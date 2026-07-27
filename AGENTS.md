@@ -571,8 +571,11 @@ semantic path.
   constraints, aggregation, and internal-tuning callbacks, and from printable
   Domain representation language. Normalize package-generated
   Shadow/Collection callback adapters and flattened internal-tuning namespace
-  adapters under the same rule. At ordinary current-object admission, return a
-  clean callback unchanged; a stripped copy must retain the exact enclosing
+  adapters under the same rule. When normalizing `Domain` representation
+  components, reject `NULL` before `is.pairlist()`—R classifies `NULL` as a
+  pairlist and `reprargs[[index]] <- NULL` would delete the named component
+  during fixed-index traversal. At ordinary current-object admission, return
+  a clean callback unchanged; a stripped copy must retain the exact enclosing
   environment. Read
   `options(paradox.strip_srcrefs = FALSE)` only at admission as a debugging
   opt-out. The recursive source-reference walk never enters arbitrary callback

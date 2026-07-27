@@ -117,7 +117,10 @@ boundaries.
   id string and later prints agree. Consequence to accept and pin: for
   srcref-carrying inline functions, `deparse`'s default `"useSource"` control
   means the rendered repr/id loses original comments/formatting (cosmetic;
-  §6, §7.S13).
+  §6, §7.S13). Component normalization must test `NULL` before
+  `is.pairlist()`: base R reports `is.pairlist(NULL)` as true, and assigning
+  the unchanged `NULL` back with `reprargs[[index]] <- NULL` deletes that
+  named representation element and invalidates the fixed traversal indices.
 - **D3 — legacy upgrader normalization.** When the migration path carries
   legacy `.trafos`, `.extra_trafo`, `.constraint`, and cargo `custom_check`
   into current capsules (`R/upgrade_paradox_object.R:676`, `:687-688`, plus
@@ -221,7 +224,7 @@ native constructor:
 | S5 | `R/ParamLgl.R` | `trafo`, D1 cargo | same pattern as S2 |
 | S6 | `R/ParamSet.R:1195-1210` | `f` in the `extra_trafo` and `constraint` active bindings, before `.Call(C_param_set_set_callback, private, self, f, 0L/1L)` | this one site also covers `ps(.extra_trafo=, .constraint=)` (`R/ps.R:72-73` routes through these bindings) and `ParamSetShadow$extra_trafo` write-through (`R/ParamSetShadow.R:184-195` assigns `origin$extra_trafo`). `ParamSetCollection` callbacks are read-only (`R/ParamSetCollection.R:403-427`) — no site |
 | S7 | `R/to_tune.R:165-224` | `aggr`, after `assert_function` (`:170`), before `content$aggr = aggr` (`:224`) | the search-space conversion later copies `tt$content$aggr` into cargo (`:285-287`) — already stripped by then |
-| S8 (D2) | `R/Domain.R` representation-capture block | closure, language, and pairlist components of `reprargs`, before the fresh `param_repr` call is assembled and passed to `C_domain_simple_repr_id` | component-wise normalization has the same recursive coverage as scanning the fresh carrier, but avoids walking every node of an ordinary callback-free constructor call |
+| S8 (D2) | `R/Domain.R` representation-capture block | non-`NULL` closure, language, and pairlist components of `reprargs`, before the fresh `param_repr` call is assembled and passed to `C_domain_simple_repr_id` | component-wise normalization has the same recursive coverage as scanning the fresh carrier, but avoids walking every node of an ordinary callback-free constructor call; `NULL` must bypass `[[<-` so the named element is not deleted |
 | S9 (D3) | `R/upgrade_paradox_object.R:676` (`.trafos` list), `:687-688` (`extra_trafo`, `constraint`), plus the legacy-cargo `custom_check`/`aggr`/`in_tune_fn` carry site (locate in the Domain/cargo preparation helpers) | migrated callbacks | keep this inside the *preparation* phase (before offside construction), never in the commit wave |
 | S10 | `R/ParamSetShadow.R:7-18`; `R/ParamSetCollection.R:8-62,317-336` | package-generated Shadow/Collection constraint and transformation adapters, plus the flattened internal-tuning namespace adapter | normalize the returned closure because keep-source package builds can attach package source metadata after the original user callback has already been normalized |
 

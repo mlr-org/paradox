@@ -30,5 +30,12 @@ test_that("R6 values of ParamUty are cloned", {
 })
 
 test_that("default NULL works", {
-  expect_equal(p_uty(default = NULL)$cargo[[1]]$repr, "NULL")
+  domain = p_uty(default = NULL)
+  expect_equal(domain$cargo[[1]]$repr, "NULL")
+  expect_identical(domain$id, "p_uty(default = NULL)")
+  expect_identical(
+    deparse(attr(domain, "repr", exact = TRUE)),
+    "p_uty(default = NULL)"
+  )
+  expect_false(identical(domain$id, p_uty()$id))
 })

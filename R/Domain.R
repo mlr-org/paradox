@@ -245,6 +245,9 @@ Domain = function(cls, grouping,
   # metadata while keeping callback-free construction cheap.
   for (index in seq_along(reprargs)) {
     component = reprargs[[index]]
+    if (is.null(component)) {
+      next
+    }
     if (typeof(component) == "closure" ||
         is.language(component) ||
         is.pairlist(component)) {
