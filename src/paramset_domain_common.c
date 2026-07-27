@@ -257,6 +257,17 @@ int paradox_domain_owns_private_environment(SEXP self,
   if (TYPEOF(self) != ENVSXP || TYPEOF(private_environment) != ENVSXP) {
     return FALSE;
   }
+#if R_VERSION < R_Version(4, 2, 0)
+  /*
+   * Old R's required ordinary-binding boundary has no allocation-free
+   * existence query and deliberately assumes an admitted package shell.
+   * Reject a plain malformed environment by its constant-time object bit
+   * before that reader; current runtimes keep their existing hot path.
+   */
+  if (!Rf_isObject(self)) {
+    return FALSE;
+  }
+#endif
   /* Current package-generated shells are authorized by their sealed capsule,
    * not by replaying R6's generated closure/private-environment topology.
    * Registered entry points receive `self` and `private` from thin package

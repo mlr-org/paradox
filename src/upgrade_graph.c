@@ -601,7 +601,7 @@ static void fail_opaque_promise(const paradox_upgrade_path_t *path) {
   SEXP location = PROTECT(render_path(path));
   Rf_error(
     "Recursive Paradox object upgrade cannot inspect a promise on R 4.5 "
-    "(at `%s`); load and upgrade this object under R >= 4.6",
+    "(at `%s`); load and upgrade this object under R 4.0--4.4 or R >= 4.6",
     CHAR(location)
   );
 }

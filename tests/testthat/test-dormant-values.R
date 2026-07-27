@@ -643,12 +643,14 @@ test_that("T18 required get_values checks use the active stored view", {
 })
 
 test_that("T19 dormant state survives public lifecycle operations", {
+  increment = function(x) x + 1L
+  environment(increment) = baseenv()
   make_set = function(value) {
     result = ps(
       parent = p_lgl(),
       child = p_int(
         depends = parent == TRUE,
-        trafo = function(x) x + 1L
+        trafo = increment
       )
     )
     result$values = list(parent = FALSE, child = value)

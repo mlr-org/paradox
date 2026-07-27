@@ -69,9 +69,11 @@ policy <- runtime_matrix_validate_old_r_stress_policy(snapshot)
 
 Sys.setenv(NOT_CRAN = "true")
 Sys.unsetenv("PARADOX_SKIP_CHARACTERIZATION_GCT")
-# testthat/withr changes LC_* temporarily while formatting expectations.  An
-# inherited LC_ALL would override those changes and turn every expectation
-# into an unrelated warning; LANG remains the deterministic UTF-8 baseline.
+# The process starts under LC_ALL=C.UTF-8, which establishes its deterministic
+# UTF-8 locale. testthat/withr changes LC_* temporarily while formatting
+# expectations; clear the overriding environment selector after startup.
+# The stage launcher sets LANG=C so old testthat does not request thousands of
+# no-op language changes before this point.
 Sys.unsetenv("LC_ALL")
 if (nzchar(Sys.getenv("LC_ALL", unset = ""))) {
   stop("could not clear LC_ALL for the old-runtime stress process",

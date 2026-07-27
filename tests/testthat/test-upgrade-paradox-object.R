@@ -155,6 +155,7 @@ legacy_detached_extra_trafo = function(sets_with_trafos) {
   children_with_trafos = seq_along(sets_with_trafos)
   translation = NULL
   psc_extra_trafo = function(x, ...) x
+  environment(psc_extra_trafo) = baseenv()
   postfix = FALSE
   result = mlr3misc::crate(
     function(x) psc_extra_trafo(
@@ -178,6 +179,7 @@ legacy_detached_constraint = function(sets_with_constraints) {
   children_with_constraints = seq_along(sets_with_constraints)
   translation = NULL
   psc_constraint = function(x, ...) TRUE
+  environment(psc_constraint) = baseenv()
   result = mlr3misc::crate(
     function(x) psc_constraint(
       x,
@@ -1116,7 +1118,7 @@ test_that("graph migration rebinds shared callback carrier identities", {
   ))
 })
 
-test_that("legacy callback carrier shells reject dispatch and ALTREP", {
+test_that("legacy callback carrier shells reject dispatch and S4", {
   skip_if_no_active_binding_inspection()
   child = legacy_base_from_current(ps(y = p_int()))
   class_dispatches = 0L
@@ -1147,7 +1149,11 @@ test_that("legacy callback carrier shells reject dispatch and ALTREP", {
     upgrade_paradox_object(s4),
     "sets_with_trafos.*ordinary list"
   )
+})
 
+test_that("legacy callback carrier shells reject ALTREP", {
+  skip_if_no_list_altrep()
+  child = legacy_base_from_current(ps(y = p_int()))
   altrep_observations = 0L
   altrep_carriers = native_stateful_altrep(
     list(child = child),

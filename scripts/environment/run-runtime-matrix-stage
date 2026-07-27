@@ -359,6 +359,14 @@ export PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$STAGE_INPUTS"
 unset PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT
 unset PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT
 configure_stage_user_environment
+declared_floor_candidate=
+if [[ "$VERSION" == 3.6.3 ]]; then
+  # This directory is needed only after the general stage setup. Create and
+  # authenticate it while the artifact-root descriptor is still pinned; the
+  # descriptor must not leak into any R/build subprocess below.
+  declared_floor_candidate="$STAGE_ARTIFACTS/declared-floor-candidate-library"
+  ensure_stage_directory "$declared_floor_candidate" 0700
+fi
 exec {stage_artifacts_descriptor}<&-
 
 # Stage-aware activation must already have selected the authenticated detached
@@ -434,8 +442,8 @@ if [[ "$VERSION" == 3.6.3 ]]; then
     "$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor \
       --verified-receipt-handoff "$declared_floor_receipt" --print-path
   )
-  declared_floor_candidate="$STAGE_ARTIFACTS/declared-floor-candidate-library"
-  ensure_stage_directory "$declared_floor_candidate" 0700
+  "$MANAGED_PATH" "$ROOT" "$declared_floor_candidate" existing ||
+    fail "prepared declared-floor candidate library is unsafe"
   R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
     R_LIBS_USER="$declared_floor_candidate" \
     R_LIBS_SITE="$declared_floor_library" \
@@ -459,14 +467,14 @@ audit_symbols "$VERSION" "$STAGE_LIBRARY/paradox/libs/paradox.so" \
   "$STAGE_LOGS/r-api-symbol-audit.log"
 audit_r45_compiled_code_policy "$VERSION" "$STAGE_LIBRARY/paradox" \
   "$STAGE_LOGS/r45-compiled-code-policy.log"
-NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
+LANG=C NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
   Rscript --vanilla \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
   "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/source-test-scope" \
   > "$STAGE_LOGS/source-tests.log" 2>&1
 if [[ "$VERSION" == 3.6.3 || "$VERSION" == 4.0.5 ]]; then
   unset PARADOX_SKIP_CHARACTERIZATION_GCT
-  NOT_CRAN=true Rscript --vanilla \
+  LANG=C NOT_CRAN=true Rscript --vanilla \
     "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R" \
     "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/old-r-stress-scope" \
     > "$STAGE_LOGS/old-r-stress.log" 2>&1

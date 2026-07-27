@@ -236,7 +236,11 @@ header-declared/exported `Rf_findVarInFrame` once. Only R < 4.5 may inspect a
 returned `PROMSXP` through the header-declared/exported `R_PromiseExpr`,
 `PRENV`, and `PRVALUE`; it never forces the promise. R 4.5 compiled-code policy
 classifies those accessors as non-API, so recursive migration fails closed on a
-reached promise and requests R >= 4.6.
+reached promise and requests R 4.0--4.4 or R >= 4.6. Ordinary callback
+factories can retain formal promises in lexical call frames, even when a
+formal is already forced or unused; this is therefore an exact R 4.5
+recursive-migration limitation rather than merely a `delayedAssign()` edge
+case. Ordinary ParamSet operations remain supported.
 R >= 4.6 uses the documented experimental binding classifier plus delayed/
 forced-binding expression/environment accessors and does not compile the
 `Rf_findVarInFrame` path. The public dots API covers `...`. R 4.5 headers still

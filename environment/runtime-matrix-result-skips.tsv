@@ -38,7 +38,8 @@ runtime	file	test	reason
 3.6.3	test-upgrade-paradox-object.R	corrupt current roots abort graph preflight before legacy mutation	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	graph migration rebinds shared callback carrier identities	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	joint commit validation protects earlier preflighted roots	Reason: R < 4.0 cannot safely inspect active-binding functions
-3.6.3	test-upgrade-paradox-object.R	legacy callback carrier shells reject dispatch and ALTREP	Reason: R < 4.0 cannot safely inspect active-binding functions
+3.6.3	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+3.6.3	test-upgrade-paradox-object.R	legacy callback carrier shells reject dispatch and S4	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	legacy collection sharing is preserved and cycles are rejected	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	legacy extensions, replacements, and malformed state fail closed	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	legacy preparation normalizes callbacks but not opaque values	Reason: R < 4.0 cannot safely inspect active-binding functions
@@ -77,6 +78,7 @@ runtime	file	test	reason
 4.0.5	test-native-public-table-wrappers.R	wide ALTREP table admission observes each top-level element once	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-upgrade-paradox-object-graph.R	graph discovery balances a self-duplicating ALTREP root	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.3.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
 4.3.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
 4.3.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN

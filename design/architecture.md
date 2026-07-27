@@ -136,7 +136,9 @@ The migration implementation has three layers:
    promises contribute expression and evaluation environment but are not
    forced. R 3.6--4.4 inspect reached promises. R 4.5 fails recursive
    migration closed on such a promise because its compiled-code policy rejects
-   the old accessors and no replacement exists. R >= 4.6 uses public
+   the old accessors and no replacement exists; ordinary callback factories
+   can retain such formal promises, so migrate that graph under R 4.0--4.4 or
+   R >= 4.6. R >= 4.6 uses public
    binding/dots accessors and treats a detached `PROMSXP` outside those cells
    as opaque. Because R 3.6 exposes no accessor for an active binding's
    function,
@@ -924,7 +926,9 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   binding cell. Only R < 4.5 uses the header-declared/exported
   `R_PromiseExpr`, `PRENV`, and `PRVALUE` when that cell is a `PROMSXP`.
   R 4.5 fails recursive migration closed on a reached promise because its
-  compiled-code policy classifies those accessors as non-API. R >= 4.6 uses
+  compiled-code policy classifies those accessors as non-API. This includes
+  formal promises retained by ordinary factory callback frames, even when
+  forced or unused. R >= 4.6 uses
   only the documented experimental binding/delayed-binding/dots APIs. None of
   the three detached-promise accessors is declared locally or present in an
   R >= 4.5 DSO. On R >= 4.6, a detached `PROMSXP` reached outside the public

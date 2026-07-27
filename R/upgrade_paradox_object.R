@@ -2282,7 +2282,10 @@
 #' delayed promises without evaluating either. R 3.6--4.4 can also inspect a
 #' detached promise. R 4.5 has no policy-compliant promise-inspection API, so
 #' recursive migration fails closed on a reached promise and asks the caller to
-#' migrate under R >= 4.6. R 4.6 and newer treat a detached promise reached
+#' migrate under R 4.0--4.4 or R >= 4.6. Ordinary callback factories can
+#' retain formal promises in their lexical frames even when those formals are
+#' already forced or unused, so this boundary does not require an explicit
+#' `delayedAssign()`. R 4.6 and newer treat a detached promise reached
 #' outside a binding or `...` cell as opaque. It does not enter
 #' `.GlobalEnv`, package namespaces or package environments, authenticated
 #' namespace-imports environments, attached search-path environments, or

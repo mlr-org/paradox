@@ -72,6 +72,38 @@ test_that("delayed-binding discovery is inert on every supported branch", {
   expect_false(sentinel$forced)
 })
 
+test_that("factory-frame promises use the exact R 4.5 migration boundary", {
+  sentinel = new.env(parent = emptyenv())
+  sentinel$forced = FALSE
+  make_set = function(value) {
+    ps(x = p_int(trafo = function(x) x))
+  }
+  param_set = make_set({
+    sentinel$forced = TRUE
+    stop("factory promise was forced", call. = FALSE)
+  })
+  core = paradox:::param_set_core_state(mlr3misc::get_private(param_set))
+  values = param_set$values
+  carrier = list(param_set = param_set)
+
+  if (getRversion() >= "4.5.0" && getRversion() < "4.6.0") {
+    expect_error(
+      upgrade_paradox_object_graph(carrier),
+      "load and upgrade this object under R 4.0--4.4 or R >= 4.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_identical(upgrade_paradox_object_graph(carrier), carrier)
+  }
+  expect_false(sentinel$forced)
+  expect_identical(carrier$param_set, param_set)
+  expect_identical(
+    paradox:::param_set_core_state(mlr3misc::get_private(param_set)),
+    core
+  )
+  expect_identical(param_set$values, values)
+})
+
 test_that("current ParamSet stubs bypass historical migration gateways", {
   parameter_set = ps(x = p_dbl())
   stub = paste(deparse(body(parameter_set$ids)), collapse = "\n")

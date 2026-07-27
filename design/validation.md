@@ -290,7 +290,7 @@ families.
   neither path uses `substitute()` or evaluates the binding.
   R 3.6--4.4 also inspect detached `PROMSXP` structure. R 4.5 fails recursive
   migration closed on any reached promise, proves it remains unforced, and
-  requests R >= 4.6. R >= 4.6 treats a detached promise outside a binding/dots
+  requests R 4.0--4.4 or R >= 4.6. R >= 4.6 treats a detached promise outside a binding/dots
   cell as opaque. The DSO inventory excludes `R_getVar` before R 4.6 because
   it could force a delayed cell without `R_GetBindingType`; current source must
   contain the exact three reviewed call sites and every call must follow the
@@ -556,6 +556,10 @@ The frozen candidate must pass:
   `R_PromiseExpr`, `PRENV`, and `PRVALUE`. R 4.5 must retain only
   `Rf_findVarInFrame` and exclude all three promise accessors; R >= 4.6 must
   exclude all four and use its experimental binding/delayed-binding/dots APIs.
+  A reached formal promise retained by an ordinary callback factory is covered
+  by the same R 4.5 fail-closed rule; tests must not misclassify such a promise
+  as exotic or force it to make migration pass. Recursive migration is
+  performed under R 4.0--4.4 or R >= 4.6 when this occurs.
   Raw-token, pinned-header, and DSO inventories verify every branch.
   The real R 4.5.2 stage must also retain a zero-issue result from that
   runtime's own `tools:::check_compiled_code()` on the installed package; its

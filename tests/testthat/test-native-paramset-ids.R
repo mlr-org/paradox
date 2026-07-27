@@ -240,7 +240,7 @@ test_that("the direct engine validates canonical tables without dispatch", {
   callbacks = 0L
   class(params$cls) = "IdsCallbackColumn"
   registerS3method(
-    "mtfrm",
+    "xtfrm",
     "IdsCallbackColumn",
     function(x) {
       callbacks <<- callbacks + 1L

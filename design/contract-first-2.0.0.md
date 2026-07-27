@@ -660,7 +660,10 @@ inspect a returned `PROMSXP` through the header-declared/exported
 `R_PromiseExpr`, `PRENV`, and `PRVALUE` without forcing it. R 4.5's compiled-
 code policy classifies those accessors as non-API and offers no replacement,
 so recursive migration fails closed when it reaches a promise and requests
-that the operation be performed under R >= 4.6.
+that the operation be performed under R 4.0--4.4 or R >= 4.6. Ordinary
+factory-created callbacks can retain formal promises in their lexical frames
+even when the formal is forced or unused; this boundary therefore does not
+require an explicit delayed binding.
 R >= 4.6 uses only the documented experimental binding classifier and delayed/
 forced-binding/dots accessors. None of the three detached-promise accessors is
 locally declared or present in an R >= 4.5 DSO, and a `PROMSXP` reached outside
@@ -1130,7 +1133,8 @@ migration boundary for a containing object:
   inspection API. A forced binding promise contributes its stored value and
   expression; an unforced one contributes its expression and evaluation
   environment on R 3.6--4.4 and R >= 4.6. R 4.5 fails recursive migration
-  closed on a reached promise with an R >= 4.6 instruction. R >= 4.6 treats a
+  closed on a reached promise with an R 4.0--4.4 or R >= 4.6 instruction.
+  Ordinary factory callback frames can retain such formal promises. R >= 4.6 treats a
   detached `PROMSXP` outside a binding/dots cell as opaque.
   R 3.6 cannot retrieve an arbitrary active-binding function and therefore
   fails this migration closed with an R >= 4.0 upgrade instruction rather than

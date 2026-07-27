@@ -577,6 +577,10 @@ paths; the ordinary R 3.6 stage remains the sole complete test run. The
 profile has its own cache key and receipt handoff, so it is built once and
 reused. Activation removes ambient `R_DEFAULT_PACKAGES`, preventing an
 operator setting from preloading a dependency before the origin check.
+The fresh candidate-only directory is created and authenticated before the
+stage closes its pinned artifact-root descriptor. That descriptor is closed
+before the first build or R child; later declared-floor work validates the
+prepared path and never tries to reuse a closed descriptor.
 
 The trusted-input inventory also contains `environment/Renviron`,
 `environment/Rprofile.R`, and `environment/Makevars`. Interactive activation
@@ -637,6 +641,11 @@ verifier regenerates that title filter from the retained source and manifest;
 each old runtime first proves that it leaves an unselected body unforced and
 passes a selected braced expression into testthat's isolated test environment;
 the retained result ledger proves every exact selected target actually passed.
+Both old-runtime test processes start with the stage's `LC_ALL=C.UTF-8` and
+`LANG=C`. This retains deterministic UTF-8 startup semantics while preventing
+old testthat/withr from requesting a no-op language change for every
+expectation. The stress runner clears `LC_ALL` after startup so its deliberate
+temporary locale changes are not overridden.
 Counts are always derived from that manifest and the
 testthat result structure; no expectation floor or frozen target count is an
 authority. Newer runtimes do not repeat this old-branch slice.

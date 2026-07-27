@@ -815,7 +815,14 @@ operator action.
   R 3.6--4.4 can inspect a reached promise through their compatibility
   accessors. R 4.5 classifies those accessors as non-API and has no replacement,
   so recursive migration fails closed on a reached promise and directs the
-  caller to R >= 4.6. R >= 4.6 uses the public binding/dots API, while a
+  caller to R 4.0--4.4 or R >= 4.6. This can arise without an explicit
+  `delayedAssign()`: ordinary factory-created callback closures may retain
+  forced or unreferenced formal promises in their lexical call frame. It is a
+  limitation of the one-way recursive migration operation on exactly R 4.5,
+  not of ordinary ParamSet operations. Never force, silently skip, or inspect
+  those cells through the three symbols that R 4.5's compiled-code policy
+  rejects merely to make migration appear successful. R >= 4.6 uses the
+  public binding/dots API, while a
   detached `PROMSXP` outside such a cell remains opaque. `R_getVar` is excluded
   before R 4.6 because it could force a delayed binding without the new
   classifier. Current source has three reviewed retrieval call sites—one
@@ -980,7 +987,12 @@ operator action.
   result. Candidate-shell and fresh-destination classifiers use that optional
   path, while admitted core/generation reads keep the required native path so
   old R does not evaluate `base::exists()` on every hot operation. Required
-  binding snapshots remain allocation-free. Their terminal
+  binding snapshots remain allocation-free. On R 3.6--4.1 the ownership
+  gateway first rejects a non-object `self` by its constant-time object bit,
+  preventing a malformed direct native call from entering the required reader
+  with an absent R6 enclosure binding. That guard is compiled out beginning
+  with R 4.2, whose public existence query already handles absence. Their
+  terminal
   optional receipt scan fails closed when `R_HasFancyBindings()` reports a
   locked or active frame, then uses the same stored-cell path; this old-only
   exception avoids either evaluator allocation or invocation of an active
@@ -996,7 +1008,9 @@ operator action.
   header-declared/exported accessors `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
   R 4.5's compiled-code policy classifies those accessors as non-API, so its
   crawler fails closed when it reaches a promise and requests migration under
-  R >= 4.6. R >= 4.6 uses only the documented experimental binding/dots APIs:
+  R 4.0--4.4 or R >= 4.6. Ordinary callback factories can retain such formal
+  promises in their call frames. R >= 4.6 uses only the documented
+  experimental binding/dots APIs:
   the DSO contains none of the three detached-promise accessors, and a
   structurally reached non-binding `PROMSXP` is opaque. An R-level
   `substitute()` workaround is
@@ -1258,6 +1272,11 @@ and registration, and exercises constructor/deparse, checked dormant/dependency
 behavior, diagnostics, and grid/data.table/R6 paths. Cache keys and receipt
 handoffs keep this bounded lane reusable; ambient `R_DEFAULT_PACKAGES` is
 removed so an operator startup choice cannot preload a reviewed dependency.
+The stage creates and authenticates its fresh candidate-library directory
+while the artifact-root descriptor is still pinned, then closes that
+descriptor before the first build or R subprocess. A runtime-only directory
+must never be created later through the closed descriptor, and the descriptor
+must never leak into a child.
 
 R 3.6.3 and R 4.0.5 additionally run the bounded `NOT_CRAN=true`
 `runtime-matrix-old-r-stress.tsv` slice. Its literal test titles are validated
@@ -1270,6 +1289,12 @@ expression still receives testthat's isolated evaluation environment;
 selected targets may neither skip nor warn. Do not replace this with full-file
 `NOT_CRAN=true` runs
 or a frozen expected target count, and do not repeat it on newer runtimes.
+The old testthat/withr releases key their language setup from `LANG`. Their
+source and stress launchers therefore use `LANG=C` while the stage's
+`LC_ALL=C.UTF-8` establishes the deterministic UTF-8 process locale. The
+stress runner clears `LC_ALL` only after R startup so temporary locale changes
+are not overridden. This prevents thousands of no-op framework warnings
+without changing package semantics or weakening the warning-free contract.
 
 After every selected stage is sealed, a complete `--runtime all` run performs
 one R 4.0.5 -> R 3.6.3 serialization handoff. The producer and consumer are
