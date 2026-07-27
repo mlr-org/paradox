@@ -157,6 +157,8 @@ grep -Fq 'post-freeze tooling changes a package-facing path' \
   fail "Paradox-2 profile does not protect frozen package bytes"
 grep -Fq 'benchmarks/*' "$ROOT/compat/install-downstream-bridges" ||
   fail "Paradox-2 profile does not admit post-freeze benchmark tooling"
+grep -Fq 'verification/*' "$ROOT/compat/install-downstream-bridges" ||
+  fail "Paradox-2 profile does not admit the package-excluded verification harness"
 grep -Fq "completion_value tooling_commit) == \"\$TOOLING_COMMIT\"" \
   "$ROOT/compat/install-downstream-bridges" ||
   fail "profile overlay is not bound to the exact active tooling commit"

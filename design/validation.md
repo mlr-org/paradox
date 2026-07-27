@@ -852,6 +852,13 @@ earlier `bf64490` to `9e87556` composition belongs only to the superseded
 arbitrary older-tooling replay, default unsuffixed-overlay substitution, or
 result relabeling.
 
+The non-default Paradox-2 overlay admits changes only below the explicit
+package-excluded validation roots. This includes `verification/`, whose
+controller, task manifest, tests, and operator documentation schedule the
+existing compatibility drivers but are excluded from the built package by
+`.Rbuildignore`. Package-facing paths remain rejected, and the active checkout
+must still be one clean recorded tooling commit.
+
 Remote write access is unavailable to agents. Successful local branches are
 handed to the user with manual push/PR commands; CI is accepted only after the
 user publishes the exact reviewed commits.

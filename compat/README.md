@@ -64,7 +64,10 @@ ref/commit/tree/version tuples and creates distinct overlay, lock,
 repository-test, full-check, and completion paths. These paths never overwrite
 or relabel default full-corpus evidence. A non-default profile is post-freeze
 validation tooling: it must be one clean tracked commit, and its Paradox-2 path
-proves that package bytes still equal the frozen candidate.
+proves that package bytes still equal the frozen candidate. The admitted
+package-excluded tooling roots include `verification/`; this lets the frozen
+candidate use a reviewed coordinator manifest and scheduler without treating
+those harness-only changes as package changes.
 
 Agents may commit and test these local branches but must not push them or open
 remote PRs. The final handoff gives the user exact manual push commands and PR

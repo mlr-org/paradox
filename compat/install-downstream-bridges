@@ -323,7 +323,7 @@ else
     while IFS= read -r changed_path; do
       [[ -n $changed_path ]] || continue
       case "$changed_path" in
-        AGENTS.md|benchmarks/*|compat/*|design/*|environment/*|scripts/*) ;;
+        AGENTS.md|benchmarks/*|compat/*|design/*|environment/*|scripts/*|verification/*) ;;
         *) fail "post-freeze tooling changes a package-facing path: $changed_path" ;;
       esac
     done <<<"$changed_paths"

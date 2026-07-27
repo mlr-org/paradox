@@ -2280,6 +2280,10 @@ same `dbbdcc1` ref/commit/tree. Its focused structural profile fixture passes.
 All retained overlays and consumer results owned by earlier Paradox-2
 candidates remain historical; construct one new candidate-run-owned
 `release-refresh-20260720` overlay before the prepared compatibility gates.
+Post-freeze tooling admission explicitly includes the package-excluded
+`verification/` root so that reviewed coordinator scheduling changes can drive
+that overlay; package-facing paths remain forbidden, and the tooling checkout
+must be clean at one recorded commit.
 
 The final repair passed shell syntax checks, R parsing of both snapshot
 helpers, and the complete activated validation-hardening suite in about 226
