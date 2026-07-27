@@ -21,10 +21,16 @@ RUN apt-get update \
       util-linux \
       xz-utils \
     && for command in \
-      bash chmod date grep ln mkdir mktemp mv readlink rm tar; do \
-      if [ ! -e "/usr/bin/$command" ]; then \
-        cp -p "/bin/$command" "/usr/bin/$command"; \
+      bash bunzip2 bzcat bzip2 cat chmod cp date echo egrep false fgrep grep \
+      gzip hostname ln ls mkdir mktemp more mv pwd readlink rm rmdir sed sh \
+      sleep tar true uname zcat; do \
+      if [ ! -e "/usr/bin/$command" ] || [ -L "/usr/bin/$command" ]; then \
+        rm -f "/usr/bin/$command"; \
+        cp -pL "/bin/$command" "/usr/bin/$command"; \
       fi; \
+      test -f "/usr/bin/$command"; \
+      test -x "/usr/bin/$command"; \
+      test ! -L "/usr/bin/$command"; \
     done \
     && rm -rf /var/lib/apt/lists/*
 

@@ -7,10 +7,10 @@ includes ripgrep because structural harness checks use `rg` for literal and
 regular-expression source-policy assertions, and a plain `/usr/bin`
 compatibility surface because authenticated helpers deliberately name the
 distribution's plain `/usr/bin` tools. On an unmerged base, the recipe installs
-plain compatibility
-copies of the small exact `/bin` command set used there. It does not use
-symlinks because security-sensitive helpers deliberately reject symbolic
-executables. This contract therefore does not depend on which Debian
+plain compatibility copies of the complete reviewed `/bin` subset used by
+configuration, archive extraction, receipt cleanup, and structural checks.
+The build verifies that every resulting path is a regular executable, not a
+symbolic link. This contract therefore does not depend on which Debian
 generation supplied the base.
 
 Some standard Debian alternatives still begin at `/usr/bin` and terminate at

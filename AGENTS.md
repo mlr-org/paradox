@@ -202,12 +202,16 @@ project-local R and Clang sanitizer runtime. The former immutable worker
 ASan before Paradox loaded; the failed `r36-release-076eb44` ASan lane is
 invalid worker evidence, not a package failure. Relaxing Podman isolation and
 resource settings did not help. The reviewed local replacement is
-`localhost/paradox-verification-worker@sha256:e44c4ae9fbdc9d9e32fdc5e410af0bf4455689dd496c4681f8785904c0212fda`,
+`localhost/paradox-verification-worker@sha256:9af0174219c3b0467cec8a4f0db8b3b664077ff797c88fd38ad03402e94bab4c`,
 built from exact Debian Bullseye base
 `docker.io/library/debian@sha256:cba95a21c96c1f5fc2470081829363eed57706634f7dc26e8c6712934303d57a`.
 Bullseye has an unmerged `/usr`, so the worker recipe must retain its explicit
-plain, non-symbolic compatibility copies for `/usr/bin/bash`,
-`/usr/bin/mktemp`, and the other exact authenticated command paths.
+plain, non-symbolic compatibility copies for the complete reviewed command
+subset used by archive extraction, configuration, receipt cleanup, and
+structural tests. In particular this includes `/usr/bin/bash`,
+`/usr/bin/mktemp`, `/usr/bin/uname`, the gzip/bzip2 front ends, and
+`/usr/bin/rmdir`; missing any one can fail a later clean-`PATH` phase after
+the worker's initial self-tests have passed.
 The R-header tool inventory must also retain its bounded `/bin` terminal-root
 allowance: Bullseye's `/usr/bin/pager` traverses `/etc/alternatives` to the
 regular `/bin/more` executable. The complete chain and terminal executable
