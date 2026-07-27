@@ -735,6 +735,9 @@ for parent_header_binding in \
 done
 api_tool_inventory_body=$(function_body verify_configure_tool_inventory \
   "$API_GATE")
+grep -Fq '"$TOOLCHAIN"/*|/bin/*|/usr/bin/*|/usr/lib/*|/lib/*' \
+  "$API_HEADER_CACHE" ||
+  fail "API tool inventory omits the authenticated unmerged-/usr /bin root"
 for inventory_check in \
     '"${#lines[@]}" -eq $((4 + expected_count * 11))' \
     'suffixes=(name state selected_path resolution link_chain final_path mode' \

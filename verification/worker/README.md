@@ -13,6 +13,12 @@ symlinks because security-sensitive helpers deliberately reject symbolic
 executables. This contract therefore does not depend on which Debian
 generation supplied the base.
 
+Some standard Debian alternatives still begin at `/usr/bin` and terminate at
+a regular executable below `/bin` (for example, Bullseye's `pager`). The
+R-header cache accepts that bounded system root only after recording the full
+link chain, terminal path, mode, executable bytes, and available identity in
+its cache key. It does not add `/bin` to the configure `PATH`.
+
 The image need only provide the `C.UTF-8` locale; task execution pins that
 locale and UTC in `scripts/environment/verify-task-entry`. Do not rely on an
 image's default locale, which differs between otherwise compatible Debian

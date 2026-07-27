@@ -215,7 +215,11 @@ resolve_inventory_command() {
     canonical=$(readlink -f -- "$current") || return 2
     [[ "$canonical" == "$current" ]] || return 2
     case "$current" in
-      "$TOOLCHAIN"/*|/usr/bin/*|/usr/lib/*|/lib/*) ;;
+      # Debian's unmerged-/usr alternatives may start at /usr/bin, traverse
+      # /etc/alternatives, and terminate at the equally standard /bin root.
+      # The complete chain, final path, mode, bytes, and optional identity are
+      # still authenticated below; accepting /bin does not broaden PATH.
+      "$TOOLCHAIN"/*|/bin/*|/usr/bin/*|/usr/lib/*|/lib/*) ;;
       *) return 2 ;;
     esac
     INVENTORY_FINAL_PATH=$current
@@ -1113,6 +1117,14 @@ if [[ "${1:-}" == self-test ]]; then
   if create_external_tool_inventory "$SELF_TEST_ROOT/unsafe.tsv" \
       "$SELF_TEST_ROOT/tools" unsafe-link; then
     fail "unsafe symbolic command resolution was accepted"
+  fi
+  if [[ -e /usr/bin/pager || -L /usr/bin/pager ]]; then
+    resolve_inventory_command pager /usr/bin ||
+      fail "standard /usr/bin alternative did not resolve safely"
+    case "$INVENTORY_FINAL_PATH" in
+      /bin/*|/usr/bin/*) ;;
+      *) fail "standard /usr/bin alternative escaped its reviewed roots" ;;
+    esac
   fi
 
   select_configure_compatibility 3.6.0

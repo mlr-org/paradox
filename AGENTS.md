@@ -208,6 +208,10 @@ built from exact Debian Bullseye base
 Bullseye has an unmerged `/usr`, so the worker recipe must retain its explicit
 plain, non-symbolic compatibility copies for `/usr/bin/bash`,
 `/usr/bin/mktemp`, and the other exact authenticated command paths.
+The R-header tool inventory must also retain its bounded `/bin` terminal-root
+allowance: Bullseye's `/usr/bin/pager` traverses `/etc/alternatives` to the
+regular `/bin/more` executable. The complete chain and terminal executable
+remain authenticated and `/bin` is not added to configure `PATH`.
 The container entry point must continue to pin `C.UTF-8`, UTC, and an empty
 `LANGUAGE`; Bullseye otherwise defaults to C and changes R's serialized AST
 metadata even with the identical mounted R executable.
