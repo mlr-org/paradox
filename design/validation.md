@@ -7,20 +7,18 @@ file/count matrix.
 
 ## Current validation status
 
-Package-facing source is open. In particular, the now-implemented dormant-
-values/default-aware-activity change alters native value, dependency, check,
-and constraint semantics after the last sealed candidate. All full-gate
-evidence for that candidate is therefore historical for this source. Focused
-validation for this batch has converged; while the remaining pre-release todos
-are implemented, continue to record only inner-loop diagnostics appropriate to
-the changed files. Do not relabel a focused test, strict translation-unit
-compile, cached installation, or old candidate artifact as candidate evidence.
+Package-facing feature work has converged. The provisional R 3.6 source at
+`39855c9` completed `release-core`, but its post-run audit exposed a
+release-blocking capsule-graph GC lifetime defect. The managed active-path
+carrier and focused regressions repair that source, so every full-gate result
+for `39855c9` is historical. Do not relabel a focused test, strict
+translation-unit compile, cached installation, or old candidate artifact as
+candidate evidence.
 
-Once all package-facing work converges, freeze one new clean immutable
-candidate and run the complete applicable matrix described below against that
-exact source. The deliberate choice not to run the full compatibility matrix
-during the current dormant-values batch is sequencing, not an acceptance or
-release claim.
+After the carrier fix and its targeted old/current-runtime checks converge,
+freeze one new clean immutable candidate and run the complete applicable matrix
+described below against that exact source. This final targeted pass before
+freeze is sequencing, not an acceptance or release claim.
 
 ## Unattended orchestration
 
@@ -252,6 +250,13 @@ families.
   edges error without crash;
 - BASE, empty/nested/shared COLLECTION, and live SHADOW behavior;
 - path-cycle rejection, including collection-to-shadow-to-origin cycles;
+- graph-path validation beyond its 16-frame inline capacity under
+  `gctorture()`, and the disposable
+  `scripts/environment/test-core-graph-roots` strict build after carrier
+  changes. Its compile-time-only barrier detaches each selected core, forces
+  collection and pending finalizers, and verifies that the active-path carrier
+  owns all 21 exact generations; the ordinary build contains neither barrier
+  nor registered counter;
 - native collection add rejects pre-existing/proposed cycles and corrupt child
   graphs before commit, preserves the old core on every failure, and detects a
   generation change anywhere in either admitted graph;
@@ -916,8 +921,8 @@ similarity as release evidence.
 
 The active accepted run IDs and candidate hashes belong in
 [`release-2.0.0.md`](release-2.0.0.md). Until that ledger says `accepted`, no
-collection of partial green diagnostics is a release authorization. For the
-reopened dormant-values source there is no frozen current candidate. The last
-candidate's completed local rows remain historical, and the replacement
-candidate will require the complete applicable local and hosted matrix after
-source convergence, followed by user-performed remote publication.
+collection of partial green diagnostics is a release authorization. There is
+no frozen current candidate while the post-`39855c9` active-path lifetime fix
+is being finalized. All earlier candidates' completed rows remain historical,
+and the replacement candidate requires the complete applicable local and
+hosted matrix, followed by user-performed remote publication.

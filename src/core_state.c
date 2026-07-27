@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <string.h>
 
 #include "core_state.h"
@@ -5,6 +6,9 @@
 #include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+#if defined(PARADOX_TEST_CORE_GRAPH_ROOTS)
+# include <R_ext/Memory.h>
+#endif
 
 static const char *const core_field_names[PARADOX_CORE_FIELD_COUNT] = {
   ".params",
@@ -229,6 +233,96 @@ typedef struct {
   int entered;
 } core_graph_frame_t;
 
+enum core_graph_root_slot {
+  CORE_GRAPH_ROOT_SELF = 0,
+  CORE_GRAPH_ROOT_CORE,
+  CORE_GRAPH_ROOT_STRIDE
+};
+
+enum {
+  CORE_GRAPH_INLINE_CAPACITY = 16
+};
+
+static R_xlen_t core_graph_root_slot(
+    R_xlen_t frame, enum core_graph_root_slot slot) {
+  return frame * CORE_GRAPH_ROOT_STRIDE + slot;
+}
+
+static void grow_core_graph_roots(
+    SEXP *roots, PROTECT_INDEX roots_index,
+    R_xlen_t depth, R_xlen_t capacity) {
+  SEXP replacement = PROTECT(Rf_allocVector(
+    VECSXP,
+    capacity * CORE_GRAPH_ROOT_STRIDE
+  ));
+  const R_xlen_t retained = depth * CORE_GRAPH_ROOT_STRIDE;
+  for (R_xlen_t index = 0; index < retained; ++index) {
+    SET_VECTOR_ELT(replacement, index, VECTOR_ELT(*roots, index));
+  }
+  REPROTECT(replacement, roots_index);
+  *roots = replacement;
+  UNPROTECT(1);
+}
+
+#if defined(PARADOX_TEST_CORE_GRAPH_ROOTS)
+static int test_core_graph_root_barriers = 0;
+static int test_core_graph_root_collected = FALSE;
+static int test_core_graph_root_barrier_active = FALSE;
+
+static void test_core_graph_root_finalizer(SEXP core) {
+  (void) core;
+  if (test_core_graph_root_barrier_active) {
+    test_core_graph_root_collected = TRUE;
+  }
+}
+
+static void test_core_graph_root_barrier(
+    SEXP private_environment, SEXP core) {
+  if (test_core_graph_root_barriers == INT_MAX) {
+    Rf_error("Instrumented core-graph root barrier counter overflow");
+  }
+  ++test_core_graph_root_barriers;
+  R_RegisterCFinalizerEx(
+    core,
+    test_core_graph_root_finalizer,
+    FALSE
+  );
+  SEXP core_symbol = Rf_install(".core");
+  if (paradox_core_from_private(private_environment) != core) {
+    Rf_error("Instrumented core-graph binding changed before its barrier");
+  }
+  Rf_defineVar(core_symbol, R_NilValue, private_environment);
+  test_core_graph_root_collected = FALSE;
+  test_core_graph_root_barrier_active = TRUE;
+  R_gc();
+  R_RunPendingFinalizers();
+  test_core_graph_root_barrier_active = FALSE;
+  if (test_core_graph_root_collected) {
+    Rf_error("Instrumented core-graph barrier lost its selected capsule");
+  }
+  Rf_defineVar(core_symbol, core, private_environment);
+  if (paradox_core_from_private(private_environment) != core) {
+    Rf_error("Instrumented core-graph binding was not restored");
+  }
+}
+
+SEXP paradox_test_core_graph_root_barrier_counts(SEXP reset) {
+  if (TYPEOF(reset) != LGLSXP || ALTREP(reset) ||
+      XLENGTH(reset) != 1 ||
+      LOGICAL_ELT(reset, 0) == NA_LOGICAL) {
+    Rf_error("`reset` must be TRUE or FALSE");
+  }
+  SEXP result = PROTECT(Rf_ScalarInteger(
+    test_core_graph_root_barriers
+  ));
+  if (LOGICAL_ELT(reset, 0)) {
+    test_core_graph_root_barriers = 0;
+  }
+  UNPROTECT(1);
+  return result;
+}
+#endif
+
 static void account_graph_work(R_xlen_t *work_since_interrupt) {
   ++*work_since_interrupt;
   if (*work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
@@ -238,29 +332,61 @@ static void account_graph_work(R_xlen_t *work_since_interrupt) {
 }
 
 void paradox_core_validate_graph_path(SEXP root) {
-  R_xlen_t capacity = 16;
-  core_graph_frame_t *frames = paradox_temporary_alloc(
-    capacity,
-    sizeof(*frames)
+  /*
+   * R_alloc() owns only the raw frame bytes; R's collector cannot discover
+   * SEXP pointers stored in them. Candidate-shell inspection may allocate or
+   * enter the evaluator on supported old R, and deep-stack growth allocates
+   * on every runtime. A finalizer can therefore detach an already selected
+   * capsule generation while the traversal still needs its edges.
+   *
+   * Keep the active path in one indexed R carrier: each self slot protects
+   * ancestor identity comparisons even if an edge is mutated in place, and
+   * each core slot owns the exact payload/sets generation being traversed.
+   * Slots are cleared on pop, so memory is proportional to depth rather than
+   * to every node visited. The inline common stack replaces the old initial
+   * R_alloc(), leaving only one smaller managed allocation on shallow paths.
+   */
+  PROTECT(root);
+  R_xlen_t capacity = CORE_GRAPH_INLINE_CAPACITY;
+  core_graph_frame_t inline_frames[CORE_GRAPH_INLINE_CAPACITY];
+  core_graph_frame_t *frames = inline_frames;
+  PROTECT_INDEX roots_index;
+  SEXP roots;
+  PROTECT_WITH_INDEX(
+    roots = Rf_allocVector(
+      VECSXP,
+      capacity * CORE_GRAPH_ROOT_STRIDE
+    ),
+    &roots_index
   );
   R_xlen_t depth = 1;
   R_xlen_t work_since_interrupt = 0;
   frames[0] = (core_graph_frame_t) {
     root, R_NilValue, 0, 0, FALSE
   };
+  SET_VECTOR_ELT(
+    roots,
+    core_graph_root_slot(0, CORE_GRAPH_ROOT_SELF),
+    root
+  );
 
   while (depth != 0) {
     account_graph_work(&work_since_interrupt);
     core_graph_frame_t *frame = &frames[depth - 1];
     if (!frame->entered) {
       SEXP private_environment = PROTECT(private_from_self(frame->self));
-      SEXP core = private_environment == R_UnboundValue
+      SEXP core = PROTECT(private_environment == R_UnboundValue
         ? R_UnboundValue
-        : paradox_core_from_private_optional(private_environment);
+        : paradox_core_from_private_optional(private_environment));
       if (core == R_UnboundValue) {
-        UNPROTECT(1);
+        UNPROTECT(2);
         Rf_error("Corrupt ParamSet node in capsule graph");
       }
+      SET_VECTOR_ELT(
+        roots,
+        core_graph_root_slot(depth - 1, CORE_GRAPH_ROOT_CORE),
+        core
+      );
       const paradox_core_kind_t kind = paradox_core_kind(core);
       SEXP state = R_ExternalPtrProtected(core);
       frame->sets = kind == PARADOX_CORE_BASE
@@ -270,19 +396,57 @@ void paradox_core_validate_graph_path(SEXP root) {
         frame->child_count = 0;
       } else if (TYPEOF(frame->sets) != VECSXP || ALTREP(frame->sets) ||
           (kind == PARADOX_CORE_SHADOW && XLENGTH(frame->sets) != 1)) {
-        UNPROTECT(1);
+        UNPROTECT(2);
         Rf_error("Corrupt ParamSet capsule graph edges");
       } else {
         frame->child_count = XLENGTH(frame->sets);
       }
       frame->next_child = 0;
       frame->entered = TRUE;
-      UNPROTECT(1);
+      UNPROTECT(2);
+#if defined(PARADOX_TEST_CORE_GRAPH_ROOTS)
+      /*
+       * Both local roots are intentionally gone: the indexed carrier is now
+       * the selected core's sole direct root after the binding is detached.
+       */
+      test_core_graph_root_barrier(private_environment, core);
+#endif
     }
 
     if (frame->next_child == frame->child_count) {
+      SET_VECTOR_ELT(
+        roots,
+        core_graph_root_slot(depth - 1, CORE_GRAPH_ROOT_SELF),
+        R_NilValue
+      );
+      SET_VECTOR_ELT(
+        roots,
+        core_graph_root_slot(depth - 1, CORE_GRAPH_ROOT_CORE),
+        R_NilValue
+      );
       --depth;
       continue;
+    }
+    if (depth == capacity) {
+      if (capacity > R_XLEN_T_MAX /
+          (2 * CORE_GRAPH_ROOT_STRIDE)) {
+        Rf_error("ParamSet capsule graph is too deep");
+      }
+      const R_xlen_t expanded_capacity = capacity * 2;
+      grow_core_graph_roots(
+        &roots,
+        roots_index,
+        depth,
+        expanded_capacity
+      );
+      core_graph_frame_t *expanded = paradox_temporary_alloc(
+        expanded_capacity,
+        sizeof(*expanded)
+      );
+      memcpy(expanded, frames, (size_t) depth * sizeof(*expanded));
+      frames = expanded;
+      capacity = expanded_capacity;
+      frame = &frames[depth - 1];
     }
     SEXP child = VECTOR_ELT(frame->sets, frame->next_child);
     ++frame->next_child;
@@ -295,24 +459,17 @@ void paradox_core_validate_graph_path(SEXP root) {
         Rf_error("ParamSet capsule graph contains a cycle");
       }
     }
-    if (depth == capacity) {
-      if (capacity > R_XLEN_T_MAX / 2) {
-        Rf_error("ParamSet capsule graph is too deep");
-      }
-      const R_xlen_t expanded_capacity = capacity * 2;
-      core_graph_frame_t *expanded = paradox_temporary_alloc(
-        expanded_capacity,
-        sizeof(*expanded)
-      );
-      memcpy(expanded, frames, (size_t) depth * sizeof(*expanded));
-      frames = expanded;
-      capacity = expanded_capacity;
-    }
     frames[depth] = (core_graph_frame_t) {
       child, R_NilValue, 0, 0, FALSE
     };
+    SET_VECTOR_ELT(
+      roots,
+      core_graph_root_slot(depth, CORE_GRAPH_ROOT_SELF),
+      child
+    );
     ++depth;
   }
+  UNPROTECT(2);
 }
 
 SEXP paradox_core_refresh_shadow(SEXP self, SEXP private_environment) {

@@ -410,23 +410,6 @@ attribute_hidden SEXP paradox_test_tune_token_gc_mutation_snapshot(
   SEXP column,
   SEXP replacement
 );
-#if defined(PARADOX_TEST_GC_ROW_NAMES_ROOTS)
-enum paradox_test_gc_row_names_point {
-  PARADOX_TEST_GC_ROW_NAMES_STORE = 0,
-  PARADOX_TEST_GC_ROW_NAMES_COLLECTION_LOCAL,
-  PARADOX_TEST_GC_ROW_NAMES_COLLECTION_CARRIER,
-  PARADOX_TEST_GC_ROW_NAMES_POINT_COUNT
-};
-attribute_hidden void paradox_test_gc_row_names_barrier(
-  SEXP value,
-  enum paradox_test_gc_row_names_point point
-);
-attribute_hidden SEXP paradox_test_gc_row_names_barrier_counts(SEXP reset);
-# define PARADOX_TEST_GC_ROW_NAMES_BARRIER(value, point) \
-  paradox_test_gc_row_names_barrier((value), (point))
-#else
-# define PARADOX_TEST_GC_ROW_NAMES_BARRIER(value, point) ((void) 0)
-#endif
 attribute_hidden void paradox_test_altrep_initialize(DllInfo *dll);
 
 #endif

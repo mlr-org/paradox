@@ -337,6 +337,18 @@ All native semantic/admission graph traversal is iterative, uses checked
 repeated on the current active path. It does not reject a shared node seen on a
 completed sibling path.
 
+The capsule graph-path validator keeps its common 16 frames inline and uses raw
+native storage only as scratch. A single indexed VECSXP carrier roots both the
+shell and exact selected core generation for every active frame; slots are
+cleared on pop, each selected core is installed before its temporary local
+protections are released, and the carrier is grown before frame growth or
+child extraction. This is required even though the shell normally reaches the core:
+on R 3.6--4.1, optional binding inspection enters the evaluator, so a pending
+finalizer can replace an ancestor's `.core` while its old generation still
+owns the traversal edges. `R_alloc()` memory is not scanned for `SEXP`
+pointers. The carrier is the one implementation for every supported runtime,
+not an old-R semantic branch.
+
 Collection reader graphs keep coordinated inline node/path/postorder scratch
 for 16 nodes and grow those arrays together with checked operation-local
 allocation. Node initialization reuses the first admitted prior-node lookup

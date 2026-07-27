@@ -198,6 +198,25 @@ test_that("capsules serialize and deep-clone without unmanaged state", {
   expect_identical(origin$values$x, 0.5)
 })
 
+test_that("deep capsule graph validation roots every active generation", {
+  graph = ps(x = p_int())
+  for (index in seq_len(20L)) {
+    graph = ParamSetCollection$new(list(node = graph))
+  }
+
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+  shadow = ParamSetShadow$new(graph, character())
+  gctorture(previous)
+
+  expect_s3_class(shadow, "ParamSetShadow")
+  expect_identical(shadow$origin, graph)
+  expect_identical(
+    shadow$ids(),
+    paste0(paste(rep("node", 20L), collapse = "."), ".x")
+  )
+})
+
 test_that("additive ParamSet subclasses share the sealed engine", {
   AdditiveSet = R6::R6Class(
     "AdditiveSet",

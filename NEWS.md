@@ -182,6 +182,12 @@ hazards that Paradox 2 is intended to remove.
   child graphs—including Shadow origin edges—in one native transaction. It
   rejects existing/proposed cycles, corruption, collisions, and reentrant
   graph changes before atomically installing the replacement generation.
+  Native active-path validation retains both each shell and the exact capsule
+  generation selected from it in a managed root carrier. This closes a
+  capsule-graph lifetime hole on R 3.6--4.1, where an optional binding lookup may
+  enter the evaluator and a pending finalizer could otherwise detach an
+  ancestor generation still needed by the traversal. Shared-DAG and
+  active-path-cycle behavior is unchanged.
 * Exactly two narrow cold R semantic-orchestration families remain, neither as a
   fallback. Internal-tuning aggregation, disabling, internal search-space
   conversion, and post-flatten cargo rebinding form the first because
@@ -307,10 +313,11 @@ hazards that Paradox 2 is intended to remove.
   invoked. Additive shells and modifications that fail exact authentication
   instead fail closed. Current
   operations, standalone legacy Domain/Condition conversion, and migration
-  graphs without arbitrary active bindings remain supported. R 3.6 also cannot construct the package's
-  list-ALTREP adversarial test fixture; list ALTREP does not exist there, so
-  this does not narrow production behavior. Linux, Windows x86-64, and
-  Apple-silicon macOS are supported without architecture-specific code.
+  graphs without arbitrary active bindings remain supported. R 3.6 also cannot
+  construct the package's list-ALTREP adversarial test fixture; list ALTREP
+  does not exist there, so this does not narrow production behavior. Linux,
+  Windows x86-64, and Apple-silicon macOS are supported without
+  architecture-specific code.
 
 ## Dependency semantics
 
@@ -444,10 +451,10 @@ hazards that Paradox 2 is intended to remove.
   either. R 3.6--4.4 inspect reached promises through their compatibility
   accessors. R 4.5's compiled-code policy rejects those accessors and provides
   no replacement, so recursive migration fails closed on a reached promise and
-  asks the caller to migrate under R >= 4.6. R >= 4.6 uses its public
-  binding/dots inspection API; detached promises outside those cells remain
-  opaque. `R_getVar` is deliberately excluded before R 4.6 because it could
-  force a delayed binding without that release's classifier. Migration
+  asks the caller to migrate under R 4.0--4.4 or R >= 4.6. R >= 4.6 uses its
+  public binding/dots inspection API; detached promises outside those cells
+  remain opaque. `R_getVar` is deliberately excluded before R 4.6 because it
+  could force a delayed binding without that release's classifier. Migration
   performs a full semantic and shell-shape preflight,
   including a joint native validation of every prepared/current root before
   the first transplant, then commits valid nodes in post-order. Current Shadow

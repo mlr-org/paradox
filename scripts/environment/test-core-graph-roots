@@ -1,13 +1,13 @@
 #!/usr/bin/env Rscript
 
-# Build the deterministic compact-row-name GC oracle once per exact native
-# input set.  The instrumented package is a development artifact, not release
+# Build the deterministic capsule-graph GC oracle once per exact native input
+# set. The instrumented package is a development artifact, not release
 # evidence: every reuse verifies its sealed input metadata and complete
 # installed-library tree, then reruns the inexpensive behavioral driver.
 
 usage <- function() {
   cat(paste0(
-    "Usage: scripts/environment/test-gc-row-names-roots\n\n",
+    "Usage: scripts/environment/test-core-graph-roots\n\n",
     "Run from the repository root after `. scripts/activate`.  With no\n",
     "arguments, this computes the exact instrumented-build key, verifies or\n",
     "creates the repository-local cached installation, and always reruns the\n",
@@ -195,17 +195,17 @@ main <- function() {
   local_root <- file.path(root, ".local")
   temporary_root <- file.path(local_root, "tmp")
   cache_parent <- file.path(local_root, "cache")
-  cache_root <- file.path(cache_parent, "gc-row-names-roots")
+  cache_root <- file.path(cache_parent, "core-graph-roots")
   lock_root <- file.path(cache_root, ".locks")
   require_real_directory(local_root, ".local")
   require_real_directory(temporary_root, "local temporary root")
   require_real_directory(cache_parent, "local cache root", create = TRUE)
-  require_real_directory(cache_root, "GC-row-name cache root", create = TRUE)
-  require_real_directory(lock_root, "GC-row-name cache lock root", create = TRUE)
+  require_real_directory(cache_root, "core-graph cache root", create = TRUE)
+  require_real_directory(lock_root, "core-graph cache lock root", create = TRUE)
 
-  driver <- file.path(root, "tests", "instrumented", "gc-row-names-roots.R")
-  wrapper <- file.path(root, "scripts", "environment", "test-gc-row-names-roots")
-  profile <- file.path(root, "environment", "Makevars-test-gc-row-names")
+  driver <- file.path(root, "tests", "instrumented", "core-graph-roots.R")
+  wrapper <- file.path(root, "scripts", "environment", "test-core-graph-roots")
+  profile <- file.path(root, "environment", "Makevars-test-core-graph-roots")
   strict_profile <- file.path(root, "environment", "Makevars-check-strict-gcc")
   receipt_helper <- file.path(root, "scripts", "environment", "tree-receipt.R")
   required_inputs <- c(driver, wrapper, profile, strict_profile, receipt_helper)
@@ -290,7 +290,7 @@ main <- function() {
     )
   }
 
-  add_string("schema", "cache-format", "gc-row-names-roots-v1")
+  add_string("schema", "cache-format", "core-graph-roots-v1")
   source_hashes <- unname(tools::sha256sum(full_source_paths))
   for (index in seq_along(source_paths)) {
     source_path <- full_source_paths[[index]]
@@ -417,7 +417,7 @@ main <- function() {
   rows <- do.call(rbind, records)
   ordering <- order(rows[, "kind"], rows[, "name"], method = "radix")
   rows <- rows[ordering, , drop = FALSE]
-  input_manifest <- tempfile("gc-row-name-inputs-", tmpdir = temporary_root)
+  input_manifest <- tempfile("core-graph-inputs-", tmpdir = temporary_root)
   on.exit(unlink(input_manifest), add = TRUE)
   writeLines(
     c(
@@ -601,10 +601,10 @@ main <- function() {
   }
 
   library <- verify_cache(cache)
-  cat("gc_row_names_cache_key=", key, "\n", sep = "")
-  cat("gc_row_names_cache_status=", cache_status, "\n", sep = "")
-  cat("gc_row_names_cache_library=", library, "\n", sep = "")
-  driver_log <- tempfile("gc-row-name-driver-", tmpdir = temporary_root)
+  cat("core_graph_cache_key=", key, "\n", sep = "")
+  cat("core_graph_cache_status=", cache_status, "\n", sep = "")
+  cat("core_graph_cache_library=", library, "\n", sep = "")
+  driver_log <- tempfile("core-graph-driver-", tmpdir = temporary_root)
   on.exit(unlink(driver_log), add = TRUE)
   status <- system2(
     expected_rscript,
@@ -614,7 +614,7 @@ main <- function() {
   )
   cat(paste0(readLines(driver_log, warn = FALSE), "\n"), sep = "")
   if (!identical(status, 0L)) {
-    stop("instrumented compact-row-name driver failed", call. = FALSE)
+    stop("instrumented core-graph driver failed", call. = FALSE)
   }
   invisible(TRUE)
 }
@@ -622,7 +622,7 @@ main <- function() {
 tryCatch(
   main(),
   error = function(condition) {
-    message("test-gc-row-names-roots: ", conditionMessage(condition))
+    message("test-core-graph-roots: ", conditionMessage(condition))
     quit(save = "no", status = 1L)
   }
 )

@@ -63,5 +63,8 @@ attribute_hidden SEXP paradox_param_set_core_new(SEXP kind, SEXP state);
 attribute_hidden SEXP paradox_param_set_core_state(SEXP owner);
 attribute_hidden SEXP paradox_param_set_core_replace(SEXP owner, SEXP updates);
 attribute_hidden SEXP paradox_param_set_core_kind(SEXP owner);
+#if defined(PARADOX_TEST_CORE_GRAPH_ROOTS)
+attribute_hidden SEXP paradox_test_core_graph_root_barrier_counts(SEXP reset);
+#endif
 
 #endif

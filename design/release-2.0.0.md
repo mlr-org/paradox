@@ -43,14 +43,16 @@ dependency-cycle checking without network access or warning exceptions; live
 repository freshness remains hosted evidence. The legacy-wrapper recognition
 templates' deliberate free carrier bindings are now narrowly declared to
 codetools, removing the corresponding `R CMD check` NOTE without adding a
-namespace lookup or changing the authenticated template bodies. While the
-remaining pre-release items are in
-flight, use only the focused development policy below. This development batch
-intentionally does not run or claim the complete compatibility or release
-matrix. Freeze one replacement candidate only after all package-facing source
-converges, then run the applicable native, R API, runtime, memory,
-differential, downstream, documentation, benchmark, and hosted portability
-gates once for that exact candidate.
+namespace lookup or changing the authenticated template bodies. A provisional
+exact ref at `39855c9` completed the eight-task `release-core` profile, but a
+later independent audit found an active capsule generation reachable only
+through raw, unscanned graph-frame storage after old-R evaluator/finalizer
+reentry. The uniform managed active-path carrier and its deep/instrumented
+regressions repair that release-blocking lifetime defect; the provisional run
+is historical and cannot be transferred. Finish the targeted carrier checks,
+freeze one replacement candidate, then run the applicable native, R API,
+runtime, memory, differential, downstream, documentation, benchmark, and
+hosted portability gates once for that exact candidate.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -155,6 +157,12 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 - `ParamSetCollection$add()` is an atomic native replacement transaction. It
   follows Shadow origins, rejects corruption and existing/proposed cycles
   before commit, and generation-checks the complete current/child graphs.
+- Native capsule graph-path admission roots every active shell and exact
+  selected core generation in one managed carrier. Raw frame storage is
+  scratch only; carrier slots are cleared on pop and grown before an allocating
+  frame/child transition. This protects ancestor edges across old-R optional
+  binding evaluation and finalizer-driven `.core` replacement without a
+  separate old-R implementation.
 - Shadow live refresh is native and generation-based. Its sole non-payload
   attribute is an exact derived origin-graph signature; `.sets[[1L]]` is the
   only origin authority and fixed factories are not cached as state. The
@@ -365,8 +373,8 @@ not a local compatibility workaround.
 
 Checked entries below record implemented architectural components or
 historical exact-payload conclusions. They do not make the reopened worktree
-release-ready and do not transfer the last candidate's green gates to dormant-
-values source. The active package-facing blockers are:
+release-ready and do not transfer an earlier candidate's green gates. The
+remaining convergence and acceptance steps are:
 
 - [x] converge the dormant-values/default-aware-activity implementation,
   focused contract tests, documentation, differential cases, and dependency-
@@ -380,8 +388,11 @@ values source. The active package-facing blockers are:
 - [x] complete the pre-specified final performance batch with focused
   correctness, balanced A/B evidence, direct routine coverage, strict
   GCC/Clang builds, and the retained integrity-validation stop boundary;
-- [ ] finish the other planned pre-release package-facing changes and freeze
-  one clean replacement candidate;
+- [x] complete R 3.6 compatibility and its header/runtime/portability harness;
+- [x] repair the independently discovered active graph-frame GC lifetime defect
+  with one managed carrier plus ordinary and compile-time-instrumented
+  regressions;
+- [ ] freeze one clean replacement candidate;
 - [ ] run and retain the complete applicable gate matrix against that exact
   replacement candidate.
 
@@ -616,26 +627,26 @@ source. The replacement candidate still requires:
 - [x] directly affected development tests pass from stable cached
   installations;
 - [x] the complete unit suite, CRAN-style package check, and depends-only check
-  pass for the active frozen migration payload under
+  pass for the historical frozen migration payload under
   `.local/checks/serialized-migration-release-8797f11-20260724`;
 - [x] for the historical sealed migration payload, profiling was closed:
   sparse search-target projection and a bulk-dependency constructor
   transaction were measured no-gos for 2.0.0;
 - [x] measured hot-path changes remain intact under the bounded refreshed
   comparison recorded below;
-- [x] the sealed active-candidate benchmark has 77 policy/decision rows:
+- [x] the historical sealed-candidate benchmark has 77 policy/decision rows:
   73 pass, four bounded marginal reviews, and zero failures;
 - [x] strict GCC/Clang, both analyzers, cppcheck, symbol/registration audit,
-  ASan, UBSan, and R-API/exception-ledger checks are sealed for the active
+  ASan, UBSan, and R-API/exception-ledger checks are sealed for the historical
   payload;
 - [x] the combined GCT, Valgrind, and bounded-rchk memory completion is sealed
-  for the active payload;
+  for the historical payload;
 - [x] real R 4.3.3 and 4.5.2 runtime execution plus the current local R 4.6.1
-  native execution are sealed for the active payload;
+  native execution are sealed for the historical payload;
 - [ ] Windows x86-64 and real macOS ARM64 are clean for the exact frozen
   candidate and independently retained;
 - [x] priority consumer, documentation, differential, and benchmark gates are
-  rerun and accepted for the active payload.
+  rerun and accepted for the historical payload.
 
 Current profiling diagnostics are implementation guidance, not release
 benchmark evidence:
@@ -1021,7 +1032,29 @@ retains its donor execution identity and additionally names the target and exact
 equivalence proof; verifier-only changes never relabel old execution as a new
 package run.
 
-### Active retained local release evidence
+### Historical provisional R 3.6 release-core evidence
+
+The exact immutable ref `refs/paradox-release/r36-39855c9`, commit
+`39855c919beec323fd5940e4c46286e8df1be8ff`, tree
+`48e347b0c31a0f7ea966458586d13c1ab9d82764`, passed all eight tasks in
+`.local/verify/runs/r36-release-39855c9`. This included strict native,
+seven-axis header/API, differential, all four supported runtimes, declared
+dependency floors, old-R stress, and the cross-runtime serialization handoff.
+The coordinator completion, summary, native completion, API/header completion,
+runtime top seal, and differential seal SHA-256 values are
+`4a5d240f88ca5ed7593e0322e38749d38c515e02f5cb951b809d72d780225847`,
+`8b5b7026d75dd7718d52ad7af7dbb5025e45e5a0bf26635714f3c6e933778ecd`,
+`e12a74029b671db15bd5005b11aa4c243e7635e4d7efd67a1dd7eebe5e689cb6`,
+`a9deab9d413adf7a0063b8665bac9df074ec324a535187cbd70df13be78415c2`,
+`baf2e8462528d2814a06557b15d5f250cda7551dc84c7c2395210f870bbde58b`,
+and
+`18883e5b93c7625dd6d17710e23b00907e453f73e882f32c179e173d7d6c87b7`.
+`release-core` excludes the separate combined memory gate. More importantly,
+the subsequent graph-frame lifetime repair changes native package source, so
+no row in this otherwise successful run transfers to the replacement
+candidate.
+
+### Historical retained local release evidence for `8797f11`
 
 | Gate | Retained evidence and result |
 |---|---|
@@ -1067,16 +1100,15 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending` while the dormant-values implementation and
-other final cleanup changes remain in flight. The `8797f11` local gates above
-describe only the last sealed payload. Focused results from the current
-development batch are not release evidence. After the package-facing source
-converges, freeze one replacement candidate and complete its applicable local
-unit/check, R API, runtime, combined-memory, differential, documentation,
-downstream, source-package, benchmark, and hosted Windows x86-64/macOS ARM64
-gates. User publication of the prepared downstream branches/PRs, release tag,
-and workflow remains required. No historical row or current focused diagnostic
-alone authorizes the reopened payload.
+The release decision is `pending` until the managed graph-root fix is committed,
+one replacement candidate is frozen, and its applicable local unit/check,
+R API, runtime, combined-memory, differential, documentation, downstream,
+source-package, benchmark, and hosted Windows x86-64/macOS ARM64 gates
+complete. All planned feature and compatibility changes are implemented. The
+`8797f11` rows above and successful `39855c9` `release-core` run describe
+superseded payloads; focused results for the current fix are not release
+evidence. User publication of prepared downstream branches/PRs, the release
+tag, and workflow remains required.
 
 ## Historical rejected or superseded refs
 

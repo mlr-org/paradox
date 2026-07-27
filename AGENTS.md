@@ -28,8 +28,15 @@ content SHA-256
 Final pre-release cleanup reopened package source after that seal on
 2026-07-25. The ref and all source-bound gates are therefore historical until a
 new candidate is frozen; there is currently no active frozen package candidate.
-The R 3.6 compatibility implementation is now complete in the working tree:
-create one new candidate and rerun the applicable final gates once.
+The provisional R 3.6 ref `refs/paradox-release/r36-39855c9`, commit
+`39855c919beec323fd5940e4c46286e8df1be8ff`, completed all eight
+`release-core` tasks, including the four supported runtimes. A subsequent
+independent audit found that its capsule-graph validator stored active
+`SEXP` pointers only in unscanned `R_alloc()` memory; an old-R optional binding
+lookup could run a finalizer that detached such a generation. That run is
+therefore historical development evidence, not candidate acceptance. The
+managed active-path carrier and its regression must be included before the
+replacement candidate is frozen and the applicable final gates are run once.
 Post-freeze release-policy, validation, and ledger commits for that
 future candidate must prove package-facing paths unchanged; call that
 relationship *package-facing-source identical*, not package-identical, unless a
@@ -94,7 +101,7 @@ finish with `Status: OK`. All mandatory documentation rows pass; advisory
 `mlr3book` full-render and legacy `mlr3gallery` dependency rows are excluded and
 do not weaken the focused Paradox documentation conclusion. All local release
 gates were complete for that historical payload; none is a completion claim
-for the reopened dormant-value source.
+for the current package-facing source.
 
 The direct-child portability companion is
 `refs/paradox-release/portability-harness-5305ead`, commit
@@ -105,9 +112,9 @@ The direct-child portability companion is
 and is package-facing-source identical to the candidate. The only remaining
 release gates for that historical candidate were retained hosted Windows
 x86-64/macOS ARM64 results and the user-performed downstream branch/PR
-publication handoff. The replacement dormant-value candidate instead requires
-the applicable local matrix again after source convergence. Agents must not
-perform either remote write.
+publication handoff. The replacement candidate instead requires the applicable
+local matrix again after source convergence. Agents must not perform either
+remote write.
 
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
@@ -292,6 +299,15 @@ operator action.
   unchanged. `SHADOW` owns one origin edge and a
   fixed visible schema while reading/writing dynamic origin semantics live.
   Shared DAG nodes are valid; a repeated node on one active path is a cycle.
+  The graph-path validator's raw native frames are scratch, never GC roots.
+  One indexed VECSXP carrier owns both every active shell and the exact selected
+  capsule generation until that frame is popped; grow the carrier before any
+  allocation that could invalidate a raw frame or child pointer. Do not replace
+  this with `SEXP` fields held only in `R_alloc()` storage.
+  Three same-process paired runs measured a 2--3% cost when the native Shadow
+  constructor was isolated and 0--1% on the public R6 constructor; that bounded
+  cost is accepted for exact-generation safety and is not grounds for weakening
+  the carrier.
   Deep clone memoizes the complete graph and clones each shell once; never
   restore independent per-edge `$clone(deep = TRUE)` recursion.
 - `ParamSetShadow` is supplied by Paradox. Visible writes preserve hidden
@@ -987,7 +1003,10 @@ operator action.
   result. Candidate-shell and fresh-destination classifiers use that optional
   path, while admitted core/generation reads keep the required native path so
   old R does not evaluate `base::exists()` on every hot operation. Required
-  binding snapshots remain allocation-free. On R 3.6--4.1 the ownership
+  binding snapshots remain allocation-free. Because the old optional query
+  enters the evaluator and may run pending finalizers, active capsule-graph
+  traversal roots the shell and exact selected core generation independently
+  of their mutable bindings on every supported R branch. On R 3.6--4.1 the ownership
   gateway first rejects a non-object `self` by its constant-time object bit,
   preventing a malformed direct native call from entering the required reader
   with an absent R6 enclosure binding. That guard is compiled out beginning
@@ -1641,6 +1660,11 @@ The package suite must directly cover, before downstream packages are used:
 
 - exact capsule schema/version validation and corrupt-state no-crash behavior;
 - BASE, nested/shared COLLECTION, and live SHADOW graphs, including cycles;
+- graph-path validation at depth greater than the 16-frame inline capacity
+  under `gctorture()`, plus the disposable
+  `scripts/environment/test-core-graph-roots` build after any root-carrier
+  change; its test-only barrier detaches every selected `.core`, forces GC and
+  pending finalizers, and requires the exact generation to survive;
 - collection add rejects existing/proposed cycles and corruption before commit
   and generation-checks both admitted graphs without rejecting shared DAGs;
 - additive subclasses and deterministic rejection/non-support of core

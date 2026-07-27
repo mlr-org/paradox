@@ -1,0 +1,6 @@
+# Deterministic capsule-graph reachability probe. This profile is selected only
+# by the standalone instrumented regression; ordinary package builds do not
+# compile its barrier or register its status routine.
+
+include $(PARADOX_ROOT)/environment/Makevars-check-strict-gcc
+PKG_CPPFLAGS += -DPARADOX_TEST_CORE_GRAPH_ROOTS
