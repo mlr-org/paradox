@@ -1799,7 +1799,23 @@ cache; synthetic Git mutations belong in a scratch repository, never the real
 `.git`. Runtime-matrix stages redirect their package library, temp, cache, and
 runtime state to the attempt-private writable mount only after authenticating
 the coordinator's prefix receipt handoff. Pinned source archives remain
-read-only and are inspected below process-private temporary state.
+read-only and are inspected below process-private temporary state. Runtime
+prefix receipts force the C locale before enumerating and sorting members, and
+the bootstrap's explicit-package lock/installed-inventory comparisons use the
+same byte order. Their bytes and authentication result therefore cannot vary
+with host or worker collation. Receipt verification writes its comparison only
+below the caller's process-private `TMPDIR`, which must be a plain directory
+outside the authenticated tree; retained manifests and their read-only parent
+directories never need write access. The helper owns a private `077` umask, so
+hostile caller settings cannot make its scratch files unreadable or leak their
+contents.
+
+The worker also maps ordinary activation's generic state and the runtime
+matrix's mutable development library, temporary, cache, and runtime subtrees
+to attempt-private directories. Prefixes, prefix/dependency receipts, and
+sealed dependency libraries are deliberately not in that list and remain
+read-only. This lets synthetic activation checks execute without granting
+write access to retained compatibility evidence.
 
 Child output and GNU-timeout diagnostics must use separate descriptors.
 Deadline evidence accepts the exact full-path or basename diagnostic emitted

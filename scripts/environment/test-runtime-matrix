@@ -1166,6 +1166,62 @@ ln -s sub/value "$fixture/tree/link"
   create "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
 "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
   verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+receipt_scratch="$fixture/receipt-scratch"
+mkdir "$receipt_scratch"
+chmod 0700 "$receipt_scratch"
+chmod 0555 "$fixture/receipts"
+receipt_manifest_sha256=$(sha256sum "$fixture/receipts/tree.tsv")
+receipt_parent_listing=$(
+  find "$fixture/receipts" -mindepth 1 -maxdepth 1 \
+    -printf '%f\t%y\t%m\t%s\n' | LC_ALL=C sort
+)
+TMPDIR="$receipt_scratch" \
+  "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+  verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+(
+  umask 0777
+  TMPDIR="$receipt_scratch" \
+    "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+)
+[[ -z "$(find "$receipt_scratch" -mindepth 1 -print -quit)" &&
+  "$(sha256sum "$fixture/receipts/tree.tsv")" == "$receipt_manifest_sha256" &&
+  "$(find "$fixture/receipts" -mindepth 1 -maxdepth 1 \
+    -printf '%f\t%y\t%m\t%s\n' | LC_ALL=C sort)" == \
+    "$receipt_parent_listing" ]] ||
+  fail "Runtime-prefix verification wrote outside its private workspace"
+printf 'tampered\n' >> "$fixture/tree/sub/value"
+if TMPDIR="$receipt_scratch" \
+    "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then
+  fail "Runtime-prefix private-workspace verification accepted tampered content"
+fi
+[[ -z "$(find "$receipt_scratch" -mindepth 1 -print -quit)" ]] ||
+  fail "Runtime-prefix verification leaked its private failure workspace"
+printf 'spherical\n' > "$fixture/tree/sub/value"
+printf 'not a directory\n' > "$fixture/receipt-not-directory"
+ln -s receipt-scratch "$fixture/receipt-scratch-link"
+for invalid_temporary_root in \
+    "$fixture/receipt-not-directory" "$fixture/receipt-scratch-link"; do
+  if TMPDIR="$invalid_temporary_root" \
+      "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+      verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then
+    fail "Runtime-prefix receipt accepted an invalid temporary root"
+  fi
+done
+mkdir "$fixture/tree/in-tree-scratch"
+if temporary_root_error=$(
+    TMPDIR="$fixture/tree/in-tree-scratch" \
+      "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+      verify "$fixture/tree" "$fixture/receipts/tree.tsv" 2>&1
+  ); then
+  fail "Runtime-prefix receipt accepted a temporary root inside its tree"
+fi
+[[ "$temporary_root_error" == \
+  *"Receipt verification temporary root is inside the authenticated tree"* ]] ||
+  fail "Runtime-prefix receipt missed its in-tree temporary-root guard"
+rmdir "$fixture/tree/in-tree-scratch"
+chmod 0755 "$fixture/receipts"
 ln "$fixture/tree/sub/value" "$fixture/outside-alias"
 if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
     verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then

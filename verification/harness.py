@@ -78,7 +78,14 @@ ACTIVATION_WRITABLE_PATHS = (
     ".cache/pip",
     ".cache/uv",
 )
-ACTIVATION_PRIVATE_PATHS = (".local/tmp", ".local/runtime")
+ACTIVATION_PRIVATE_PATHS = (
+    ".local/tmp",
+    ".local/runtime",
+    ".local/runtime-matrix/libraries",
+    ".local/runtime-matrix/tmp",
+    ".local/runtime-matrix/runtime",
+    ".cache/runtime-matrix",
+)
 
 
 class HarnessError(RuntimeError):

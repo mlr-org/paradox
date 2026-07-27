@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Receipt bytes must not depend on the host or worker locale.  In particular,
+# collation that ignores punctuation/case reorders conda's .r-*, R*, and
+# lowercase executable names even though the authenticated tree is unchanged.
+LC_ALL=C
+LANG=C
+export LC_ALL LANG
+umask 077
+
 usage() {
   cat <<'USAGE'
 Usage: scripts/environment/runtime-matrix-prefix-receipt create|verify DIRECTORY MANIFEST
@@ -43,7 +51,7 @@ case "$manifest/" in
   "$directory"/*) fail "Receipt must live outside the authenticated tree" ;;
 esac
 
-for tool in find sort sha256sum readlink realpath mktemp cmp xargs; do
+for tool in find sort sha256sum readlink realpath mktemp cmp xargs stat; do
   command -v "$tool" >/dev/null 2>&1 || fail "Required receipt tool is absent: $tool"
 done
 
@@ -144,8 +152,70 @@ fi
 
 [[ -f "$manifest" && ! -L "$manifest" ]] ||
   fail "Runtime-prefix receipt is absent or symbolic: $manifest"
-temporary=$(mktemp "$manifest.verify.XXXXXX")
-trap 'rm -f -- "${temporary:-}"' EXIT
+temporary_root=${TMPDIR:-/tmp}
+[[ -d "$temporary_root" && ! -L "$temporary_root" ]] ||
+  fail "Receipt verification temporary root is absent or symbolic: $temporary_root"
+temporary_root=$(cd "$temporary_root" && pwd -P)
+case "$temporary_root/" in
+  "$directory/"|"$directory/"*)
+    fail "Receipt verification temporary root is inside the authenticated tree"
+    ;;
+esac
+temporary_directory=
+temporary_directory_identity=
+temporary_directory_descriptor=
+temporary_directory_handle=
+cleanup_verification_workspace() {
+  local status=$? cleanup_failed=0
+  trap - EXIT
+  if [[ -n "${temporary_directory:-}" ]]; then
+    if [[ -d "$temporary_directory" &&
+        ! -L "$temporary_directory" &&
+        -n "${temporary_directory_identity:-}" &&
+        "$(stat -Lc '%d:%i' -- "$temporary_directory" 2>/dev/null || :)" == \
+          "$temporary_directory_identity" ]]; then
+      if [[ -n "${temporary_directory_handle:-}" &&
+          "$(stat -Lc '%d:%i' -- "$temporary_directory_handle" \
+            2>/dev/null || :)" == "$temporary_directory_identity" ]]; then
+        find -H "$temporary_directory_handle" -xdev -depth -mindepth 1 \
+          -delete >/dev/null 2>&1 || cleanup_failed=1
+      elif [[ -n "${temporary_directory_handle:-}" ]]; then
+        cleanup_failed=1
+      fi
+    else
+      cleanup_failed=1
+    fi
+    if [[ -n "${temporary_directory_descriptor:-}" ]]; then
+      exec {temporary_directory_descriptor}<&-
+    fi
+    if [[ $cleanup_failed -eq 0 ]]; then
+      rmdir -- "$temporary_directory" >/dev/null 2>&1 || cleanup_failed=1
+    fi
+  fi
+  if [[ $status -eq 0 && $cleanup_failed -ne 0 ]]; then
+    printf '%s\n' \
+      "Could not remove the private receipt verification workspace" >&2
+    status=1
+  fi
+  exit "$status"
+}
+trap cleanup_verification_workspace EXIT
+temporary_directory=$(
+  mktemp -d "$temporary_root/runtime-prefix-receipt.verify.XXXXXX"
+)
+temporary_directory_identity=$(stat -Lc '%d:%i' -- "$temporary_directory")
+chmod 0700 -- "$temporary_directory"
+[[ "$(stat -Lc '%d:%i' -- "$temporary_directory")" == \
+    "$temporary_directory_identity" &&
+  "$(stat -Lc '%a' -- "$temporary_directory")" == 700 ]] ||
+  fail "Receipt verification workspace could not be made private"
+exec {temporary_directory_descriptor}< "$temporary_directory"
+temporary_directory_handle="/proc/$$/fd/$temporary_directory_descriptor"
+[[ "$(stat -Lc '%d:%i' -- "$temporary_directory_handle")" == \
+    "$temporary_directory_identity" &&
+  "$(stat -Lc '%a' -- "$temporary_directory_handle")" == 700 ]] ||
+  fail "Receipt verification workspace is not one private owned directory"
+temporary="$temporary_directory_handle/observed.tsv"
 describe "$directory" "$temporary"
 if ! cmp -s -- "$manifest" "$temporary"; then
   fail "Runtime prefix does not match its authenticated tree receipt: $directory"

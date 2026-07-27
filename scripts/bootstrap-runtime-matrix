@@ -596,10 +596,10 @@ verify_one() {
   expected_inventory="/proc/$$/fd/$expected_inventory_descriptor"
   actual_inventory="/proc/$$/fd/$actual_inventory_descriptor"
   expected_receipt="/proc/$$/fd/$expected_receipt_descriptor"
-  tail -n +4 "$lock" | sort > "$expected_inventory"
+  tail -n +4 "$lock" | LC_ALL=C sort > "$expected_inventory"
   R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
     "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
-    sort > "$actual_inventory"
+    LC_ALL=C sort > "$actual_inventory"
   verify_open_file "$expected_inventory_descriptor" \
     "$expected_inventory_identity" "Runtime expected inventory"
   verify_open_file "$actual_inventory_descriptor" \
@@ -732,11 +732,11 @@ verify_unreceipted_prefix() {
     "Unreceipted actual inventory"
   expected="/proc/$$/fd/$expected_descriptor"
   actual="/proc/$$/fd/$actual_descriptor"
-  tail -n +4 "$lock" | sort > "$expected"
+  tail -n +4 "$lock" | LC_ALL=C sort > "$expected"
   R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
     R_LIBS_USER='' R_LIBS_SITE='' \
     "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
-    sort > "$actual"
+    LC_ALL=C sort > "$actual"
   verify_open_file "$expected_descriptor" "$expected_identity" \
     "Unreceipted expected inventory"
   verify_open_file "$actual_descriptor" "$actual_identity" \
@@ -946,7 +946,7 @@ EOF
     seal_handle="/proc/$$/fd/$seal_descriptor"
     R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
       "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
-      sort > "$inventory_handle"
+      LC_ALL=C sort > "$inventory_handle"
     verify_open_file "$inventory_descriptor" "$inventory_identity" \
       "Runtime explicit inventory staging file"
     R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \

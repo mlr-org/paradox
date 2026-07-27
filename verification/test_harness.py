@@ -798,6 +798,28 @@ class EngineTests(unittest.TestCase):
                 f"type=bind,src={root / '.local'},dst={root / '.local'},rw",
                 command,
             )
+            for relative in harness.ACTIVATION_PRIVATE_PATHS:
+                destination = root / relative
+                source = (
+                    run_root
+                    / "tasks"
+                    / "one"
+                    / "state"
+                    / "r-one-a001"
+                    / "activation"
+                    / relative.lstrip(".")
+                )
+                self.assertIn(
+                    f"type=bind,src={source},dst={destination},rw",
+                    command,
+                )
+            for relative in (
+                ".local/runtime-matrix/prefixes",
+                ".local/runtime-matrix/receipts",
+                ".local/runtime-matrix/dependencies",
+                ".local/runtime-matrix/dependency-receipts",
+            ):
+                self.assertNotIn(f"dst={root / relative},rw", joined)
             probe_flags = harness._base_limit_flags("docker", "probe")
             self.assertIn(f"{os.getuid()}:{os.getgid()}", probe_flags)
             self.assertIn("--security-opt=label=disable", " ".join(probe_flags))

@@ -38,7 +38,10 @@ toolchain, dependency libraries, and undeclared state are read-only. Each task
 gets private home, temporary, and runtime directories plus only the reviewed
 `writable_paths` in `tasks.json`; downstream candidate, dependency, bridge, and
 extra libraries are explicitly remounted read-only below their writable
-evidence parent. The network is disabled unless a reviewed task explicitly
+evidence parent. Generic activation state and the runtime matrix's development
+library, temporary, cache, and runtime subtrees are backed by attempt-private
+mounts; retained prefixes, receipts, and sealed dependency libraries remain
+read-only. The network is disabled unless a reviewed task explicitly
 requests it. A different platform/toolchain can instead use a task-specific
 image plus overridden platform/machine constraints in `tasks.json`. All
 currently shipped local tasks inherit the repository's Linux/x86-64 toolchain
