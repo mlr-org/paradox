@@ -202,9 +202,12 @@ project-local R and Clang sanitizer runtime. The former immutable worker
 ASan before Paradox loaded; the failed `r36-release-076eb44` ASan lane is
 invalid worker evidence, not a package failure. Relaxing Podman isolation and
 resource settings did not help. The reviewed local replacement is
-`localhost/paradox-verification-worker@sha256:1bf06cbf59385885df4f0e62a5736d95fc3c17f091e29fb7ff3e87dddd7833d9`,
+`localhost/paradox-verification-worker@sha256:e44c4ae9fbdc9d9e32fdc5e410af0bf4455689dd496c4681f8785904c0212fda`,
 built from exact Debian Bullseye base
 `docker.io/library/debian@sha256:cba95a21c96c1f5fc2470081829363eed57706634f7dc26e8c6712934303d57a`.
+Bullseye has an unmerged `/usr`, so the worker recipe must retain its explicit
+plain, non-symbolic compatibility copies for `/usr/bin/bash`,
+`/usr/bin/mktemp`, and the other exact authenticated command paths.
 An ASan-selected native run now fails closed on exact preloaded-R startup and
 an XDR round-trip before any expensive compiler mode. Never add a direct-host
 fallback or weaken container isolation; provision and pin a compatible worker.

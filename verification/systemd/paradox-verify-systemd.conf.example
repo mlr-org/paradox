@@ -12,4 +12,4 @@ cpu_reserve=2
 tasks_max=8192
 runtime_max_sec=604800
 engine=podman
-worker_image=localhost/paradox-verification-worker@sha256:1bf06cbf59385885df4f0e62a5736d95fc3c17f091e29fb7ff3e87dddd7833d9
+worker_image=localhost/paradox-verification-worker@sha256:e44c4ae9fbdc9d9e32fdc5e410af0bf4455689dd496c4681f8785904c0212fda

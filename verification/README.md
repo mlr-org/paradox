@@ -40,8 +40,8 @@ selected, `scripts/native-check` exercises the exact preloaded R startup and an
 XDR serialization round-trip before any expensive native mode and seals the
 one-line result. An incompatible image must be rebuilt and repinned, never
 worked around by weakening isolation or silently moving that mode onto the
-host. The checkout,
-toolchain, dependency libraries, and undeclared state are read-only. Each task
+host. The checkout, toolchain, dependency libraries, and undeclared state are
+read-only. Each task
 gets private home, temporary, and runtime directories plus only the reviewed
 `writable_paths` in `tasks.json`; downstream candidate, dependency, bridge, and
 extra libraries are explicitly remounted read-only below their writable
@@ -77,9 +77,11 @@ organization worker image exists. Build it as an explicit preparation step
 from a digest-pinned Debian-compatible base; the resulting image digest—not its
 mutable tag—is the value supplied to the controller. The worker recipe records
 the exact glibc 2.31 Bullseye base validated with the current mounted
-R/Clang-ASan combination; another platform must establish its own matching
-userland rather than substitute an arbitrary newer base. Package/image
-downloads and builds remain outside test execution.
+R/Clang-ASan combination and explicitly supplies plain, non-symbolic
+compatibility copies for the authenticated `/usr/bin` command set when the
+base is unmerged. Another platform must establish its own matching userland
+rather than substitute an arbitrary newer base. Package/image downloads and
+builds remain outside test execution.
 
 `make verify-doctor`, `make verify-plan`, `make verify-smoke`,
 `make verify-focused`, `make verify-compat`, `make verify-harness`,

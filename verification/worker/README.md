@@ -2,9 +2,16 @@
 
 This recipe supplies only the ordinary Linux commands used around the
 repository-mounted, lockfile-built `.local/toolchain`. It deliberately does
-not copy the checkout or install R packages.  The ordinary command contract
+not copy the checkout or install R packages. The ordinary command contract
 includes ripgrep because structural harness checks use `rg` for literal and
-regular-expression source-policy assertions.
+regular-expression source-policy assertions, and a plain `/usr/bin`
+compatibility surface because authenticated helpers deliberately name the
+distribution's plain `/usr/bin` tools. On an unmerged base, the recipe installs
+plain compatibility
+copies of the small exact `/bin` command set used there. It does not use
+symlinks because security-sensitive helpers deliberately reject symbolic
+executables. This contract therefore does not depend on which Debian
+generation supplied the base.
 
 Use a Debian-compatible base by exact digest. The mounted project toolchain,
 not packages copied into the image, supplies R and Clang. The base userland

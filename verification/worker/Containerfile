@@ -20,6 +20,12 @@ RUN apt-get update \
       tar \
       util-linux \
       xz-utils \
+    && for command in \
+      bash chmod date grep ln mkdir mktemp mv readlink rm tar; do \
+      if [ ! -e "/usr/bin/$command" ]; then \
+        cp -p "/bin/$command" "/usr/bin/$command"; \
+      fi; \
+    done \
     && rm -rf /var/lib/apt/lists/*
 
 LABEL org.opencontainers.image.title="paradox-verification-worker"
