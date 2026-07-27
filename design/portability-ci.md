@@ -17,6 +17,11 @@ The source must not rely on GNU-only C behavior, x86 floating-point details,
 unaligned access, little-endian layout, pointer ordering, `long` width,
 architecture-specific vector instructions, or private data.table APIs. Use
 `R_xlen_t`, checked conversions, R's NA/NaN predicates, and portable math.
+Compiler extensions selected inside recent public R headers are external to
+that source contract: `src/paradox.h` explicitly includes the public
+`R_ext/Complex.h` required for `Rcomplex` and lexically isolates only R's
+build-selected fixed-base enum and anonymous-structure diagnostics. The same
+pedantic warnings remain errors for every Paradox declaration.
 
 ## Local supported-runtime matrix
 

@@ -373,7 +373,11 @@ modified evidence.
 The strict profiles use C99 and turn a broad warning set into errors. They do
 not globally suppress compiler diagnostics. The only accepted R-specific
 exceptions therefore remain the narrow source pragmas around the public R
-header fixed-base enum and the registration ABI's required `DL_FUNC` casts.
+header fixed-base enum and, since R 4.3, anonymous `Rcomplex` struct, and the
+registration ABI's required `DL_FUNC` casts. The header push/pop does not
+weaken those diagnostics for Paradox source; its explicit
+`R_ext/Complex.h` include avoids relying on `R.h` to keep including that type
+in future R versions.
 The conda R `Makeconf` includes a linker-only option in `CPPFLAGS`; profiles
 replace that with the equivalent compile-only preprocessor flags instead of
 disabling Clang's unused-command-line warning.

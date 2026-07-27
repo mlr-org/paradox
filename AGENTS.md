@@ -926,6 +926,12 @@ semantic path.
   one conservative rooting proof across all supported branches because hostile
   class metadata can allocate during facade admission, while recognized
   callback-backed user databases are rejected before binding APIs.
+  Recent R public headers themselves use a fixed-base enum on some builds, and
+  R >= 4.3 uses an anonymous `Rcomplex` struct while package C is compiled as
+  C99. The diagnostic push/pop in `src/paradox.h` treats only those
+  official-header declarations as compiler extensions and explicitly includes
+  the public `R_ext/Complex.h` used by Paradox; the same pedantic diagnostics
+  remain errors throughout Paradox source.
   R 3.6--4.5 use one exact, ledgered `ATTRIB` occurrence for raw attribute
   iteration that cannot be expressed through the earlier API without
   expanding compact `row.names`. R 3.6--4.4 retain one ledgered `FORMALS`

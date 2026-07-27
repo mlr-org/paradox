@@ -1355,6 +1355,30 @@ for compiler in "$GCC" "$CLANG"; do
     "$HEADER_CLASSIFICATION/probe.c"
 done
 
+# The package-level R-header boundary admits only compiler extensions used by
+# official recent-R headers.  Keep the R include as an ordinary -I path here:
+# that reproduces R CMD INSTALL, unlike the separate header-matrix gate where
+# authenticated R headers are deliberately external -isystem inputs.
+R_HEADER_BOUNDARY="$TEST_ROOT/r header diagnostic boundary"
+mkdir -p "$R_HEADER_BOUNDARY"
+printf '%s\n' '#include "paradox.h"' > "$R_HEADER_BOUNDARY/probe.c"
+"$CLANG" -std=gnu99 -O2 -fsyntax-only \
+  -DR_NO_REMAP -DSTRICT_R_HEADERS -Wall -Wextra -Wpedantic -Werror \
+  "-I$TOOLCHAIN/lib/R/include" "-I$ROOT/src" \
+  "$R_HEADER_BOUNDARY/probe.c" ||
+  fail "official R headers escape their narrow package diagnostic boundary"
+printf '%s\n' \
+  '#include "paradox.h"' \
+  'struct paradox_c11_probe { union { struct { int x; }; int y; }; };' \
+  > "$R_HEADER_BOUNDARY/probe.c"
+expect_failure "$CLANG" -std=gnu99 -O2 -fsyntax-only \
+  -DR_NO_REMAP -DSTRICT_R_HEADERS -Wall -Wextra -Wpedantic -Werror \
+  "-I$TOOLCHAIN/lib/R/include" "-I$ROOT/src" \
+  "$R_HEADER_BOUNDARY/probe.c"
+grep -Fq 'anonymous structs are a C11 extension [-Werror,-Wc11-extensions]' \
+  "$TEST_ROOT/unexpected-success.log" ||
+  fail "R-header diagnostic pop no longer restores strict package warnings"
+
 [[ "$("$REFERENCE_SOURCE_FETCHER" --print-r-source-url 3.6.0)" == \
     'https://cran.r-project.org/src/base/R-3/R-3.6.0.tar.gz' &&
    "$("$REFERENCE_SOURCE_FETCHER" --print-r-source-url 4.6.1)" == \

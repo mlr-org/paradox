@@ -1,9 +1,10 @@
 #ifndef PARADOX_H
 #define PARADOX_H
 
-/* R 4.6 can expose a compiler-extension fixed-base enum in its public C17
- * headers when R itself was built by a compiler that supports it. Keep
- * pedantic diagnostics enabled for our code while isolating that declaration. */
+/* Recent R can expose compiler extensions in its public headers: a fixed-base
+ * enum on some builds and, since R 4.3, an anonymous struct in Rcomplex when
+ * compiling package C as C99. Keep pedantic diagnostics enabled for our code
+ * while isolating those declarations. */
 #if defined(__clang__)
 # pragma clang diagnostic push
 # if defined(__has_warning)
@@ -12,12 +13,16 @@
 #  elif __has_warning("-Wc23-extensions")
 #   pragma clang diagnostic ignored "-Wc23-extensions"
 #  endif
+#  if __has_warning("-Wc11-extensions")
+#   pragma clang diagnostic ignored "-Wc11-extensions"
+#  endif
 # endif
 #elif defined(__GNUC__) && __GNUC__ >= 5
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wpedantic"
 #endif
 #include <R.h>
+#include <R_ext/Complex.h>
 #include <Rversion.h>
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
