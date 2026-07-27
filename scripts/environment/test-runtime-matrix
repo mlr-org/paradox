@@ -578,10 +578,19 @@ if rg -Fq 'tools::sha256sum' \
 fi
 [[ $(rg -Fc '_R_CHECK_FORCE_SUGGESTS_=false' \
     "$ROOT/scripts/environment/run-runtime-matrix-stage") -eq 1 ]]
+rg -Fq \
+  'check_nm_directory="$PARADOX_RUNTIME_MATRIX_PREFIX/$CONDA_TOOLCHAIN_HOST/bin"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  'PATH="$check_nm_directory:$PATH" _R_CHECK_FORCE_SUGGESTS_=false' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  '"$(readlink -- "$check_nm_alias")" ==' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
 rg -Fq 'R CMD check --no-tests --ignore-vignettes --no-manual "$archive"' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
 rg -Fq \
-  'R CMD check --no-tests --ignore-vignettes --no-manual ARCHIVE' \
+  'PATH=authenticated-target-tool-bin _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --ignore-vignettes --no-manual ARCHIVE' \
   "$ROOT/scripts/test-runtime-matrix"
 rg -Fq 'verify_declared_minimum_check "$version" "$artifacts" "$metadata"' \
   "$ROOT/scripts/verify-runtime-matrix-evidence"

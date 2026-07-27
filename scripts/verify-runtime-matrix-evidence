@@ -314,8 +314,9 @@ verify_declared_minimum_check() {
     }
     NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}
     END {
-      if (NR != 9 ||
+      if (NR != 11 ||
           !seen["scope"] || !seen["force_suggests"] || !seen["options"] ||
+          !seen["nm_path_scope"] || !seen["nm_command_relative"] ||
           !seen["exit_status"] || !seen["conclusion"] ||
           !seen["driver_log_sha256"] || !seen["check_log_relative"] ||
           !seen["check_log_sha256"]) exit 1
@@ -328,6 +329,10 @@ verify_declared_minimum_check() {
     $(check_status_value force_suggests) == false &&
     $(check_status_value options) == \
       "--no-tests --ignore-vignettes --no-manual" &&
+    $(check_status_value nm_path_scope) == \
+      check-only-target-tool-directory &&
+    $(check_status_value nm_command_relative) == \
+      x86_64-conda-linux-gnu/bin/nm &&
     $(check_status_value exit_status) == 0 &&
     $(check_status_value conclusion) == expected-missing-suggests-note &&
     $(check_status_value check_log_relative) == \

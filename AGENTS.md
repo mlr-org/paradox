@@ -1244,7 +1244,13 @@ nine direct Suggests and deliberately omits exactly `reticulate`, `rmarkdown`,
 `mlr3learners`, and `e1071`. The check must therefore exit zero with exactly
 that one missing-Suggests dependency NOTE, no other NOTE/WARNING/ERROR/halt,
 and one sole final `Status: 1 NOTE`; `Status: OK` is not a truthful contract for
-this axis.
+this axis. R 3.6's compiled-code checker ignores the configured `NM` and
+searches `PATH` for the literal command `nm`. The stage therefore prepends the
+sealed prefix's compiler-family target-tool directory only around this check,
+after proving that its `nm` alias has the exact expected relative target and
+resolves to the same authenticated inode as the `NM` used by the DSO audit.
+Do not install a worker-global binutils, copy a second binary, or broaden that
+PATH adjustment to other stage commands.
 
 `scripts/bootstrap-runtime-matrix` alone owns persistent runtime and
 dependency-library provisioning. For an R 3.6.3 selection, provision mode owns

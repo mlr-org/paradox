@@ -130,6 +130,12 @@ locked local test library deliberately omits exactly `reticulate`, `rmarkdown`,
 `mlr3learners`, and `e1071`; therefore its sole admissible check exception is
 child exit zero, one exact missing-Suggests dependency NOTE, no other
 NOTE/WARNING/ERROR/halt, and one final `Status: 1 NOTE`.
+R 3.6's Unix compiled-code checker predates the configured `NM` lookup and
+calls the literal command `nm`. Only for this check, the stage prepends the
+authenticated compiler-family target-tool directory already present in the
+sealed prefix. It first verifies the installed alias's exact relative target
+and resolved inode against the target-prefixed `NM`; no worker-global tool or
+duplicated launcher is part of the contract.
 Historical fixed file/skip/expectation counts are removed; a narrow exclusion
 must name a current unsupported runtime capability and be independently
 validated.

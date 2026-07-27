@@ -667,6 +667,11 @@ nine direct Suggests, so the only accepted result is child exit zero, one
 dependency NOTE naming exactly `reticulate`, `rmarkdown`, `mlr3learners`, and
 `e1071`, no other NOTE/WARNING/ERROR/halt, and one sole final
 `Status: 1 NOTE`. This check is not multiplied across the newer runtime axes.
+On R 3.6, `tools` searches `PATH` for the literal command `nm` instead of
+using the activated target-prefixed `NM`. The check-only subprocess therefore
+prepends the sealed prefix's compiler-family target-tool directory after
+verifying that its installed `nm` alias resolves to that exact authenticated
+backend. The rest of the stage keeps the ordinary clean PATH.
 
 A complete `--runtime all` run has one additional post-stage gate:
 `run-runtime-matrix-cross-serialization` creates a representative current-v2

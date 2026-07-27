@@ -290,7 +290,7 @@ for version in "${versions[@]}"; do
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
     if [[ "$version" == 3.6.3 ]]; then
-      printf 'declared-minimum-check\t_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --ignore-vignettes --no-manual ARCHIVE\n'
+      printf 'declared-minimum-check\tPATH=authenticated-target-tool-bin _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --ignore-vignettes --no-manual ARCHIVE\n'
       printf 'declared-floor-install\tR CMD INSTALL into a fresh candidate library with the exact declared direct-dependency floors\n'
       printf 'declared-floor-smoke\texact R 3.6.3 dependency-origin and representative imported-path probe\n'
     fi

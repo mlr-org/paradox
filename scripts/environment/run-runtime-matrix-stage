@@ -482,10 +482,27 @@ fi
 if [[ "$VERSION" == 3.6.3 ]]; then
   check_driver_log="$STAGE_LOGS/r-cmd-check.log"
   check_status="$STAGE_LOGS/r-cmd-check-status.tsv"
+  check_nm_directory="$PARADOX_RUNTIME_MATRIX_PREFIX/$CONDA_TOOLCHAIN_HOST/bin"
+  check_nm_alias="$check_nm_directory/nm"
+  check_nm_target="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$CONDA_TOOLCHAIN_HOST-nm"
+  [[ -d "$check_nm_directory" && ! -L "$check_nm_directory" &&
+    -L "$check_nm_alias" &&
+    "$(readlink -- "$check_nm_alias")" == \
+      "../../bin/$CONDA_TOOLCHAIN_HOST-nm" &&
+    -f "$check_nm_target" && ! -L "$check_nm_target" &&
+    -x "$check_nm_target" &&
+    "$(/usr/bin/stat -Lc '%d:%i' -- "$check_nm_alias")" == \
+      "$(/usr/bin/stat -c '%d:%i' -- "$check_nm_target")" ]] ||
+    fail "R 3.6 target-tool nm alias is absent or inconsistent"
+  check_nm_command=$(
+    PATH="$check_nm_directory:$PATH" command -v nm
+  )
+  [[ "$check_nm_command" == "$check_nm_alias" ]] ||
+    fail "R 3.6 check PATH did not select the authenticated target-tool nm"
   check_exit_status=0
   (
     cd "$STAGE_CHECK"
-    _R_CHECK_FORCE_SUGGESTS_=false \
+    PATH="$check_nm_directory:$PATH" _R_CHECK_FORCE_SUGGESTS_=false \
       R CMD check --no-tests --ignore-vignettes --no-manual "$archive"
   ) > "$check_driver_log" 2>&1 || check_exit_status=$?
   check_log="$STAGE_CHECK/paradox.Rcheck/00check.log"
@@ -504,6 +521,8 @@ if [[ "$VERSION" == 3.6.3 ]]; then
     printf 'scope\tdeclared-minimum-r-3.6.3\n'
     printf 'force_suggests\tfalse\n'
     printf 'options\t--no-tests --ignore-vignettes --no-manual\n'
+    printf 'nm_path_scope\tcheck-only-target-tool-directory\n'
+    printf 'nm_command_relative\t%s/bin/nm\n' "$CONDA_TOOLCHAIN_HOST"
     printf 'exit_status\t%s\n' "$check_exit_status"
     printf 'conclusion\t%s\n' "$check_conclusion"
     printf 'driver_log_sha256\t%s\n' "$(sha256_file "$check_driver_log")"
