@@ -147,6 +147,17 @@ verify_tree <- function(base, phase) {
   invisible(TRUE)
 }
 
+restore_exact_mode <- function(path, mode, relative) {
+  if (!isTRUE(Sys.chmod(path, mode = mode, use_umask = FALSE))) {
+    stop("failed to restore copied mode for ", relative, call. = FALSE)
+  }
+  copied_mode <- sprintf("%04o", as.integer(file.info(path)$mode))
+  if (!identical(copied_mode, mode)) {
+    stop("copied mode differs for ", relative, call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
 verify_tree(origin, "pre-copy verification")
 
 for (index in seq_along(paths)) {
@@ -163,6 +174,9 @@ for (index in seq_along(paths)) {
   }
   if (!isTRUE(copied)) {
     stop("failed to copy ", paths[[index]], call. = FALSE)
+  }
+  if (manifest$kind[[index]] == "file") {
+    restore_exact_mode(target, manifest$mode[[index]], paths[[index]])
   }
 }
 

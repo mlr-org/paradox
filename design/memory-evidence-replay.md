@@ -22,6 +22,37 @@ functional corpus. Those belong to other gates. They run the complete direct
 registered-routine inventory, reviewed allocation/callback hazard probes, and a
 bounded analyzer-sensitive test subset against one exact DSO.
 
+The source-run validator is deliberately relocatable. Every helper it resolves
+beside itself is part of one exact retained bundle: `scripts/memory-check`
+copies and hashes it, and the independent memory-run validator requires the
+same inventory. Root-dependent fixture/Git helpers are instead authenticated
+against the active repository as explicitly specified by the source-run
+validator; the two trust classes must not be conflated.
+
+Source manifests bind exact regular-file modes as well as bytes. Snapshot
+creation and snapshot replay restore modes with `use_umask = FALSE`, then
+verify copied modes and source stability. A passed functional native run whose
+manifest disagrees with its copied-tree receipt is not a replayable source
+donor and cannot be repaired in place.
+
+### 2026-07-27 provenance incident
+
+`release-candidate-dbbdcc1-native-release-a001` completed its package work, but
+its snapshot manifest recorded original worktree modes while the copied source
+tree recorded umask-filtered modes. The first memory attempt,
+`release-candidate-dbbdcc1-memory`, also omitted the relocated trusted
+`create-offline-check-repository.R` helper and therefore stopped in source
+preflight before loading Paradox or starting any analyzer. Both directories
+are retained only for the bounded conclusions they actually establish.
+
+The repair spans the two snapshot-copy helpers, the memory driver and
+independent memory-run validator, and their two adversarial tests. It preserves
+exact modes under a restrictive umask, retains/hashes the missing helper,
+rejects its substitution or removal, and derives the complete relocated-
+sibling set generically. The candidate package results remain informative, but
+memory acceptance requires a fresh full native source run and a fresh combined
+memory run from that replayable proof.
+
 ## Modes
 
 ### GCT

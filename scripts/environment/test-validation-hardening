@@ -102,35 +102,57 @@ git -C "$SNAPSHOT_SOURCE" config user.email 'fixture@example.invalid'
 git -C "$SNAPSHOT_SOURCE" config commit.gpgsign false
 printf '%s\n' retained > "$SNAPSHOT_SOURCE/retained.txt"
 printf '%s\n' deleted > "$SNAPSHOT_SOURCE/deleted.txt"
+printf '%s\n' '#!/bin/sh' 'exit 0' > "$SNAPSHOT_SOURCE/executable"
+chmod 0664 "$SNAPSHOT_SOURCE/retained.txt"
+chmod 0775 "$SNAPSHOT_SOURCE/executable"
 ln -s retained.txt "$SNAPSHOT_SOURCE/retained-link"
-git -C "$SNAPSHOT_SOURCE" add retained.txt deleted.txt retained-link
+git -C "$SNAPSHOT_SOURCE" add retained.txt deleted.txt executable retained-link
 git -C "$SNAPSHOT_SOURCE" commit -q -m fixture
 rm "$SNAPSHOT_SOURCE/deleted.txt"
 printf '%s\n' untracked > "$SNAPSHOT_SOURCE/untracked.txt"
-env TMPDIR="$SNAPSHOT_TMP" "$RSCRIPT" --vanilla "$SNAPSHOT_HELPER" \
-  "$SNAPSHOT_SOURCE" "$SNAPSHOT_DESTINATION" "$SNAPSHOT_METADATA" \
-  > "$SNAPSHOT_FIXTURE/snapshot.log"
-grep -qx 'snapshot_files=3' "$SNAPSHOT_FIXTURE/snapshot.log" ||
+chmod 0664 "$SNAPSHOT_SOURCE/untracked.txt"
+(
+  umask 0077
+  env TMPDIR="$SNAPSHOT_TMP" "$RSCRIPT" --vanilla "$SNAPSHOT_HELPER" \
+    "$SNAPSHOT_SOURCE" "$SNAPSHOT_DESTINATION" "$SNAPSHOT_METADATA" \
+    > "$SNAPSHOT_FIXTURE/snapshot.log"
+)
+grep -qx 'snapshot_files=4' "$SNAPSHOT_FIXTURE/snapshot.log" ||
   fail "dirty snapshot reported the wrong existing-file count"
 grep -qx 'snapshot_deleted_tracked=1' "$SNAPSHOT_FIXTURE/snapshot.log" ||
   fail "dirty snapshot did not report its deleted tracked path"
 [[ -f "$SNAPSHOT_DESTINATION/retained.txt" && \
     -f "$SNAPSHOT_DESTINATION/untracked.txt" && \
+    -x "$SNAPSHOT_DESTINATION/executable" && \
     -L "$SNAPSHOT_DESTINATION/retained-link" && \
     ! -e "$SNAPSHOT_DESTINATION/deleted.txt" ]] ||
   fail "dirty snapshot copied the wrong path set"
-env TMPDIR="$SNAPSHOT_TMP" "$RSCRIPT" --vanilla "$COPY_SNAPSHOT_HELPER" \
-  "$SNAPSHOT_DESTINATION" "$SNAPSHOT_METADATA" \
-  "$SNAPSHOT_REPLAY" "$SNAPSHOT_REPLAY_METADATA" \
-  > "$SNAPSHOT_FIXTURE/replay.log"
+for relative in retained.txt untracked.txt executable; do
+  [[ "$(stat -c '%04a' "$SNAPSHOT_DESTINATION/$relative")" == \
+      "$(stat -c '%04a' "$SNAPSHOT_SOURCE/$relative")" ]] ||
+    fail "snapshot did not preserve the source mode for $relative"
+done
+(
+  umask 0077
+  env TMPDIR="$SNAPSHOT_TMP" "$RSCRIPT" --vanilla "$COPY_SNAPSHOT_HELPER" \
+    "$SNAPSHOT_DESTINATION" "$SNAPSHOT_METADATA" \
+    "$SNAPSHOT_REPLAY" "$SNAPSHOT_REPLAY_METADATA" \
+    > "$SNAPSHOT_FIXTURE/replay.log"
+)
 cmp "$SNAPSHOT_METADATA/source-manifest.tsv" \
   "$SNAPSHOT_REPLAY_METADATA/source-manifest.tsv" >/dev/null ||
   fail "snapshot replay changed the retained source manifest"
 [[ -f "$SNAPSHOT_REPLAY/retained.txt" && \
     -f "$SNAPSHOT_REPLAY/untracked.txt" && \
+    -x "$SNAPSHOT_REPLAY/executable" && \
     -L "$SNAPSHOT_REPLAY/retained-link" && \
     ! -e "$SNAPSHOT_REPLAY/deleted.txt" ]] ||
   fail "snapshot replay did not preserve the deleted tracked path"
+for relative in retained.txt untracked.txt executable; do
+  [[ "$(stat -c '%04a' "$SNAPSHOT_REPLAY/$relative")" == \
+      "$(stat -c '%04a' "$SNAPSHOT_SOURCE/$relative")" ]] ||
+    fail "snapshot replay did not preserve the retained mode for $relative"
+done
 
 # Frozen-candidate Git authentication rejects every state that can substitute
 # bytes for an exported object identity: a dirty root or source worktree, a
@@ -2144,6 +2166,26 @@ build_valid_native_fixture() {
 build_valid_native_fixture
 "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
 
+# memory-check executes a retained copy of the source validator. Its trusted
+# sibling inputs must therefore remain complete when relocated away from the
+# active scripts/environment directory.
+RELOCATED_VALIDATOR_DIRECTORY="$TEST_ROOT/relocated-source-validator"
+mkdir "$RELOCATED_VALIDATOR_DIRECTORY"
+for helper in validate-native-source-run tree-receipt.R \
+    copy-check-snapshot.R create-offline-check-repository.R \
+    run-native-probes.R verify-native-probes.R run-native-tests.R \
+    run-native-test-worker.R run-native-test-worker-group \
+    verify-native-test-ledger.R resource-jobs; do
+  cp "$ROOT/scripts/environment/$helper" \
+    "$RELOCATED_VALIDATOR_DIRECTORY/$helper"
+done
+"$RELOCATED_VALIDATOR_DIRECTORY/validate-native-source-run" \
+  "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+rm "$RELOCATED_VALIDATOR_DIRECTORY/create-offline-check-repository.R"
+expect_failure \
+  "$RELOCATED_VALIDATOR_DIRECTORY/validate-native-source-run" \
+  "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
 # ASan-selected completion is accepted only with the exact early runtime/XDR
 # startup result, even if an attacker recomputes the generic modes receipt.
 FIXTURE_ASAN=true
@@ -3001,6 +3043,7 @@ for required_pattern in \
     'RETAINED_NATIVE_PROBE_RUNNER' \
     'RETAINED_NATIVE_TEST_RUNNER' \
     'RETAINED_NATIVE_TEST_VERIFIER' \
+    'OFFLINE_REPOSITORY_HELPER=' \
     '--mode=gct' \
     '--mode=valgrind' \
     'valgrind-analyzer' \
@@ -3032,6 +3075,84 @@ for required_pattern in \
   grep -Fq -- "$required_pattern" "$MEMORY_HARNESS" ||
     fail "memory harness lacks targeted evidence policy: $required_pattern"
 done
+[[ $(grep -Fc \
+  '"$RUN_DIRECTORY/metadata/create-offline-check-repository.R"' \
+  "$MEMORY_HARNESS") -eq 2 ]] ||
+  fail "memory harness does not both retain and hash its offline repository helper"
+MEMORY_RUN_VALIDATOR="$ROOT/scripts/environment/validate-memory-run"
+for required_pattern in \
+    'TRUSTED_OFFLINE_REPOSITORY_HELPER=' \
+    'create-offline-check-repository.R' \
+    '[create-offline-check-repository.R]="$TRUSTED_OFFLINE_REPOSITORY_HELPER"'; do
+  grep -Fq -- "$required_pattern" "$MEMORY_RUN_VALIDATOR" ||
+    fail "memory-run validator lacks relocated-helper policy: $required_pattern"
+done
+
+# Keep the relocation contract generic: the memory harness must copy and hash
+# one identical ordered bundle, the independent replay validator must name that
+# exact bundle, and every trusted sibling of its retained source-run validator
+# must be present. This catches future helper additions without another
+# helper-specific grep.
+MEMORY_COPIED_INVENTORY="$TEST_ROOT/memory-harness-copied.txt"
+MEMORY_HASHED_INVENTORY="$TEST_ROOT/memory-harness-hashed.txt"
+MEMORY_VALIDATOR_INVENTORY="$TEST_ROOT/memory-validator-inventory.txt"
+SOURCE_VALIDATOR_SIBLINGS="$TEST_ROOT/source-validator-siblings.txt"
+awk '
+  /^cp "\$HARNESS_SCRIPT" / { inside = 1 }
+  inside && /^chmod 700 / { exit }
+  inside {
+    line = $0
+    while (match(line, /"\$RUN_DIRECTORY\/metadata\/[^"]+"/)) {
+      value = substr(line, RSTART, RLENGTH)
+      sub(/^"\$RUN_DIRECTORY\/metadata\//, "", value)
+      sub(/"$/, "", value)
+      print value
+      line = substr(line, RSTART + RLENGTH)
+    }
+  }
+' "$MEMORY_HARNESS" > "$MEMORY_COPIED_INVENTORY"
+awk '
+  /^sha256sum "\$RUN_DIRECTORY\/metadata\/memory-check" / { inside = 1 }
+  inside && /^[[:space:]]*>/ { exit }
+  inside {
+    line = $0
+    while (match(line, /"\$RUN_DIRECTORY\/metadata\/[^"]+"/)) {
+      value = substr(line, RSTART, RLENGTH)
+      sub(/^"\$RUN_DIRECTORY\/metadata\//, "", value)
+      sub(/"$/, "", value)
+      print value
+      line = substr(line, RSTART + RLENGTH)
+    }
+  }
+' "$MEMORY_HARNESS" > "$MEMORY_HASHED_INVENTORY"
+awk '
+  /^declare -a harness_names=\(/ { inside = 1; next }
+  inside && /^\)/ { exit }
+  inside {
+    for (field = 1; field <= NF; field++) print $field
+  }
+' "$MEMORY_RUN_VALIDATOR" > "$MEMORY_VALIDATOR_INVENTORY"
+sed -n \
+  's/^[[:space:]]*TRUSTED_[A-Z_]*="$TRUSTED_HELPER_DIRECTORY\/\([^"]*\)".*/\1/p' \
+  "$SOURCE_VALIDATOR" > "$SOURCE_VALIDATOR_SIBLINGS"
+[[ -s "$MEMORY_COPIED_INVENTORY" && -s "$SOURCE_VALIDATOR_SIBLINGS" ]] ||
+  fail "could not extract generic retained-validator inventories"
+cmp -s "$MEMORY_COPIED_INVENTORY" "$MEMORY_HASHED_INVENTORY" ||
+  fail "memory harness copied and hashed inventories differ"
+cmp -s "$MEMORY_HASHED_INVENTORY" "$MEMORY_VALIDATOR_INVENTORY" ||
+  fail "memory-run validator inventory differs from the memory harness bundle"
+for inventory in "$MEMORY_COPIED_INVENTORY" "$MEMORY_HASHED_INVENTORY" \
+    "$MEMORY_VALIDATOR_INVENTORY" "$SOURCE_VALIDATOR_SIBLINGS"; do
+  [[ -z "$(LC_ALL=C sort "$inventory" | uniq -d)" ]] ||
+    fail "retained-validator inventory contains a duplicate: $inventory"
+done
+LC_ALL=C sort "$MEMORY_HASHED_INVENTORY" \
+  > "$TEST_ROOT/memory-harness-hashed.sorted.txt"
+LC_ALL=C sort "$SOURCE_VALIDATOR_SIBLINGS" \
+  > "$TEST_ROOT/source-validator-siblings.sorted.txt"
+[[ -z "$(comm -23 "$TEST_ROOT/source-validator-siblings.sorted.txt" \
+  "$TEST_ROOT/memory-harness-hashed.sorted.txt")" ]] ||
+  fail "memory bundle omits a trusted relocated source-validator sibling"
 memory_policy_source_line=$(grep -n \
   '^  verify_rchk_policy_preflight source$' "$MEMORY_HARNESS" | cut -d: -f1)
 memory_policy_pre_rchk_line=$(grep -n \

@@ -2,57 +2,51 @@
 
 ## Status
 
-**Package-facing source reopened for final cleanup; the prior local release
-gates are historical and a new candidate will be required.**
-The last sealed candidate is
-`refs/paradox-release/candidate-20260724T105215Z`, commit
-`8797f1163fe612cb01d1facf517834d3f516a697`, tree
-`81e6f901266754b97a0906f88a472bf04795f13c`, candidate content SHA-256
-`ced2390bc756b01805e7bdcf32fdb4a6ff2c1bd010dd3d576194d939e491f644`.
-It includes the informative native diagnostics, recursive legacy object-graph
-migration, authenticated native gateway/generation barriers, and the focused
-self-returning ALTREP duplicate regression. The former frozen candidate and
-its local correctness, compatibility, documentation, memory, and performance
-gates are historical only; they do not transfer to the cleanup source that
-followed it. The dormant-values/default-aware-activity implementation is an
-additional package-facing semantic change after that seal; it changes the
-native dependency/check/value paths and therefore cannot inherit any
-package-facing conclusion from `8797f11`. The later output-sensitive native
-grid implementation is another package-facing change: it adds the final-size
-ceiling and prepared-grid boundary and changes the formerly broken handling of
-valid cross-storage fixed specials. Callback source-reference normalization is
-also package-facing: stored package-interpreted callbacks now discard source
-metadata at admission while the source-reference normalizer leaves opaque
-`$values` untouched. The bounded final performance implementation is complete
-at `81cbccf`/`387c1cd` under
-`design/final-performance-implementation-plan.md`; its focused tests,
-order-balanced per-slice benchmarks, exhaustive native probes, and strict
-GCC/Clang builds are development evidence only. The final compatibility change
-lowers the supported baseline to R 3.6 and portable C99, adds version-bounded
-R API adapters, and extends the runtime/header harness. It changes native,
-metadata, tests, and validation inputs, so none of the historical R-4.3+
-candidate evidence proves this source. The full current-R native harness now
-uses two sealed, exact Python 3.10.20/ConfigSpace 1.2.2 and 0.5.0 prefixes
-instead of reticulate-managed resolution. Their checked-in SHA-256 locks and
-authenticated receipts are verified before and after networkless tests with
-`.local/configspace` read-only. This is validation infrastructure, not
-completed candidate evidence. The same lane now builds a standard local CRAN
-index from the exact SHA-locked source closure plus the candidate and supplies
-all three standard BioC names from a sealed empty index. This preserves
-dependency-cycle checking without network access or warning exceptions; live
-repository freshness remains hosted evidence. The legacy-wrapper recognition
-templates' deliberate free carrier bindings are now narrowly declared to
-codetools, removing the corresponding `R CMD check` NOTE without adding a
-namespace lookup or changing the authenticated template bodies. A provisional
-exact ref at `39855c9` completed the eight-task `release-core` profile, but a
-later independent audit found an active capsule generation reachable only
-through raw, unscanned graph-frame storage after old-R evaluator/finalizer
-reentry. The uniform managed active-path carrier and its deep/instrumented
-regressions repair that release-blocking lifetime defect; the provisional run
-is historical and cannot be transferred. Finish the targeted carrier checks,
-freeze one replacement candidate, then run the applicable native, R API,
-runtime, memory, differential, downstream, documentation, benchmark, and
-hosted portability gates once for that exact candidate.
+**The package-facing candidate is frozen; `release-core` is green, and the
+memory source-proof rerun is pending after a validation-harness repair.**
+The active candidate is
+`refs/paradox-release/candidate-20260727T152133Z`, commit
+`dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
+`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. It contains the complete
+contract-first implementation, R 3.6/C99 compatibility work, and the managed
+active-path graph carrier with ordinary and instrumented regressions.
+
+The exact `release-candidate-dbbdcc1` run passed all eight `release-core`
+tasks: controller/native/runtime/validation harnesses, differential, API
+headers, native release, and the supported R 3.6.3/4.0.5/4.3.3/4.5.2 runtime
+matrix. The coordinator completion, JSON summary, and TSV summary SHA-256
+values are respectively
+`511da5ccf2ef4e779db97bc6e79ab458f861148b4841625132e613a2b285d090`,
+`fe9b41d7552d73e2d342cfa1f3c666cb672508d4d29aef6d3c7dc063ee380e44`,
+and
+`507160680c2a861ece452f8a23f12caceb590897afec00a38a5757229709b522`.
+
+The native child
+`release-candidate-dbbdcc1-native-release-a001` is not an eligible memory
+source donor even though its package work passed. Its source manifest retained
+the original worktree modes while its copied source tree retained
+umask-filtered modes. The first combined-memory attempt,
+`release-candidate-dbbdcc1-memory`, then failed source-proof preflight because
+the relocated validator lacked its trusted
+`create-offline-check-repository.R` sibling. It stopped before loading the
+candidate or starting GCT, Valgrind, or rchk, so it is neither a package failure
+nor memory evidence.
+
+The six-file harness repair makes snapshot and replay modes exact and
+umask-independent, retains/hashes the offline-repository helper, validates the
+same exact relocated bundle independently, and tests the generic sibling-set
+relationship. The old run directories remain immutable. A fresh full native
+run under the repaired harness must produce the source proof for a fresh
+combined-memory run. The repair is confined to package-excluded harness paths;
+its eventual commit still requires the ordinary package-facing-source identity
+proof before any candidate conclusion transfers.
+
+The finalized repair passed Bash syntax and R parse checks and the full
+activated validation-hardening suite in about 226 seconds. Its adversarial
+fixtures cover exact `0664`/`0775` initial and replayed modes under umask
+`0077`, missing/tampered relocated helpers, and equality of all 21 copied,
+hashed, and independently validated harness inputs. Actual R 3.6.3 and current
+R probes also confirmed exact mode restoration with `use_umask = FALSE`.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -392,9 +386,15 @@ remaining convergence and acceptance steps are:
 - [x] repair the independently discovered active graph-frame GC lifetime defect
   with one managed carrier plus ordinary and compile-time-instrumented
   regressions;
-- [ ] freeze one clean replacement candidate;
+- [x] freeze the replacement candidate at `dbbdcc1`;
+- [x] run the eight-task `release-core` profile; all rows pass, while the
+  native child source proof is retained only as informative execution evidence
+  because its copied modes do not replay;
+- [ ] create a fresh replayable native source run with the repaired harness and
+  complete the combined-memory gate from that exact source proof;
 - [ ] run and retain the complete applicable gate matrix against that exact
-  replacement candidate.
+  candidate, including the remaining downstream, documentation, benchmark, and
+  hosted portability stages.
 
 ### State and public model
 
@@ -598,29 +598,31 @@ assignments are unchanged. The exact frozen-candidate memory gate retained the
 same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 
 The checklist below is the historical `8797f11` payload ledger. It is retained
-to explain old evidence and is not the acceptance state of the open R-3.6
-source. The replacement candidate still requires:
+to explain old evidence and is not the acceptance state of the active R-3.6
+candidate. Current candidate progress is:
 
-- [ ] strict C99 compilation against R 3.6.0 and every later pinned header/API
+- [x] strict C99 compilation against R 3.6.0 and every later pinned header/API
   branch;
-- [ ] an authenticated real R 3.6.3 source-library build/install/test stage,
+- [x] an authenticated real R 3.6.3 source-library build/install/test stage,
   including its complete-test closure, the precise active-binding and
   list-ALTREP capability results, and the exact bounded
   four-missing-Suggests package-check NOTE;
-- [ ] the separate exact R 3.6 declared-floor install/smoke authenticates every
+- [x] the separate exact R 3.6 declared-floor install/smoke authenticates every
   package identity and dependency namespace origin plus the candidate Paradox
   DLL, with ambient `R_DEFAULT_PACKAGES` isolated;
-- [ ] a complete four-runtime selection seals the exact
+- [x] a complete four-runtime selection seals the exact
   R 4.0.5-to-R 3.6.3 current-v2 serialization handoff; a partial selection
   makes no cross-runtime claim;
-- [ ] the source-derived bounded `NOT_CRAN=true` GC/reentry slice passes all
+- [x] the source-derived bounded `NOT_CRAN=true` GC/reentry slice passes all
   exact selected targets under both R 3.6.3 and R 4.0.5, including the
   selector isolation self-test and independently regenerated title filter;
 - [ ] an authenticated hosted Windows x86-64 R 3.6.3/Rtools35 source-build,
   PE-DLL load/registration, and focused smoke/check artifact;
-- [ ] the current-R full native lane verifies both sealed ConfigSpace
+- [x] the current-R full native lane verifies both sealed ConfigSpace
   environments and all locked local CRAN/BioC repository indexes before and
-  after its networkless, read-only test and package-check execution;
+  after its networkless, read-only test and package-check execution; its
+  functional result is green, but a fresh replayable source proof is still
+  required for memory;
 - [ ] the complete applicable current-R, portability, memory, compatibility,
   documentation, and benchmark gates after source freeze.
 
@@ -1100,15 +1102,15 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending` until the managed graph-root fix is committed,
-one replacement candidate is frozen, and its applicable local unit/check,
-R API, runtime, combined-memory, differential, documentation, downstream,
-source-package, benchmark, and hosted Windows x86-64/macOS ARM64 gates
-complete. All planned feature and compatibility changes are implemented. The
-`8797f11` rows above and successful `39855c9` `release-core` run describe
-superseded payloads; focused results for the current fix are not release
-evidence. User publication of prepared downstream branches/PRs, the release
-tag, and workflow remains required.
+The release decision is `pending`. The managed graph-root fix is committed, the
+replacement candidate is frozen at `dbbdcc1`, and its eight-task
+`release-core` run is green. Its native child is not a replayable memory donor,
+however, and the first memory attempt stopped at harness provenance preflight.
+A fresh full native source proof and combined-memory gate under the six-file
+harness repair remain mandatory, followed by the applicable documentation,
+downstream, source-package, benchmark, and hosted Windows x86-64/macOS ARM64
+gates. User publication of prepared downstream branches/PRs, the release tag,
+and workflow also remains required.
 
 ## Historical rejected or superseded refs
 

@@ -45,6 +45,7 @@ TRUSTED_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 TRUSTED_MEMORY_CHECK="$ROOT/scripts/memory-check"
 TRUSTED_COPY_SNAPSHOT="$TRUSTED_DIRECTORY/copy-check-snapshot.R"
 TRUSTED_SOURCE_RUN_VALIDATOR="$TRUSTED_DIRECTORY/validate-native-source-run"
+TRUSTED_OFFLINE_REPOSITORY_HELPER="$TRUSTED_DIRECTORY/create-offline-check-repository.R"
 TRUSTED_VALGRIND_RECEIPTS="$TRUSTED_DIRECTORY/valgrind-receipts"
 TRUSTED_TREE_RECEIPT="$TRUSTED_DIRECTORY/tree-receipt.R"
 TRUSTED_MEMORY_EVIDENCE="$TRUSTED_DIRECTORY/validate-memory-evidence"
@@ -69,7 +70,8 @@ RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
 LOCAL_LIBRARY="$ROOT/.local/R/library"
 
 for trusted_input in "$TRUSTED_MEMORY_CHECK" "$TRUSTED_COPY_SNAPSHOT" \
-    "$TRUSTED_SOURCE_RUN_VALIDATOR" "$TRUSTED_VALGRIND_RECEIPTS" \
+    "$TRUSTED_SOURCE_RUN_VALIDATOR" "$TRUSTED_OFFLINE_REPOSITORY_HELPER" \
+    "$TRUSTED_VALGRIND_RECEIPTS" \
     "$TRUSTED_TREE_RECEIPT" "$TRUSTED_MEMORY_EVIDENCE" \
     "$TRUSTED_PROBE_RUNNER" "$TRUSTED_PROBE_VERIFIER" \
     "$TRUSTED_TEST_RUNNER" "$TRUSTED_TEST_WORKER" \
@@ -298,6 +300,7 @@ require_regular "$COMPLETION_SEAL"
 
 declare -a harness_names=(
   memory-check copy-check-snapshot.R validate-native-source-run
+  create-offline-check-repository.R
   valgrind-receipts tree-receipt.R validate-memory-evidence
   run-native-probes.R verify-native-probes.R run-native-tests.R
   run-native-test-worker.R run-native-test-worker-group
@@ -311,6 +314,7 @@ declare -A trusted_harness=(
   [memory-check]="$TRUSTED_MEMORY_CHECK"
   [copy-check-snapshot.R]="$TRUSTED_COPY_SNAPSHOT"
   [validate-native-source-run]="$TRUSTED_SOURCE_RUN_VALIDATOR"
+  [create-offline-check-repository.R]="$TRUSTED_OFFLINE_REPOSITORY_HELPER"
   [valgrind-receipts]="$TRUSTED_VALGRIND_RECEIPTS"
   [tree-receipt.R]="$TRUSTED_TREE_RECEIPT"
   [validate-memory-evidence]="$TRUSTED_MEMORY_EVIDENCE"

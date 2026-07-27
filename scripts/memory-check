@@ -174,6 +174,7 @@ LOCAL_CMAKE_ARGS="-DCMAKE_AR=$LOCAL_AR -DCMAKE_CXX_COMPILER_AR=$TOOLCHAIN/bin/$L
 COPY_SNAPSHOT="$ROOT/scripts/environment/copy-check-snapshot.R"
 HARNESS_SCRIPT="$ROOT/scripts/memory-check"
 SOURCE_RUN_VALIDATOR="$ROOT/scripts/environment/validate-native-source-run"
+OFFLINE_REPOSITORY_HELPER="$ROOT/scripts/environment/create-offline-check-repository.R"
 VALGRIND_RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
 TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
 MEMORY_EVIDENCE_HELPER="$ROOT/scripts/environment/validate-memory-evidence"
@@ -212,6 +213,8 @@ done
 [ -f "$HARNESS_SCRIPT" ] || fail "memory-check script is missing: $HARNESS_SCRIPT"
 [ -x "$SOURCE_RUN_VALIDATOR" ] ||
   fail "source-run validator is missing: $SOURCE_RUN_VALIDATOR"
+[ -f "$OFFLINE_REPOSITORY_HELPER" ] && [ ! -L "$OFFLINE_REPOSITORY_HELPER" ] ||
+  fail "offline repository helper is missing or symbolic: $OFFLINE_REPOSITORY_HELPER"
 [ -x "$VALGRIND_RECEIPT_HELPER" ] ||
   fail "Valgrind receipt helper is missing: $VALGRIND_RECEIPT_HELPER"
 [ -f "$TREE_RECEIPT_HELPER" ] ||
@@ -293,6 +296,8 @@ cp "$HARNESS_SCRIPT" "$RUN_DIRECTORY/metadata/memory-check"
 cp "$COPY_SNAPSHOT" "$RUN_DIRECTORY/metadata/copy-check-snapshot.R"
 cp "$SOURCE_RUN_VALIDATOR" \
   "$RUN_DIRECTORY/metadata/validate-native-source-run"
+cp "$OFFLINE_REPOSITORY_HELPER" \
+  "$RUN_DIRECTORY/metadata/create-offline-check-repository.R"
 cp "$VALGRIND_RECEIPT_HELPER" \
   "$RUN_DIRECTORY/metadata/valgrind-receipts"
 cp "$TREE_RECEIPT_HELPER" "$RUN_DIRECTORY/metadata/tree-receipt.R"
@@ -337,6 +342,7 @@ chmod 700 "$RUN_DIRECTORY/metadata/validate-native-source-run" \
 sha256sum "$RUN_DIRECTORY/metadata/memory-check" \
   "$RUN_DIRECTORY/metadata/copy-check-snapshot.R" \
   "$RUN_DIRECTORY/metadata/validate-native-source-run" \
+  "$RUN_DIRECTORY/metadata/create-offline-check-repository.R" \
   "$RUN_DIRECTORY/metadata/valgrind-receipts" \
   "$RUN_DIRECTORY/metadata/tree-receipt.R" \
   "$RUN_DIRECTORY/metadata/validate-memory-evidence" \

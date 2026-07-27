@@ -19,26 +19,41 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The last sealed package-facing candidate is
-`refs/paradox-release/candidate-20260724T105215Z`, commit
-`8797f1163fe612cb01d1facf517834d3f516a697`, tree
-`81e6f901266754b97a0906f88a472bf04795f13c`, with authenticated candidate
-content SHA-256
-`ced2390bc756b01805e7bdcf32fdb4a6ff2c1bd010dd3d576194d939e491f644`.
-Final pre-release cleanup reopened package source after that seal on
-2026-07-25. The ref and all source-bound gates are therefore historical until a
-new candidate is frozen; there is currently no active frozen package candidate.
+The active frozen package-facing candidate is
+`refs/paradox-release/candidate-20260727T152133Z`, commit
+`dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
+`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. It includes the managed
+active-path carrier and its ordinary and deterministic instrumented
+regressions. The exact `release-candidate-dbbdcc1` `release-core` run completed
+all eight tasks, including strict native/sanitizer/package checks and the R
+3.6.3, 4.0.5, 4.3.3, and 4.5.2 supported-runtime matrix. Those successful
+package executions remain informative candidate evidence, but the retained
+native child run cannot seed the memory gate: its source manifest records the
+original worktree modes while the copied source tree reflects the worker
+umask.
+
+The first combined-memory attempt,
+`release-candidate-dbbdcc1-memory`, stopped in source-proof preflight before
+loading Paradox or starting an analyzer because its relocated source-run
+validator lacked the trusted `create-offline-check-repository.R` sibling. The
+failed attempt is harness diagnostic evidence only, not a package or memory
+failure. The six-file harness repair retains, hashes, and independently
+validates that helper; preserves and verifies exact regular-file modes in both
+the initial and replayed snapshots regardless of caller umask; and tests the
+complete relocated-helper inventory. Do not mutate or rehabilitate
+`release-candidate-dbbdcc1-native-release-a001`. A fresh full native source run
+under the repaired, package-facing-source-identical harness must create the
+replayable source proof used by a fresh combined-memory run.
+
 The provisional R 3.6 ref `refs/paradox-release/r36-39855c9`, commit
 `39855c919beec323fd5940e4c46286e8df1be8ff`, completed all eight
 `release-core` tasks, including the four supported runtimes. A subsequent
 independent audit found that its capsule-graph validator stored active
 `SEXP` pointers only in unscanned `R_alloc()` memory; an old-R optional binding
 lookup could run a finalizer that detached such a generation. That run is
-therefore historical development evidence, not candidate acceptance. The
-managed active-path carrier and its regression must be included before the
-replacement candidate is frozen and the applicable final gates are run once.
-Post-freeze release-policy, validation, and ledger commits for that
-future candidate must prove package-facing paths unchanged; call that
+therefore historical development evidence, not candidate acceptance.
+Post-freeze release-policy, validation, and ledger commits for the active
+candidate must prove package-facing paths unchanged; call that
 relationship *package-facing-source identical*, not package-identical, unless a
 separate sealed complete-payload byte proof exists.
 
@@ -112,9 +127,9 @@ The direct-child portability companion is
 and is package-facing-source identical to the candidate. The only remaining
 release gates for that historical candidate were retained hosted Windows
 x86-64/macOS ARM64 results and the user-performed downstream branch/PR
-publication handoff. The replacement candidate instead requires the applicable
-local matrix again after source convergence. Agents must not perform either
-remote write.
+publication handoff. The active replacement candidate has now passed
+`release-core`, but still requires the fresh memory-source proof and remaining
+applicable local/hosted gates. Agents must not perform either remote write.
 
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
@@ -1572,8 +1587,22 @@ space a poor resident-memory/OOM estimate.
 The retained `validate-native-source-run` authenticates the source-run copies
 of the `mbo_config` and runtime-matrix Git/receipt helpers against their active
 repository-root copies before executing them; do not resolve those
-root-dependent helpers relative to a relocated validator. The memory harness
-receipt hashes both native test workers as well as the runner and verifier.
+root-dependent helpers relative to a relocated validator. Every helper that
+the validator intentionally resolves beside itself, including
+`create-offline-check-repository.R`, must instead be copied into the relocated
+bundle, hashed by the memory harness, and named in the independent memory-run
+validator's exact inventory. The validation-hardening test derives this sibling
+set generically so a later validator dependency cannot be omitted silently.
+The memory harness receipt also hashes both native test workers as well as the
+runner and verifier.
+
+Worktree snapshot and replay manifests commit exact regular-file modes as well
+as content. Copy helpers must restore those modes with
+`Sys.chmod(..., use_umask = FALSE)` and verify both source stability and copied
+state; `file.copy(copy.mode = TRUE)` alone is not exact under a restrictive
+worker umask. A source run whose retained manifest and copied-tree receipt
+disagree on mode is not replayable and must never seed another release gate,
+even when its functional package tests passed.
 
 Caching policy:
 
@@ -2136,7 +2165,48 @@ evidence and explicit design review. Treat non-pass integrity rows as required
 raw-distribution review, and normally retire these contract-reset tiers once
 Paradox 2 is the authenticated baseline.
 
-## Last sealed candidate (historical after final cleanup)
+## Active candidate and current gate status
+
+The active frozen candidate is
+`refs/paradox-release/candidate-20260727T152133Z` at
+`dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
+`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. Its
+`release-candidate-dbbdcc1` coordinator run passed all eight `release-core`
+rows. The coordinator completion, JSON summary, and TSV summary SHA-256 values
+are respectively
+`511da5ccf2ef4e779db97bc6e79ab458f861148b4841625132e613a2b285d090`,
+`fe9b41d7552d73e2d342cfa1f3c666cb672508d4d29aef6d3c7dc063ee380e44`,
+and
+`507160680c2a861ece452f8a23f12caceb590897afec00a38a5757229709b522`.
+
+The native child
+`release-candidate-dbbdcc1-native-release-a001` passed its functional work,
+but is not a replayable source donor: for example,
+`scripts/environment/create-offline-check-repository.R` is mode `0664` in
+`source-manifest.tsv` and `0644` in `source-tree.tsv`. The first memory attempt
+then failed closed before package load because the retained validator's
+relocated offline-repository helper was absent. Keep both directories
+immutable. Their package results are informative, but neither directory
+supplies combined-memory acceptance. Run one fresh full native source proof
+after the six-file harness repair, then use only that new child run for a fresh
+combined-memory gate.
+
+The repair changes only `scripts/memory-check` and five
+`scripts/environment/` harness files. Before transferring any package-facing
+conclusion, prove the eventual repair commit package-facing-source identical
+to the candidate. The release remains pending after that memory rerun and the
+remaining applicable downstream, documentation, benchmark, and hosted
+portability gates.
+
+The final repair passed shell syntax checks, R parsing of both snapshot
+helpers, and the complete activated validation-hardening suite in about 226
+seconds. The latter covers the independent memory validator, the 21-row exact
+harness inventory, missing/tampered relocated helpers, and restrictive-`0077`
+snapshot/replay fixtures preserving `0664` and `0775`. Focused actual R 3.6.3
+and current-R probes also restored exact `0664` with
+`Sys.chmod(..., use_umask = FALSE)`.
+
+## Last sealed candidate before final cleanup (historical)
 
 The last sealed package candidate is
 `refs/paradox-release/candidate-20260724T105215Z`, commit

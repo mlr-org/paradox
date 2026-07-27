@@ -7,18 +7,36 @@ file/count matrix.
 
 ## Current validation status
 
-Package-facing feature work has converged. The provisional R 3.6 source at
-`39855c9` completed `release-core`, but its post-run audit exposed a
-release-blocking capsule-graph GC lifetime defect. The managed active-path
-carrier and focused regressions repair that source, so every full-gate result
-for `39855c9` is historical. Do not relabel a focused test, strict
-translation-unit compile, cached installation, or old candidate artifact as
-candidate evidence.
+Package-facing feature work has converged at the frozen ref
+`refs/paradox-release/candidate-20260727T152133Z`, commit `dbbdcc1`. Its
+`release-candidate-dbbdcc1` run passed all eight `release-core` tasks, including
+the complete native lane and supported-runtime matrix. The package executions
+remain informative, but the native child run is not replayable: its manifest
+records original worktree modes while its copied source-tree receipt records
+umask-filtered modes. It therefore cannot supply the source proof for the
+combined memory gate.
 
-After the carrier fix and its targeted old/current-runtime checks converge,
-freeze one new clean immutable candidate and run the complete applicable matrix
-described below against that exact source. This final targeted pass before
-freeze is sequencing, not an acceptance or release claim.
+The first memory attempt failed closed in preflight before package load because
+the relocated source-run validator did not receive its trusted offline-
+repository helper. The six-file harness repair now retains and authenticates
+that helper and preserves exact modes across both snapshot copies. This is a
+validation-provenance repair, not a package failure or a reason to rerun the
+already green API/runtime branches. It does require one fresh full native
+source run, followed by a fresh combined-memory run from that new replayable
+source proof. Do not mutate, reseal, or use
+`release-candidate-dbbdcc1-native-release-a001` as a donor.
+
+The final harness repair itself passed shell syntax checks for the four changed
+shell drivers/tests, R parsing for both snapshot helpers, and the complete
+activated `scripts/environment/test-validation-hardening` adversarial suite
+(`validation hardening helper tests passed`, about 226 seconds). That suite
+includes the independent memory-run validator, restrictive-`0077` initial and
+replay copies preserving exact `0664`/`0775` modes, relocated-helper
+removal/substitution rejection, and equality of the 21-row copied, hashed, and
+independently validated harness inventories. Focused probes also confirmed
+`Sys.chmod(..., use_umask = FALSE)` restores exact `0664` under both actual R
+3.6.3 and the local current R. These are exact repair tests, not a substitute
+for the fresh native or memory execution.
 
 ## Unattended orchestration
 
@@ -817,7 +835,12 @@ run and does not rebuild examples, vignettes, or the full functional corpus in
 each analyzer mode. Analyzer-specific probes cover every registered routine and
 reviewed hazard. Its retained source-run validator authenticates root-dependent
 fixture/Git helpers against the active repository copies rather than resolving
-them from the validator's relocated evidence directory. Valgrind/rchk are
+them from the validator's relocated evidence directory. Its package-local
+sibling helpers are a different trust class: the memory harness retains and
+hashes the complete relocated bundle, and the independent memory-run validator
+requires the same exact inventory. Snapshot creation and replay restore and
+verify manifest modes independently of the caller's umask; a content-correct
+but mode-inconsistent source tree is not replayable. Valgrind/rchk are
 serial memory-heavy stages and run only after
 the resource helper admits one process and retains its exact report. Valgrind
 requires a 16-GiB working-set allowance plus at least a 16-GiB host reserve;
@@ -922,7 +945,9 @@ similarity as release evidence.
 The active accepted run IDs and candidate hashes belong in
 [`release-2.0.0.md`](release-2.0.0.md). Until that ledger says `accepted`, no
 collection of partial green diagnostics is a release authorization. There is
-no frozen current candidate while the post-`39855c9` active-path lifetime fix
-is being finalized. All earlier candidates' completed rows remain historical,
-and the replacement candidate requires the complete applicable local and
-hosted matrix, followed by user-performed remote publication.
+now a frozen candidate at `dbbdcc1`, but its otherwise green `release-core`
+native child has a non-replayable source snapshot and its memory attempt never
+crossed preflight. The repaired harness must produce a fresh native source
+proof and combined-memory result. The remaining applicable local and hosted
+matrix then completes against the package-facing-source-identical candidate,
+followed by user-performed remote publication.

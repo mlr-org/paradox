@@ -92,6 +92,17 @@ split_nul <- function(value) {
   }, character(1L), USE.NAMES = FALSE)
 }
 
+restore_exact_mode <- function(path, mode, relative) {
+  if (!isTRUE(Sys.chmod(path, mode = mode, use_umask = FALSE))) {
+    stop("failed to restore copied mode for ", relative, call. = FALSE)
+  }
+  copied_mode <- sprintf("%04o", as.integer(file.info(path)$mode))
+  if (!identical(copied_mode, mode)) {
+    stop("copied mode differs for ", relative, call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
 listing_before <- file.path(metadata, "source-files.zlist")
 status_before <- file.path(metadata, "git-status.porcelain-v2.z")
 diff_before <- file.path(metadata, "git-diff.patch")
@@ -132,6 +143,14 @@ if (any(is_directory)) {
 is_regular <- exists & !is_link
 is_deleted <- !exists
 
+source_info_before <- file.info(source_paths)
+source_modes_before <- rep(NA_character_, length(paths))
+if (any(is_regular)) {
+  source_modes_before[is_regular] <- sprintf(
+    "%04o", as.integer(source_info_before$mode[is_regular])
+  )
+}
+
 hash_before <- rep(NA_character_, length(paths))
 if (any(is_regular)) {
   hash_before[is_regular] <- unname(tools::sha256sum(source_paths[is_regular]))
@@ -150,6 +169,11 @@ for (index in which(exists)) {
   }
   if (!isTRUE(copied)) {
     stop("failed to copy ", paths[[index]], call. = FALSE)
+  }
+  if (is_regular[[index]]) {
+    restore_exact_mode(
+      target, source_modes_before[[index]], paths[[index]]
+    )
   }
 }
 
@@ -179,6 +203,17 @@ if (any(is_regular)) {
       !identical(hash_before[is_regular], hash_copy)) {
     stop("a regular file changed while the snapshot was copied", call. = FALSE)
   }
+  source_info_after <- file.info(source_paths[is_regular])
+  copied_info <- file.info(file.path(destination, paths[is_regular]))
+  source_modes_after <- sprintf(
+    "%04o", as.integer(source_info_after$mode)
+  )
+  copied_modes <- sprintf("%04o", as.integer(copied_info$mode))
+  if (!identical(source_modes_before[is_regular], source_modes_after) ||
+      !identical(source_modes_before[is_regular], copied_modes)) {
+    stop("a regular file mode changed while the snapshot was copied",
+      call. = FALSE)
+  }
 }
 if (any(is_link)) {
   copied_links <- Sys.readlink(file.path(destination, paths[is_link]))
@@ -196,13 +231,12 @@ if (any(is_deleted)) {
   }
 }
 
-info <- file.info(source_paths)
 kind <- ifelse(is_deleted, "deleted", ifelse(is_link, "symlink", "file"))
 content <- hash_before
 content[is_link] <- paste0("target:", link_targets[is_link])
 content[is_deleted] <- "-"
-size <- ifelse(is_regular, info$size, NA_real_)
-mode <- ifelse(is_regular, sprintf("%04o", as.integer(info$mode)), "-")
+size <- ifelse(is_regular, source_info_before$size, NA_real_)
+mode <- ifelse(is_regular, source_modes_before, "-")
 manifest <- data.frame(
   path = paths,
   kind = kind,

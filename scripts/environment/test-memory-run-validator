@@ -76,6 +76,7 @@ write_harness_receipt() {
     "$RUN_DIRECTORY/metadata/memory-check" \
     "$RUN_DIRECTORY/metadata/copy-check-snapshot.R" \
     "$RUN_DIRECTORY/metadata/validate-native-source-run" \
+    "$RUN_DIRECTORY/metadata/create-offline-check-repository.R" \
     "$RUN_DIRECTORY/metadata/valgrind-receipts" \
     "$RUN_DIRECTORY/metadata/tree-receipt.R" \
     "$RUN_DIRECTORY/metadata/validate-memory-evidence" \
@@ -190,6 +191,8 @@ build_fixture() {
     "$RUN_DIRECTORY/metadata/copy-check-snapshot.R"
   cp "$ROOT/scripts/environment/validate-native-source-run" \
     "$RUN_DIRECTORY/metadata/validate-native-source-run"
+  cp "$ROOT/scripts/environment/create-offline-check-repository.R" \
+    "$RUN_DIRECTORY/metadata/create-offline-check-repository.R"
   cp "$ROOT/scripts/environment/valgrind-receipts" \
     "$RUN_DIRECTORY/metadata/valgrind-receipts"
   cp "$ROOT/scripts/environment/tree-receipt.R" \
@@ -417,6 +420,15 @@ expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 build_fixture
 printf '%s\n' '# synthetic substitution' \
   >> "$RUN_DIRECTORY/metadata/validate-memory-evidence"
+write_harness_receipt
+write_completion
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# The validator's relocated offline-repository sibling is also exact trusted
+# harness policy, not an unauthenticated implementation detail.
+build_fixture
+printf '%s\n' '# synthetic substitution' \
+  >> "$RUN_DIRECTORY/metadata/create-offline-check-repository.R"
 write_harness_receipt
 write_completion
 expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
