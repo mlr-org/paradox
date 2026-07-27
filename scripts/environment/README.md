@@ -226,10 +226,13 @@ and UBSan as two separate builds. Functional tests are deliberately owned by
 one selected DSO (strict GCC when it is present); the other compiler and
 sanitizer builds dynamically exercise every ordinary registered routine in the
 reviewed coverage manifest and four allocation/callback hazards through
-`run-native-probes.R`. The compile-time row-name-rooting fixture belongs only
-to its dedicated instrumented build. The gate discovers and compares names and
-arities exactly; prose never substitutes for the current manifest. Every such
-probe-mode DSO also runs a bounded analyzer-sensitive corpus covering
+`run-native-probes.R`. Its grid probe includes a dependent list-valued fixed
+special value and inactive row, so GCT reaches the conditional missing-sentinel
+protection path as well as ordinary atomic construction. The compile-time
+row-name-rooting fixture belongs only to its dedicated instrumented build. The
+gate discovers and compares names and arities exactly; prose never substitutes
+for the current manifest. Every such probe-mode DSO also runs a bounded
+analyzer-sensitive corpus covering
 adversarial storage, materialize-once ALTREP, Domain kernels, allocating-entry
 GCT, ParamSet quantile/trafo GCT, graph value transactions, and canonical
 collection construction. That corpus sets `NOT_CRAN=false`, retains an

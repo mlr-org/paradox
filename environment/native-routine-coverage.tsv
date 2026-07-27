@@ -56,7 +56,7 @@ param_set_qunif_builtin	3	production	production-dynamic	direct_param_set_qunif_b
 sampler_unif_sample_builtin	2	production	production-dynamic	direct_sampler_unif_sample_builtin	Direct capsule-driven whole-operation uniform sampling
 sampler_unif_subspace_handoffs	3	production	production-dynamic	direct_sampler_unif_subspace_handoffs	Direct issue of fresh sampler-specific single-use subspace ownership carriers
 sampler_unif_take_subspace	1	production	production-dynamic	direct_sampler_unif_take_subspace	Direct one-time consumption of an authenticated sampler subspace ownership carrier
-generate_design_grid_builtin	4	production	production-dynamic	direct_generate_design_grid_builtin	Direct output-sensitive fixed/dependency-aware grid construction; malformed inputs and overflowing realized products error before allocation
+generate_design_grid_builtin	4	production	production-dynamic	direct_generate_design_grid_builtin	Direct output-sensitive fixed/dependency-aware grid construction, including dependent list-valued inactive-row protection; malformed inputs and overflowing realized products error before allocation
 param_set_trafo	4	production	production-dynamic	direct_param_set_trafo	Direct single-row transformation through the shared capsule engine
 param_set_get_domain	3	production	production-dynamic	direct_param_set_get_domain	Direct Domain recovery from exact capsule state
 param_set_domains	2	production	production-dynamic	direct_param_set_domains	Direct batch Domain recovery

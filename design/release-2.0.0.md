@@ -3,7 +3,8 @@
 ## Status
 
 **The package-facing candidate is frozen; `release-core` and the repaired
-memory source-proof rerun are green, while combined memory is pending.**
+source proof are green, reviewed rchk discovery is complete, and post-policy
+combined memory is pending.**
 The active candidate is
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
@@ -51,6 +52,31 @@ SHA-256 values are respectively
 `9a279062fa8f2d99ff97561b6530dd3944614d04fc133e953b772aee64f5cb80`,
 and
 `92eb669197c8cd82a43f2424143efe7f3967213a3a1da2006bcdc691ce519bd2`.
+
+The first rchk discovery attempt failed resource preflight without starting an
+analyzer. After memory was released,
+`release-candidate-dbbdcc1-rchk-discovery-r2` admitted the full 20-GiB
+analyzer allowance plus 16-GiB host reserve. All three analyzers exited zero;
+the retained run failed only at the intended comparison with the historical
+policy. Bcheck analyzed 951 functions and 50,395 states, producing 83 Function
+blocks, 239 UP, and 17 PB. Its raw and semantic SHA-256 values are
+`ddbad6140d74e96422bc4f77942f9303af9e51706005f9f95d36b3d677b011d8`
+and
+`9135cbe02ddbd69019d7901d09bd5a7286fd24b74260e1864be0c92aeceef1d9`.
+Maacheck is byte-empty; fficheck reports the exact 82 registered functions and
+one registration call, SHA-256
+`448c7d8dae05fab9b43570ed169a4472de8ca6ca40836061642c4203c3391882`.
+
+Every changed block was source-reviewed and no native defect was found. The
+four new PB diagnostics are confined to bcheck's branch-dependent model of the
+balanced list-column path in `build_dependent_grid()`. A harness-only GCT probe
+now combines dependency expansion, a list-valued fixed special value, and an
+inactive row. The independently generated and validated policy, block table,
+and unchanged rationale catalog SHA-256 values are respectively
+`eb1e2e9d89a27b9a43a7be87606c22b71fef636284c5c570c5f795aa2345833f`,
+`d0ba3cbc6d2b536b157939fc3c6cbe2d9fcf5b2ed497a088234ee345dddf2fad`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
 
 The finalized repair passed Bash syntax and R parse checks and the full
 activated validation-hardening suite in about 226 seconds. Its adversarial
@@ -405,7 +431,11 @@ remaining convergence and acceptance steps are:
   ref/commit/tree and pass its structural profile fixtures;
 - [x] create and independently validate a fresh replayable native source run
   with the repaired harness;
-- [ ] complete the combined-memory gate from that exact source proof;
+- [x] complete and audit exact-candidate rchk discovery, regenerate its
+  source-bound policy, and add focused GCT coverage for the sole new
+  branch-dependent protection-depth family;
+- [ ] create a fresh static/focused donor from the policy/harness commit and
+  complete the combined-memory gate from that exact source proof;
 - [ ] install one fresh candidate-owned
   `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
   reverse-dependency, repository, documentation, and benchmark gates;
@@ -1125,11 +1155,12 @@ replacement candidate is frozen at `dbbdcc1`, and its eight-task
 memory donor and the first memory attempt stopped at harness provenance
 preflight, but the repaired
 `release-candidate-dbbdcc1-native-replay-r2-native-release-a001` source proof
-is now green and independently replayable. The combined-memory gate remains
-mandatory, followed by the applicable documentation, downstream,
-source-package, benchmark, and hosted Windows x86-64/macOS ARM64 gates. User
-publication of prepared downstream branches/PRs, the release tag, and workflow
-also remains required.
+is green and independently replayable. It supplied a successful reviewed rchk
+discovery and regenerated policy. One static/focused donor under that policy
+and the combined-memory gate remain mandatory, followed by the applicable
+documentation, downstream, source-package, benchmark, and hosted Windows
+x86-64/macOS ARM64 gates. User publication of prepared downstream branches/PRs,
+the release tag, and workflow also remains required.
 
 ## Historical rejected or superseded refs
 

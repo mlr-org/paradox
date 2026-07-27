@@ -25,8 +25,8 @@ already green API/runtime branches. The required replacement native run is now
 complete: `release-candidate-dbbdcc1-native-replay-r2` passed all four selected
 rows, its full native child passed, and direct independent source validation
 accepted the exact copied bytes and modes. Use child
-`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` for the fresh
-combined-memory run. Do not mutate, reseal, or use
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` for isolated
+rchk policy discovery. Do not mutate, reseal, or use
 `release-candidate-dbbdcc1-native-release-a001` as a donor.
 
 The final harness repair itself passed shell syntax checks for the four changed
@@ -47,6 +47,24 @@ because live admission found 36,328 MiB against the reviewed 36,864-MiB
 analyzer-plus-host-reserve requirement. Preserve the 20-GiB analyzer allowance
 and 16-GiB host reserve; wait for or manually free about 1 GiB, then use a new
 run ID. This is neither an analyzer nor package failure.
+
+Discovery `release-candidate-dbbdcc1-rchk-discovery-r2` subsequently admitted
+40,004 MiB and completed bcheck, maacheck, and fficheck with zero tool failures.
+Its retained run fails only at the expected stale-policy comparison. The
+reviewed report has 951 functions, 50,395 states, 83 blocks, 239 UP, and 17 PB;
+maacheck is empty and fficheck matches the exact 82-function/one-call
+registration inventory. Independent policy generation and complete evidence
+validation accept only the three established base-R abstraction ceilings and
+six exact objdump infrastructure warnings, with an empty residual diagnostic
+file.
+
+No C defect was found in the source review. Four new PB diagnostics are
+bcheck's loss of the conditional list-column protection depth in
+`build_dependent_grid()`; every normal and error branch balances exactly. A
+small harness-only native probe now exercises that dependent list-valued
+inactive-row branch under the final GCT run. After committing the policy and
+probe, create one fresh `--mode static --tests focused` native donor and run
+combined memory from it. Do not repeat full package, API, or runtime gates.
 
 ## Unattended orchestration
 
@@ -961,6 +979,8 @@ now a frozen candidate at `dbbdcc1`; the original `release-core` native child
 has a non-replayable source snapshot, but the repaired harness has produced and
 independently validated the replacement
 `release-candidate-dbbdcc1-native-replay-r2-native-release-a001` source proof.
-The combined-memory result remains pending. The remaining applicable local and
-hosted matrix then completes against the package-facing-source-identical
-candidate, followed by user-performed remote publication.
+That proof supplied the reviewed rchk discovery; the policy update requires a
+new static/focused donor before the combined-memory result. The remaining
+applicable local and hosted matrix then completes against the
+package-facing-source-identical candidate, followed by user-performed remote
+publication.

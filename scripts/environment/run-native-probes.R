@@ -800,6 +800,33 @@ main <- function() {
           data.table:::selfrefok(result, verbose = FALSE) == 1L,
         "one-shot grid differs"
       )
+      dependent <- ps(
+        gate = p_lgl(),
+        value = p_int(
+          0L,
+          2L,
+          special_vals = list("special"),
+          depends = gate == TRUE
+        )
+      )
+      dependent$values <- list(value = "special")
+      dependent_result <- .Call(
+        symbol("generate_design_grid_builtin"),
+        private_of(dependent),
+        dependent,
+        c(gate = 2, value = 100),
+        NULL
+      )
+      check(
+        identical(names(dependent_result), c("gate", "value")) &&
+          identical(dependent_result$gate, c(TRUE, FALSE)) &&
+          identical(dependent_result$value, list("special", NA)) &&
+          data.table:::selfrefok(
+            dependent_result,
+            verbose = FALSE
+          ) == 1L,
+        "dependent list-valued grid differs"
+      )
       dense <- ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
       overflow <- tryCatch(
         .Call(

@@ -54,7 +54,10 @@ completion, JSON summary, and TSV summary SHA-256 values are respectively
 `9a279062fa8f2d99ff97561b6530dd3944614d04fc133e953b772aee64f5cb80`,
 and
 `92eb669197c8cd82a43f2424143efe7f3967213a3a1da2006bcdc691ce519bd2`.
-Use only that child as the source donor for the fresh combined-memory run.
+That child is the immutable donor for the isolated rchk policy discovery. Once
+the source-bound policy changes, the final combined-memory run requires a new
+static/focused native donor from the converged policy/harness commit; it does
+not require another full package acceptance run.
 
 The first isolated bounded-rchk discovery attempt from the new donor,
 `release-candidate-dbbdcc1-rchk-discovery-r1`, failed closed in resource
@@ -63,6 +66,31 @@ reviewed 20-GiB analyzer allowance plus 16-GiB protected host reserve
 (36,864 MiB total). It is capacity evidence only and must not be reused. Keep
 both limits; wait for or manually free at least about 1 GiB of nonessential
 memory, then use a fresh discovery run ID.
+
+The admitted replacement discovery,
+`release-candidate-dbbdcc1-rchk-discovery-r2`, ran all three analyzers
+successfully and failed only at the intended old-policy comparison. It analyzed
+951 functions and 50,395 states: 83 Function blocks contain 239 UP and 17 PB
+diagnostics. Raw bcheck and ordering-insensitive semantic SHA-256 values are
+`ddbad6140d74e96422bc4f77942f9303af9e51706005f9f95d36b3d677b011d8`
+and
+`9135cbe02ddbd69019d7901d09bd5a7286fd24b74260e1864be0c92aeceef1d9`.
+Maacheck is byte-empty; fficheck reports the exact current 82 functions and one
+registration call, SHA-256
+`448c7d8dae05fab9b43570ed169a4472de8ca6ca40836061642c4203c3391882`.
+The independently generated and validated policy, block table, and unchanged
+rationale catalog SHA-256 values are respectively
+`eb1e2e9d89a27b9a43a7be87606c22b71fef636284c5c570c5f795aa2345833f`,
+`d0ba3cbc6d2b536b157939fc3c6cbe2d9fcf5b2ed497a088234ee345dddf2fad`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+
+Every new or changed block was source-reviewed. No C defect was found. The four
+additional PB diagnostics all come from bcheck losing the conditional
+list-column protection depth in `build_dependent_grid()`; branch-by-branch
+accounting is exact. The native GCT probe now also exercises a dependent,
+list-valued fixed special value and its inactive row, rather than relying on
+separate atomic GCT and ordinary list-column tests.
 
 The provisional R 3.6 ref `refs/paradox-release/r36-39855c9`, commit
 `39855c919beec323fd5940e4c46286e8df1be8ff`, completed all eight
@@ -2222,7 +2250,10 @@ and result SHA-256 values are respectively
 `522490b19cf52e6a18b955207d797463f60b51b6c1a85537423fc6088b21fc36`,
 and
 `d89ff720ea1cda8be1f82538a1e92a245dd901fd7e31990ed2a37e97c62130b0`.
-Use only that child for the fresh combined-memory gate.
+That child supplied the successful rchk discovery. The regenerated policy and
+strengthened GCT probe now require one fresh static/focused native donor before
+the combined-memory gate; rerunning full native/package acceptance would add no
+information because package-facing source remains `dbbdcc1`.
 
 The repair changes only `scripts/memory-check` and five
 `scripts/environment/` harness files. Before transferring any package-facing

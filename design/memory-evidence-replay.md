@@ -63,13 +63,39 @@ modes. Its source-manifest, source-tree, and modes-tree SHA-256 values are
 `821e28ab6db88a0125e4dbea167730235096bc2f699cb33a94d0c85cc2594a3a`,
 and
 `6550f985a6bfc766618a95719ec638ec02988021e118c7b7f296a71df0c95b95`.
-Only the fresh combined-memory run remains for memory acceptance.
+It supplies immutable source input for policy discovery. Because the resulting
+policy changes the source-bound memory snapshot, final memory acceptance uses
+one new static/focused native donor from the policy/harness commit.
 
 An initial isolated rchk discovery from this donor,
 `release-candidate-dbbdcc1-rchk-discovery-r1`, failed closed before analyzer
 start because live capacity was 536 MiB below the reviewed 20-GiB analyzer
 allowance plus 16-GiB host reserve. Retain it as capacity evidence only; do not
 reduce either bound or reuse the failed run ID.
+
+The admitted discovery
+`release-candidate-dbbdcc1-rchk-discovery-r2` completed every analyzer and
+retained stable pre/post source proofs. It is deliberately a failed run: the
+old policy rejects the changed report after successful report-shape, status,
+maacheck, fficheck, error-inventory, and semantic extraction checks. The raw
+bcheck report SHA-256 is
+`ddbad6140d74e96422bc4f77942f9303af9e51706005f9f95d36b3d677b011d8`;
+its semantic SHA-256 is
+`9135cbe02ddbd69019d7901d09bd5a7286fd24b74260e1864be0c92aeceef1d9`.
+It analyzed 951 functions and 50,395 states with 83 blocks, 239 UP, and 17 PB.
+Maacheck is byte-empty. Fficheck reports 82 functions and one registration
+call, SHA-256
+`448c7d8dae05fab9b43570ed169a4472de8ca6ca40836061642c4203c3391882`.
+
+All changed blocks were audited against source. The four additional PB
+diagnostics belong only to `build_dependent_grid()` and arise when bcheck loses
+its conditional VECSXP missing-sentinel protection depth; every branch has an
+exact balance. The existing five-rationale catalog is sufficient. Independent
+generation and validation produced policy/block/rationale SHA-256 values
+`eb1e2e9d89a27b9a43a7be87606c22b71fef636284c5c570c5f795aa2345833f`,
+`d0ba3cbc6d2b536b157939fc3c6cbe2d9fcf5b2ed497a088234ee345dddf2fad`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
 
 ## Modes
 
@@ -98,7 +124,8 @@ collection add with cycle/corruption paths, BASE-Shadow constraint plans and
 merge callbacks, exact TuneToken snapshot admission and cold search-space
 conversion (including rooted candidate receipts, final nonallocating
 reauthentication, and sealed single-use BASE capabilities), shared built-in
-Domain-row admission, Design, sampler,
+Domain-row admission, Design, fixed and dependency-aware grid construction
+(including a list-valued fixed special value and inactive row), sampler,
 serialization, and upgrader validation.
 Rooting regressions are direct assertions, not inferred from the absence of a
 crash in unrelated tests.
