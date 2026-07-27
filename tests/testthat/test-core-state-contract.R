@@ -109,8 +109,7 @@ test_that("capsule admission rejects S4-marked carriers and schema metadata", {
 
   expect_error(
     paradox:::param_set_core_state(new.env(parent = emptyenv())),
-    "missing versioned core capsule",
-    fixed = TRUE
+    "missing versioned core capsule|no binding"
   )
 })
 

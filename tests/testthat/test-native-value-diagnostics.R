@@ -135,6 +135,28 @@ test_that("Domain and ParamSet checks share informative scalar diagnostics", {
   }
 })
 
+test_that("native formatted diagnostics grow real buffers without truncation", {
+  domain = p_dbl(0, 1, tolerance = 0)
+  param_set = ps(value = domain)
+  lower = -.Machine$double.xmax
+  upper = .Machine$double.xmax
+  token = to_tune(lower = lower, upper = upper)
+  rendered_bounds = paste0("lower ", sprintf("%g, upper %g", lower, upper))
+
+  returned = param_set$check(list(value = token))
+  thrown = tryCatch(
+    {
+      param_set$values = list(value = token)
+      NULL
+    },
+    error = conditionMessage
+  )
+
+  expect_match(returned, rendered_bounds, fixed = TRUE)
+  expect_match(thrown, rendered_bounds, fixed = TRUE)
+  expect_match(thrown, paste0(rendered_bounds, "."), fixed = TRUE)
+})
+
 test_that("scalar missingness takes precedence over irrelevant storage type", {
   cases = list(
     double = list(

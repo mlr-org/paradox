@@ -346,6 +346,88 @@ for (arguments in invalid_identities) {
   if (identical(status, 0L)) rr_fail("unsafe watchdog identity was admitted")
 }
 
+# A completed worker group may contain only a zombie whose live parent moved
+# into a different session.  This is deterministic in rootless containers
+# without a reaping PID 1, but can also occur while an ordinary parent defers
+# wait(2).  Signals cannot make progress against that terminal member, so the
+# wrapper must publish the completed result instead of timing out cleanup.
+setsid_path <- c("/usr/bin/setsid", "/bin/setsid")
+setsid_path <- setsid_path[file.exists(setsid_path) &
+  file.access(setsid_path, mode = 1L) == 0L]
+if (length(setsid_path)) {
+  zombie_root <- file.path(temporary, "zombie-only-group")
+  dir.create(file.path(zombie_root, "metadata"), recursive = TRUE)
+  zombie_worker <- file.path(zombie_root, "worker")
+  zombie_helper <- file.path(zombie_root, "helper.pid")
+  zombie_log <- file.path(zombie_root, "wrapper.log")
+  writeLines(c(
+    "#!/usr/bin/env sh",
+    "set -eu",
+    "(",
+    "  /bin/sleep 0.1 &",
+    paste0("  exec ", setsid_path[[1L]], " /bin/sleep 30"),
+    ") &",
+    "printf '%s\\n' \"$!\" > \"$PARADOX_REVERSE_ZOMBIE_HELPER\"",
+    "printf '%s\\n' result > \"$PARADOX_REVERSE_WORKER_RESULT\""
+  ), zombie_worker, useBytes = TRUE)
+  Sys.chmod(zombie_worker, mode = "0700")
+  zombie_paths <- list(
+    launch = file.path(zombie_root, "metadata", "worker-launch.tsv"),
+    result = file.path(zombie_root, "metadata", "worker-result"),
+    completion = file.path(
+      zombie_root, "metadata", "worker-completion.tsv"
+    )
+  )
+  zombie_started <- proc.time()[["elapsed"]]
+  zombie_status <- suppressWarnings(system2(
+    worker_group_script, zombie_worker,
+    stdout = zombie_log, stderr = zombie_log,
+    env = c(
+      paste0("PARADOX_REVERSE_COORDINATOR_PID=", Sys.getpid()),
+      paste0("PARADOX_REVERSE_WORKER_TOKEN=zombie.", Sys.getpid()),
+      paste0("PARADOX_REVERSE_WORKER_LAUNCH=", zombie_paths$launch),
+      paste0("PARADOX_REVERSE_WORKER_RESULT=", zombie_paths$result),
+      paste0(
+        "PARADOX_REVERSE_WORKER_COMPLETION=", zombie_paths$completion
+      ),
+      "PARADOX_REVERSE_TASK_POSITION=1",
+      paste0("PARADOX_REVERSE_TASK_SHA256=", strrep("a", 64L)),
+      paste0("PARADOX_REVERSE_ZOMBIE_HELPER=", zombie_helper),
+      "PARADOX_REVERSE_DISABLE_PROC_SWEEP=1"
+    )
+  ))
+  zombie_elapsed <- proc.time()[["elapsed"]] - zombie_started
+  helper_pid <- if (file.exists(zombie_helper)) {
+    suppressWarnings(as.integer(readLines(
+      zombie_helper, warn = FALSE, n = 1L
+    )))
+  } else {
+    NA_integer_
+  }
+  if (length(helper_pid) == 1L && !is.na(helper_pid) && helper_pid > 1L) {
+    invisible(suppressWarnings(system2(
+      "/bin/kill", c("-TERM", as.character(helper_pid)),
+      stdout = FALSE, stderr = FALSE
+    )))
+  }
+  zombie_diagnostic <- if (file.exists(zombie_log)) {
+    rr_compact_external_text(
+      paste(readLines(zombie_log, warn = FALSE), collapse = "\n"), 1000L
+    )
+  } else {
+    "<absent>"
+  }
+  if (!identical(zombie_status, 0L) || zombie_elapsed > 10 ||
+      !file.exists(zombie_paths$result) ||
+      !file.exists(zombie_paths$completion)) {
+    rr_fail(
+      "zombie-only worker group blocked clean completion: status=",
+      zombie_status, "; elapsed=", format(zombie_elapsed, digits = 4L),
+      "; log=", zombie_diagnostic
+    )
+  }
+}
+
 external_task <- function(task, directory) {
   dir.create(file.path(directory, "metadata"), recursive = TRUE)
   dir.create(file.path(directory, "worker-state"))
@@ -705,6 +787,13 @@ parallel_wave <- rr_parallel_wave(parallel_tasks, function(task) {
   if (task$index == 2L) stop("synthetic worker failure", call. = FALSE)
   task$index
 }, 2L, external_rscript, wave_worker_script, worker_group_script, 30L)
+parallel_logs <- vapply(parallel_tasks, function(task) {
+  path <- task$rr_transport$log
+  if (!file.exists(path)) return("<absent>")
+  rr_compact_external_text(
+    paste(readLines(path, warn = FALSE), collapse = "\n"), 2000L
+  )
+}, character(1L))
 if (!identical(parallel_wave$backend, "external") ||
     length(parallel_wave$results) != 2L ||
     !isTRUE(parallel_wave$results[[1L]]$ok) ||
@@ -715,7 +804,23 @@ if (!identical(parallel_wave$backend, "external") ||
     any(!file.exists(file.path(
       parallel_root, paste0("row-", 1:2), "finished"
     )))) {
-  rr_fail("bounded wave lost concurrency, ordering, or a sibling failure")
+  rr_fail(
+    "bounded wave lost concurrency, ordering, or a sibling failure: backend=",
+    parallel_wave$backend,
+    "; results=", paste(vapply(
+      parallel_wave$results,
+      function(value) paste0(
+        "ok=", value$ok, ",value=",
+        if (is.null(value$value)) "NULL" else paste(value$value, collapse = ","),
+        ",error=", value$error
+      ),
+      character(1L)
+    ), collapse = " | "),
+    "; finished=", paste(file.exists(file.path(
+      parallel_root, paste0("row-", 1:2), "finished"
+    )), collapse = ","),
+    "; logs=", paste(parallel_logs, collapse = " | ")
+  )
 }
 
 # The coordinator imposes an outer deadline even when the worker never reaches

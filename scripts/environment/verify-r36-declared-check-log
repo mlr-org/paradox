@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Authenticate the one bounded R CMD check exception for the local declared-
+# minimum R 3.6.3 axis.  Its locked test library deliberately omits exactly four
+# direct Suggests, so R 3.6 reports one dependency NOTE despite a successful
+# child process.  No other check problem is admissible.
+
+fail() {
+  printf 'verify-r36-declared-check-log: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 1 ]] ||
+  fail "usage: verify-r36-declared-check-log CHECK_LOG"
+
+check_log=$1
+[[ -f "$check_log" && ! -L "$check_log" && -s "$check_log" ]] ||
+  fail "check log is absent, empty, non-regular, or symbolic"
+[[ $(wc -c < "$check_log") -le 16777216 ]] ||
+  fail "check log exceeds the reviewed 16 MiB bound"
+
+LC_ALL=C awk '
+  function trim(value) {
+    sub(/^[[:space:]]+/, "", value)
+    sub(/[[:space:]]+$/, "", value)
+    return value
+  }
+  function count_words(value, normalized, word_fields, word_count, idx) {
+    normalized = value
+    gsub(/[^A-Za-z0-9.]+/, " ", normalized)
+    word_count = split(normalized, word_fields, /[[:space:]]+/)
+    for (idx = 1; idx <= word_count; idx++) {
+      if (word_fields[idx] == "NOTE") notes++
+      if (word_fields[idx] == "WARNING" || word_fields[idx] == "ERROR") {
+        warning_or_error++
+      }
+    }
+  }
+  BEGIN {
+    expected["reticulate"] = 1
+    expected["rmarkdown"] = 1
+    expected["mlr3learners"] = 1
+    expected["e1071"] = 1
+    expected_marker = "* checking package dependencies ... NOTE"
+    expected_header = "Packages suggested but not available for checking:"
+  }
+  {
+    sub(/\r$/, "", $0)
+    count_words($0)
+    stripped = trim($0)
+    if (stripped != "") last_nonempty = stripped
+    if (index($0, "Execution halted") != 0) halted++
+
+    if ($0 ~ /^Status:/) {
+      statuses++
+      if ($0 == "Status: 1 NOTE") exact_statuses++
+    }
+
+    if ($0 ~ /^\* checking .* \.\.\. (NOTE|WARNING|ERROR)$/) {
+      problems++
+      if ($0 == expected_marker) {
+        markers++
+        in_block = 1
+        need_header = 1
+      } else {
+        in_block = 0
+      }
+      next
+    }
+
+    if (in_block && $0 ~ /^\* checking /) {
+      in_block = 0
+      block_closed++
+    }
+    if (!in_block) next
+
+    if (stripped == "") next
+    if (need_header) {
+      if (stripped != expected_header) bad_header++
+      headers++
+      need_header = 0
+      next
+    }
+
+    package_line = $0
+    gsub(/[^A-Za-z0-9.]+/, " ", package_line)
+    package_count = split(package_line, package_fields, /[[:space:]]+/)
+    for (package_index = 1; package_index <= package_count; package_index++) {
+      package = package_fields[package_index]
+      if (package == "") continue
+      observed[package]++
+      observed_count++
+    }
+  }
+  END {
+    valid = statuses == 1 && exact_statuses == 1 &&
+      last_nonempty == "Status: 1 NOTE" &&
+      problems == 1 && markers == 1 &&
+      headers == 1 && bad_header == 0 && block_closed == 1 &&
+      notes == 2 && warning_or_error == 0 && halted == 0 &&
+      observed_count == 4
+    for (package in expected) {
+      if (observed[package] != 1) valid = 0
+    }
+    for (package in observed) {
+      if (!(package in expected) || observed[package] != 1) valid = 0
+    }
+    exit(valid ? 0 : 1)
+  }
+' "$check_log" ||
+  fail "log is not the exact four-missing-Suggests R 3.6 check result"
+
+printf 'r36_declared_check_log=passed\n'
+printf 'missing_suggests=reticulate,rmarkdown,mlr3learners,e1071\n'

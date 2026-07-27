@@ -7,7 +7,9 @@ Usage: scripts/environment/runtime-matrix-prefix-receipt create|verify DIRECTORY
 
 Create or verify a deterministic SHA-256 manifest for an isolated runtime
 prefix.  Paths, kinds, modes, sizes, file bytes, and internal symbolic-link
-targets are authenticated.  Links that resolve outside the prefix are refused.
+targets are authenticated.  Links that resolve outside the prefix are refused,
+and every regular file must have exactly one hard-link so a writable package
+cache or sibling runtime cannot mutate a sealed prefix through a shared inode.
 USAGE
 }
 
@@ -46,13 +48,24 @@ for tool in find sort sha256sum readlink realpath mktemp cmp xargs; do
 done
 
 describe() {
-  local root=$1 output=$2 relative path kind mode size value target resolved
+  local root=$1 output=$2 relative path kind mode size links value target
+  local resolved multiply_linked
   local record hash full_path
   local unsorted
   declare -A hashes=()
   unsorted=$(mktemp "${output}.unsorted.XXXXXX")
   trap 'rm -f -- "${unsorted:-}" "${output:-}"' RETURN
   : > "$unsorted"
+
+  # Reject the old micromamba hard-link topology before reading and hashing the
+  # complete tree.  The per-record check below remains authoritative if a link
+  # is introduced after this cheap preflight.
+  if IFS= read -r -d '' multiply_linked < <(
+      find "$root" -type f -links +1 -print0 -quit
+    ); then
+    relative=${multiply_linked#"$root/"}
+    fail "Runtime prefix contains a multiply-linked regular file: $relative"
+  fi
 
   # Hash all regular files in batched sha256sum processes.  The earlier
   # per-member implementation spawned several processes for each conda file
@@ -67,7 +80,7 @@ describe() {
   done < <(find "$root" -type f -print0 | sort -z |
     xargs -0 -r sha256sum -z --)
 
-  while IFS=$'\t' read -r -d '' relative kind size mode target; do
+  while IFS=$'\t' read -r -d '' relative kind size mode links target; do
     [[ -n "$relative" && "$relative" != *$'\t'* &&
       "$relative" != *$'\r'* && "$relative" != *$'\n'* ]] ||
       fail "Runtime prefix contains a path unsupported by the receipt format"
@@ -94,6 +107,8 @@ describe() {
       value=-
     elif [[ "$kind" == f && -f "$path" ]]; then
       kind='file'
+      [[ "$links" == 1 ]] ||
+        fail "Runtime prefix contains a multiply-linked regular file: $relative"
       value=${hashes[$relative]:-}
       [[ "$value" =~ ^[0-9a-f]{64}$ ]] ||
         fail "A regular runtime-prefix file was not hashed: $relative"
@@ -102,7 +117,8 @@ describe() {
     fi
     printf '%s\t%s\t%s\t%s\t%s\n' \
       "$relative" "$kind" "$value" "$size" "$mode" >> "$unsorted"
-  done < <(find "$root" -mindepth 1 -printf '%P\t%y\t%s\t%m\t%l\0' | sort -z)
+  done < <(find "$root" -mindepth 1 \
+    -printf '%P\t%y\t%s\t%m\t%n\t%l\0' | sort -z)
 
   {
     printf 'path\tkind\tsha256_or_target\tsize\tmode\n'

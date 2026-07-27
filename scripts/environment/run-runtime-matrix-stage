@@ -17,9 +17,14 @@ ROOT=$1
 RUN_ROOT=$2
 VERSION=$3
 REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
 MANAGED_PATH="$ROOT/scripts/environment/runtime-matrix-managed-path"
-[[ -x "$REGISTRY" ]] || fail "runtime registry helper is absent"
+DECLARED_CHECK_LOG_VERIFIER="$ROOT/scripts/environment/verify-r36-declared-check-log"
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" ]] ||
+  fail "runtime registry or dependency-library manager is absent"
 [[ -x "$MANAGED_PATH" ]] || fail "runtime managed-path helper is absent"
+[[ -x "$DECLARED_CHECK_LOG_VERIFIER" ]] ||
+  fail "declared-minimum check-log verifier is absent"
 "$REGISTRY" contains "$VERSION" || fail "unsupported runtime version"
 DATATABLE_VERSION=1.18.4
 DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
@@ -116,29 +121,39 @@ audit_symbols() {
   if [[ "$version" == 3.6.3 ]]; then
     required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE R_HasFancyBindings)
-    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv
+    forbidden=(R_ClosureFormals R_ClosureExpr R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv
       R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
-      R_getVarEx R_GetBindingType R_getRegisteredNamespace
-      R_getAttribCount R_hasAttrib R_mapAttrib SET_COMPLEX_ELT SET_RAW_ELT)
+      R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib Rf_GetOption1
+      ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
   elif [[ "$version" == 4.0.5 ]]; then
-    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
+    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE R_HasFancyBindings
       R_ActiveBindingFunction)
-    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv
-      R_existsVarInFrame R_NewEnv R_getVarEx R_GetBindingType
+    forbidden=(R_ClosureFormals R_ClosureExpr R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv
+      R_existsVarInFrame R_NewEnv R_getVar R_getVarEx R_GetBindingType
       R_getRegisteredNamespace R_getAttribCount R_hasAttrib R_mapAttrib
-      SET_COMPLEX_ELT SET_RAW_ELT)
+      Rf_GetOption1 ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
   elif [[ "$version" == 4.3.3 ]]; then
-    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
-      R_PromiseExpr PRENV PRVALUE)
-    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
+    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_existsVarInFrame
+      R_ActiveBindingFunction SET_COMPLEX_ELT SET_RAW_ELT)
+    forbidden=(R_ClosureFormals R_ClosureExpr R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv R_getVar R_getVarEx
       R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
-      R_mapAttrib)
+      R_mapAttrib Rf_GetOption1 ANY_ATTRIB R_HasFancyBindings)
+  elif [[ "$version" == 4.5.2 ]]; then
+    required=(Rf_eval ATTRIB ANY_ATTRIB R_ClosureFormals R_ClosureExpr
+      R_BytecodeExpr R_ClosureEnv R_ParentEnv Rf_findVarInFrame
+      Rf_GetOption1 R_existsVarInFrame R_ActiveBindingFunction
+      SET_COMPLEX_ELT SET_RAW_ELT)
+    forbidden=(R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib
+      R_PromiseExpr PRENV PRVALUE FORMALS R_HasFancyBindings)
   else
-    required=(Rf_eval ATTRIB R_ClosureFormals R_ClosureExpr R_ClosureEnv
-      R_ParentEnv Rf_findVarInFrame R_PromiseExpr PRENV PRVALUE)
-    forbidden=(R_getVarEx R_GetBindingType R_getRegisteredNamespace
-      R_getAttribCount R_hasAttrib R_mapAttrib)
+    fail "unsupported runtime symbol policy: $version"
   fi
   branch=$("$REGISTRY" field "$version" api_branch)
   for symbol in "${required[@]}"; do
@@ -169,6 +184,36 @@ audit_symbols() {
     printf 'forbidden_symbol_absent=%s\n' "$symbol" >> "$log"
   done
   printf 'r_api_compat_branch=%s\nsymbol_audit=passed\n' "$branch" >> "$log"
+}
+
+audit_r45_compiled_code_policy() {
+  local version=$1 package_directory=$2 log=$3
+  [[ "$version" == 4.5.2 ]] || return 0
+  Rscript --vanilla -e '
+    arguments <- commandArgs(trailingOnly = TRUE)
+    package_directory <- normalizePath(
+      arguments[[1L]], winslash = "/", mustWork = TRUE
+    )
+    issues <- tools:::check_compiled_code(package_directory)
+    if (length(issues)) {
+      cat(
+        "runtime=4.5.2\n",
+        "policy_source=tools:::check_compiled_code\n",
+        sprintf("issue_count=%d\n", length(issues)),
+        sep = ""
+      )
+      writeLines(capture.output(print(issues)))
+      quit(save = "no", status = 1L)
+    }
+    cat(
+      "runtime=4.5.2\n",
+      "policy_source=tools:::check_compiled_code\n",
+      "issue_count=0\n",
+      "compiled_code_policy=passed\n",
+      sep = ""
+    )
+  ' "$package_directory" > "$log" 2>&1 ||
+    fail "R 4.5 compiled-code policy rejected the installed package"
 }
 
 ensure_stage_directory() {
@@ -307,10 +352,25 @@ configure_stage_user_environment() {
 
 configure_stage_user_environment
 cd "$ROOT"
+export PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT="$STAGE_ARTIFACTS"
+export PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$STAGE_INPUTS"
 # shellcheck disable=SC1091
 . "$ROOT/scripts/activate-runtime-matrix" "$VERSION"
+unset PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT
+unset PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT
 configure_stage_user_environment
 exec {stage_artifacts_descriptor}<&-
+
+# Stage-aware activation must already have selected the authenticated detached
+# inputs before its own R identity probes. Keep one postcondition here rather
+# than a second assignment implementation.
+[[ "$R_ENVIRON_USER" == "$STAGE_INPUTS/environment/Renviron" &&
+  "$R_PROFILE_USER" == "$STAGE_INPUTS/environment/Rprofile.R" &&
+  "$R_MAKEVARS_USER" == "$STAGE_INPUTS/environment/Makevars" &&
+  "$R_BUILD_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" &&
+  "$R_CHECK_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" &&
+  "$R_INSTALL_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" ]] ||
+  fail "stage-aware activation did not retain authenticated R startup inputs"
 
 # The scheduler admits at most two independently isolated R-version stages at
 # once. Do not let a package, BLAS, OpenMP runtime, future/parallel, or a nested
@@ -366,16 +426,51 @@ mapfile -t archives < <(find "$STAGE_BUILD" -maxdepth 1 -type f \
 archive=${archives[0]}
 R CMD INSTALL --preclean --clean --install-tests \
   --library="$STAGE_LIBRARY" "$archive" > "$STAGE_LOGS/install.log" 2>&1
+if [[ "$VERSION" == 3.6.3 ]]; then
+  declared_floor_receipt="$STAGE_INPUTS/declared-floor-library-receipt"
+  [[ -d "$declared_floor_receipt" && ! -L "$declared_floor_receipt" ]] ||
+    fail "prepared declared-floor library receipt handoff is absent or symbolic"
+  declared_floor_library=$(
+    "$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor \
+      --verified-receipt-handoff "$declared_floor_receipt" --print-path
+  )
+  declared_floor_candidate="$STAGE_ARTIFACTS/declared-floor-candidate-library"
+  ensure_stage_directory "$declared_floor_candidate" 0700
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER="$declared_floor_candidate" \
+    R_LIBS_SITE="$declared_floor_library" \
+    R CMD INSTALL --preclean --clean --no-multiarch \
+      --library="$declared_floor_candidate" "$archive" \
+      > "$STAGE_LOGS/declared-floor-install.log" 2>&1
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER="$declared_floor_candidate" \
+    R_LIBS_SITE="$declared_floor_library" \
+    Rscript --vanilla \
+      "$STAGE_SOURCE/scripts/environment/run-r36-declared-floor-smoke.R" smoke \
+      "$STAGE_SOURCE" \
+      "$STAGE_SOURCE/environment/runtime-r-3.6.3-declared-floor-packages.lock" \
+      "$declared_floor_candidate" "$declared_floor_library" "$ROOT" \
+      > "$STAGE_LOGS/declared-floor-smoke.log" 2>&1
+fi
 export PARADOX_RUNTIME_MATRIX_REGISTRY_FILE="$STAGE_INPUTS/environment/runtime-matrix.tsv"
 Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" \
   "$STAGE_LIBRARY" > "$STAGE_LOGS/focused-probe.log" 2>&1
 audit_symbols "$VERSION" "$STAGE_LIBRARY/paradox/libs/paradox.so" \
   "$STAGE_LOGS/r-api-symbol-audit.log"
+audit_r45_compiled_code_policy "$VERSION" "$STAGE_LIBRARY/paradox" \
+  "$STAGE_LOGS/r45-compiled-code-policy.log"
 NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
   Rscript --vanilla \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
   "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/source-test-scope" \
   > "$STAGE_LOGS/source-tests.log" 2>&1
+if [[ "$VERSION" == 3.6.3 || "$VERSION" == 4.0.5 ]]; then
+  unset PARADOX_SKIP_CHARACTERIZATION_GCT
+  NOT_CRAN=true Rscript --vanilla \
+    "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R" \
+    "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/old-r-stress-scope" \
+    > "$STAGE_LOGS/old-r-stress.log" 2>&1
+fi
 if [[ "$VERSION" == 3.6.3 ]]; then
   check_driver_log="$STAGE_LOGS/r-cmd-check.log"
   check_status="$STAGE_LOGS/r-cmd-check-status.tsv"
@@ -383,32 +478,33 @@ if [[ "$VERSION" == 3.6.3 ]]; then
   (
     cd "$STAGE_CHECK"
     _R_CHECK_FORCE_SUGGESTS_=false \
-      R CMD check --no-tests --no-manual --no-build-vignettes "$archive"
+      R CMD check --no-tests --ignore-vignettes --no-manual "$archive"
   ) > "$check_driver_log" 2>&1 || check_exit_status=$?
   check_log="$STAGE_CHECK/paradox.Rcheck/00check.log"
   check_conclusion=unavailable
   check_log_sha256=-
   if [[ -f "$check_log" && ! -L "$check_log" ]]; then
     check_log_sha256=$(sha256_file "$check_log")
-    if [[ $(grep -Fxc 'Status: OK' "$check_log") -eq 1 ]]; then
-      check_conclusion=OK
+    if "$DECLARED_CHECK_LOG_VERIFIER" "$check_log" >/dev/null 2>&1; then
+      check_conclusion=expected-missing-suggests-note
     else
-      check_conclusion=not-OK
+      check_conclusion=unexpected-check-result
     fi
   fi
   {
     printf 'field\tvalue\n'
     printf 'scope\tdeclared-minimum-r-3.6.3\n'
     printf 'force_suggests\tfalse\n'
-    printf 'options\t--no-tests --no-manual --no-build-vignettes\n'
+    printf 'options\t--no-tests --ignore-vignettes --no-manual\n'
     printf 'exit_status\t%s\n' "$check_exit_status"
     printf 'conclusion\t%s\n' "$check_conclusion"
     printf 'driver_log_sha256\t%s\n' "$(sha256_file "$check_driver_log")"
     printf 'check_log_relative\tcheck/paradox.Rcheck/00check.log\n'
     printf 'check_log_sha256\t%s\n' "$check_log_sha256"
   } > "$check_status"
-  [[ "$check_exit_status" -eq 0 && "$check_conclusion" == OK ]] ||
-    fail "R 3.6.3 declared-minimum R CMD check was not clean"
+  [[ "$check_exit_status" -eq 0 &&
+    "$check_conclusion" == expected-missing-suggests-note ]] ||
+    fail "R 3.6.3 declared-minimum R CMD check exceeded its bounded NOTE"
 fi
 Rscript --vanilla -e 'sessionInfo()' > "$STAGE_LOGS/session-info.log" 2>&1
 Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \

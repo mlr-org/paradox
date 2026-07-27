@@ -14,6 +14,10 @@ TEMP_ROOT="$ROOT/.local/tmp"
 # registry, and receipt-tool changes deliberately do not invalidate a built
 # package closure.
 SOURCE_LIBRARY_BUILD_SCHEMA=1
+# `--vanilla` does not suppress an inherited default-package list.  Receipt
+# verification and package installation must not preload caller-selected
+# namespaces.
+unset R_DEFAULT_PACKAGES
 
 fail() {
   printf 'runtime-matrix-library: %s\n' "$*" >&2
@@ -165,16 +169,20 @@ verify_open_file() {
 usage() {
   cat <<'EOF'
 Usage: runtime-matrix-library --runtime VERSION [--verify|--verify-lock]
+                              [--profile runtime|declared-floor]
                               [--verified-receipt-handoff DIRECTORY]
                               [--offline]
                               [--print-path]
 
 Provision or verify the exact sealed source-package library registered for an
-old runtime. The cache and installed library remain inside this checkout.
+old runtime.  The declared-floor profile is the separate exact direct-
+dependency floor closure for R 3.6.3.  Caches and installed libraries remain
+inside this checkout.
 EOF
 }
 
 version=
+library_profile=runtime
 mode=provision
 offline=false
 print_path=false
@@ -184,6 +192,13 @@ while (($#)); do
     --runtime)
       (($# >= 2)) || fail "--runtime requires a value"
       version=$2
+      shift 2
+      ;;
+    --profile)
+      (($# >= 2)) || fail "--profile requires a value"
+      [[ "$2" == runtime || "$2" == declared-floor ]] ||
+        fail "--profile must be runtime or declared-floor"
+      library_profile=$2
       shift 2
       ;;
     --verify)
@@ -219,15 +234,27 @@ for input in "$MANAGER" "$REGISTRY" "$R_HELPER" "$TREE_RECEIPT"; do
 done
 "$REGISTRY" contains "$version" ||
   fail "runtime is not registered: $version"
-[[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]] ||
-  fail "runtime does not use a source-package library: $version"
+if [[ "$library_profile" == runtime ]]; then
+  [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]] ||
+    fail "runtime does not use a source-package library: $version"
+  lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+  library_dependency_mode=source-library
+  library_version_component="R-$version"
+  handoff_name=dependency-library-receipt
+else
+  [[ "$version" == 3.6.3 ]] ||
+    fail "the declared-floor profile is defined only for R 3.6.3"
+  lock_relative=environment/runtime-r-3.6.3-declared-floor-packages.lock
+  library_dependency_mode=declared-floor
+  library_version_component=R-3.6.3-declared-floor
+  handoff_name=declared-floor-library-receipt
+fi
 
 case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) ;;
   *) fail "the local runtime library is pinned for Linux x86_64" ;;
 esac
 
-lock_relative=$("$REGISTRY" field "$version" dependency_lock)
 lock="$ROOT/$lock_relative"
 runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
 runtime_lock="$ROOT/$runtime_lock_relative"
@@ -237,7 +264,7 @@ prefix_receipt_directory="$MATRIX_ROOT/receipts/R-$version"
 prefix_manifest="$prefix_receipt_directory/prefix.manifest.tsv"
 prefix_receipt="$prefix_receipt_directory/receipt.tsv"
 prefix_seal="$prefix_receipt_directory/receipt.sha256"
-cache="$CACHE_ROOT/R-$version"
+cache="$CACHE_ROOT/$library_version_component"
 for input in "$lock" "$runtime_lock" "$registry_manifest"; do
   require_plain_file "$input"
 done
@@ -357,8 +384,7 @@ key=$(
     printf 'runtime\t%s\n' "$version"
     printf 'platform\t%s\n' \
       "$("$REGISTRY" field "$version" platform)"
-    printf 'dependency_mode\t%s\n' \
-      "$("$REGISTRY" field "$version" dependency_mode)"
+    printf 'dependency_mode\t%s\n' "$library_dependency_mode"
     printf 'runtime_lock_relative\t%s\n' "$runtime_lock_relative"
     printf 'runtime_lock\t%s\n' "$runtime_lock_sha256"
     printf 'prefix_manifest\t%s\n' "$prefix_manifest_sha256"
@@ -366,14 +392,14 @@ key=$(
     printf 'dependency_lock\t%s\n' "$dependency_lock_sha256"
   } | sha256sum | cut -d ' ' -f 1
 )
-library="$MATRIX_ROOT/dependencies/R-$version/$key/library"
-receipt_directory="$MATRIX_ROOT/dependency-receipts/R-$version/$key"
+library="$MATRIX_ROOT/dependencies/$library_version_component/$key/library"
+receipt_directory="$MATRIX_ROOT/dependency-receipts/$library_version_component/$key"
 manifest="$receipt_directory/library.manifest.tsv"
 identity_manifest="$receipt_directory/library.identity.tsv"
 inventory="$receipt_directory/packages.tsv"
 receipt="$receipt_directory/receipt.tsv"
 seal="$receipt_directory/receipt.sha256"
-dependency_version_root="$MATRIX_ROOT/dependencies/R-$version"
+dependency_version_root="$MATRIX_ROOT/dependencies/$library_version_component"
 dependency_key_root="${library%/*}"
 receipt_version_root="${receipt_directory%/*}"
 
@@ -400,7 +426,7 @@ platform	linux-64
 build_schema	$SOURCE_LIBRARY_BUILD_SCHEMA
 build_identity	$key
 cache_key	$key
-library_relative	.local/runtime-matrix/dependencies/R-$version/$key/library
+library_relative	.local/runtime-matrix/dependencies/$library_version_component/$key/library
 runtime_lock_relative	$runtime_lock_relative
 runtime_lock_sha256	$runtime_lock_sha256
 prefix_manifest_sha256	$prefix_manifest_sha256
@@ -585,7 +611,7 @@ verify_receipt_handoff() {
   run_id=${relative%%/*}
   [[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
     fail "verified receipt handoff has an invalid run ID"
-  expected_handoff="$ROOT/.local/checks/$run_id/runtime-matrix/R-$version/artifacts/inputs/dependency-library-receipt"
+  expected_handoff="$ROOT/.local/checks/$run_id/runtime-matrix/R-$version/artifacts/inputs/$handoff_name"
   [[ "$handoff" == "$expected_handoff" ]] ||
     fail "verified receipt handoff is not the exact runtime stage input"
   require_plain_directory "$handoff"
@@ -823,8 +849,11 @@ for home_directory in home tmp config cache data state runtime r-cache ccache \
 done
 chmod 0700 "$staging_home/home" "$staging_home/tmp" "$staging_home/runtime"
 (
-  unset R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE R_ENVIRON R_ENVIRON_USER \
-    R_PROFILE R_PROFILE_USER R_MAKEVARS_SITE R_MAKEVARS_USER \
+  unset R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE R_DEFAULT_PACKAGES \
+    R_ENVIRON R_ENVIRON_USER \
+    R_PROFILE R_PROFILE_USER \
+    R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON \
+    R_MAKEVARS_SITE R_MAKEVARS_USER \
     CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
     CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS LDFLAGS \
     CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH LD_LIBRARY_PATH \
@@ -841,6 +870,9 @@ chmod 0700 "$staging_home/home" "$staging_home/tmp" "$staging_home/runtime"
   export R_ENVIRON_USER=/dev/null
   export R_PROFILE_USER=/dev/null
   export R_MAKEVARS_USER=/dev/null
+  export R_BUILD_ENVIRON=/dev/null
+  export R_CHECK_ENVIRON=/dev/null
+  export R_INSTALL_ENVIRON=/dev/null
   export PARADOX_ROOT="$ROOT"
   export HOME="$staging_home/home"
   export R_USER="$staging_home/home"
@@ -888,6 +920,9 @@ require_owned_directory "$staging_home" "$owned_home_identity" \
 clear_open_owned_directory_after_use "$staging_home_descriptor" \
   "$staging_home" "$owned_home_identity" \
   "dependency-library build-home staging directory"
+rmdir -- "$staging_home"
+[[ ! -e "$staging_home" && ! -L "$staging_home" ]] ||
+  fail "dependency-library build-home staging directory was not removed"
 exec {staging_home_descriptor}<&-
 staging_home=
 owned_home_identity=

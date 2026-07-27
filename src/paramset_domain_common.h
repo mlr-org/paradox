@@ -114,6 +114,10 @@ attribute_hidden int paradox_domain_owns_private_environment(
   SEXP self,
   SEXP private_environment
 );
+/* Required package-operation topology lookup. Unlike the absence-tolerant
+ * candidate classifier below, a missing binding is corrupt and may fail at
+ * the old-R binding API; active/delayed bindings are still never invoked. */
+attribute_hidden SEXP paradox_domain_required_private_environment(SEXP self);
 attribute_hidden SEXP paradox_domain_private_environment(SEXP self);
 attribute_hidden int paradox_domain_validate_params(
   SEXP params,

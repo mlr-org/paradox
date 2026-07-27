@@ -1,6 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# GNU timeout's stderr must not share a descriptor with the command it
+# supervises.  A run-local snapshot of this file is therefore also used as a
+# tiny, content-bound logging wrapper for header-cache preparation.  The
+# wrapper redirects only the helper; timeout diagnostics remain independently
+# authenticatable by the coordinator.
+if [[ "${1:-}" == --internal-prepare-wrapper ]]; then
+  (($# >= 4)) || exit 125
+  task_log=$2
+  helper=$3
+  shift 3
+  [[ "$task_log" == /* && -f "$task_log" && ! -L "$task_log" &&
+     "$helper" == /* && -f "$helper" && -x "$helper" &&
+     ! -L "$helper" ]] || exit 125
+  exec "$helper" "$@" >> "$task_log" 2>&1
+fi
+
 usage() {
   cat <<'EOF'
 Usage: scripts/check-r-api-compatibility [--run-id ID]
@@ -20,6 +36,14 @@ EOF
 fail() {
   printf 'check-r-api-compatibility: %s\n' "$*" >&2
   exit 1
+}
+
+sha256_value() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
 }
 
 RUN_ID=
@@ -62,11 +86,19 @@ COMPILER_BATCH_HELPER="$ROOT/scripts/environment/run-compiler-batch"
 COMPILER_WAVE_HELPER="$ROOT/scripts/environment/run-compiler-wave"
 COMPILER_IDENTITY_HELPER="$ROOT/scripts/environment/compiler-identity.R"
 HEADER_CACHE_HELPER="$ROOT/scripts/environment/r-api-header-cache"
+RUNTIME_PREFIX_RECEIPT_HELPER="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+CURL7_PREFIX="$ROOT/.local/runtime-matrix/prefixes/R-3.6.3"
+CURL7_RECEIPT_DIRECTORY="$ROOT/.local/runtime-matrix/receipts/R-3.6.3"
+CURL7_MANIFEST="$CURL7_RECEIPT_DIRECTORY/prefix.manifest.tsv"
+CURL7_RECEIPT="$CURL7_RECEIPT_DIRECTORY/receipt.tsv"
+CURL7_SEAL="$CURL7_RECEIPT_DIRECTORY/receipt.sha256"
+CURL7_LOCK="$ROOT/environment/runtime-r-3.6.3-linux-64.lock"
 GCC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc"
 CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
 GFORTRAN="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gfortran"
 RSCRIPT="$TOOLCHAIN/bin/Rscript"
 MAKE="$TOOLCHAIN/bin/make"
+CURL_CONFIG="$TOOLCHAIN/bin/curl-config"
 SETSID=$(command -v setsid 2>/dev/null || true)
 TIMEOUT_TOOL=$(command -v timeout 2>/dev/null || true)
 BASH_EXECUTABLE=$(readlink -f -- "${BASH:?}")
@@ -91,7 +123,11 @@ HEADER_CACHE_TASK_TIMEOUT_SECONDS=1380
   fail "compiler identity helper is missing or symbolic"
 [[ -x "$HEADER_CACHE_HELPER" && ! -L "$HEADER_CACHE_HELPER" ]] ||
   fail "R API header cache helper is missing, non-executable, or symbolic"
-for executable in "$GCC" "$CLANG" "$GFORTRAN" "$RSCRIPT" "$MAKE"; do
+[[ -x "$RUNTIME_PREFIX_RECEIPT_HELPER" &&
+   ! -L "$RUNTIME_PREFIX_RECEIPT_HELPER" ]] ||
+  fail "runtime-prefix receipt helper is missing, non-executable, or symbolic"
+for executable in "$GCC" "$CLANG" "$GFORTRAN" "$RSCRIPT" "$MAKE" \
+    "$CURL_CONFIG"; do
   [[ -x "$executable" ]] || fail "missing local executable: $executable"
 done
 [[ "$SETSID" == /* && -x "$SETSID" && ! -L "$SETSID" ]] ||
@@ -251,6 +287,8 @@ cp "$COMPILER_BATCH_HELPER" "$RUN/metadata/run-compiler-batch"
 cp "$COMPILER_WAVE_HELPER" "$RUN/metadata/run-compiler-wave"
 cp "$COMPILER_IDENTITY_HELPER" "$RUN/metadata/compiler-identity.R"
 cp "$HEADER_CACHE_HELPER" "$RUN/metadata/r-api-header-cache"
+cp "$RUNTIME_PREFIX_RECEIPT_HELPER" \
+  "$RUN/metadata/runtime-matrix-prefix-receipt"
 HARNESS_SHA256=$(sha256sum \
   "$RUN/metadata/check-r-api-compatibility" | cut -d ' ' -f 1)
 TREE_RECEIPT_HELPER_SHA256=$(sha256sum \
@@ -265,12 +303,26 @@ COMPILER_IDENTITY_HELPER_SHA256=$(sha256sum \
   "$RUN/metadata/compiler-identity.R" | cut -d ' ' -f 1)
 HEADER_CACHE_HELPER_SHA256=$(sha256sum \
   "$RUN/metadata/r-api-header-cache" | cut -d ' ' -f 1)
+RUNTIME_PREFIX_RECEIPT_HELPER_SHA256=$(sha256sum \
+  "$RUN/metadata/runtime-matrix-prefix-receipt" | cut -d ' ' -f 1)
 RETAINED_TREE_RECEIPT_HELPER="$RUN/metadata/tree-receipt.R"
 RETAINED_RESOURCE_JOBS_HELPER="$RUN/metadata/resource-jobs"
 RETAINED_COMPILER_BATCH_HELPER="$RUN/metadata/run-compiler-batch"
 RETAINED_COMPILER_WAVE_HELPER="$RUN/metadata/run-compiler-wave"
 RETAINED_COMPILER_IDENTITY_HELPER="$RUN/metadata/compiler-identity.R"
 RETAINED_HEADER_CACHE_HELPER="$RUN/metadata/r-api-header-cache"
+RETAINED_RUNTIME_PREFIX_RECEIPT_HELPER="$RUN/metadata/runtime-matrix-prefix-receipt"
+[[ -d "$CURL7_PREFIX" && ! -L "$CURL7_PREFIX" ]] ||
+  fail "locked R 3.6 runtime prefix is absent; run scripts/bootstrap-runtime-matrix"
+for curl7_input in "$CURL7_MANIFEST" "$CURL7_RECEIPT" "$CURL7_SEAL" \
+    "$CURL7_LOCK"; do
+  [[ -f "$curl7_input" && ! -L "$curl7_input" ]] ||
+    fail "locked libcurl7 input is absent or symbolic: $curl7_input"
+done
+CURL7_MANIFEST_SHA256=$(sha256_value "$CURL7_MANIFEST")
+CURL7_RECEIPT_SHA256=$(sha256_value "$CURL7_RECEIPT")
+CURL7_SEAL_SHA256=$(sha256_value "$CURL7_SEAL")
+CURL7_LOCK_SHA256=$(sha256_value "$CURL7_LOCK")
 TIMEOUT_TOOL_SHA256=$(sha256sum "$TIMEOUT_TOOL" | cut -d ' ' -f 1)
 TIMEOUT_TOOL_IDENTITY_SHA256=$("$TIMEOUT_TOOL" --version | sha256sum |
   cut -d ' ' -f 1)
@@ -335,14 +387,6 @@ RESOURCE_DECISION_SHA256=$(sha256sum \
 RESOURCE_PREPARE_DECISION_SHA256=$(sha256sum \
   "$RUN/metadata/resource-prepare-jobs.tsv" | cut -d ' ' -f 1)
 
-sha256_value() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | cut -d ' ' -f 1
-  else
-    shasum -a 256 "$1" | cut -d ' ' -f 1
-  fi
-}
-
 argument_vector_sha256() {
   if (($#)); then
     printf '%s\0' "$@"
@@ -375,6 +419,9 @@ CLANG_DRIVER_IDENTITY_SHA256=$(LC_ALL=C "$CLANG" --version 2>&1 | sha256sum |
 RSCRIPT_SHA256=$(sha256_value "$RSCRIPT")
 RSCRIPT_IDENTITY_SHA256=$(LC_ALL=C "$RSCRIPT" --version 2>&1 | sha256sum |
   cut -d ' ' -f 1)
+CURL_CONFIG_SHA256=$(sha256_value "$CURL_CONFIG")
+CURL_CONFIG_IDENTITY_SHA256=$(LC_ALL=C "$CURL_CONFIG" --version 2>&1 |
+  sha256sum | cut -d ' ' -f 1)
 
 MANIFEST_SHA256=$(sha256_value "$MANIFEST")
 {
@@ -405,7 +452,7 @@ MANIFEST_SHA256=$(sha256_value "$MANIFEST")
     "$CLANG_DRIVER_IDENTITY_SHA256"
   printf 'rscript_sha256=%s\n' "$RSCRIPT_SHA256"
   printf 'rscript_identity_sha256=%s\n' "$RSCRIPT_IDENTITY_SHA256"
-  printf 'header_cache_policy=authenticated-run-local-copy-schema-3\n'
+  printf 'header_cache_policy=authenticated-run-local-copy-schema-4\n'
   printf 'header_cache_lock_timeout_seconds=%s\n' \
     "$HEADER_CACHE_LOCK_TIMEOUT_SECONDS"
   printf 'header_cache_command_timeout_seconds=%s\n' \
@@ -432,16 +479,61 @@ cp "$SNAPSHOT_MANIFEST" "$RUN/metadata/r-api-sources.tsv"
 "$RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" create \
   "$RUN/source" "$RUN/metadata/source-tree.tsv" \
   > "$RUN/metadata/source-tree-create.log" 2>&1
+PREPARE_TASK_WRAPPER="$RUN/source/scripts/check-r-api-compatibility"
+[[ -f "$PREPARE_TASK_WRAPPER" && -x "$PREPARE_TASK_WRAPPER" &&
+   ! -L "$PREPARE_TASK_WRAPPER" ]] ||
+  fail "source snapshot has no plain executable preparation wrapper"
+PREPARE_TASK_WRAPPER_SHA256=$(sha256_value "$PREPARE_TASK_WRAPPER")
 
 shopt -s nullglob
 source_files=("$RUN/source/src"/*.c)
+header_files=("$RUN/source/src"/*.h)
 shopt -u nullglob
-for source_file in "${source_files[@]}"; do
+for source_file in "${source_files[@]}" "${header_files[@]}"; do
   [[ -f "$source_file" && ! -L "$source_file" ]] ||
-    fail "source snapshot contains a non-regular C translation unit"
+    fail "source snapshot contains a non-regular native source file"
 done
 ((${#source_files[@]} > 0)) || fail "source snapshot contains no C files"
 printf '%s\n' "${source_files[@]}" > "$RUN/artifacts/translation-units.txt"
+
+# R 3.6 on Windows predates the UCRT toolchain. Keep diagnostics independent
+# of the historical MSVCRT spellings for wide and size-sized integers; every
+# R_xlen_t value is bounded by 2^52 and is therefore represented exactly by
+# the portable `%.0f`/double spelling used in shipped error paths.
+printf_portability_report="$RUN/metadata/printf-portability.txt"
+printf_portability_violations=
+for source_file in "${source_files[@]}" "${header_files[@]}"; do
+  while IFS= read -r violation; do
+    printf_portability_violations+="${source_file#"$RUN/source/"}:$violation"$'\n'
+  done < <(
+    grep -nE '%[-+ #0*.0-9$]*(ll|I64|[jzt])[diouxX]' \
+      "$source_file" || true
+  )
+done
+if [[ -n "$printf_portability_violations" ]]; then
+  printf '%s' "$printf_portability_violations" > "$printf_portability_report"
+  fail "native source retains an old-Windows-incompatible integer format"
+fi
+
+# Historical MSVCRT compatibility formatters need not implement C99
+# null-buffer sizing.  Compact whitespace so putting the first two arguments
+# on separate lines cannot silently reintroduce that old-Windows failure.
+null_buffer_sizing_violations=
+for source_file in "${source_files[@]}" "${header_files[@]}"; do
+  if tr -d '[:space:]' < "$source_file" |
+      grep -Eq 'v?snprintf\((NULL|0),0,'; then
+    null_buffer_sizing_violations+="${source_file#"$RUN/source/"}"$'\n'
+  fi
+done
+if [[ -n "$null_buffer_sizing_violations" ]]; then
+  printf '%s' "$null_buffer_sizing_violations" > "$printf_portability_report"
+  fail "native source retains null-buffer printf sizing"
+fi
+printf '%s\n' \
+  'result=passed' \
+  'policy=no-ll-I64-j-z-t-integer-formats' \
+  'policy=no-null-buffer-vsnprintf-sizing' \
+  > "$printf_portability_report"
 
 API_TOKEN_AUDITOR="$RUN/source/scripts/environment/audit-public-api-tokens"
 [[ -x "$API_TOKEN_AUDITOR" ]] || fail "public API token auditor is missing"
@@ -452,7 +544,7 @@ grep -qx 'result=passed' "$RUN/metadata/public-api-token-audit.txt" ||
   fail "public API token audit did not record success"
 printf 'version\tpurpose\tarchive_sha256\trconfig_sha256\tcache_key\theaders_tree_sha256\n' \
   > "$RUN/metadata/validated-headers.tsv"
-printf 'version\tcache_key\tcache_result\tinputs_sha256\theaders_tree_sha256\tconfigure_tools_sha256\tbuilder_helper_sha256\ttree_receipt_helper_sha256\tcache_seal_sha256\tcache_seal_file_sha256\trun_headers_tree_sha256\trun_headers_receipt_semantics\tevidence_sha256\n' \
+printf 'version\tcache_key\tcache_result\tinputs_sha256\theaders_tree_sha256\tconfigure_tools_sha256\tbuilder_helper_sha256\ttree_receipt_helper_sha256\tcache_seal_sha256\tcache_seal_file_sha256\trun_headers_tree_sha256\trun_headers_receipt_semantics\tcurl_preflight_output_sha256\tevidence_sha256\n' \
   > "$RUN/metadata/header-cache.tsv"
 printf 'version\tresource_report_sha256\twave_plan_sha256\tjobs\tgcc_jobs\tclang_jobs\texecution\ttask_timeout_seconds\ttimeout_tool_sha256\twave_task_ledgers_sha256\ttasks_per_compiler\ttask_failures\texact_timeouts\n' \
   > "$RUN/metadata/compiler-waves.tsv"
@@ -518,7 +610,9 @@ verify_compiler_task_ledger() {
   local supervisor_sha expected_relative expected_task_log
   local expected_supervisor expected_ordinal observed_rows=0 index
   local task_failures=0 task_timeouts=0 supervisor_line first_log_line
-  local term_marker kill_marker term_seen kill_seen
+  local timeout_name term_marker term_marker_short
+  local kill_marker kill_marker_short term_seen kill_seen
+  local term_count kill_count authenticated_timeout
   local expected_arguments_count=$# expected_arguments_sha256
 
   expected_arguments_sha256=$(argument_vector_sha256 "$@")
@@ -654,26 +748,43 @@ verify_compiler_task_ledger() {
       first_log_line=
     [[ "$first_log_line" == "$expected_relative" ]] ||
       fail "compiler $label task $expected_ordinal log lost its source identity"
+    timeout_name=${TIMEOUT_TOOL##*/}
     term_marker="$TIMEOUT_TOOL: sending signal TERM to command '$wrapper_bash'"
+    term_marker_short="$timeout_name: sending signal TERM to command '$wrapper_bash'"
     kill_marker="$TIMEOUT_TOOL: sending signal KILL to command '$wrapper_bash'"
+    kill_marker_short="$timeout_name: sending signal KILL to command '$wrapper_bash'"
     term_seen=false
     kill_seen=false
+    term_count=0
+    kill_count=0
     while IFS= read -r supervisor_line || [[ -n "$supervisor_line" ]]; do
       case "$supervisor_line" in
-        "$term_marker") term_seen=true ;;
-        "$kill_marker") kill_seen=true ;;
+        "$term_marker"|"$term_marker_short")
+          term_seen=true
+          term_count=$((term_count + 1))
+          ;;
+        "$kill_marker"|"$kill_marker_short")
+          kill_seen=true
+          kill_count=$((kill_count + 1))
+          ;;
         *) fail "compiler $label task $expected_ordinal retained unknown supervisor output" ;;
       esac
     done < "$lane_root/$supervisor_relative"
-    [[ "$kill_seen" == false || "$term_seen" == true ]] ||
-      fail "compiler $label task $expected_ordinal retained a KILL marker without TERM"
-    if [[ "$exit_status" -eq 124 && "$term_seen" == true ]]; then
-      [[ "$timed_out" == true ]] ||
-        fail "compiler $label task $expected_ordinal lost its exact timeout classification"
+    [[ "$term_count" -le 1 && "$kill_count" -le 1 &&
+       ("$kill_seen" == false || "$term_seen" == true) ]] ||
+      fail "compiler $label task $expected_ordinal retained ambiguous timeout diagnostics"
+    authenticated_timeout=false
+    if [[ "$term_count" -eq 0 && "$kill_count" -eq 0 ]]; then
+      :
+    elif [[ "$term_seen" == true ]] &&
+        { [[ "$exit_status" -eq 124 ]] ||
+          [[ "$exit_status" -eq 137 && "$kill_seen" == true ]]; }; then
+      authenticated_timeout=true
     else
-      [[ "$timed_out" == false ]] ||
-        fail "compiler $label task $expected_ordinal has a false timeout classification"
+      fail "compiler $label task $expected_ordinal retained impossible timeout evidence"
     fi
+    [[ "$timed_out" == "$authenticated_timeout" ]] ||
+      fail "compiler $label task $expected_ordinal has a false timeout classification"
     if [[ "$exit_status" -eq 0 ]]; then
       [[ "$timed_out" == false && "$term_seen" == false &&
          "$kill_seen" == false ]] ||
@@ -746,10 +857,17 @@ compile_api_release() {
     execution=concurrent
   fi
 
-  left_arguments=("${gcc_flags[@]}" -I"$generated_include" \
-    -I"$source_include" -isystem "$TOOLCHAIN/include")
-  right_arguments=("${clang_flags[@]}" -I"$generated_include" \
-    -I"$source_include" -isystem "$TOOLCHAIN/include")
+  # The authenticated R header copies are external interfaces, not package
+  # source.  Old supported headers intentionally retain declarations that
+  # predate modern strict-prototype diagnostics; classify only those external
+  # roots as system headers so -Werror continues to judge every Paradox
+  # translation unit and package-local header at full strength.
+  left_arguments=("${gcc_flags[@]}" \
+    -isystem "$generated_include" -isystem "$source_include" \
+    -isystem "$TOOLCHAIN/include")
+  right_arguments=("${clang_flags[@]}" \
+    -isystem "$generated_include" -isystem "$source_include" \
+    -isystem "$TOOLCHAIN/include")
   wave_arguments=(
     --jobs "$live_jobs"
     --batch-runner "$RETAINED_COMPILER_BATCH_HELPER"
@@ -910,7 +1028,7 @@ compile_api_release() {
 
   resource_sha256=$(sha256_value "$resource_report")
   wave_plan_sha256=$(sha256_value "$wave_plan")
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$version" "$resource_sha256" "$wave_plan_sha256" "$live_jobs" \
     "$gcc_jobs" "$clang_jobs" "$execution" \
     "$COMPILER_TASK_TIMEOUT_SECONDS" "$TIMEOUT_TOOL_SHA256" \
@@ -946,13 +1064,15 @@ versions=${#api_versions[@]}
 ((versions > 0)) || fail "manifest contains no R releases"
 
 prepare_api_release() {
-  local version=$1 expected_sha256=$2
+  local version=$1 expected_sha256=$2 prepare_log=$3
   # The preparation child deliberately fixes GNU timeout diagnostics and every
   # configure/cache subprocess to the C locale.
   # shellcheck disable=SC2031
   export LC_ALL=C
   exec "$SETSID" --wait -- "$TIMEOUT_TOOL" --foreground --verbose \
     --signal=TERM --kill-after=10s "${HEADER_CACHE_TASK_TIMEOUT_SECONDS}s" \
+    "$BASH_EXECUTABLE" "$PREPARE_TASK_WRAPPER" \
+    --internal-prepare-wrapper "$prepare_log" \
     "$RETAINED_HEADER_CACHE_HELPER" prepare \
     --root "$ROOT" \
     --version "$version" \
@@ -965,7 +1085,8 @@ prepare_api_release() {
     --setsid "$SETSID" \
     --active-group-file "$RUN/metadata/header-cache-active-group-R-${version}.pid" \
     --lock-timeout-seconds "$HEADER_CACHE_LOCK_TIMEOUT_SECONDS" \
-    --command-timeout-seconds "$HEADER_CACHE_COMMAND_TIMEOUT_SECONDS"
+    --command-timeout-seconds "$HEADER_CACHE_COMMAND_TIMEOUT_SECONDS" \
+    --curl7-receipt-helper "$RETAINED_RUNTIME_PREFIX_RECEIPT_HELPER"
 }
 
 cleanup_prepare_active_record() {
@@ -1003,32 +1124,66 @@ prepare_failures=0
 prepare_cleanup_failures=0
 failed_prepare_cleanup_files=()
 failed_prepare_cleanup_versions=()
-printf 'version\texit_status\touter_timed_out\tresult\tcleanup_state\tprepare_log_sha256\tcleanup_log_sha256\n' \
+printf 'version\texit_status\touter_timed_out\tresult\tcleanup_state\tprepare_log_sha256\tsupervisor_log_sha256\tcleanup_log_sha256\n' \
   > "$RUN/metadata/header-preparation.tsv"
+classify_prepare_supervisor() {
+  local status=$1 supervisor_log=$2 line
+  local timeout_name term_marker term_marker_short
+  local kill_marker kill_marker_short
+  local term_count=0 kill_count=0 diagnostics_valid=true
+  timeout_name=${TIMEOUT_TOOL##*/}
+  term_marker="$TIMEOUT_TOOL: sending signal TERM to command '$BASH_EXECUTABLE'"
+  term_marker_short="$timeout_name: sending signal TERM to command '$BASH_EXECUTABLE'"
+  kill_marker="$TIMEOUT_TOOL: sending signal KILL to command '$BASH_EXECUTABLE'"
+  kill_marker_short="$timeout_name: sending signal KILL to command '$BASH_EXECUTABLE'"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      "$term_marker"|"$term_marker_short")
+        term_count=$((term_count + 1))
+        ;;
+      "$kill_marker"|"$kill_marker_short")
+        kill_count=$((kill_count + 1))
+        ;;
+      *) diagnostics_valid=false ;;
+    esac
+  done < "$supervisor_log"
+
+  PREPARE_SUPERVISOR_VALID=false
+  PREPARE_OUTER_TIMED_OUT=false
+  if [[ "$diagnostics_valid" == true && "$term_count" -eq 0 &&
+      "$kill_count" -eq 0 ]]; then
+    PREPARE_SUPERVISOR_VALID=true
+  elif [[ "$diagnostics_valid" == true && "$term_count" -eq 1 &&
+      "$kill_count" -le 1 ]] &&
+      { [[ "$status" -eq 124 ]] ||
+        [[ "$status" -eq 137 && "$kill_count" -eq 1 ]]; }; then
+    PREPARE_SUPERVISOR_VALID=true
+    PREPARE_OUTER_TIMED_OUT=true
+  fi
+}
 wait_prepare_task() {
-  local task_index=$1 status=0 active_file prepare_log cleanup_log
-  local timeout_diagnostic timeout_count outer_timed_out=false
+  local task_index=$1 status=0 active_file prepare_log supervisor_log cleanup_log
+  local outer_timed_out=false
   local result=passed cleanup_state=not_required cleanup_log_sha=-
   local task_failed=false version
   active_file=${prepare_active_files[$task_index]}
   prepare_log=${prepare_logs[$task_index]}
+  supervisor_log=${prepare_supervisor_logs[$task_index]}
   cleanup_log=${prepare_cleanup_logs[$task_index]}
   version=${prepare_versions[$task_index]}
-  timeout_diagnostic="$TIMEOUT_TOOL: sending signal TERM to command '$RETAINED_HEADER_CACHE_HELPER'"
   if wait "${prepare_pids[$task_index]}"; then status=0; else status=$?; fi
   [[ "$status" =~ ^(0|[1-9][0-9]{0,2})$ && "$status" -le 255 ]] ||
     fail "R API preparation returned an invalid child status"
-  [[ -f "$prepare_log" && ! -L "$prepare_log" ]] ||
-    fail "R API preparation retained an unsafe task log"
-  timeout_count=$(grep -Fxc -- "$timeout_diagnostic" "$prepare_log" || true)
-  [[ "$timeout_count" =~ ^[0-9]+$ && "$timeout_count" -le 1 ]] ||
-    fail "R API preparation retained ambiguous outer timeout diagnostics"
-  if [[ "$status" -eq 124 && "$timeout_count" -eq 1 ]]; then
+  [[ -f "$prepare_log" && ! -L "$prepare_log" &&
+     -f "$supervisor_log" && ! -L "$supervisor_log" ]] ||
+    fail "R API preparation retained an unsafe task or supervisor log"
+  classify_prepare_supervisor "$status" "$supervisor_log"
+  if [[ "$PREPARE_OUTER_TIMED_OUT" == true ]]; then
     outer_timed_out=true
     printf 'R API preparation timed out after %ss: %s\n' \
       "$HEADER_CACHE_TASK_TIMEOUT_SECONDS" \
       "${prepare_labels[$task_index]}" >&2
-  elif [[ "$timeout_count" -ne 0 ]]; then
+  elif [[ "$PREPARE_SUPERVISOR_VALID" == false ]]; then
     result=failed-timeout-classification
     task_failed=true
   fi
@@ -1043,7 +1198,9 @@ wait_prepare_task() {
     fi
     printf 'R API preparation failed: %s\n' \
       "${prepare_labels[$task_index]}" >&2
-    result=failed-exit
+    if [[ "$result" == passed ]]; then
+      result=failed-exit
+    fi
     task_failed=true
   elif [[ -e "$active_file" || -L "$active_file" ||
           -e "${active_file}.identity" || -L "${active_file}.identity" ]]; then
@@ -1067,9 +1224,10 @@ wait_prepare_task() {
   fi
   [[ "$task_failed" == false ]] ||
     prepare_failures=$((prepare_failures + 1))
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$version" "$status" "$outer_timed_out" "$result" "$cleanup_state" \
-    "$(sha256_value "$prepare_log")" "$cleanup_log_sha" \
+    "$(sha256_value "$prepare_log")" "$(sha256_value "$supervisor_log")" \
+    "$cleanup_log_sha" \
     >> "$RUN/metadata/header-preparation.tsv"
   ACTIVE_PIDS[task_index]=
   ACTIVE_PREPARE_PIDS[task_index]=
@@ -1077,6 +1235,7 @@ wait_prepare_task() {
 }
 prepare_active_files=()
 prepare_logs=()
+prepare_supervisor_logs=()
 prepare_cleanup_logs=()
 api_compile_failures=0
 api_compile_timeouts=0
@@ -1084,19 +1243,29 @@ for index in "${!api_versions[@]}"; do
   version=${api_versions[$index]}
   active_file="$RUN/metadata/header-cache-active-group-R-${version}.pid"
   prepare_log="$RUN/artifacts/prepare-R-${version}.log"
+  supervisor_log="$RUN/artifacts/prepare-supervisor-R-${version}.log"
   cleanup_log="$RUN/artifacts/prepare-cleanup-R-${version}.log"
   [[ ! -e "$active_file" && ! -L "$active_file" &&
      ! -e "${active_file}.identity" && ! -L "${active_file}.identity" &&
      ! -e "$prepare_log" && ! -L "$prepare_log" &&
+     ! -e "$supervisor_log" && ! -L "$supervisor_log" &&
      ! -e "$cleanup_log" && ! -L "$cleanup_log" ]] ||
     fail "R API preparation state path already exists"
-  prepare_api_release "$version" "${api_sha256[$index]}" \
-    > "$prepare_log" 2>&1 &
+  : > "$prepare_log"
+  : > "$supervisor_log"
+  [[ ! -L "$prepare_log" && ! -L "$supervisor_log" ]] ||
+    fail "R API preparation output unexpectedly became symbolic"
+  [[ "$(sha256_value "$PREPARE_TASK_WRAPPER")" == \
+      "$PREPARE_TASK_WRAPPER_SHA256" ]] ||
+    fail "R API preparation wrapper changed before task launch"
+  prepare_api_release "$version" "${api_sha256[$index]}" "$prepare_log" \
+    > "$supervisor_log" 2>&1 &
   prepare_pids+=("$!")
   prepare_labels+=("R-${version}")
   prepare_versions+=("$version")
   prepare_active_files+=("$active_file")
   prepare_logs+=("$prepare_log")
+  prepare_supervisor_logs+=("$supervisor_log")
   prepare_cleanup_logs+=("$cleanup_log")
   ACTIVE_PIDS+=("$!")
   ACTIVE_PREPARE_PIDS+=("$!")
@@ -1142,18 +1311,19 @@ done
 FAILED_PREPARE_ACTIVE_FILES=("${remaining_cleanup_files[@]}")
 prepare_cleanup_failures=${#FAILED_PREPARE_ACTIVE_FILES[@]}
 
-awk -F '\t' 'NF != 7 { exit 1 }' "$RUN/metadata/header-preparation.tsv" ||
-  fail "R API preparation ledger is not an exact seven-column TSV"
+awk -F '\t' 'NF != 8 { exit 1 }' "$RUN/metadata/header-preparation.tsv" ||
+  fail "R API preparation ledger is not an exact eight-column TSV"
 IFS= read -r header_preparation_header < \
   "$RUN/metadata/header-preparation.tsv"
-[[ "$header_preparation_header" == $'version\texit_status\touter_timed_out\tresult\tcleanup_state\tprepare_log_sha256\tcleanup_log_sha256' ]] ||
+[[ "$header_preparation_header" == $'version\texit_status\touter_timed_out\tresult\tcleanup_state\tprepare_log_sha256\tsupervisor_log_sha256\tcleanup_log_sha256' ]] ||
   fail "R API preparation ledger has an unexpected schema"
 [[ "$(awk 'END { print NR - 1 }' "$RUN/metadata/header-preparation.tsv")" \
     -eq "$versions" ]] ||
   fail "R API preparation ledger does not cover every release"
 prepare_ledger_index=0
 while IFS=$'\t' read -r version prepare_status outer_timed_out \
-    prepare_result cleanup_state prepare_log_sha cleanup_log_sha; do
+    prepare_result cleanup_state prepare_log_sha supervisor_log_sha \
+    cleanup_log_sha; do
   [[ -n "$version" ]] || continue
   ((prepare_ledger_index < versions)) ||
     fail "R API preparation ledger has excess rows"
@@ -1163,10 +1333,24 @@ while IFS=$'\t' read -r version prepare_status outer_timed_out \
      "$prepare_result" =~ ^(passed|failed-exit|failed-active-evidence|failed-timeout-classification)$ &&
      "$cleanup_state" =~ ^(not_required|absent|terminated|failed)$ &&
      "$prepare_log_sha" =~ ^[0-9a-f]{64}$ &&
+     "$supervisor_log_sha" =~ ^[0-9a-f]{64}$ &&
      ( "$cleanup_log_sha" == - || "$cleanup_log_sha" =~ ^[0-9a-f]{64}$ ) ]] ||
     fail "R API preparation ledger contains a malformed or reordered row"
   verify_sha256 "$prepare_log_sha" \
     "$RUN/artifacts/prepare-R-${version}.log"
+  verify_sha256 "$supervisor_log_sha" \
+    "$RUN/artifacts/prepare-supervisor-R-${version}.log"
+  classify_prepare_supervisor "$prepare_status" \
+    "$RUN/artifacts/prepare-supervisor-R-${version}.log"
+  [[ "$PREPARE_OUTER_TIMED_OUT" == "$outer_timed_out" ]] ||
+    fail "R API preparation ledger has a false timeout classification"
+  if [[ "$PREPARE_SUPERVISOR_VALID" == false ]]; then
+    [[ "$prepare_result" == failed-timeout-classification ]] ||
+      fail "R API preparation ledger accepted invalid supervisor evidence"
+  else
+    [[ "$prepare_result" != failed-timeout-classification ]] ||
+      fail "R API preparation ledger falsely rejected supervisor evidence"
+  fi
   if [[ "$cleanup_log_sha" == - ]]; then
     [[ "$cleanup_state" == not_required ]] ||
       fail "R API preparation ledger omitted a required cleanup log"
@@ -1367,6 +1551,7 @@ for index in "${!api_versions[@]}"; do
   header_receipt="$RUN/metadata/header-cache-headers-R-${version}.tsv"
   run_header_receipt="$RUN/metadata/header-cache-run-headers-R-${version}.tsv"
   configure_tools="$RUN/metadata/header-cache-configure-tools-R-${version}.tsv"
+  curl_preflight="$RUN/metadata/header-cache-curl-preflight-R-${version}.txt"
   cache_seal="$RUN/metadata/header-cache-seal-R-${version}.tsv"
   cache_seal_file="$RUN/metadata/header-cache-seal-R-${version}.sha256"
   cache_evidence="$RUN/metadata/header-cache-evidence-R-${version}.tsv"
@@ -1380,7 +1565,7 @@ for index in "${!api_versions[@]}"; do
      ! -L "$source_include/Rinternals.h" ]] ||
     fail "R $version retained no complete plain run-local header copy"
   for metadata_file in "$input_receipt" "$header_receipt" \
-      "$run_header_receipt" "$configure_tools" "$cache_seal" \
+      "$run_header_receipt" "$configure_tools" "$curl_preflight" "$cache_seal" \
       "$cache_seal_file" "$cache_evidence"; do
     [[ -f "$metadata_file" && ! -L "$metadata_file" ]] ||
       fail "R $version retained unsafe or missing header-cache metadata: $metadata_file"
@@ -1394,7 +1579,7 @@ for index in "${!api_versions[@]}"; do
   expected_evidence_fields=$'field\nschema\nversion\narchive_sha256\ncache_key\ncache_result\ninputs_sha256\nheaders_tree_sha256\nconfigure_tools_sha256\nbuilder_helper_sha256\ntree_receipt_helper_sha256\ncache_seal_sha256\ncache_seal_file_sha256\nrun_headers_tree_sha256\nrun_headers_receipt_semantics\nlock_timeout_seconds\nlock_wait_seconds\ncommand_timeout_seconds\ntermination_grace_tenths'
   [[ "$(cut -f 1 "$cache_evidence")" == "$expected_evidence_fields" ]] ||
     fail "R $version cache evidence has an unexpected shape"
-  [[ "$(tsv_record_value "$cache_evidence" schema)" == 3 &&
+  [[ "$(tsv_record_value "$cache_evidence" schema)" == 4 &&
      "$(tsv_record_value "$cache_evidence" version)" == "$version" &&
      "$(tsv_record_value "$cache_evidence" archive_sha256)" == \
        "$expected_sha256" ]] ||
@@ -1447,7 +1632,130 @@ for index in "${!api_versions[@]}"; do
     "$input_receipt" configure_tool_inventory_commands)
   input_env_paths=$(awk -F '\t' '$1 == "env_path" { print $2 }' \
     "$input_receipt")
-  [[ "$(tsv_record_value "$input_receipt" cache_schema)" == 3 &&
+  case "$version" in
+    3.6.0)
+      expected_compatibility_mode=legacy-implicit-declarations-locked-curl7
+      expected_cflags='-O2 -g -Wno-error=implicit-function-declaration'
+      expected_curl_required=true
+      expected_curl_minimum=071600
+      ;;
+    4.0.0)
+      expected_compatibility_mode=legacy-implicit-declarations-locked-curl7
+      expected_cflags='-O2 -g -Wno-error=implicit-function-declaration'
+      expected_curl_required=true
+      expected_curl_minimum=071c00
+      ;;
+    4.2.0)
+      expected_compatibility_mode=locked-curl7
+      expected_cflags='-O2 -g'
+      expected_curl_required=true
+      expected_curl_minimum=071c00
+      ;;
+    *)
+      expected_compatibility_mode=none
+      expected_cflags='-O2 -g'
+      expected_curl_required=false
+      expected_curl_minimum=none
+      ;;
+  esac
+  if [[ "$expected_curl_required" == true ]]; then
+    expected_curl_config="$CURL7_PREFIX/bin/curl-config"
+    expected_ld_library_path="$CURL7_PREFIX/lib"
+    expected_ldflags="-L$CURL7_PREFIX/lib -Wl,-rpath,$CURL7_PREFIX/lib ${LDFLAGS:-}"
+    expected_curl7_prefix=.local/runtime-matrix/prefixes/R-3.6.3
+    expected_curl7_manifest_sha=$CURL7_MANIFEST_SHA256
+    expected_curl7_receipt_sha=$CURL7_RECEIPT_SHA256
+    expected_curl7_seal_sha=$CURL7_SEAL_SHA256
+    expected_curl7_lock_sha=$CURL7_LOCK_SHA256
+    expected_curl7_helper_sha=$RUNTIME_PREFIX_RECEIPT_HELPER_SHA256
+  else
+    expected_curl_config="$CURL_CONFIG"
+    expected_ld_library_path=not-set
+    expected_ldflags=${LDFLAGS:-}
+    expected_curl7_prefix=not-required
+    expected_curl7_manifest_sha=not-required
+    expected_curl7_receipt_sha=not-required
+    expected_curl7_seal_sha=not-required
+    expected_curl7_lock_sha=not-required
+    expected_curl7_helper_sha=not-required
+  fi
+  curl_output_sha=$(tsv_record_value \
+    "$input_receipt" curl_preflight_output_sha256)
+  [[ "$curl_output_sha" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "R $version libcurl preflight output has no SHA-256 identity"
+  verify_sha256 "$curl_output_sha" "$curl_preflight"
+  if [[ "$expected_curl_required" == true ]]; then
+    curl7_initial_log="$RUN/artifacts/curl7-prefix-initial-verify-R-${version}.log"
+    [[ -f "$curl7_initial_log" && ! -L "$curl7_initial_log" &&
+       "$(grep -Fxc \
+          "runtime_prefix_receipt_verified=$CURL7_MANIFEST" \
+          "$curl7_initial_log")" -eq 1 &&
+       "$(awk -F= '$1 == "runtime_prefix_members" &&
+          $2 ~ /^[1-9][0-9]*$/ {count++} END {print count + 0}' \
+          "$curl7_initial_log")" -eq 1 ]] ||
+      fail "R $version retained no exact initial libcurl7 prefix proof"
+    curl7_final_log="$RUN/artifacts/curl7-prefix-final-verify-R-${version}.log"
+    if [[ "$cache_result" == hit ]]; then
+      [[ ! -e "$curl7_final_log" && ! -L "$curl7_final_log" ]] ||
+        fail "R $version cache hit unexpectedly repeated full prefix verification"
+    else
+      [[ -f "$curl7_final_log" && ! -L "$curl7_final_log" &&
+         "$(grep -Fxc \
+            "runtime_prefix_receipt_verified=$CURL7_MANIFEST" \
+            "$curl7_final_log")" -eq 1 &&
+         "$(awk -F= '$1 == "runtime_prefix_members" &&
+            $2 ~ /^[1-9][0-9]*$/ {count++} END {print count + 0}' \
+            "$curl7_final_log")" -eq 1 ]] ||
+        fail "R $version cache miss retained no exact final libcurl7 proof"
+    fi
+    [[ "$(wc -l < "$curl_preflight")" -eq 3 &&
+       "$(sed -n '3p' "$curl_preflight")" == https=true ]] ||
+      fail "R $version retained malformed libcurl preflight evidence"
+    curl_header_hex=$(sed -n \
+      's/^header_version_hex=\([0-9a-f]\{6\}\)$/\1/p' \
+      "$curl_preflight")
+    curl_runtime_hex=$(sed -n \
+      's/^runtime_version_hex=\([0-9a-f]\{6\}\)$/\1/p' \
+      "$curl_preflight")
+    [[ "$curl_header_hex" =~ ^[0-9a-f]{6}$ &&
+       "$curl_header_hex" == "$curl_runtime_hex" &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_source_sha256)" =~ ^[0-9a-f]{64}$ &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_header_version_hex)" == "$curl_header_hex" &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_runtime_version_hex)" == "$curl_runtime_hex" &&
+       "$(tsv_record_value "$input_receipt" curl_preflight_https)" == true &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_compile_policy)" == \
+         gnu-c99-wall-wextra-werror-locked-curl7-v1 &&
+       "$(tsv_record_value "$input_receipt" curl_config_cflags)" == \
+         "$(LC_ALL=C "$expected_curl_config" --cflags)" &&
+       "$(tsv_record_value "$input_receipt" curl_config_libs)" == \
+         "$(LC_ALL=C "$expected_curl_config" --libs)" &&
+       "$curl_header_hex" == 07???? ]] ||
+      fail "R $version libcurl preflight receipt changed its proof"
+    ((16#$curl_header_hex >= 16#$expected_curl_minimum)) ||
+      fail "R $version libcurl proof is below its numeric minimum"
+  else
+    [[ "$(cat "$curl_preflight")" == status=not-required &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_source_sha256)" == not-required &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_header_version_hex)" == not-required &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_runtime_version_hex)" == not-required &&
+       "$(tsv_record_value "$input_receipt" curl_preflight_https)" == \
+         not-required &&
+       "$(tsv_record_value "$input_receipt" \
+          curl_preflight_compile_policy)" == not-required &&
+       "$(tsv_record_value "$input_receipt" curl_config_cflags)" == \
+         not-required &&
+       "$(tsv_record_value "$input_receipt" curl_config_libs)" == \
+         not-required ]] ||
+      fail "R $version retained unexpected libcurl compatibility evidence"
+  fi
+  [[ "$(tsv_record_value "$input_receipt" cache_schema)" == 4 &&
      "$(tsv_record_value "$input_receipt" builder_helper_sha256)" == \
        "$HEADER_CACHE_HELPER_SHA256" &&
      "$(tsv_record_value "$input_receipt" tree_receipt_helper_sha256)" == \
@@ -1471,6 +1779,43 @@ for index in "${!api_versions[@]}"; do
        "$BASH_EXECUTABLE" &&
      "$(tsv_record_value "$input_receipt" make_argument_shell)" == \
        "SHELL=$BASH_EXECUTABLE" &&
+     "$(tsv_record_value "$input_receipt" env_cflags)" == \
+       "$expected_cflags" &&
+     "$(tsv_record_value "$input_receipt" env_ldflags)" == \
+       "$expected_ldflags" &&
+     "$(tsv_record_value "$input_receipt" env_curl_config)" == \
+       "$expected_curl_config" &&
+     "$(tsv_record_value "$input_receipt" env_ld_library_path)" == \
+       "$expected_ld_library_path" &&
+     "$(tsv_record_value "$input_receipt" \
+        configure_compatibility_mode)" == "$expected_compatibility_mode" &&
+     "$(tsv_record_value "$input_receipt" \
+        configure_cache_override_count)" == 0 &&
+     "$(tsv_record_value "$input_receipt" curl_preflight_required)" == \
+       "$expected_curl_required" &&
+     "$(tsv_record_value "$input_receipt" curl_preflight_minimum_hex)" == \
+       "$expected_curl_minimum" &&
+     "$(tsv_record_value "$input_receipt" curl_config_path)" == \
+       "$expected_curl_config" &&
+     "$(tsv_record_value "$input_receipt" curl_config_sha256)" == \
+       "$(sha256_value "$expected_curl_config")" &&
+     "$(tsv_record_value "$input_receipt" \
+        curl_config_identity_sha256)" == \
+       "$(LC_ALL=C "$expected_curl_config" --version 2>&1 | sha256sum |
+          cut -d ' ' -f 1)" &&
+     "$(tsv_record_value "$input_receipt" curl7_prefix_relative)" == \
+       "$expected_curl7_prefix" &&
+     "$(tsv_record_value "$input_receipt" curl7_manifest_sha256)" == \
+       "$expected_curl7_manifest_sha" &&
+     "$(tsv_record_value "$input_receipt" curl7_receipt_sha256)" == \
+       "$expected_curl7_receipt_sha" &&
+     "$(tsv_record_value "$input_receipt" curl7_seal_sha256)" == \
+       "$expected_curl7_seal_sha" &&
+     "$(tsv_record_value "$input_receipt" curl7_lock_sha256)" == \
+       "$expected_curl7_lock_sha" &&
+     "$(tsv_record_value "$input_receipt" \
+        curl7_receipt_helper_sha256)" == \
+       "$expected_curl7_helper_sha" &&
      "$(tsv_record_value "$input_receipt" toolchain_lock_sha256)" == \
        "$(sha256_value "$SNAPSHOT_TOOLCHAIN_LOCK")" &&
      "$(tsv_record_value "$input_receipt" version)" == "$version" &&
@@ -1484,7 +1829,7 @@ for index in "${!api_versions[@]}"; do
   expected_cache_seal_fields=$'schema\ncache_key\ninputs_sha256\nheaders_tree_sha256\nconfigure_tools_sha256\nversion\narchive_sha256'
   [[ "$(cut -f 1 "$cache_seal")" == "$expected_cache_seal_fields" ]] ||
     fail "R $version cache seal has an unexpected field inventory"
-  grep -Fqx $'schema\t3' "$cache_seal" ||
+  grep -Fqx $'schema\t4' "$cache_seal" ||
     fail "R $version cache seal changed its schema"
   grep -Fqx $'inputs_sha256\t'"$input_sha" "$cache_seal" ||
     fail "R $version cache seal and input receipt disagree"
@@ -1520,11 +1865,12 @@ for index in "${!api_versions[@]}"; do
     "$(sha256_value "$generated_include/Rconfig.h")" "$cache_key" \
     "$headers_tree_sha" \
     >> "$RUN/metadata/validated-headers.tsv"
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$version" "$cache_key" "$cache_result" "$input_sha" \
     "$headers_tree_sha" "$configure_tools_sha" "$builder_helper_sha" \
     "$tree_receipt_helper_sha" "$cache_seal_sha" "$cache_seal_file_sha" \
     "$run_headers_tree_sha" "$run_headers_receipt_semantics" \
+    "$curl_output_sha" \
     "$(sha256_value "$cache_evidence")" \
     >> "$RUN/metadata/header-cache.tsv"
 done
@@ -1541,7 +1887,7 @@ header_cache_rows=$(awk 'END { print NR - 1 }' \
 [[ "$header_cache_rows" -eq "$versions" ]] ||
   fail "header-cache ledger does not cover every R release"
 IFS= read -r header_cache_header < "$RUN/metadata/header-cache.tsv"
-[[ "$header_cache_header" == $'version\tcache_key\tcache_result\tinputs_sha256\theaders_tree_sha256\tconfigure_tools_sha256\tbuilder_helper_sha256\ttree_receipt_helper_sha256\tcache_seal_sha256\tcache_seal_file_sha256\trun_headers_tree_sha256\trun_headers_receipt_semantics\tevidence_sha256' ]] ||
+[[ "$header_cache_header" == $'version\tcache_key\tcache_result\tinputs_sha256\theaders_tree_sha256\tconfigure_tools_sha256\tbuilder_helper_sha256\ttree_receipt_helper_sha256\tcache_seal_sha256\tcache_seal_file_sha256\trun_headers_tree_sha256\trun_headers_receipt_semantics\tcurl_preflight_output_sha256\tevidence_sha256' ]] ||
   fail "header-cache ledger has an unexpected schema"
 verify_sha256 "$RSCRIPT_SHA256" "$RSCRIPT"
 verify_sha256 "$TREE_RECEIPT_HELPER_SHA256" \
@@ -1550,7 +1896,8 @@ header_cache_index=0
 while IFS=$'\t' read -r version cache_key cache_result input_sha \
     headers_tree_sha configure_tools_sha builder_helper_sha \
     tree_receipt_helper_sha cache_seal_sha cache_seal_file_sha \
-    run_headers_tree_sha run_headers_receipt_semantics evidence_sha; do
+    run_headers_tree_sha run_headers_receipt_semantics \
+    curl_preflight_output_sha evidence_sha; do
   [[ -n "$version" ]] || continue
   ((header_cache_index < versions)) ||
     fail "header-cache ledger has excess rows"
@@ -1564,6 +1911,7 @@ while IFS=$'\t' read -r version cache_key cache_result input_sha \
      "$cache_seal_file_sha" =~ ^[0-9a-f]{64}$ &&
      "$run_headers_tree_sha" == "$headers_tree_sha" &&
      "$run_headers_receipt_semantics" == actual-published-output-receipt-v1 &&
+     "$curl_preflight_output_sha" =~ ^[0-9a-f]{64}$ &&
      "$evidence_sha" =~ ^[0-9a-f]{64}$ &&
      "$cache_result" =~ ^(hit|miss|rebuilt)$ ]] ||
     fail "header-cache ledger is reordered or malformed"
@@ -1573,6 +1921,8 @@ while IFS=$'\t' read -r version cache_key cache_result input_sha \
     "$RUN/metadata/header-cache-headers-R-${version}.tsv"
   verify_sha256 "$configure_tools_sha" \
     "$RUN/metadata/header-cache-configure-tools-R-${version}.tsv"
+  verify_sha256 "$curl_preflight_output_sha" \
+    "$RUN/metadata/header-cache-curl-preflight-R-${version}.txt"
   verify_sha256 "$run_headers_tree_sha" \
     "$RUN/metadata/header-cache-run-headers-R-${version}.tsv"
   verify_sha256 "$cache_seal_sha" \
@@ -1639,12 +1989,12 @@ while IFS=$'\t' read -r version resource_sha256 wave_plan_sha256 \
   wave_plan="$RUN/artifacts/compile-R-${version}/wave-plan.tsv"
   wave_task_ledgers="$RUN/artifacts/compile-R-${version}/wave-task-ledgers.tsv"
   final_left_arguments=("${gcc_flags[@]}" \
-    -I"$RUN/artifacts/headers/R-${version}/generated" \
-    -I"$RUN/artifacts/headers/R-${version}/source" \
+    -isystem "$RUN/artifacts/headers/R-${version}/generated" \
+    -isystem "$RUN/artifacts/headers/R-${version}/source" \
     -isystem "$TOOLCHAIN/include")
   final_right_arguments=("${clang_flags[@]}" \
-    -I"$RUN/artifacts/headers/R-${version}/generated" \
-    -I"$RUN/artifacts/headers/R-${version}/source" \
+    -isystem "$RUN/artifacts/headers/R-${version}/generated" \
+    -isystem "$RUN/artifacts/headers/R-${version}/source" \
     -isystem "$TOOLCHAIN/include")
   verify_sha256 "$resource_sha256" \
     "$resource_report"
@@ -1771,6 +2121,14 @@ verify_sha256 "$COMPILER_IDENTITY_HELPER_SHA256" \
   "$RETAINED_COMPILER_IDENTITY_HELPER"
 verify_sha256 "$HEADER_CACHE_HELPER_SHA256" \
   "$RETAINED_HEADER_CACHE_HELPER"
+verify_sha256 "$RUNTIME_PREFIX_RECEIPT_HELPER_SHA256" \
+  "$RETAINED_RUNTIME_PREFIX_RECEIPT_HELPER"
+verify_sha256 "$CURL7_MANIFEST_SHA256" "$CURL7_MANIFEST"
+verify_sha256 "$CURL7_RECEIPT_SHA256" "$CURL7_RECEIPT"
+verify_sha256 "$CURL7_SEAL_SHA256" "$CURL7_SEAL"
+verify_sha256 "$CURL7_LOCK_SHA256" "$CURL7_LOCK"
+verify_sha256 "$PREPARE_TASK_WRAPPER_SHA256" \
+  "$PREPARE_TASK_WRAPPER"
 verify_sha256 "$TIMEOUT_TOOL_SHA256" "$TIMEOUT_TOOL"
 verify_sha256 "$SETSID_SHA256" "$SETSID"
 [[ "$(LC_ALL=C "$SETSID" --version 2>&1 | sha256sum | cut -d ' ' -f 1)" == \
@@ -1871,7 +2229,13 @@ COMPLETION_NEW="$RUN/metadata/completion.txt.new"
   printf 'rscript_identity_sha256=%s\n' "$RSCRIPT_IDENTITY_SHA256"
   printf 'header_cache_helper_sha256=%s\n' \
     "$HEADER_CACHE_HELPER_SHA256"
-  printf 'header_cache_schema=3\n'
+  printf 'header_cache_schema=4\n'
+  printf 'curl7_prefix_manifest_sha256=%s\n' "$CURL7_MANIFEST_SHA256"
+  printf 'curl7_prefix_receipt_sha256=%s\n' "$CURL7_RECEIPT_SHA256"
+  printf 'curl7_prefix_seal_sha256=%s\n' "$CURL7_SEAL_SHA256"
+  printf 'curl7_runtime_lock_sha256=%s\n' "$CURL7_LOCK_SHA256"
+  printf 'runtime_prefix_receipt_helper_sha256=%s\n' \
+    "$RUNTIME_PREFIX_RECEIPT_HELPER_SHA256"
   printf 'header_cache_lock_timeout_seconds=%s\n' \
     "$HEADER_CACHE_LOCK_TIMEOUT_SECONDS"
   printf 'header_cache_command_timeout_seconds=%s\n' \

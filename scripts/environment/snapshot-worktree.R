@@ -24,6 +24,27 @@ if (dir.exists(destination) && length(list.files(destination, all.files = TRUE,
     no.. = TRUE)) != 0L) {
   stop("snapshot destination is not empty", call. = FALSE)
 }
+
+# Snapshotting is read-only even when the checkout is mounted read-only inside
+# a verification worker.  Disable Git's optional index refresh and inherited
+# repository/config indirection before any status/diff operation.
+Sys.unsetenv(c(
+  "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_NAMESPACE", "GIT_REPLACE_REF_BASE", "GIT_QUARANTINE_PATH",
+  "GIT_CONFIG", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM",
+  "GIT_CONFIG_NOSYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS"
+))
+Sys.setenv(
+  GIT_CONFIG_GLOBAL = "/dev/null",
+  GIT_CONFIG_SYSTEM = "/dev/null",
+  GIT_CONFIG_NOSYSTEM = "1",
+  GIT_NO_REPLACE_OBJECTS = "1",
+  GIT_NO_LAZY_FETCH = "1",
+  GIT_OPTIONAL_LOCKS = "0",
+  GIT_TERMINAL_PROMPT = "0"
+)
+
 dir.create(destination, recursive = TRUE, showWarnings = FALSE)
 dir.create(metadata, recursive = TRUE, showWarnings = FALSE)
 

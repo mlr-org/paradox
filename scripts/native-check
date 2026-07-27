@@ -260,7 +260,13 @@ LOCAL_OBJDUMP="$TOOLCHAIN/bin/$LOCAL_TARGET-objdump"
 LOCAL_READELF="$TOOLCHAIN/bin/$LOCAL_TARGET-readelf"
 LOCAL_CPP="$TOOLCHAIN/bin/$LOCAL_TARGET-cpp"
 LOCAL_CMAKE_ARGS="-DCMAKE_AR=$LOCAL_AR -DCMAKE_CXX_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_C_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_RANLIB=$LOCAL_RANLIB -DCMAKE_CXX_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_C_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_LINKER=$LOCAL_LD -DCMAKE_STRIP=$LOCAL_STRIP -DCMAKE_BUILD_TYPE=Release"
-LOCAL_USER=$(/usr/bin/id -un)
+LOCAL_USER=$(/usr/bin/id -un 2>/dev/null || /usr/bin/id -u) ||
+  fail "could not identify the verification worker user"
+case "$LOCAL_USER" in
+  ''|*[!A-Za-z0-9._-]*)
+    fail "verification worker user has an unsafe environment representation"
+    ;;
+esac
 [ -x "$TOOLCHAIN/bin/R" ] || fail "local R is missing; run scripts/bootstrap"
 [ -d "$DEPENDENCY_LIBRARY" ] || fail "repository-local R library is missing"
 [ -f "$TOOLCHAIN_LOCK" ] && [ ! -L "$TOOLCHAIN_LOCK" ] ||
@@ -1328,7 +1334,7 @@ if [ "$MODE_ANALYZER_CLANG" = true ]; then
         "$CLANG" --analyze -std=gnu99 \
         -DR_NO_REMAP -DSTRICT_R_HEADERS -DNDEBUG -D_FORTIFY_SOURCE=2 \
         -isystem "$TOOLCHAIN/include" \
-        "-I$TOOLCHAIN/lib/R/include" "-I$SOURCE_DIRECTORY/src" \
+        -isystem "$TOOLCHAIN/lib/R/include" "-I$SOURCE_DIRECTORY/src" \
         -Wall -Wextra -Wpedantic -Werror \
         -Wstrict-prototypes -Wmissing-prototypes \
         -Wmissing-variable-declarations \
@@ -1427,17 +1433,20 @@ if [ "$MODE_SYMBOLS" = true ]; then
       sub(/@.*/, "", symbol)
       if (symbol == "Rf_findVarInFrame") legacy += 1
       if (symbol == "R_GetBindingType") current += 1
+      if (symbol == "R_getVar") retrieval += 1
+      if (symbol == "Rf_GetOption1") option += 1
       if (symbol == "R_PromiseExpr") expression += 1
       if (symbol == "PRENV") environment += 1
       if (symbol == "PRVALUE") value += 1
     }
     END {
-      printf "%d:%d:%d:%d:%d",
-        legacy + 0, current + 0, expression + 0, environment + 0, value + 0
+      printf "%d:%d:%d:%d:%d:%d:%d",
+        legacy + 0, current + 0, retrieval + 0, expression + 0,
+        environment + 0, value + 0, option + 0
     }
   ' "$MODE_DIRECTORY/logs/undefined-symbols.log")
-  [ "$inspected_symbol_scope" = 0:1:0:0:0 ] ||
-    fail "the current-R DLL has the wrong binding/detached-promise API inventory"
+  [ "$inspected_symbol_scope" = 0:1:1:0:0:0:1 ] ||
+    fail "the current-R DLL has the wrong binding/promise/option API inventory"
   run_logged "$MODE_DIRECTORY/logs/dynamic-symbols.log" \
     env -i "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
     "LC_ALL=C.UTF-8" "TZ=UTC" \

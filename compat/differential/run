@@ -3,7 +3,43 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 STATE="$ROOT/.local/compat/differential"
-BASELINE_URL=$(git -C "$ROOT" remote get-url origin 2>/dev/null || printf '%s\n' "https://github.com/mlr-org/paradox.git")
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+LOCAL_GIT_EXEC_PATH="$ROOT/.local/toolchain/libexec/git-core"
+[[ -x "$LOCAL_GIT" && -f "$LOCAL_GIT" && ! -L "$LOCAL_GIT" &&
+   -d "$LOCAL_GIT_EXEC_PATH" && ! -L "$LOCAL_GIT_EXEC_PATH" ]] || {
+  printf '%s\n' 'The repository-local Git or exec path is unavailable' >&2
+  exit 2
+}
+differential_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_QUARANTINE_PATH \
+    -u GIT_SHALLOW_FILE -u GIT_EXEC_PATH -u GIT_TEMPLATE_DIR \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    -u GIT_EXTERNAL_DIFF -u GIT_DIFF_OPTS \
+    -u GIT_ASKPASS -u GIT_SSH -u GIT_SSH_COMMAND -u GIT_PROXY_COMMAND \
+    -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+    -u GIT_PAGER -u GIT_EDITOR -u GIT_SEQUENCE_EDITOR \
+    -u GIT_LITERAL_PATHSPECS -u GIT_GLOB_PATHSPECS \
+    -u GIT_NOGLOB_PATHSPECS -u GIT_ICASE_PATHSPECS \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 \
+    GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 \
+    GIT_TERMINAL_PROMPT=0 GIT_PAGER=cat GIT_EXEC_PATH="$LOCAL_GIT_EXEC_PATH" \
+    LC_ALL=C TZ=UTC \
+    "$LOCAL_GIT" --no-replace-objects -c core.hooksPath=/dev/null \
+      -c core.attributesFile=/dev/null -c core.fsmonitor=false \
+      -c core.untrackedCache=false -c diff.external= \
+      -c interactive.diffFilter= -c tar.umask=0022 "$@"
+}
+[[ "$(differential_git --exec-path)" == "$LOCAL_GIT_EXEC_PATH" ]] || {
+  printf '%s\n' 'The repository-local Git exec path changed' >&2
+  exit 2
+}
+BASELINE_URL=$(differential_git -C "$ROOT" remote get-url origin 2>/dev/null ||
+  printf '%s\n' "https://github.com/mlr-org/paradox.git")
 BASELINE_REF=main
 CASE_FILE="$ROOT/compat/differential/cases.R"
 EXPECTED_DIFFERENCES="$ROOT/compat/differential/expected-differences.tsv"
@@ -162,24 +198,25 @@ if [[ ! -d "$MIRROR" ]]; then
     printf 'Offline mode requested but the upstream mirror is absent: %s\n' "$MIRROR" >&2
     exit 2
   fi
-  git clone --mirror "$BASELINE_URL" "$MIRROR"
+  differential_git clone --mirror "$BASELINE_URL" "$MIRROR"
 else
   [[ "$(cd "$MIRROR" && pwd -P)" == "$MIRROR" ]] || {
     printf 'Differential mirror resolves outside its managed path: %s\n' "$MIRROR" >&2
     exit 2
   }
-  CONFIGURED_URL=$(git --git-dir="$MIRROR" remote get-url origin)
+  CONFIGURED_URL=$(differential_git --git-dir="$MIRROR" remote get-url origin)
   if [[ "$CONFIGURED_URL" != "$BASELINE_URL" ]]; then
     printf 'Existing mirror URL is %s, not requested URL %s\n' "$CONFIGURED_URL" "$BASELINE_URL" >&2
     printf 'Use the configured URL or remove %s deliberately.\n' "$MIRROR" >&2
     exit 2
   fi
   if ((FETCH == 1)); then
-    git --git-dir="$MIRROR" remote update --prune
+    differential_git --git-dir="$MIRROR" remote update --prune
   fi
 fi
 
-if ! BASELINE_COMMIT=$(git --git-dir="$MIRROR" rev-parse --verify "${BASELINE_REF}^{commit}"); then
+if ! BASELINE_COMMIT=$(differential_git --git-dir="$MIRROR" \
+    rev-parse --verify "${BASELINE_REF}^{commit}"); then
   printf 'Could not resolve baseline ref %s in %s\n' "$BASELINE_REF" "$MIRROR" >&2
   exit 2
 fi
@@ -224,9 +261,11 @@ sha256_value() {
 # Bind every subsequent source operation and retained provenance field to the
 # same observed Git state. A clean release run is therefore exactly one commit;
 # dirty worktrees remain useful diagnostics but are deliberately not sealable.
-CANDIDATE_COMMIT=$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}')
-CANDIDATE_TREE=$(git -C "$ROOT" rev-parse --verify "$CANDIDATE_COMMIT^{tree}")
-CANDIDATE_STATUS=$(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)
+CANDIDATE_COMMIT=$(differential_git -C "$ROOT" rev-parse --verify 'HEAD^{commit}')
+CANDIDATE_TREE=$(differential_git -C "$ROOT" rev-parse --verify \
+  "$CANDIDATE_COMMIT^{tree}")
+CANDIDATE_STATUS=$(differential_git -C "$ROOT" status --porcelain=v1 \
+  --untracked-files=all)
 CANDIDATE_REVISION="$CANDIDATE_COMMIT"
 CANDIDATE_CLEAN=true
 if [[ -n "$CANDIDATE_STATUS" ]]; then
@@ -236,9 +275,12 @@ fi
 
 verify_candidate_state() {
   local current_commit current_tree current_status
-  current_commit=$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}')
-  current_tree=$(git -C "$ROOT" rev-parse --verify "$current_commit^{tree}")
-  current_status=$(git -C "$ROOT" status --porcelain=v1 --untracked-files=all)
+  current_commit=$(differential_git -C "$ROOT" rev-parse --verify \
+    'HEAD^{commit}')
+  current_tree=$(differential_git -C "$ROOT" rev-parse --verify \
+    "$current_commit^{tree}")
+  current_status=$(differential_git -C "$ROOT" status --porcelain=v1 \
+    --untracked-files=all)
   [[ "$current_commit" == "$CANDIDATE_COMMIT" &&
      "$current_tree" == "$CANDIDATE_TREE" &&
      "$current_status" == "$CANDIDATE_STATUS" ]] || {
@@ -253,19 +295,24 @@ verify_candidate_state() {
 # the exact run-local candidate source snapshot first: committed HEAD, tracked
 # changes, then non-ignored untracked files. The default differential harness is
 # copied from this frozen source rather than independently from the live tree.
-git -C "$ROOT" archive "$CANDIDATE_COMMIT" | tar -xf - -C "$CANDIDATE_SOURCE"
+differential_git -C "$ROOT" archive "$CANDIDATE_COMMIT" |
+  tar -xf - -C "$CANDIDATE_SOURCE"
 if [[ "$CANDIDATE_CLEAN" != true ]]; then
   CANDIDATE_PREFIX=${CANDIDATE_SOURCE#"$ROOT"/}
-  git -C "$ROOT" diff --binary "$CANDIDATE_COMMIT" -- | \
-    git -C "$ROOT" apply --unsafe-paths --directory="$CANDIDATE_PREFIX"
+  differential_git -C "$ROOT" diff --binary --no-ext-diff \
+    "$CANDIDATE_COMMIT" -- |
+    differential_git -C "$ROOT" apply --unsafe-paths \
+      --directory="$CANDIDATE_PREFIX"
   while IFS= read -r -d '' path; do
     mkdir -p "$CANDIDATE_SOURCE/$(dirname "$path")"
     cp -pP "$ROOT/$path" "$CANDIDATE_SOURCE/$path"
-  done < <(git -C "$ROOT" ls-files -z --others --exclude-standard)
+  done < <(differential_git -C "$ROOT" ls-files -z --others \
+    --exclude-standard)
 fi
 verify_candidate_state
 
-git --git-dir="$MIRROR" archive "$BASELINE_COMMIT" | tar -xf - -C "$BASELINE_SOURCE"
+differential_git --git-dir="$MIRROR" archive "$BASELINE_COMMIT" |
+  tar -xf - -C "$BASELINE_SOURCE"
 
 cp -p "$CANDIDATE_SOURCE/compat/repository-evidence.R" \
   "$METADATA/repository-evidence.R"

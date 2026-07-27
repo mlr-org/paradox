@@ -65,7 +65,7 @@ grep -F -- "fresh full run requires an empty reservation" \
   "$TEST_ROOT/collision.err" >/dev/null
 
 mkdir "$FAKE_ROOT/.local/compat/reverse-runs/missing-attempt"
-if PATH="$FAKE_BIN:$PATH" \
+if env -u PARADOX_VERIFY_TASK_ATTEMPT PATH="$FAKE_BIN:$PATH" \
     "$WRAPPER" \
       "$FAKE_ROOT" missing-attempt /candidate /dependency /source \
       1 paradox2 full >"$TEST_ROOT/missing-attempt.out" \

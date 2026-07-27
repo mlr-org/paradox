@@ -2,6 +2,10 @@
 
 fail <- function(...) stop(..., call. = FALSE)
 `%||%` <- function(left, right) if (is.null(left)) right else left
+count_fixed <- function(needle, haystack) {
+  matches <- gregexpr(needle, haystack, fixed = TRUE)[[1L]]
+  if (identical(matches, -1L)) 0L else length(matches)
+}
 arguments <- commandArgs(trailingOnly = TRUE)
 if (length(arguments) > 5L) {
   fail(paste0(
@@ -20,6 +24,11 @@ workflow_path <- if (length(arguments) >= 3L) {
 } else {
   file.path(root, ".github", "workflows", "r-cmd-check.yml")
 }
+if (!file.exists(workflow_path) || dir.exists(workflow_path) ||
+    (!is.na(Sys.readlink(workflow_path)) &&
+      nzchar(Sys.readlink(workflow_path)))) {
+  fail("portability workflow is absent, non-regular, or symbolic")
+}
 workflow_path <- normalizePath(
   workflow_path, winslash = "/", mustWork = TRUE
 )
@@ -35,18 +44,17 @@ if (mode == "release") {
   fail("candidate identity arguments are valid only in release mode")
 }
 
-if (!file.exists(workflow_path) || dir.exists(workflow_path) ||
-    nzchar(Sys.readlink(workflow_path))) {
-  fail("portability workflow is absent, non-regular, or symbolic")
-}
 if (!requireNamespace("yaml", quietly = TRUE)) {
   fail("repository-local yaml package is required")
 }
 
 workflow <- yaml::read_yaml(workflow_path)
 if (!identical(sort(names(workflow$jobs)),
-    sort(c("r-cmd-check", "portability-complete")))) {
-  fail("portability workflow must contain only the check and completion jobs")
+    sort(c("r-cmd-check", "r36-windows", "portability-complete")))) {
+  fail(
+    "portability workflow must contain only the matrix, old-Windows, and ",
+    "completion jobs"
+  )
 }
 job <- workflow$jobs[["r-cmd-check"]]
 configs <- job$strategy$matrix$config
@@ -54,7 +62,10 @@ steps <- job$steps
 expected_rows <- if (mode == "general") 6L else 2L
 if (!identical(job$strategy[["fail-fast"]], FALSE) ||
     !is.null(job[["continue-on-error"]]) ||
-    !is.list(configs) || length(configs) != expected_rows || !is.list(steps)) {
+    !is.list(configs) ||
+    length(configs) != expected_rows ||
+    !is.list(steps) ||
+    length(steps) != (if (mode == "general") 7L else 10L)) {
   fail("portability workflow has an unexpected matrix size for mode ", mode)
 }
 
@@ -69,27 +80,38 @@ step_by_name <- function(name) {
   matches[[1L]]
 }
 
+check_checkout <- function(target_steps, label) {
+  checkout <- Filter(
+    function(step) startsWith(step$uses %||% "", "actions/checkout@"),
+    target_steps
+  )
+  if (length(checkout) != 1L) {
+    fail(label, " must contain exactly one checkout step")
+  }
+  if (mode == "general") {
+    if (!identical(checkout[[1L]]$uses, "actions/checkout@v6") ||
+        !is.null(checkout[[1L]]$with$ref)) {
+      fail(label, " does not check out the triggering ref")
+    }
+  } else {
+    if (!identical(
+        checkout[[1L]]$uses,
+        "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
+      ) ||
+        !identical(checkout[[1L]]$with$ref, candidate_tag) ||
+        !identical(checkout[[1L]]$with[["persist-credentials"]], FALSE)) {
+      fail(label, " does not pin a credential-free frozen checkout")
+    }
+  }
+  invisible(checkout[[1L]])
+}
+
 checkout <- Filter(
   function(step) startsWith(step$uses %||% "", "actions/checkout@"),
   steps
 )
-if (length(checkout) != 1L) {
-  fail("workflow must contain exactly one checkout step")
-}
-if (mode == "general") {
-  if (!identical(checkout[[1L]]$uses, "actions/checkout@v6") ||
-      !is.null(checkout[[1L]]$with$ref)) {
-    fail("general workflow does not check out the triggering ref")
-  }
-} else {
-  if (!identical(
-      checkout[[1L]]$uses,
-      "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
-    ) ||
-      !identical(checkout[[1L]]$with$ref, candidate_tag) ||
-      !identical(checkout[[1L]]$with[["persist-credentials"]], FALSE)) {
-    fail("release workflow does not pin a credential-free frozen checkout")
-  }
+check_checkout(steps, "matrix job")
+if (mode == "release") {
   identity <- step_by_name("Verify frozen candidate checkout")
   identity_lines <- trimws(strsplit(identity$run, "\n", fixed = TRUE)[[1L]])
   expected_lines <- grep("^readonly expected=", identity_lines, value = TRUE)
@@ -152,6 +174,13 @@ if (mode == "general") {
   expected_platforms <- c("macos-15/arm64", "windows-latest/x86_64")
   if (!identical(paste(os, arch, sep = "/"), expected_platforms) ||
       any(r_versions != "release") ||
+      !identical(
+        job$name,
+        paste0(
+          "${{ matrix.config.os }} / ${{ matrix.config.arch }} ",
+          "(${{ matrix.config.r }})"
+        )
+      ) ||
       !identical(depends_expression, "FALSE") ||
       !identical(check_step$env$NOT_CRAN, "TRUE")) {
     fail("release workflow is not the exact two-platform ordinary-check matrix")
@@ -181,6 +210,607 @@ if (mode == "general") {
         "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
       )) {
     fail("release workflow does not retain provenance and check evidence")
+  }
+}
+
+old_job <- workflow$jobs[["r36-windows"]]
+old_steps <- old_job$steps
+old_step_by_name <- function(name) {
+  matches <- Filter(
+    function(step) identical(step$name %||% NULL, name),
+    old_steps
+  )
+  if (length(matches) != 1L) {
+    fail("expected exactly one old-Windows step named: ", name)
+  }
+  matches[[1L]]
+}
+if (!identical(
+    old_job$name,
+    "windows-latest / x86_64 (R 3.6.3 / Rtools35)"
+  ) ||
+    !identical(old_job[["runs-on"]], "windows-latest") ||
+    !identical(old_job[["timeout-minutes"]], 75L) ||
+    !is.null(old_job[["continue-on-error"]]) ||
+    !is.list(old_steps) ||
+    length(old_steps) != (if (mode == "general") 7L else 8L) ||
+    !identical(old_job$env$PARADOX_R36_WORK, "C:\\p36") ||
+    !identical(old_job$env$PARADOX_R36_EVIDENCE, "C:\\p36-evidence") ||
+    !identical(
+      old_job$env$PARADOX_R36_ISOLATION,
+      "C:\\p36-isolation"
+    )) {
+  fail(
+    "the separate exact old-Windows job has an unexpected shape: mode=",
+    mode,
+    ", steps=",
+    length(old_steps),
+    ", name=",
+    old_job$name %||% "<missing>",
+    ", runs-on=",
+    old_job[["runs-on"]] %||% "<missing>",
+    ", timeout=",
+    old_job[["timeout-minutes"]] %||% "<missing>",
+    ", work=",
+    old_job$env$PARADOX_R36_WORK %||% "<missing>",
+    ", evidence=",
+    old_job$env$PARADOX_R36_EVIDENCE %||% "<missing>",
+    ", names=",
+    paste(vapply(
+      old_steps,
+      function(step) step$name %||% step$uses %||% "<unnamed>",
+      character(1L)
+    ), collapse = " | ")
+  )
+}
+check_checkout(old_steps, "exact old-Windows job")
+
+old_setup <- Filter(
+  function(step) startsWith(step$uses %||% "", "r-lib/actions/setup-r@"),
+  old_steps
+)
+if (length(old_setup) != 1L ||
+    !identical(
+      old_setup[[1L]]$uses,
+      "r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6"
+    ) ||
+    !identical(old_setup[[1L]]$with[["r-version"]], "3.6.3") ||
+    !identical(old_setup[[1L]]$with[["rtools-version"]], "35") ||
+    !identical(old_setup[[1L]]$with[["use-public-rspm"]], FALSE) ||
+    any(vapply(
+      old_steps,
+      function(step) grepl(
+        "setup-r-dependencies",
+        step$uses %||% "",
+        fixed = TRUE
+      ),
+      logical(1L)
+    ))) {
+  fail("old-Windows setup is not pinned to exact R 3.6.3/Rtools35")
+}
+
+toolchain <- old_step_by_name("Verify exact R 3.6 Windows toolchain")
+closure <- old_step_by_name("Install exact R 3.6 source closure")
+old_check <- old_step_by_name("Build, smoke, and check on R 3.6 Windows")
+isolation_helper_literal <-
+  "scripts\\environment\\enter-hosted-r36-windows.ps1"
+isolation_calls <- c(
+  toolchain = toolchain$run,
+  closure = closure$run,
+  candidate = old_check$run
+)
+expected_phases <- names(isolation_calls)
+if (any(!vapply(
+      isolation_calls,
+      function(source) grepl(
+        isolation_helper_literal, source, fixed = TRUE
+      ),
+      logical(1L)
+    )) ||
+    any(!vapply(seq_along(isolation_calls), function(index) {
+      grepl(
+        paste0("-Phase ", expected_phases[[index]]),
+        isolation_calls[[index]],
+        fixed = TRUE
+      )
+    }, logical(1L))) ||
+    !grepl("-Initialize", toolchain$run, fixed = TRUE) ||
+    grepl("-Initialize", closure$run, fixed = TRUE) ||
+    grepl("-Initialize", old_check$run, fixed = TRUE)) {
+  fail("old-Windows execution phases do not enter one exact isolation helper")
+}
+if (!identical(toolchain$shell, "pwsh") ||
+    !grepl('"3.6.3"', toolchain$run, fixed = TRUE) ||
+    !grepl("mingw_64\\bin\\gcc.exe", toolchain$run, fixed = TRUE) ||
+    !grepl("mingw_64\\bin\\g++.exe", toolchain$run, fixed = TRUE) ||
+    !grepl("mingw_64\\bin\\objdump.exe", toolchain$run, fixed = TRUE) ||
+    !grepl("Get-FileHash", toolchain$run, fixed = TRUE) ||
+    !grepl(
+      'Get-Command gcc.exe -CommandType Application',
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      'Get-Command g++.exe -CommandType Application',
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      paste0(
+        '"gcc.exe ',
+        '(x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3"'
+      ),
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      paste0(
+        '"g++.exe ',
+        '(x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3"'
+      ),
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      'Assert-RConfiguredToolPath $rConfiguredCc $gcc "R CMD config CC"',
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      '$rConfiguredCxxTokens.Count -ne 2',
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      '$rConfiguredCxxTokens[1] -cne "-std=gnu++11"',
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      'Assert-RConfiguredToolPath $rConfiguredCxx11 $gxx',
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      '$rConfiguredCxx11Std -cne "-std=gnu++11"',
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    !identical(closure$shell, "pwsh") ||
+    !grepl(
+      "scripts\\environment\\install-hosted-r36-windows.ps1",
+      closure$run,
+      fixed = TRUE
+    ) ||
+    !identical(old_check$shell, "pwsh") ||
+    !grepl(
+      "scripts\\environment\\run-hosted-r36-windows.R",
+      old_check$run,
+      fixed = TRUE
+    ) ||
+    !grepl("LASTEXITCODE", old_check$run, fixed = TRUE)) {
+  fail("old-Windows source validation is not fail-visible and script-owned")
+}
+
+installer_path <- file.path(
+  root, "scripts", "environment", "install-hosted-r36-windows.ps1"
+)
+runner_path <- file.path(
+  root, "scripts", "environment", "run-hosted-r36-windows.R"
+)
+isolation_helper_path <- file.path(
+  root, "scripts", "environment", "enter-hosted-r36-windows.ps1"
+)
+if (!file.exists(isolation_helper_path) ||
+    dir.exists(isolation_helper_path) ||
+    nzchar(Sys.readlink(isolation_helper_path))) {
+  fail("old-Windows hostile-environment isolation helper is absent or symbolic")
+}
+installer <- paste(readLines(installer_path, warn = FALSE), collapse = "\n")
+runner <- paste(readLines(runner_path, warn = FALSE), collapse = "\n")
+isolation_helper_lines <- readLines(isolation_helper_path, warn = FALSE)
+isolation_helper <- paste(isolation_helper_lines, collapse = "\n")
+reset_start <- which(trimws(isolation_helper_lines) ==
+  "$ResetVariables = @(")
+reset_end <- if (length(reset_start) == 1L) {
+  candidates <- which(
+    seq_along(isolation_helper_lines) > reset_start &
+      trimws(isolation_helper_lines) == ")"
+  )
+  if (length(candidates)) candidates[[1L]] else integer()
+} else {
+  integer()
+}
+if (length(reset_start) != 1L || length(reset_end) != 1L ||
+    reset_end <= reset_start + 1L) {
+  fail("old-Windows reset-variable policy array is not structurally exact")
+}
+reset_lines <- trimws(isolation_helper_lines[
+  seq.int(reset_start + 1L, reset_end - 1L)
+])
+reset_matches <- regexec('^"([A-Z0-9_]+)",?$', reset_lines)
+reset_pieces <- regmatches(reset_lines, reset_matches)
+if (any(lengths(reset_pieces) != 2L)) {
+  fail("old-Windows reset-variable policy contains a malformed row")
+}
+observed_reset_variables <- vapply(
+  reset_pieces, `[[`, character(1L), 2L
+)
+expected_reset_variables <- c(
+  "R_HOME", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE",
+  "R_DEFAULT_PACKAGES", "R_ENVIRON", "R_ENVIRON_USER", "R_PROFILE",
+  "R_PROFILE_USER", "R_BUILD_ENVIRON", "R_CHECK_ENVIRON",
+  "R_INSTALL_ENVIRON", "R_MAKEVARS_SITE", "R_MAKEVARS_USER", "R_USER",
+  "R_HISTFILE", "R_ARCH", "R_INSTALL_TAR", "R_PKG_CFLAGS",
+  "R_PKG_CPPFLAGS", "R_PKG_CXXFLAGS", "R_PKG_CXX_STD",
+  "R_PKG_FFLAGS", "R_PKG_FCFLAGS", "R_PKG_LIBS", "CC", "CPP",
+  "CXX", "CXX11", "CXX14", "CXX17", "CXX20", "CXX23", "FC",
+  "F77", "F90", "F95", "OBJC", "OBJCXX", "CC_FOR_BUILD",
+  "CPP_FOR_BUILD", "CXX_FOR_BUILD", "FC_FOR_BUILD", "AR", "AS",
+  "LD", "NM", "OBJCOPY", "OBJDUMP", "RANLIB", "READELF", "SIZE",
+  "STRINGS", "STRIP", "WINDRES", "DLLTOOL", "BINPREF", "BINPREF64",
+  "M_ARCH", "CFLAGS", "CPPFLAGS", "CXXFLAGS", "CXX11FLAGS",
+  "CXX14FLAGS", "CXX17FLAGS", "CXX20FLAGS", "CXX23FLAGS",
+  "FCFLAGS", "FFLAGS", "FORTRANFLAGS", "LDFLAGS", "CPATH",
+  "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH",
+  "LIBRARY_PATH", "COMPILER_PATH", "GCC_EXEC_PREFIX", "MAKE",
+  "MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "CONFIG_SITE",
+  "PKG_CONFIG", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR",
+  "PKG_CONFIG_SYSROOT_DIR"
+)
+expected_empty_files <- c(
+  'R_ENVIRON = "Renviron.site"',
+  'R_ENVIRON_USER = "Renviron.user"',
+  'R_PROFILE = "Rprofile.site"',
+  'R_PROFILE_USER = "Rprofile.user"',
+  'R_MAKEVARS_SITE = "Makevars.site"',
+  'R_MAKEVARS_USER = "Makevars.user"'
+)
+if (!identical(observed_reset_variables, expected_reset_variables) ||
+    anyDuplicated(observed_reset_variables) ||
+    any(vapply(
+      expected_empty_files,
+      count_fixed,
+      integer(1L),
+      haystack = isolation_helper
+    ) != 1L) ||
+    !grepl(
+      '$ObservedHash -cne $EmptySHA256',
+      isolation_helper,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      '[IO.FileAttributes]::ReadOnly',
+      isolation_helper,
+      fixed = TRUE
+    )) {
+  fail("old-Windows hostile-environment policy differs from the reviewed list")
+}
+expected_rtools35_hashes <- c(
+  "2d415b0fd5eacb43268e2ddf080b50f706d9fa2465b1e32d04f54ce936fac3da",
+  "0d3d581bca702c777fc045a2fe69696e5979d86e819efe2350e2ac43f33f2b7f",
+  "cbf5f996ef759be73502387c9d1296176f8bb7b6320b63cfb61371f7a98e7b59",
+  "ce462e4ca812718a077ae4b67ebec0bd2df0e7a3bc1e31897e40895023e13c72"
+)
+if (any(vapply(
+    expected_rtools35_hashes,
+    count_fixed,
+    integer(1L),
+    haystack = toolchain$run
+  ) != 1L) ||
+    any(vapply(
+      expected_rtools35_hashes,
+      count_fixed,
+      integer(1L),
+      haystack = installer
+    ) != 1L)) {
+  fail("old-Windows workflow/installer do not bind exact Rtools35 executables")
+}
+summary_key_literals <- paste0(
+  'paste0("',
+  c(
+    "r_version", "r_platform", "r_arch", "package_archive",
+    "package_archive_sha256", "dll", "registered_call_routines",
+    "compiler", "compiler_first_line"
+  ),
+  '=",'
+)
+summary_key_literals <- c(
+  summary_key_literals,
+  '"formatted_diagnostics=pass"',
+  '"smoke=pass"'
+)
+if (any(vapply(
+    summary_key_literals,
+    count_fixed,
+    integer(1L),
+    haystack = runner
+  ) != 1L)) {
+  fail("old-Windows runner does not emit each exact summary key once")
+}
+native_process_owners <- function(source) {
+  records <- list()
+  character_literals <- function(expression) {
+    if (is.character(expression)) {
+      return(expression)
+    }
+    if (!is.call(expression) && !is.pairlist(expression) &&
+        !is.expression(expression)) {
+      return(character())
+    }
+    unlist(
+      lapply(as.list(expression), character_literals),
+      use.names = FALSE
+    )
+  }
+  walk <- function(expression, owner = NULL) {
+    if (!is.call(expression)) {
+      return(invisible(NULL))
+    }
+    head <- if (is.symbol(expression[[1L]])) {
+      as.character(expression[[1L]])
+    } else {
+      ""
+    }
+    if (head %in% c("<-", "=") && length(expression) == 3L) {
+      assigned <- if (is.symbol(expression[[2L]])) {
+        as.character(expression[[2L]])
+      } else {
+        NA_character_
+      }
+      walk(expression[[3L]], assigned)
+      return(invisible(NULL))
+    }
+    if (identical(head, "run_native")) {
+      literals <- character_literals(expression)
+      kind <- if (all(c("CMD", "build") %in% literals)) {
+        "build"
+      } else if (all(c("CMD", "check") %in% literals)) {
+        "check"
+      } else {
+        NULL
+      }
+      if (!is.null(kind)) {
+        records[[length(records) + 1L]] <<- c(
+          kind = kind,
+          owner = if (is.null(owner)) NA_character_ else owner
+        )
+      }
+    }
+    for (element in as.list(expression)[-1L]) {
+      walk(element, NULL)
+    }
+    invisible(NULL)
+  }
+  for (expression in parse(text = source, keep.source = FALSE)) {
+    walk(expression)
+  }
+  if (!length(records)) {
+    return(setNames(character(), character()))
+  }
+  kinds <- vapply(records, `[[`, character(1L), "kind")
+  owners <- vapply(records, `[[`, character(1L), "owner")
+  if (anyDuplicated(kinds)) {
+    return(setNames(owners, kinds))
+  }
+  setNames(owners, kinds)
+}
+has_exact_process_ownership <- function(source) {
+  owners <- native_process_owners(source)
+  identical(
+    owners[c("build", "check")],
+    c(build = "build_process", check = "check_process")
+  )
+}
+native_process_field_references <- function(source) {
+  references <- character()
+  walk <- function(expression) {
+    if (!is.call(expression)) {
+      return(invisible(NULL))
+    }
+    if (identical(expression[[1L]], as.name("$")) &&
+        length(expression) == 3L &&
+        is.symbol(expression[[2L]]) &&
+        is.symbol(expression[[3L]])) {
+      owner <- as.character(expression[[2L]])
+      if (owner %in% c("build_process", "check_process")) {
+        references <<- c(
+          references,
+          paste(owner, as.character(expression[[3L]]), sep = "$")
+        )
+      }
+    }
+    for (element in as.list(expression)[-1L]) {
+      walk(element)
+    }
+    invisible(NULL)
+  }
+  for (expression in parse(text = source, keep.source = FALSE)) {
+    walk(expression)
+  }
+  references
+}
+has_exact_check_result_consumption <- function(source) {
+  references <- native_process_field_references(source)
+  counts <- table(factor(
+    references,
+    levels = c(
+      "check_process$status",
+      "check_process$stdout",
+      "check_process$stderr"
+    )
+  ))
+  length(references) == 5L &&
+    identical(as.integer(counts), c(3L, 1L, 1L)) &&
+    !any(startsWith(references, "build_process$"))
+}
+if (!has_exact_process_ownership(runner) ||
+    !has_exact_check_result_consumption(runner)) {
+  fail("old-Windows runner does not retain separate build/check child results")
+}
+wrong_build_owner <- sub(
+  "build_process <- run_native(",
+  "check_process <- run_native(",
+  runner,
+  fixed = TRUE
+)
+missing_check_owner <- sub(
+  "check_process <- run_native(",
+  "run_native(",
+  runner,
+  fixed = TRUE
+)
+wrong_status_owner <- gsub(
+  "check_process$",
+  "build_process$",
+  runner,
+  fixed = TRUE
+)
+if (identical(wrong_build_owner, runner) ||
+    identical(missing_check_owner, runner) ||
+    identical(wrong_status_owner, runner) ||
+    has_exact_process_ownership(wrong_build_owner) ||
+    has_exact_process_ownership(missing_check_owner) ||
+    has_exact_check_result_consumption(wrong_status_owner)) {
+  fail("old-Windows process-ownership audit accepts a build/check result mix-up")
+}
+expected_closure <- c(
+  "backports", "checkmate", "data.table", "R6", "cli", "digest", "mlr3misc"
+)
+if (any(!vapply(
+      expected_closure,
+      function(package) grepl(
+        paste0('"', package, '"'),
+        installer,
+        fixed = TRUE
+      ),
+      logical(1L)
+    )) ||
+    !grepl("runtime-r-3.6.3-packages.lock", installer, fixed = TRUE) ||
+    !grepl("Get-FileHash", installer, fixed = TRUE) ||
+    !grepl('"CMD",', installer, fixed = TRUE) ||
+    !grepl('"INSTALL",', installer, fixed = TRUE) ||
+    grepl('$env:R_PKG_CXX_STD = "CXX11"', installer, fixed = TRUE) ||
+    !grepl('$HadPkgCxxStd', installer, fixed = TRUE) ||
+    !grepl(
+      '$env:R_PKG_CXX_STD = $OriginalPkgCxxStd',
+      installer,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      '-LiteralPath "Env:R_PKG_CXX_STD"',
+      installer,
+      fixed = TRUE
+    ) ||
+    !grepl('"digest-install.log"', installer, fixed = TRUE) ||
+    !grepl('"digest-cxx11.tsv"', installer, fixed = TRUE) ||
+    !grepl('"rtools35.tsv"', installer, fixed = TRUE) ||
+    !grepl(
+      '"C:/Rtools/mingw_64/bin/g++.exe"',
+      installer,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      paste0(
+        '"g++.exe ',
+        '(x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3"'
+      ),
+      installer,
+      fixed = TRUE
+    ) ||
+    grepl("install.packages", installer, fixed = TRUE) ||
+    !grepl('"--no-tests"', runner, fixed = TRUE) ||
+    !grepl('"--no-examples"', runner, fixed = TRUE) ||
+    !grepl('"--ignore-vignettes"', runner, fixed = TRUE) ||
+    !grepl('"--no-manual"', runner, fixed = TRUE) ||
+    !grepl('"Status: 1 NOTE"', runner, fixed = TRUE) ||
+    !grepl(
+      "Packages suggested but not available for checking:",
+      runner,
+      fixed = TRUE
+    ) ||
+    !grepl('"dynamicLookup"', runner, fixed = TRUE) ||
+    !grepl("objdump", runner, fixed = TRUE) ||
+    !grepl("saveRDS", runner, fixed = TRUE) ||
+    !grepl("generate_design_grid", runner, fixed = TRUE) ||
+    !grepl(
+      'to_tune <- get("to_tune", envir = namespace)',
+      runner,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      'identical(compiler, "C:/Rtools/mingw_64/bin/gcc.exe")',
+      runner,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      paste0(
+        '"gcc.exe ',
+        '(x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3"'
+      ),
+      runner,
+      fixed = TRUE
+    ) ||
+    !grepl("growth_token <- to_tune(", runner, fixed = TRUE) ||
+    !grepl(
+      "Assertion on 'xs' failed: value: Element 1 is not <=",
+      runner,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      'PARADOX_R36_ISOLATION_PHASE"), "candidate"',
+      runner,
+      fixed = TRUE
+    ) ||
+    !grepl(
+      "PSNativeCommandUseErrorActionPreference",
+      installer,
+      fixed = TRUE
+    )) {
+  fail("reviewed old-Windows scripts lost source-lock, DLL, or smoke coverage")
+}
+
+old_provenance <- old_step_by_name("Retain old-Windows provenance")
+old_upload <- old_step_by_name("Upload old-Windows evidence")
+if (!identical(old_provenance[["if"]], "always()") ||
+    !identical(old_provenance$shell, "pwsh") ||
+    !grepl("checked_out_sha=", old_provenance$run, fixed = TRUE) ||
+    !identical(old_upload[["if"]], "always()") ||
+    !identical(
+      old_upload$uses,
+      "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    ) ||
+    !identical(
+      old_upload$with$name,
+      "paradox-2.0.0-portability-windows-r3.6.3-x86_64"
+    ) ||
+    !grepl("environment-isolation", old_provenance$run, fixed = TRUE) ||
+    any(!vapply(
+      c("toolchain.tsv", "closure.tsv", "candidate.tsv"),
+      grepl,
+      logical(1L),
+      x = old_provenance$run,
+      fixed = TRUE
+    )) ||
+    !identical(old_upload$with$path, "C:\\p36-evidence") ||
+    !identical(old_upload$with[["if-no-files-found"]], "error")) {
+  fail("old-Windows provenance and artifact retention are not fail-closed")
+}
+
+if (mode == "release") {
+  old_identity <- old_step_by_name("Verify frozen candidate checkout")
+  old_identity_lines <- trimws(strsplit(
+    old_identity$run, "\n", fixed = TRUE
+  )[[1L]])
+  old_expected <- grep(
+    "^readonly expected=", old_identity_lines, value = TRUE
+  )
+  if (!identical(old_expected, paste0(
+      "readonly expected=", candidate_commit
+    )) ||
+      sum(old_identity_lines ==
+        'test "$(git rev-parse HEAD)" = "$expected"') != 1L) {
+    fail("old-Windows checkout assertion is not bound to the frozen commit")
   }
 }
 
@@ -241,7 +871,10 @@ if (inherits(evaluate_completion(), "try-error")) {
 completion_job <- workflow$jobs[["portability-complete"]]
 if (!identical(completion_job$name, "Verify required check jobs") ||
     !identical(completion_job[["if"]], "${{ always() }}") ||
-    !identical(completion_job$needs, "r-cmd-check") ||
+    !identical(
+      completion_job$needs,
+      c("r-cmd-check", "r36-windows")
+    ) ||
     !identical(completion_job[["runs-on"]], "ubuntu-latest") ||
     !is.list(completion_job$steps) || length(completion_job$steps) != 1L) {
   fail("required-job completion gate has an unexpected shape")
@@ -253,25 +886,43 @@ if (!identical(required_results$name, "Verify required job conclusions") ||
       required_results$env$R_CMD_CHECK_RESULT,
       "${{ needs.r-cmd-check.result }}"
     ) ||
+    !identical(
+      required_results$env$R36_WINDOWS_RESULT,
+      "${{ needs.r36-windows.result }}"
+    ) ||
     !grepl("set -euo pipefail", required_results$run, fixed = TRUE)) {
-  fail("required-job completion step is not bound fail-closed to the matrix")
+  fail("required-job completion step is not bound to both required jobs")
 }
 
-evaluate_required_results <- function(result) {
+evaluate_required_results <- function(matrix_result, old_windows_result) {
   suppressWarnings(system2(
     "/usr/bin/bash",
     args = c("-c", shQuote(required_results$run)),
-    env = paste0("R_CMD_CHECK_RESULT=", result),
+    env = c(
+      paste0("R_CMD_CHECK_RESULT=", matrix_result),
+      paste0("R36_WINDOWS_RESULT=", old_windows_result)
+    ),
     stdout = FALSE,
     stderr = FALSE
   ))
 }
-if (evaluate_required_results("success") != 0L ||
-    any(vapply(
-      c("failure", "cancelled", "skipped", ""),
-      function(result) evaluate_required_results(result) == 0L,
-      logical(1L)
-    ))) {
+outcomes <- c("success", "failure", "cancelled", "skipped", "")
+cases <- expand.grid(
+  matrix = outcomes,
+  old_windows = outcomes,
+  stringsAsFactors = FALSE
+)
+accepted <- mapply(
+  function(matrix, old_windows) {
+    evaluate_required_results(matrix, old_windows) == 0L
+  },
+  cases$matrix,
+  cases$old_windows,
+  USE.NAMES = FALSE
+)
+expected_acceptance <- cases$matrix == "success" &
+  cases$old_windows == "success"
+if (!identical(accepted, expected_acceptance)) {
   fail("required-job completion gate does not reject every non-success result")
 }
 

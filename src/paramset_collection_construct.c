@@ -131,7 +131,7 @@ static SEXP checked_set_names(SEXP sets,
     SEXP right_name = STRING_ELT(observed_names, right);
     if (right_name == NA_STRING) {
       UNPROTECT(1);
-      Rf_error("`sets` name is NA at position %lld", (long long) right + 1);
+      Rf_error("`sets` name is NA at position %.0f", (double) right + 1.0);
     }
     if (!supported_ascii(right_name)) {
       UNPROTECT(1);

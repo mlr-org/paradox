@@ -119,6 +119,24 @@ test_that("params rejects malformed direct-call shells and node kinds", {
   )
 })
 
+test_that("required ownership lookup never evaluates active shell bindings", {
+  set = ps(value = p_int())
+  private = set$.__enclos_env__$private
+  hostile = new.env(parent = emptyenv())
+  reads = 0L
+  makeActiveBinding(".__enclos_env__", function(value) {
+    if (!missing(value)) stop("test binding is read-only")
+    reads <<- reads + 1L
+    set$.__enclos_env__
+  }, hostile)
+
+  expect_error(
+    .Call(params_contract_symbol(), private, hostile),
+    "ownership|Corrupt ParamSet"
+  )
+  expect_identical(reads, 0L)
+})
+
 test_that("params exposes the rich public schema from one capsule snapshot", {
   fixture = params_contract_rich_set()
   param_set = fixture$param_set

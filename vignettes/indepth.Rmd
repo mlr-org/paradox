@@ -72,6 +72,11 @@ standalone legacy Domain/Condition conversion remain supported; load a legacy
 model under R >= 4.0 once, migrate it, and then save the upgraded object for
 continued use on R 3.6.
 
+One narrower boundary applies on R 4.5: that release has no policy-compliant
+way to inspect a reached promise, so recursive migration fails closed if the
+containing graph encounters one. Use R 4.0--4.4 or R >= 4.6 for such a graph;
+R 4.5 remains sufficient when the traversed graph is promise-free.
+
 ```{r, eval=FALSE}
 model = readRDS("legacy-model.rds")
 upgrade_paradox_object_graph(model)

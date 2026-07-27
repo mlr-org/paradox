@@ -69,6 +69,18 @@ verify_setsid_identity() {
      "$(setsid_identity_sha256)" == "$SETSID_IDENTITY_SHA256" ]]
 }
 
+timeout_identity_sha256() {
+  LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | sha256sum | cut -d ' ' -f 1
+}
+
+verify_timeout_identity() {
+  [[ -f "$TIMEOUT_TOOL" && -x "$TIMEOUT_TOOL" && ! -L "$TIMEOUT_TOOL" &&
+     "$(cd "$(dirname "$TIMEOUT_TOOL")" && pwd -P)/$(basename "$TIMEOUT_TOOL")" == \
+       "$TIMEOUT_TOOL" &&
+     "$(sha256_value "$TIMEOUT_TOOL")" == "$TIMEOUT_TOOL_SHA256" &&
+     "$(timeout_identity_sha256)" == "$TIMEOUT_TOOL_IDENTITY_SHA256" ]]
+}
+
 validate_admission_report() {
   local report=$1 expected_fields actual_fields
   local online affinity cgroup_cpu cpu_limit cpu_reserve cpu_per cpu_jobs
@@ -233,11 +245,17 @@ fi
 if [[ -z "$TIMEOUT_TOOL" ]]; then
   TIMEOUT_TOOL=$(command -v timeout 2>/dev/null || true)
 fi
-[[ "$TIMEOUT_TOOL" == /* && -x "$TIMEOUT_TOOL" && ! -L "$TIMEOUT_TOOL" ]] ||
+[[ "$TIMEOUT_TOOL" == /* && -f "$TIMEOUT_TOOL" && -x "$TIMEOUT_TOOL" &&
+   ! -L "$TIMEOUT_TOOL" && "$TIMEOUT_TOOL" != *$'\t'* &&
+   "$TIMEOUT_TOOL" != *$'\r'* && "$TIMEOUT_TOOL" != *$'\n'* ]] ||
   fail "--timeout-tool must name a plain absolute executable"
-"$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |
+[[ "$(cd "$(dirname "$TIMEOUT_TOOL")" && pwd -P)/$(basename "$TIMEOUT_TOOL")" == \
+   "$TIMEOUT_TOOL" ]] || fail "--timeout-tool path is not canonical"
+LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |
   grep -Fq 'timeout (GNU coreutils)' ||
   fail "--timeout-tool is not GNU coreutils timeout"
+TIMEOUT_TOOL_SHA256=$(sha256_value "$TIMEOUT_TOOL")
+TIMEOUT_TOOL_IDENTITY_SHA256=$(timeout_identity_sha256)
 [[ "$BATCH_RUNNER" == /* && -f "$BATCH_RUNNER" &&
    -x "$BATCH_RUNNER" && ! -L "$BATCH_RUNNER" ]] ||
   fail "batch runner is absent, non-executable, or symbolic"
@@ -363,10 +381,9 @@ mkdir "$OUTPUT_DIRECTORY"
   printf 'setsid_identity_sha256\t%s\n' "$SETSID_IDENTITY_SHA256"
   printf 'task_timeout_seconds\t%s\n' "$TASK_TIMEOUT_SECONDS"
   printf 'timeout_tool_path\t%s\n' "$TIMEOUT_TOOL"
-  printf 'timeout_tool_sha256\t%s\n' \
-    "$(sha256sum "$TIMEOUT_TOOL" | cut -d ' ' -f 1)"
+  printf 'timeout_tool_sha256\t%s\n' "$TIMEOUT_TOOL_SHA256"
   printf 'timeout_tool_identity_sha256\t%s\n' \
-    "$("$TIMEOUT_TOOL" --version | sha256sum | cut -d ' ' -f 1)"
+    "$TIMEOUT_TOOL_IDENTITY_SHA256"
 } > "$OUTPUT_DIRECTORY/wave-plan.tsv"
 
 pids=()
@@ -483,6 +500,8 @@ fi
   fail "batch-runner identity changed while the paired wave was running"
 verify_setsid_identity ||
   fail "setsid identity changed while the paired wave was running"
+verify_timeout_identity ||
+  fail "timeout identity changed while the paired wave was running"
 
 LEDGER_HEADER=$'schema\tordinal\tsource_relative\tsource_sha256\tcompiler_invoked_path\tcompiler_link_target\tcompiler_canonical_path\tcompiler_canonical_sha256\tcompiler_identity_sha256\ttask_wrapper_path\ttask_wrapper_sha256\ttask_wrapper_bash_path\ttask_wrapper_bash_sha256\texit_status\ttimed_out\tlog_relative\tlog_sha256\tsupervisor_log_relative\tsupervisor_log_sha256'
 LEFT_TASK_LEDGER="$OUTPUT_DIRECTORY/left/task-ledger.tsv"
@@ -505,6 +524,13 @@ for plan in "$LEFT_BATCH_PLAN" "$RIGHT_BATCH_PLAN"; do
       ! grep -Fqx $'setsid_sha256\t'"$SETSID_SHA256" "$plan" ||
       ! grep -Fqx $'setsid_identity_sha256\t'"$SETSID_IDENTITY_SHA256" "$plan"; then
     fail "compiler lane batch plan changed its setsid identity: $plan"
+  fi
+  if ! grep -Fqx $'task_timeout_seconds\t'"$TASK_TIMEOUT_SECONDS" "$plan" ||
+      ! grep -Fqx $'timeout_tool_path\t'"$TIMEOUT_TOOL" "$plan" ||
+      ! grep -Fqx $'timeout_tool_sha256\t'"$TIMEOUT_TOOL_SHA256" "$plan" ||
+      ! grep -Fqx $'timeout_tool_identity_sha256\t'"$TIMEOUT_TOOL_IDENTITY_SHA256" \
+        "$plan"; then
+    fail "compiler lane batch plan changed its timeout identity: $plan"
   fi
 done
 if ! grep -Fqx $'compiler_arguments_count\t'"$LEFT_ARGUMENTS_COUNT" \

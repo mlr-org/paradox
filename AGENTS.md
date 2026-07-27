@@ -28,9 +28,9 @@ content SHA-256
 Final pre-release cleanup reopened package source after that seal on
 2026-07-25. The ref and all source-bound gates are therefore historical until a
 new candidate is frozen; there is currently no active frozen package candidate.
-Record only focused development evidence while the remaining cleanup items are
-being implemented, then create one new candidate and rerun the applicable final
-gates once. Post-freeze release-policy, validation, and ledger commits for that
+The R 3.6 compatibility implementation is now complete in the working tree:
+create one new candidate and rerun the applicable final gates once.
+Post-freeze release-policy, validation, and ledger commits for that
 future candidate must prove package-facing paths unchanged; call that
 relationship *package-facing-source identical*, not package-identical, unless a
 separate sealed complete-payload byte proof exists.
@@ -142,11 +142,58 @@ and weakened generation reauthentication remain prohibited.
 The final compatibility batch is governed by
 [`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).
 Paradox 2 supports R >= 3.6 and uses portable C99. Old-runtime adaptation stays
-inside the small R API facade or removes a newer-API dependency; it is never a
-second semantic engine. The real supported-runtime matrix includes R 3.6.3,
+inside the small R API facade, except for the graph crawler's narrow
+capability gates where an old runtime cannot expose an edge at all; it is never
+a second semantic engine. The real supported-runtime matrix includes R 3.6.3,
 and the header matrix includes the 3.6.0 minimum plus the 4.0.0 and 4.2.0 API
 transition releases before the existing later axes. Historical candidate evidence that
 started at R 4.3 remains historical and cannot prove this reopened source.
+The R 3.6 stage has two separate dependency proofs: its complete-test closure
+and a cached, sealed six-package closure at the exact five direct
+`DESCRIPTION` floors plus `digest` 0.6.39. The latter installs the same
+candidate tarball into a fresh one-package library and runs only a bounded
+dependency-origin/import smoke; it is not a duplicate test suite. A complete
+four-runtime run also serializes a representative current-v2 nested graph on
+R 4.0.5 and loads, exercises, mutates, and reserializes those exact bytes on
+R 3.6.3. Every selected R 3.6 stage owns the floor proof; only a complete
+runtime selection may claim the cross-version handoff.
+Hosted portability also has one separate exact Windows x86-64 R 3.6.3/Rtools35
+job. It installs the reviewed seven-package runtime closure from the existing
+SHA-256 source lock, builds and loads the candidate DLL, runs focused semantic
+smoke probes, and performs a bounded runtime-import-only check. It complements
+the complete local R 3.6 behavior stage; it is the compiler/linker/loader and
+old-Windows ABI proof and is mandatory in the release companion.
+Do not authenticate that lane from paths or self-reported banners alone:
+`design/portability-ci.md` records the official Rtools35 GCC, G++, `objdump`,
+and Make byte digests, and the workflow, source installer, retained
+`rtools35.tsv`, and offline verifier must agree on all four. Exact R 3.6.3
+Windows already defines default `CXX` as the authenticated G++ plus one
+`-std=gnu++11`. Locked `digest` 0.6.39 is the sentinel proving that ordinary
+path with four distinct raw compile commands; no dependency override is
+needed. One shared helper clears the reviewed hostile R/compiler/make inputs,
+binds six empty read-only startup/Makevars files, and creates fresh
+phase-specific home, temporary, and library state before all three execution
+phases. It also binds `R_BUILD_ENVIRON`, `R_CHECK_ENVIRON`, and
+`R_INSTALL_ENVIRON` to the authenticated empty environment file.
+`R_PKG_CXX_STD` therefore enters the installer absent. The three exact
+policy receipts are mandatory artifact evidence. An earlier raw-G++ audit
+accidentally used the R 3.6.0 header source rather than the hosted R 3.6.3
+configuration; do not reintroduce its discarded override.
+
+The focused old-R binding benchmark is recorded in the final-results ledger of
+[`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).
+On actual R 3.6.3, replacing absence-tolerant lookup at already-required
+ownership/core/collection reads produced old/required median ratios from
+1.08x on BASE `$params` through 1.24--1.40x on collection reads and 1.50x on
+BASE `$values`; paired current-R controls show no regression.  The retained
+development-evidence hash list is
+`cccced57e09e66a656f89d50cff144602ef1dc3d3df7d6a49207411f3806eb7b`.
+This is not release evidence and need not be rerun during cleanup.  Keep the
+compile-time-specialized required and optional shell readers: remaining
+optional sites are candidate/graph admission, fresh-destination detection, or
+absence-sensitive generation reauthentication, not trusted hot-path reads.
+Do not recover the old-R gain through caller-trust metadata or a second
+semantic path.
 
 ## Non-negotiable design decisions
 
@@ -664,9 +711,9 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   stable ALTREP. Package-owned capsule tables and returned facades keep
   canonical ordinary metadata; this input exception does not admit ALTREP
   capsule, Domain, Condition, TuneToken, row, callback-result, or general list
-  shells. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the
-  established `ATTRIB` traversal backport on R 3.6--4.5. Neither path invokes R
-  or data.table fallback logic. Direct checked or unchecked `$values <-`
+  shells. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and one
+  exact, ledgered `ATTRIB` compatibility exception on R 3.6--4.5. Neither path
+  invokes R or data.table fallback logic. Direct checked or unchecked `$values <-`
   assignment rejects an outer
   ALTREP before observation and canonicalizes the accepted Paradox-1 empty
   spellings (`NULL`, an ordinary attribute-free zero-length atomic/expression
@@ -717,10 +764,18 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   follows ordinary lists, pairlists/language/expressions, attributes and S4
   slots, environment bindings and parents, active-binding *functions*, closure
   environments/formals/bodies and bytecode expressions, and promise-binding
-  expression/environment or forced-value state—including `...` cells—without
-  forcing an unforced promise. R 3.6--4.5 additionally inspect a detached
-  `PROMSXP`; under strict R >= 4.6 headers such a promise outside a binding/dots
-  cell is opaque. It never invokes an active binding or a serialized method.
+  expression/environment or forced-value state—including `...` cells—where a
+  policy-compliant API exposes them, without forcing an unforced promise.
+  R 3.6--4.4 can inspect a reached promise through their compatibility
+  accessors. R 4.5 classifies those accessors as non-API and has no replacement,
+  so recursive migration fails closed on a reached promise and directs the
+  caller to R >= 4.6. R >= 4.6 uses the public binding/dots API, while a
+  detached `PROMSXP` outside such a cell remains opaque. `R_getVar` is excluded
+  before R 4.6 because it could force a delayed binding without the new
+  classifier. Current source has three reviewed retrieval call sites—one
+  direct-value facade plus graph direct/forced-value branches—and every site
+  follows `R_GetBindingType`; the DSO has one undefined-symbol inventory row.
+  It never invokes an active binding or a serialized method.
   R 3.6 exposes no accessor for an active binding's function; encountering an
   arbitrary one during recursive migration therefore fails closed with an
   instruction to perform that migration under R >= 4.0. The one narrow
@@ -746,7 +801,11 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   as a promise and never evaluated.
   `.GlobalEnv`, namespaces, package/import environments, attached search-path
   infrastructure, Autoloads, base, and the empty environment are hard
-  boundaries. Generic external-pointer internals and weak references are
+  boundaries. An `imports:` display name alone is not authentication: a
+  genuine imports boundary must have an ordinary scalar raw `name` attribute
+  with that prefix and the exact base namespace as its direct parent. A user
+  environment with a spoofed prefix remains traversable. Generic
+  external-pointer internals and weak references are
   opaque; the protected ordinary-R payload of an authenticated Paradox `.core`
   is the sole external-pointer exception.
 - Current ParamSet-family shell admission has one native inert classifier.
@@ -850,13 +909,20 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   the exact current Paradox namespace. `isNamespace()` plus
   `environmentName()` is descriptive metadata and is not authentication: an
   ordinary environment can spoof both.
-- Shipped C is portable C99 and supports R >= 3.6. Version selection is
-  centralized in `src/r_api_compat.c`; semantic translation units do not
-  acquire old-R implementations. Current runtimes retain their public,
+- Shipped C is portable C99 and supports R >= 3.6. API spelling selection is
+  centralized in `src/r_api_compat.c`; the graph walker has only the narrow
+  capability gates required to select which inert edges a runtime can expose,
+  never a duplicated old-R engine. Current runtimes retain their public,
   allocation-free ordinary-frame fast paths. The compatibility boundary keeps
   one conservative rooting proof across all supported branches because hostile
   class metadata can allocate during facade admission, while recognized
   callback-backed user databases are rejected before binding APIs.
+  R 3.6--4.5 use one exact, ledgered `ATTRIB` occurrence for raw attribute
+  iteration that cannot be expressed through the earlier API without
+  expanding compact `row.names`. R 3.6--4.4 retain one ledgered `FORMALS`
+  occurrence because transformation callback admission is a semantic hot path;
+  cold closure-body/environment traversal instead uses public base calls and
+  must not compile `R_ClosureExpr` or `R_BytecodeExpr` before they become API.
   R 3.6--4.1 use a cold
   `base::exists(..., inherits = FALSE)` query only where absence is an accepted
   result. Candidate-shell and fresh-destination classifiers use that optional
@@ -873,30 +939,64 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   The graph walker applies this boundary before namespace/package
   classification because old R implements those predicates through an
   object-table lookup.
-  R 3.6--4.5 use the declared/exported
-  `Rf_findVarInFrame` to obtain the stored frame cell and, when it is a
-  `PROMSXP`, the three header-declared/exported accessors `R_PromiseExpr`,
-  `PRENV`, and `PRVALUE`. R >= 4.6 uses only the documented experimental
-  binding/dots APIs: strict headers hide all three detached-promise accessors,
-  the current DSO must contain none of them, and a structurally reached
-  non-binding `PROMSXP` is opaque. An R-level `substitute()` workaround is
+  R 3.6--4.5 use the declared/exported `Rf_findVarInFrame` to obtain the stored
+  frame cell. Only R 3.6--4.4 inspect a returned `PROMSXP`, through the three
+  header-declared/exported accessors `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
+  R 4.5's compiled-code policy classifies those accessors as non-API, so its
+  crawler fails closed when it reaches a promise and requests migration under
+  R >= 4.6. R >= 4.6 uses only the documented experimental binding/dots APIs:
+  the DSO contains none of the three detached-promise accessors, and a
+  structurally reached non-binding `PROMSXP` is opaque. An R-level
+  `substitute()` workaround is
   insufficient for receipt scans and recursive graph discovery: although
   non-forcing, it returns a promise expression and cannot distinguish that
   expression from a realized language/symbol value or provide a stable
   binding-generation receipt. Every such symbol/version/source occurrence must be listed
   exactly in `environment/r-api-exceptions.tsv`, raw-token and DSO audited, and
   tested against pinned headers and real runtimes before freeze.
+  Although `R_getVar` is public from R 4.5, it may force a delayed binding
+  before R 4.6's classifier can distinguish the cell. All pre-4.6 inventories
+  therefore forbid it. The raw-token audit requires the exact three current
+  call sites and every call follows `R_GetBindingType` after direct or forced
+  value classification; the DSO inventory requires one undefined-symbol row.
+  Printable simple-Domain IDs retain one native renderer on every supported
+  R. R >= 4.5 snapshots `scipen` with the documented allocation-free
+  `Rf_GetOption1`; R 3.6--4.4 call public `base::getOption()` through the
+  compatibility facade and then stay in the same native renderer. The older
+  runtimes must not call their header-declared but then-undocumented
+  `Rf_GetOption1`, and they must not fall back unconditionally to R
+  `deparse1()`. Runtime DSO inventories forbid that symbol through R 4.4 and
+  require it exactly once beginning with R 4.5. A malformed or changing option,
+  unsupported representation, or overlong output still takes the existing
+  correctness fallback.
   `R_HasFancyBindings`, `Rf_findVarInFrame`, `R_PromiseExpr`, `PRENV`, and
-  `PRVALUE` are confined to their exact old-runtime branches and ledgered.
+  `PRVALUE` are confined to their exact old-runtime branches and ledgered; the
+  last three are absent beginning with R 4.5.
+  The exact R 4.5.2 runtime stage also runs that runtime's own
+  `tools:::check_compiled_code()` against the installed package and retains an
+  authenticated zero-issue receipt. The explicit DSO inventory is a semantic
+  branch proof, not a substitute for R's policy checker.
   Pre-4.6 required snapshots authenticate once and then use the centralized
   stored-cell selector; do not reintroduce a duplicate active/class boundary
   into this hot path.
   None is a
   CRAN allowlist or permission for another internal API or semantic path.
-  Old-Windows portability does not rely on `%lld`: graph indices use bounded
-  decimal arithmetic. GCC-only diagnostic pragmas are compiler-version gated,
-  and strict/analyzer/sanitizer profiles compile the package as GNU C99 rather
-  than proving only that C17 accepts it.
+  Old-Windows portability does not rely on `%lld`, `%I64`, or `j`/`z`/`t`
+  integer-length formats: graph indices use bounded decimal arithmetic and
+  diagnostic-only long-vector positions use exact `%.0f`/double formatting
+  within R's 2^52 long-vector limit. The strict source/header gate rejects
+  those integer format spellings, including decorated variants. Formatted
+  ParamSet failures never size with `vsnprintf(NULL, 0, ...)`: Rtools35's
+  MSVCRT path returns a negative value for that idiom and for truncated real
+  buffers. The single formatter instead uses a real local buffer, `va_copy`,
+  bounded growth, and supports both the C99 required-length and old-MSVCRT
+  negative-on-truncation conventions. All of its format arguments are package-
+  bounded; the 64-KiB corruption/formatter-failure ceiling therefore truncates
+  no supported diagnostic. The source gate rejects null-buffer printf sizing.
+  GCC-only
+  diagnostic pragmas are compiler-
+  version gated, and strict/analyzer/sanitizer profiles compile the package as
+  GNU C99 rather than proving only that C17 accepts it.
   `src/binding_snapshot.c` exposes the same centralized classifier to the cold
   R migration/gateway code as one registered native call: it returns an exact
   realized ordinary frame value, or a negative result for absent, inherited,
@@ -951,7 +1051,7 @@ test "$(command -v Rscript)" = "$PARADOX_ROOT/.local/toolchain/bin/Rscript"
 test "$(R RHOME)" = "$PARADOX_ROOT/.local/toolchain/lib/R"
 ```
 
-Authoritative inputs are:
+Core authenticated inputs include:
 
 - `environment/toolchain-linux-64.lock`: local development toolchain;
 - `environment/r-packages-linux-64.lock`: exact source-package closure;
@@ -962,11 +1062,23 @@ Authoritative inputs are:
 - `environment/runtime-r-3.6.3-packages.lock` and
   `environment/runtime-r-4.0.5-packages.lock`: exact source-package closures
   for the two older runtime axes;
+- `environment/runtime-r-3.6.3-declared-floor-packages.lock`: the separate
+  exact declared-floor source closure;
+- `environment/runtime-r-3.6.3-prefix-repair.lock`: the authenticated repair
+  boundary for the managed R 3.6 prefix;
 - `environment/runtime-matrix.tsv`: authenticated runtime-axis registry;
+- `environment/runtime-matrix-old-r-stress.tsv`: exact bounded old-runtime
+  stress targets;
 - `environment/r-api-sources.tsv`: local reference R sources/manuals;
 - `environment/r-api-exceptions.tsv`: the exact reviewed versioned R C API
   exception ledger;
 - `environment/valgrind-r-packages.tsv`: instrumented-R package closure.
+
+`scripts/environment/runtime-matrix-trusted-inputs` is the exhaustive
+runtime-matrix input enumerator. It also binds the floor-smoke,
+old-runtime-stress, cross-serialization, result-skip, and verification policy
+programs into retained evidence; do not maintain a competing hand-written
+exhaustive list here.
 
 Bulky state is deliberately ignored below `.local/` and `.cache/`. Bootstrap
 is idempotent and checksum-verifying; reuse valid downloads and installations
@@ -990,7 +1102,21 @@ scripts/bootstrap-runtime-matrix --verify
 . scripts/activate                        # return to R 4.6.1
 ```
 
-R 3.6.3 and R 4.0.5 install their exact source locks once into sealed,
+The source-with-version spelling requires Bash or zsh. dash does not forward
+arguments to its dot builtin; repository automation uses Bash even though the
+activation body itself remains portable shell.
+
+Micromamba must create every supported-runtime prefix with `--always-copy`.
+Never seal a prefix whose regular files are hard-linked to the writable
+micromamba package cache or to another prefix: a single in-place cache write
+would mutate several supposedly immutable runtimes. The complete prefix
+receipt rejects every multiply-linked regular file in addition to checking
+content, modes, paths, and internal symlinks. A prefix made by the older
+hard-linking bootstrap must be deliberately moved aside or otherwise
+reprovisioned from the exact lock; do not weaken or refresh its receipt to
+admit shared inodes, and do not auto-delete it.
+
+R 3.6.3 and R 4.0.5 install their exact complete-test source locks once into sealed,
 content- and identity-receipted libraries. Interactive activation fully
 verifies the selected library; a retained runtime worker instead consumes the
 coordinator's exact authenticated receipt handoff and does not repeat the full
@@ -1005,7 +1131,61 @@ registry, policy, dependency lock, and prefix-repair lock. The coordinator
 checks it immediately before and after the worker wave and binds it into the
 top-level and per-stage evidence. The declared-minimum R 3.6 package check uses
 `--no-tests`; the separately receipted complete-source stage already runs the
-supported test suite once.
+supported test suite once. Its locked local test library contains five of the
+nine direct Suggests and deliberately omits exactly `reticulate`, `rmarkdown`,
+`mlr3learners`, and `e1071`. The check must therefore exit zero with exactly
+that one missing-Suggests dependency NOTE, no other NOTE/WARNING/ERROR/halt,
+and one sole final `Status: 1 NOTE`; `Status: OK` is not a truthful contract for
+this axis.
+
+`scripts/bootstrap-runtime-matrix` alone owns persistent runtime and
+dependency-library provisioning. For an R 3.6.3 selection, provision mode owns
+both the complete-test and declared-floor closures, while `--verify` checks
+both without mutation. `scripts/test-runtime-matrix` may only consume those
+verified caches and copy their receipts into a retained run. Its trusted-input
+inventory includes `environment/Renviron`, `environment/Rprofile.R`, and
+`environment/Makevars`; every retained stage points the corresponding R
+variables, including `R_BUILD_ENVIRON`, `R_CHECK_ENVIRON`, and
+`R_INSTALL_ENVIRON`, to the detached authenticated copies below its retained
+inputs. Stage activation selects those copies before its first R child;
+interactive activation alone selects the live developer files. Never restore
+coordinator-side cache repair or a live
+checkout startup path inside an admitted stage. Successful bootstrap
+verification also removes its owned empty scratch directories after closing
+their contents; it must not leak one directory per runtime replay.
+
+The R 3.6 stage separately consumes the `declared-floor` profile of the same
+sealed library manager. Its exact lock contains backports 1.1.7, checkmate
+2.0.0, data.table 1.18.4, mlr3misc 0.10.0, R6 2.6.1, and the sole transitive
+dependency digest 0.6.39. The stage rebuilds only Paradox into a fresh
+candidate library against those floors, authenticates every installed package
+identity and dependency namespace origin, plus the candidate Paradox DLL origin
+and registration, and exercises constructor/deparse, checked dormant/dependency
+behavior, diagnostics, and grid/data.table/R6 paths. Cache keys and receipt
+handoffs keep this bounded lane reusable; ambient `R_DEFAULT_PACKAGES` is
+removed so an operator startup choice cannot preload a reviewed dependency.
+
+R 3.6.3 and R 4.0.5 additionally run the bounded `NOT_CRAN=true`
+`runtime-matrix-old-r-stress.tsv` slice. Its literal test titles are validated
+against the authenticated source, and a deterministically regenerated final
+test helper leaves top-level setup intact while declining to force every
+unselected `test_that()` body. The retained staged sources, title filter,
+per-block ledger, log, and counts must replay exactly. Each old runtime first
+proves that an unselected body is unforced and that a selected braced
+expression still receives testthat's isolated evaluation environment;
+selected targets may neither skip nor warn. Do not replace this with full-file
+`NOT_CRAN=true` runs
+or a frozen expected target count, and do not repeat it on newer runtimes.
+
+After every selected stage is sealed, a complete `--runtime all` run performs
+one R 4.0.5 -> R 3.6.3 serialization handoff. The producer and consumer are
+bound to their exact stage package and DSO paths. The fixture covers base,
+collection, and shadow capsules; shared topology; an attribute-hidden closure;
+dormant values including named `NULL`; callbacks, checks, transformations,
+mutation, and an R 3.6 round trip. Its artifacts, isolated state, logs,
+per-stage seals, candidate DSOs, and receipts are independently sealed and
+replayed. A partial matrix records `not-applicable` and retains no such
+artifact.
 
 `scripts/test-runtime-matrix` validates both the deliberately empty pre-R-4.6
 exclusion policy and the reviewed result-skip manifest against the exact
@@ -1611,6 +1791,28 @@ current phase, blocks failed descendants and later expensive phases, and
 aborts globally only for fatal provenance, cache, containment, host pressure,
 container-cleanup, or source-integrity failures.
 
+The prepared worker is intentionally a minimal Linux userland, but its
+reviewed command contract includes `rg`, GNU `timeout`, util-linux `setsid`,
+and procps. Git operations against the read-only checkout must disable
+optional locks, lazy fetching, prompts, filesystem monitors, and the untracked
+cache; synthetic Git mutations belong in a scratch repository, never the real
+`.git`. Runtime-matrix stages redirect their package library, temp, cache, and
+runtime state to the attempt-private writable mount only after authenticating
+the coordinator's prefix receipt handoff. Pinned source archives remain
+read-only and are inspected below process-private temporary state.
+
+Child output and GNU-timeout diagnostics must use separate descriptors.
+Deadline evidence accepts the exact full-path or basename diagnostic emitted
+by supported GNU coreutils versions, and classifies status 124/137 as a
+timeout only with the matching singleton TERM/KILL evidence; unknown,
+duplicate, or impossible supervisor output fails closed. Plans bind and
+reauthenticate the timeout, wrapper, shell, and worker bytes before launch and
+after each batch. Reverse-worker process-group cleanup treats a group as
+quiescent only when `kill -0` finds it and a successful procps snapshot proves
+that every remaining member is a zombie. This permits completion under a
+non-reaping container PID 1 without weakening cleanup for any executable
+descendant.
+
 Exact-key semantic cache hits below `.local/verify` accelerate development.
 They are never release-evidence transfers: release profiles disable generic
 result reuse/publication and retain the existing source-bound gate receipts.
@@ -1690,10 +1892,13 @@ Run release gates against one clean immutable full ref, broadly in this order:
 
 1. strict GCC/Clang C99, registered-routine/probe audit, ASan/UBSan, complete
    package suite, and clean `R CMD check --as-cran`;
-2. actual R 3.6.3, 4.0.5, 4.3.3, 4.5.2, and development R plus compilation against
-   pinned R 3.6.0 and later headers and
-   exact stored-binding/promise
-   `environment/r-api-exceptions.tsv`/raw-token/version-gated DSO audit;
+2. actual R 3.6.3, 4.0.5, 4.3.3, 4.5.2, and development R plus compilation
+   against all seven pinned R 3.6.0--4.6.1 header axes; the exact
+   raw-attribute/hot-closure-formals/stored-binding/promise exception ledger,
+   raw-token/version-gated DSO audit, and option-access symbol policy; the
+   authenticated R 3.6 complete-test closure and separate exact declared-floor
+   smoke with `R_DEFAULT_PACKAGES` isolated; and the full-only sealed
+   R 4.0.5-to-R 3.6.3 serialization handoff;
 3. upstream differential with reviewed intentional Paradox-2 deltas;
 4. all exact reviewed downstream bridge heads, then priority-zero/one reverse
    and GitHub consumers and documentation workloads;
@@ -1701,7 +1906,8 @@ Run release gates against one clean immutable full ref, broadly in this order:
    direct coverage of every registered routine/hazard family;
 6. examples, vignettes, manuals, pkgdown/book/gallery/website and legacy
    upgrade workloads;
-7. Windows x86-64 and real macOS Apple-silicon ARM64 CI for the exact ref;
+7. current Windows x86-64, exact Windows x86-64 R 3.6.3/Rtools35, and real
+   macOS Apple-silicon ARM64 CI for the exact ref;
 8. paired release benchmarks on an otherwise idle host.
 
 Primary retained drivers include `scripts/native-check`,
@@ -1713,13 +1919,24 @@ after cheaper package/bridge gates are green.
 
 Never accept a green GitHub matrix label as portability evidence by itself.
 Each platform row must reject a nonzero `rcmdcheck` child status and require one
-sole final `Status: OK`; an always-run completion job must then reject the
-complete matrix aggregate unless it is exactly `success`. The offline verifier
-independently requires three successful REST jobs (macOS ARM64, Windows x86-64,
-and completion), both exact platform artifacts, their check logs, and frozen
-candidate provenance. A release-only direct-child companion changes only the
-workflow to pin and check out the immutable candidate and to reduce the matrix;
-it must retain both completion layers.
+sole final `Status: OK`, except for the separate R 3.6.3/Rtools35 row. R 3.6's
+`_R_CHECK_DEPENDS_ONLY_` does not suppress its dependency-inventory NOTE, so
+that runtime-import-only row instead requires child exit zero, exactly one
+missing-Suggests NOTE naming the complete expected nine-package set, no other
+NOTE/WARNING/ERROR/halt, and one sole final `Status: 1 NOTE`. Current Windows
+and macOS retain exact `Status: OK`. An always-run completion job must then
+reject the complete matrix aggregate unless it is exactly `success`. The offline verifier
+independently requires four successful REST jobs (macOS ARM64, current Windows
+x86-64, exact R 3.6.3/Rtools35 Windows x86-64, and completion), all three exact
+platform artifacts, their check logs, and frozen candidate provenance. A
+release-only direct-child companion changes only the workflow to pin and check
+out the immutable candidate and to reduce the ordinary matrix; it must retain
+the separate old-Windows job and both completion layers.
+Create that workflow with
+`scripts/environment/render-portability-release-workflow.R`, never by a
+one-job hand edit: the renderer pins both checkouts credential-free, inserts
+both exact commit assertions, and runs the release structural validator before
+publishing an absent output path.
 
 Profile representative constructor, `check`/`check_dt`/`check_dependencies`,
 `has_deps`, values, domains/params/dependencies, subset/collection, live Shadow

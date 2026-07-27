@@ -30,6 +30,7 @@ Required options:
   --active-group-file FILE
   --lock-timeout-seconds N
   --command-timeout-seconds N
+  --curl7-receipt-helper FILE
 
 The command verifies or creates a repository-local content-addressed cache
 entry and atomically copies its authenticated header tree into OUTPUT.
@@ -50,6 +51,15 @@ sha256_stream() {
   else
     shasum -a 256 | cut -d ' ' -f 1
   fi
+}
+
+exact_tsv_value() {
+  local file=$1 field=$2 value count
+  value=$(awk -F '\t' -v field="$field" '$1 == field {print $2}' "$file")
+  count=$(awk -F '\t' -v field="$field" \
+    '$1 == field {count++} END {print count + 0}' "$file")
+  [[ "$count" -eq 1 ]] || return 1
+  printf '%s\n' "$value"
 }
 
 resolve_plain_executable() {
@@ -86,6 +96,57 @@ tool_fingerprint() {
     printf 'sha256=%s\n' "$(sha256_value "$executable")"
     printf 'identity=%s\n' "$(tool_identity_sha256 "$executable")"
   } | sha256_stream
+}
+
+select_configure_compatibility() {
+  local version=$1
+  CONFIGURE_COMPATIBILITY_MODE=none
+  CONFIGURE_CFLAGS_SUFFIX=
+  CURL_PREFLIGHT_REQUIRED=false
+  CURL_PREFLIGHT_MINIMUM_HEX=none
+  case "$version" in
+    3.6.0)
+      # Two upstream configure probes omit declarations that contemporary C
+      # compilers diagnose as errors.  Demote only that diagnostic so the
+      # original bzip2 and HTTPS compile/run probes still execute.
+      CONFIGURE_COMPATIBILITY_MODE=legacy-implicit-declarations-locked-curl7
+      CONFIGURE_CFLAGS_SUFFIX=-Wno-error=implicit-function-declaration
+      CURL_PREFLIGHT_REQUIRED=true
+      CURL_PREFLIGHT_MINIMUM_HEX=071600
+      ;;
+    4.0.0)
+      CONFIGURE_COMPATIBILITY_MODE=legacy-implicit-declarations-locked-curl7
+      CONFIGURE_CFLAGS_SUFFIX=-Wno-error=implicit-function-declaration
+      CURL_PREFLIGHT_REQUIRED=true
+      CURL_PREFLIGHT_MINIMUM_HEX=071c00
+      ;;
+    4.2.0)
+      CONFIGURE_COMPATIBILITY_MODE=locked-curl7
+      CURL_PREFLIGHT_REQUIRED=true
+      CURL_PREFLIGHT_MINIMUM_HEX=071c00
+      ;;
+  esac
+}
+
+validate_curl_preflight_output() {
+  local file=$1 minimum_hex=$2 header_hex runtime_hex
+  local -a lines
+  [[ -f "$file" && ! -L "$file" &&
+     "$minimum_hex" =~ ^[0-9a-f]{6}$ &&
+     "$(wc -l < "$file")" -eq 3 ]] || return 1
+  mapfile -t lines < "$file"
+  [[ "${#lines[@]}" -eq 3 &&
+     "${lines[0]}" =~ ^header_version_hex=([0-9a-f]{6})$ ]] || return 1
+  header_hex=${BASH_REMATCH[1]}
+  [[ "${lines[1]}" =~ ^runtime_version_hex=([0-9a-f]{6})$ ]] || return 1
+  runtime_hex=${BASH_REMATCH[1]}
+  [[ "${lines[2]}" == https=true &&
+     "$header_hex" == "$runtime_hex" &&
+     "$header_hex" == 07???? ]] || return 1
+  ((16#$header_hex >= 16#$minimum_hex)) || return 1
+  CURL_PREFLIGHT_HEADER_VERSION_HEX=$header_hex
+  CURL_PREFLIGHT_RUNTIME_VERSION_HEX=$runtime_hex
+  CURL_PREFLIGHT_HTTPS=true
 }
 
 normalize_absolute_path() {
@@ -173,7 +234,7 @@ resolve_inventory_command() {
 probe_inventory_identity() {
   local name=$1 executable=$2 output status=0
   case "$name" in
-    R|Rscript|ar|as|awk|bash|bison|c++|cc|clang|cpp|env|g++|gcc|\
+    R|Rscript|ar|as|awk|bash|bison|c++|cc|clang|cpp|curl-config|env|g++|gcc|\
     gfortran|grep|ld|m4|make|makeinfo|nm|objcopy|objdump|perl|\
     pkg-config|python|python3|ranlib|readelf|sed|strip|tar|\
     x86_64-conda-linux-gnu-ar|x86_64-conda-linux-gnu-as|\
@@ -565,12 +626,16 @@ terminate_active_record() {
 
 run_supervised_group() {
   local timeout_seconds=$1 label=$2 status=0 sleeper marker_new
+  local watchdog_sleeper attempt
   local identity_new release_new attempt pgrp session start
   shift 2
   GROUP_TIMEOUT_MARKER=$(mktemp "$LOCAL_TMP/r-api-header-timeout.XXXXXX")
   rm -f -- "$GROUP_TIMEOUT_MARKER"
   ACTIVE_GROUP_RELEASE=$(mktemp "$LOCAL_TMP/r-api-header-release.XXXXXX")
   rm -f -- "$ACTIVE_GROUP_RELEASE"
+  GROUP_WATCHDOG_SLEEPER_FILE=$(mktemp \
+    "$LOCAL_TMP/r-api-header-watchdog-sleeper.XXXXXX")
+  rm -f -- "$GROUP_WATCHDOG_SLEEPER_FILE"
   # The session leader waits for a private release token.  Configure/make can
   # therefore never begin before the parent has published the active PID and
   # its Linux process-start identity.  If the parent disappears in that narrow
@@ -654,6 +719,7 @@ run_supervised_group() {
     trap stop_watchdog HUP INT TERM
     sleep "$timeout_seconds" &
     sleeper=$!
+    printf '%s\n' "$sleeper" > "$GROUP_WATCHDOG_SLEEPER_FILE"
     wait "$sleeper" || exit 0
     trap - HUP INT TERM
     marker_new=$(mktemp "${GROUP_TIMEOUT_MARKER}.new.XXXXXX")
@@ -675,10 +741,29 @@ run_supervised_group() {
     # escalation finish even if TERM already removed the group leader.
     wait "$GROUP_WATCHDOG_PID" 2>/dev/null || true
   else
+    watchdog_sleeper=
+    for ((attempt = 0; attempt < 20; ++attempt)); do
+      if [[ -f "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+          ! -L "$GROUP_WATCHDOG_SLEEPER_FILE" ]] &&
+          IFS= read -r watchdog_sleeper \
+            < "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+          [[ "$watchdog_sleeper" =~ ^[1-9][0-9]*$ ]]; then
+        break
+      fi
+      watchdog_sleeper=
+      sleep 0.01
+    done
+    # Interrupt the child that the watchdog is synchronously waiting for.
+    # Signalling only the shell can otherwise be deferred by Bash until the
+    # full sleep expires when several helpers finish at the same instant.
+    [[ -n "$watchdog_sleeper" ]] &&
+      kill "$watchdog_sleeper" 2>/dev/null || true
     kill "$GROUP_WATCHDOG_PID" 2>/dev/null || true
     wait "$GROUP_WATCHDOG_PID" 2>/dev/null || true
   fi
   GROUP_WATCHDOG_PID=
+  rm -f -- "$GROUP_WATCHDOG_SLEEPER_FILE"
+  GROUP_WATCHDOG_SLEEPER_FILE=
   terminate_process_group "$ACTIVE_GROUP" "$ACTIVE_GROUP_START" 0 false
   wait "$ACTIVE_GROUP" 2>/dev/null || true
   ACTIVE_GROUP=
@@ -776,6 +861,7 @@ if [[ "${1:-}" == self-test ]]; then
   ACTIVE_GROUP_NONCE=
   ACTIVE_GROUP_RELEASE=
   GROUP_WATCHDOG_PID=
+  GROUP_WATCHDOG_SLEEPER_FILE=
   ACTIVE_GROUP_FILE="$SELF_TEST_ROOT/active-group"
   TERMINATION_GRACE_TENTHS=5
   pid_file="$SELF_TEST_ROOT/timeout-pids"
@@ -802,6 +888,17 @@ if [[ "${1:-}" == self-test ]]; then
   [[ ! -e "$ACTIVE_GROUP_FILE" &&
      ! -e "${ACTIVE_GROUP_FILE}.identity" ]] ||
     fail "synthetic deadline retained active-group state"
+
+  graceful_started=$SECONDS
+  run_supervised_group 5 synthetic-fast-completion \
+    "$BASH_EXECUTABLE" -c 'exit 0' ||
+    fail "synthetic fast command did not complete successfully"
+  ((SECONDS - graceful_started <= 2)) ||
+    fail "fast supervised command waited for its watchdog deadline"
+  [[ ! -e "$ACTIVE_GROUP_FILE" &&
+     ! -e "${ACTIVE_GROUP_FILE}.identity" &&
+     -z "$GROUP_WATCHDOG_SLEEPER_FILE" ]] ||
+    fail "fast supervised command retained watchdog/process state"
 
   # An incorrect Linux start identity must never signal a live session group.
   "$SETSID" --wait -- "$BASH_EXECUTABLE" -c 'exec sleep 30' &
@@ -1017,6 +1114,83 @@ if [[ "${1:-}" == self-test ]]; then
       "$SELF_TEST_ROOT/tools" unsafe-link; then
     fail "unsafe symbolic command resolution was accepted"
   fi
+
+  select_configure_compatibility 3.6.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == \
+       legacy-implicit-declarations-locked-curl7 &&
+     "$CONFIGURE_CFLAGS_SUFFIX" == \
+       -Wno-error=implicit-function-declaration &&
+     "$CURL_PREFLIGHT_REQUIRED" == true &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == 071600 ]] ||
+    fail "R 3.6 configure-compatibility selection changed"
+  select_configure_compatibility 4.0.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == \
+       legacy-implicit-declarations-locked-curl7 &&
+     "$CONFIGURE_CFLAGS_SUFFIX" == \
+       -Wno-error=implicit-function-declaration &&
+     "$CURL_PREFLIGHT_REQUIRED" == true &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == 071c00 ]] ||
+    fail "R 4.0 configure-compatibility selection changed"
+  select_configure_compatibility 4.2.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == locked-curl7 &&
+     -z "$CONFIGURE_CFLAGS_SUFFIX" &&
+     "$CURL_PREFLIGHT_REQUIRED" == true &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == 071c00 ]] ||
+    fail "R 4.2 configure-compatibility selection changed"
+  select_configure_compatibility 4.3.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == none &&
+     -z "$CONFIGURE_CFLAGS_SUFFIX" &&
+     "$CURL_PREFLIGHT_REQUIRED" == false &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == none ]] ||
+    fail "modern R configure-compatibility selection changed"
+
+  curl_fixture="$SELF_TEST_ROOT/curl-preflight.txt"
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075600 \
+    https=true > "$curl_fixture"
+  validate_curl_preflight_output "$curl_fixture" 071c00 ||
+    fail "valid synthetic libcurl proof was rejected"
+  [[ "$CURL_PREFLIGHT_HEADER_VERSION_HEX" == 075600 &&
+     "$CURL_PREFLIGHT_RUNTIME_VERSION_HEX" == 075600 &&
+     "$CURL_PREFLIGHT_HTTPS" == true ]] ||
+    fail "valid synthetic libcurl proof was parsed incorrectly"
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075500 \
+    https=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "mismatched libcurl header/runtime proof was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=081500 \
+    runtime_version_hex=081500 \
+    https=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "non-major-7 libcurl proof was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=071500 \
+    runtime_version_hex=071500 \
+    https=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "insufficient libcurl proof was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075600 \
+    https=false > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "libcurl proof without HTTPS was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075600 \
+    https=true \
+    unexpected=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "libcurl proof with extra output was accepted"
+  fi
   printf '%s\n' \
     'r_api_header_cache_self_test=passed' \
     'timeout_status=124' \
@@ -1026,7 +1200,10 @@ if [[ "${1:-}" == self-test ]]; then
     'terminate_active_interface=passed' \
     'builder_recipe_invalidation=passed' \
     'tool_inventory_invalidation=passed' \
-    'shell_identity_invalidation=passed'
+    'shell_identity_invalidation=passed' \
+    'fast_watchdog_cancellation=passed' \
+    'configure_compatibility_selection=passed' \
+    'curl_preflight_validation=passed'
   exit 0
 fi
 
@@ -1048,6 +1225,7 @@ SETSID=
 ACTIVE_GROUP_FILE=
 LOCK_TIMEOUT_SECONDS=
 COMMAND_TIMEOUT_SECONDS=
+CURL7_RECEIPT_HELPER=
 while (($#)); do
   case "$1" in
     --root) ROOT=${2:-}; shift 2 ;;
@@ -1062,6 +1240,7 @@ while (($#)); do
     --active-group-file) ACTIVE_GROUP_FILE=${2:-}; shift 2 ;;
     --lock-timeout-seconds) LOCK_TIMEOUT_SECONDS=${2:-}; shift 2 ;;
     --command-timeout-seconds) COMMAND_TIMEOUT_SECONDS=${2:-}; shift 2 ;;
+    --curl7-receipt-helper) CURL7_RECEIPT_HELPER=${2:-}; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
@@ -1090,6 +1269,56 @@ ROOT=$(cd "$ROOT" && pwd -P)
   fail "authenticated process-group supervision requires Linux /proc start identities"
 OWNER_START_TICKS=$(linux_start_ticks "$$") ||
   fail "could not authenticate the helper's Linux owner identity"
+
+CURL7_PREFIX="$ROOT/.local/runtime-matrix/prefixes/R-3.6.3"
+CURL7_RECEIPT_DIRECTORY="$ROOT/.local/runtime-matrix/receipts/R-3.6.3"
+CURL7_MANIFEST="$CURL7_RECEIPT_DIRECTORY/prefix.manifest.tsv"
+CURL7_RECEIPT="$CURL7_RECEIPT_DIRECTORY/receipt.tsv"
+CURL7_SEAL="$CURL7_RECEIPT_DIRECTORY/receipt.sha256"
+CURL7_LOCK="$ROOT/environment/runtime-r-3.6.3-linux-64.lock"
+select_configure_compatibility "$VERSION"
+CURL7_MANIFEST_SHA256=not-required
+CURL7_RECEIPT_SHA256=not-required
+CURL7_SEAL_SHA256=not-required
+CURL7_LOCK_SHA256=not-required
+CURL7_RECEIPT_HELPER_SHA256=not-required
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  [[ "$CURL7_RECEIPT_HELPER" == \
+       "$ROOT/.local/checks/"*/metadata/runtime-matrix-prefix-receipt &&
+     -f "$CURL7_RECEIPT_HELPER" && -x "$CURL7_RECEIPT_HELPER" &&
+     ! -L "$CURL7_RECEIPT_HELPER" ]] ||
+    fail "--curl7-receipt-helper must name the plain retained helper"
+  [[ -f "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" &&
+     ! -L "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" &&
+     "$(sha256_value "$CURL7_RECEIPT_HELPER")" == \
+       "$(sha256_value \
+          "$ROOT/scripts/environment/runtime-matrix-prefix-receipt")" ]] ||
+    fail "retained libcurl7 receipt helper differs from current source"
+  for curl7_input in "$CURL7_MANIFEST" "$CURL7_RECEIPT" "$CURL7_SEAL" \
+      "$CURL7_LOCK"; do
+    [[ -f "$curl7_input" && ! -L "$curl7_input" ]] ||
+      fail "authenticated libcurl7 input is absent or symbolic: $curl7_input"
+  done
+  [[ -d "$CURL7_PREFIX" && ! -L "$CURL7_PREFIX" ]] ||
+    fail "authenticated R 3.6 runtime prefix is absent; run scripts/bootstrap-runtime-matrix"
+  curl7_receipt_sha=$(sha256_value "$CURL7_RECEIPT")
+  [[ "$(wc -l < "$CURL7_SEAL")" -eq 1 &&
+     "$(cat "$CURL7_SEAL")" == "$curl7_receipt_sha  receipt.tsv" &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" prefix_relative)" == \
+       .local/runtime-matrix/prefixes/R-3.6.3 &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" lock_relative)" == \
+       environment/runtime-r-3.6.3-linux-64.lock &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" lock_sha256)" == \
+       "$(sha256_value "$CURL7_LOCK")" &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" prefix_manifest_sha256)" == \
+       "$(sha256_value "$CURL7_MANIFEST")" ]] ||
+    fail "libcurl7 prefix receipt is malformed or detached from its lock"
+  CURL7_MANIFEST_SHA256=$(sha256_value "$CURL7_MANIFEST")
+  CURL7_RECEIPT_SHA256=$(sha256_value "$CURL7_RECEIPT")
+  CURL7_SEAL_SHA256=$(sha256_value "$CURL7_SEAL")
+  CURL7_LOCK_SHA256=$(sha256_value "$CURL7_LOCK")
+  CURL7_RECEIPT_HELPER_SHA256=$(sha256_value "$CURL7_RECEIPT_HELPER")
+fi
 
 TOOLCHAIN="$ROOT/.local/toolchain"
 CONFIGURE_PATH="$TOOLCHAIN/bin:/usr/bin"
@@ -1133,6 +1362,8 @@ STRIP_EXECUTABLE=$(resolve_plain_executable \
   fail "STRIP does not resolve to a plain executable on the configure path"
 PKG_CONFIG_EXECUTABLE=$(resolve_plain_executable pkg-config "$CONFIGURE_PATH") ||
   fail "pkg-config does not resolve to a plain executable on the configure path"
+CURL_CONFIG_EXECUTABLE=$(resolve_plain_executable curl-config "$CONFIGURE_PATH") ||
+  fail "curl-config does not resolve to a plain executable on the configure path"
 ENV_EXECUTABLE=$(resolve_plain_executable env "$CONFIGURE_PATH") ||
   fail "env does not resolve to a plain executable on the configure path"
 SETSID=$(resolve_plain_executable "$SETSID" "$CONFIGURE_PATH") ||
@@ -1140,7 +1371,7 @@ SETSID=$(resolve_plain_executable "$SETSID" "$CONFIGURE_PATH") ||
 FLOCK=$(resolve_plain_executable flock "$CONFIGURE_PATH") ||
   fail "flock does not resolve to a plain executable on the configure path"
 ARCHIVE="$ROOT/.cache/downloads/R-${VERSION}.tar.gz"
-CACHE_SCHEMA=3
+CACHE_SCHEMA=4
 CACHE_ROOT="$ROOT/.cache/r-api-headers/schema-${CACHE_SCHEMA}"
 ENTRIES_ROOT="$CACHE_ROOT/entries"
 LOCKS_ROOT="$CACHE_ROOT/locks"
@@ -1152,7 +1383,8 @@ for executable in "$RSCRIPT" "$GCC" "$GFORTRAN" "$MAKE" \
     "$BASH_EXECUTABLE" "$CPP_EXECUTABLE" "$CXX_EXECUTABLE" \
     "$AR_EXECUTABLE" "$AS_EXECUTABLE" "$LD_EXECUTABLE" \
     "$NM_EXECUTABLE" "$RANLIB_EXECUTABLE" "$STRIP_EXECUTABLE" \
-    "$PKG_CONFIG_EXECUTABLE" "$ENV_EXECUTABLE" "$SETSID" "$FLOCK"; do
+    "$PKG_CONFIG_EXECUTABLE" "$CURL_CONFIG_EXECUTABLE" \
+    "$ENV_EXECUTABLE" "$SETSID" "$FLOCK"; do
   [[ -x "$executable" && ! -L "$executable" ]] ||
     fail "toolchain executable is absent or symbolic: $executable"
 done
@@ -1244,6 +1476,26 @@ PKG_CONFIG_LIBDIR_VALUE=${PKG_CONFIG_LIBDIR:-"$TOOLCHAIN/lib/pkgconfig:$TOOLCHAI
 PKG_CONFIG_PATH_VALUE=${PKG_CONFIG_PATH:-"$PKG_CONFIG_LIBDIR_VALUE"}
 CONFIG_SHELL_VALUE="$BASH_EXECUTABLE"
 SHELL_VALUE="$BASH_EXECUTABLE"
+select_configure_compatibility "$VERSION"
+if [[ -n "$CONFIGURE_CFLAGS_SUFFIX" ]]; then
+  CFLAGS_VALUE+=" $CONFIGURE_CFLAGS_SUFFIX"
+fi
+CONFIGURE_CURL_ENVIRONMENT=()
+LD_LIBRARY_PATH_VALUE=not-set
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  CURL_CONFIG_EXECUTABLE=$(resolve_plain_executable \
+    "$CURL7_PREFIX/bin/curl-config" "$CONFIGURE_PATH") ||
+    fail "locked libcurl7 curl-config is absent, symbolic, or non-executable"
+  LDFLAGS_VALUE="-L$CURL7_PREFIX/lib -Wl,-rpath,$CURL7_PREFIX/lib $LDFLAGS_VALUE"
+  LD_LIBRARY_PATH_VALUE="$CURL7_PREFIX/lib"
+  CONFIGURE_CURL_ENVIRONMENT+=(
+    "CURL_CONFIG=$CURL_CONFIG_EXECUTABLE"
+    "LD_LIBRARY_PATH=$LD_LIBRARY_PATH_VALUE"
+  )
+else
+  CONFIGURE_CURL_ENVIRONMENT+=("CURL_CONFIG=$CURL_CONFIG_EXECUTABLE")
+fi
+CURL_CONFIG_SELECTED_SHA256=$(sha256_value "$CURL_CONFIG_EXECUTABLE")
 
 # This reviewed inventory covers the helper itself, Autoconf probes used by
 # the four pinned R releases, and commands reachable from generated include
@@ -1252,7 +1504,8 @@ SHELL_VALUE="$BASH_EXECUTABLE"
 # regular executable below the reviewed toolchain or system roots.
 CONFIGURE_TOOL_NAMES=(
   R Rscript '[' aclocal ar as autoconf automake awk basename bash bison
-  bunzip2 bzcat bzip2 c++ cat cc chmod clang cmp comm cp cpp curl cut date
+  bunzip2 bzcat bzip2 c++ cat cc chmod clang cmp comm cp cpp curl curl-config
+  cut date
   diff dirname dvipdfm echo egrep env expr f77 f90 f95 false fc fc-list fgrep
   file find flang flex flock fort77 ftn g++ g77 gawk gcc getconf gfortran grep
   groff gzip head hostname iconv id ifort install jar java javac javadoc javah
@@ -1290,6 +1543,7 @@ STAGING=
 RUN_STAGING=
 RUN_HEADERS_RECEIPT=
 EVIDENCE_STAGING=
+CURL_PREFLIGHT_ROOT=
 ACTIVE_GROUP=
 ACTIVE_GROUP_NEW=
 ACTIVE_GROUP_START=
@@ -1299,12 +1553,19 @@ ACTIVE_GROUP_IDENTITY_SHA256=
 ACTIVE_GROUP_NONCE=
 ACTIVE_GROUP_RELEASE=
 GROUP_WATCHDOG_PID=
+GROUP_WATCHDOG_SLEEPER_FILE=
 GROUP_TIMEOUT_MARKER=
 TERMINATION_GRACE_TENTHS=20
 cleanup() {
-  local status=$?
+  local status=$? cleanup_sleeper
   trap - 0 HUP INT TERM
   if [[ -n "$GROUP_WATCHDOG_PID" ]]; then
+    if [[ -f "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+        ! -L "$GROUP_WATCHDOG_SLEEPER_FILE" ]] &&
+        IFS= read -r cleanup_sleeper < "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+        [[ "$cleanup_sleeper" =~ ^[1-9][0-9]*$ ]]; then
+      kill "$cleanup_sleeper" 2>/dev/null || true
+    fi
     kill "$GROUP_WATCHDOG_PID" 2>/dev/null || true
     wait "$GROUP_WATCHDOG_PID" 2>/dev/null || true
   fi
@@ -1313,7 +1574,7 @@ cleanup() {
       "$TERMINATION_GRACE_TENTHS" true
     wait "$ACTIVE_GROUP" 2>/dev/null || true
   fi
-  for disposable in "$STAGING" "$RUN_STAGING"; do
+  for disposable in "$STAGING" "$RUN_STAGING" "$CURL_PREFLIGHT_ROOT"; do
     [[ -n "$disposable" && -e "$disposable" && ! -L "$disposable" ]] || continue
     chmod -R u+w "$disposable" 2>/dev/null || true
     rm -rf -- "$disposable"
@@ -1321,7 +1582,7 @@ cleanup() {
   remove_owned_active_records
   rm -f -- "$INPUT_RECEIPT" "$TOOL_INVENTORY" "$RUN_HEADERS_RECEIPT" \
     "$EVIDENCE_STAGING" "$ACTIVE_GROUP_NEW" "$ACTIVE_GROUP_RELEASE" \
-    "$GROUP_TIMEOUT_MARKER"
+    "$GROUP_TIMEOUT_MARKER" "$GROUP_WATCHDOG_SLEEPER_FILE"
   exit "$status"
 }
 trap cleanup 0
@@ -1337,6 +1598,99 @@ emit_tool_receipt() {
     "$(tool_identity_sha256 "$executable")"
 }
 
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  "$CURL7_RECEIPT_HELPER" verify "$CURL7_PREFIX" "$CURL7_MANIFEST" \
+    > "$LOG_DIRECTORY/curl7-prefix-initial-verify-R-${VERSION}.log" 2>&1 ||
+    fail "R $VERSION locked libcurl7 prefix failed complete authentication"
+fi
+
+CURL_PREFLIGHT_ROOT=$(mktemp -d "$LOCAL_TMP/r-api-curl-preflight.XXXXXX")
+CURL_PREFLIGHT_OUTPUT_FILE="$CURL_PREFLIGHT_ROOT/output.txt"
+CURL_PREFLIGHT_SOURCE_SHA256=not-required
+CURL_PREFLIGHT_HEADER_VERSION_HEX=not-required
+CURL_PREFLIGHT_RUNTIME_VERSION_HEX=not-required
+CURL_PREFLIGHT_HTTPS=not-required
+CURL_CONFIG_CFLAGS_VALUE=not-required
+CURL_CONFIG_LIBS_VALUE=not-required
+CURL_PREFLIGHT_COMPILE_POLICY=not-required
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  CURL_PREFLIGHT_SOURCE_FILE="$CURL_PREFLIGHT_ROOT/probe.c"
+  CURL_PREFLIGHT_BINARY="$CURL_PREFLIGHT_ROOT/probe"
+  {
+    printf '%s\n' \
+      '#include <curl/curl.h>' \
+      '#include <stdio.h>' \
+      '#include <string.h>' \
+      '' \
+      'int main(void) {' \
+      '  const curl_version_info_data *info = curl_version_info(CURLVERSION_NOW);' \
+      '  const char *const *protocol;' \
+      '  int have_https = 0;' \
+      '  if (info == NULL) return 10;' \
+      '  if (LIBCURL_VERSION_MAJOR != 7) return 11;' \
+      '  if ((unsigned long) LIBCURL_VERSION_NUM < PARADOX_CURL_MINIMUM) return 12;' \
+      '  if ((unsigned long) info->version_num != (unsigned long) LIBCURL_VERSION_NUM) return 13;' \
+      '  for (protocol = info->protocols; protocol != NULL && *protocol != NULL; ++protocol) {' \
+      '    if (strcmp(*protocol, "https") == 0) {' \
+      '      have_https = 1;' \
+      '      break;' \
+      '    }' \
+      '  }' \
+      '  if (!have_https) return 14;' \
+      '  printf("header_version_hex=%06lx\n", (unsigned long) LIBCURL_VERSION_NUM);' \
+      '  printf("runtime_version_hex=%06lx\n", (unsigned long) info->version_num);' \
+      '  printf("https=true\n");' \
+      '  return 0;' \
+      '}'
+  } > "$CURL_PREFLIGHT_SOURCE_FILE"
+  CURL_PREFLIGHT_SOURCE_SHA256=$(sha256_value "$CURL_PREFLIGHT_SOURCE_FILE")
+  CURL_CONFIG_CFLAGS_VALUE=$(LC_ALL=C \
+    "$CURL_CONFIG_EXECUTABLE" --cflags)
+  CURL_CONFIG_LIBS_VALUE=$(LC_ALL=C "$CURL_CONFIG_EXECUTABLE" --libs)
+  for flag_value in "$CPPFLAGS_VALUE" "$LDFLAGS_VALUE" \
+      "$CURL_CONFIG_CFLAGS_VALUE" "$CURL_CONFIG_LIBS_VALUE"; do
+    [[ "$flag_value" != *$'\t'* && "$flag_value" != *$'\r'* &&
+       "$flag_value" != *$'\n'* ]] ||
+      fail "libcurl preflight received flags with unsupported control bytes"
+  done
+  curl_cppflags=()
+  curl_ldflags=()
+  curl_config_cflags=()
+  curl_config_libs=()
+  read -r -a curl_cppflags <<< "$CPPFLAGS_VALUE"
+  read -r -a curl_ldflags <<< "$LDFLAGS_VALUE"
+  read -r -a curl_config_cflags <<< "$CURL_CONFIG_CFLAGS_VALUE"
+  read -r -a curl_config_libs <<< "$CURL_CONFIG_LIBS_VALUE"
+  CURL_PREFLIGHT_COMPILE_POLICY=gnu-c99-wall-wextra-werror-locked-curl7-v1
+  if ! run_supervised_group "$COMMAND_TIMEOUT_SECONDS" \
+      "libcurl compile proof R $VERSION" \
+      "$ENV_EXECUTABLE" -i PATH="$CONFIGURE_PATH" LC_ALL=C LANG=C TZ=UTC \
+      "$GCC" -std=gnu99 -O2 -g -Wall -Wextra -Werror \
+      "${curl_cppflags[@]}" "${curl_config_cflags[@]}" \
+      "-DPARADOX_CURL_MINIMUM=0x$CURL_PREFLIGHT_MINIMUM_HEX" \
+      "$CURL_PREFLIGHT_SOURCE_FILE" \
+      "${curl_ldflags[@]}" "${curl_config_libs[@]}" \
+      -o "$CURL_PREFLIGHT_BINARY" \
+      > "$LOG_DIRECTORY/curl-preflight-compile-R-${VERSION}.log" 2>&1; then
+    fail "R $VERSION could not compile/link its authenticated libcurl proof"
+  fi
+  if ! run_supervised_group "$COMMAND_TIMEOUT_SECONDS" \
+      "libcurl runtime proof R $VERSION" \
+      "$ENV_EXECUTABLE" -i PATH="$CONFIGURE_PATH" LC_ALL=C LANG=C TZ=UTC \
+      LD_LIBRARY_PATH="$LD_LIBRARY_PATH_VALUE" \
+      "$CURL_PREFLIGHT_BINARY" \
+      > "$CURL_PREFLIGHT_OUTPUT_FILE" \
+      2> "$LOG_DIRECTORY/curl-preflight-run-R-${VERSION}.log"; then
+    fail "R $VERSION libcurl proof failed at runtime"
+  fi
+  validate_curl_preflight_output "$CURL_PREFLIGHT_OUTPUT_FILE" \
+    "$CURL_PREFLIGHT_MINIMUM_HEX" ||
+    fail "R $VERSION libcurl proof returned malformed or insufficient evidence"
+else
+  printf 'status=not-required\n' > "$CURL_PREFLIGHT_OUTPUT_FILE"
+fi
+CURL_PREFLIGHT_OUTPUT_SHA256=$(sha256_value "$CURL_PREFLIGHT_OUTPUT_FILE")
+
 {
   printf 'field\tvalue\n'
   receipt_row cache_schema "$CACHE_SCHEMA"
@@ -1349,6 +1703,35 @@ emit_tool_receipt() {
   receipt_row process_identity_policy linux-proc-starttime-group-members-v1
   receipt_row version "$VERSION"
   receipt_row archive_sha256 "$ARCHIVE_SHA256"
+  receipt_row configure_compatibility_mode "$CONFIGURE_COMPATIBILITY_MODE"
+  receipt_row configure_cache_override_count 0
+  if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+    receipt_row curl7_prefix_relative \
+      .local/runtime-matrix/prefixes/R-3.6.3
+  else
+    receipt_row curl7_prefix_relative not-required
+  fi
+  receipt_row curl7_manifest_sha256 "$CURL7_MANIFEST_SHA256"
+  receipt_row curl7_receipt_sha256 "$CURL7_RECEIPT_SHA256"
+  receipt_row curl7_seal_sha256 "$CURL7_SEAL_SHA256"
+  receipt_row curl7_lock_sha256 "$CURL7_LOCK_SHA256"
+  receipt_row curl7_receipt_helper_sha256 \
+    "$CURL7_RECEIPT_HELPER_SHA256"
+  receipt_row curl_preflight_required "$CURL_PREFLIGHT_REQUIRED"
+  receipt_row curl_preflight_minimum_hex "$CURL_PREFLIGHT_MINIMUM_HEX"
+  receipt_row curl_preflight_source_sha256 \
+    "$CURL_PREFLIGHT_SOURCE_SHA256"
+  receipt_row curl_preflight_output_sha256 \
+    "$CURL_PREFLIGHT_OUTPUT_SHA256"
+  receipt_row curl_preflight_header_version_hex \
+    "$CURL_PREFLIGHT_HEADER_VERSION_HEX"
+  receipt_row curl_preflight_runtime_version_hex \
+    "$CURL_PREFLIGHT_RUNTIME_VERSION_HEX"
+  receipt_row curl_preflight_https "$CURL_PREFLIGHT_HTTPS"
+  receipt_row curl_preflight_compile_policy \
+    "$CURL_PREFLIGHT_COMPILE_POLICY"
+  receipt_row curl_config_cflags "$CURL_CONFIG_CFLAGS_VALUE"
+  receipt_row curl_config_libs "$CURL_CONFIG_LIBS_VALUE"
   receipt_row configure_arg_01 "--prefix=$CONFIGURE_PREFIX"
   receipt_row configure_arg_02 --without-x
   receipt_row configure_arg_03 --without-recommended-packages
@@ -1383,6 +1766,8 @@ emit_tool_receipt() {
   receipt_row env_as "$AS_VALUE"
   receipt_row env_ld "$LD_VALUE"
   receipt_row env_ldflags "$LDFLAGS_VALUE"
+  receipt_row env_curl_config "$CURL_CONFIG_EXECUTABLE"
+  receipt_row env_ld_library_path "$LD_LIBRARY_PATH_VALUE"
   receipt_row env_nm "$NM_VALUE"
   receipt_row env_ranlib "$RANLIB_VALUE"
   receipt_row env_strip "$STRIP_VALUE"
@@ -1410,6 +1795,7 @@ emit_tool_receipt() {
   emit_tool_receipt ranlib "$RANLIB_EXECUTABLE"
   emit_tool_receipt strip "$STRIP_EXECUTABLE"
   emit_tool_receipt pkg_config "$PKG_CONFIG_EXECUTABLE"
+  emit_tool_receipt curl_config "$CURL_CONFIG_EXECUTABLE"
   emit_tool_receipt env "$ENV_EXECUTABLE"
   emit_tool_receipt bash "$BASH_EXECUTABLE"
   emit_tool_receipt setsid "$SETSID"
@@ -1437,6 +1823,23 @@ verify_recipe_sources_unchanged() {
      "$(sha256_value "$TREE_RECEIPT_HELPER")" == \
        "$TREE_RECEIPT_HELPER_SHA256" ]] ||
     fail "header-cache builder recipe changed during execution"
+}
+
+verify_curl7_inputs_unchanged() {
+  [[ "$(sha256_value "$CURL_CONFIG_EXECUTABLE")" == \
+       "$CURL_CONFIG_SELECTED_SHA256" ]] ||
+    fail "authenticated libcurl7 inputs changed during header preparation"
+  if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+    [[ "$(sha256_value "$CURL7_MANIFEST")" == \
+         "$CURL7_MANIFEST_SHA256" &&
+       "$(sha256_value "$CURL7_RECEIPT")" == \
+         "$CURL7_RECEIPT_SHA256" &&
+       "$(sha256_value "$CURL7_SEAL")" == "$CURL7_SEAL_SHA256" &&
+       "$(sha256_value "$CURL7_LOCK")" == "$CURL7_LOCK_SHA256" &&
+       "$(sha256_value "$CURL7_RECEIPT_HELPER")" == \
+         "$CURL7_RECEIPT_HELPER_SHA256" ]] ||
+      fail "authenticated libcurl7 receipt inputs changed during preparation"
+  fi
 }
 
 verify_tool_inventory_unchanged() {
@@ -1511,6 +1914,7 @@ validate_entry() {
 }
 
 verify_recipe_sources_unchanged
+verify_curl7_inputs_unchanged
 CACHE_RESULT=hit
 if ! validate_entry "$ENTRY"; then
   CACHE_RESULT=miss
@@ -1587,6 +1991,7 @@ if ! validate_entry "$ENTRY"; then
     PKG_CONFIG="$PKG_CONFIG_VALUE" \
     PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR_VALUE" \
     PKG_CONFIG_PATH="$PKG_CONFIG_PATH_VALUE" \
+    "${CONFIGURE_CURL_ENVIRONMENT[@]}" \
     "$BASH_EXECUTABLE" "$source_root/configure" \
       "--prefix=$CONFIGURE_PREFIX" \
       --without-x --without-recommended-packages --disable-java \
@@ -1601,7 +2006,13 @@ if ! validate_entry "$ENTRY"; then
       "SHELL=$SHELL_VALUE" Rconfig.h Rversion.h \
       > "$make_log" 2>&1
 
+  if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+    "$CURL7_RECEIPT_HELPER" verify "$CURL7_PREFIX" "$CURL7_MANIFEST" \
+      > "$LOG_DIRECTORY/curl7-prefix-final-verify-R-${VERSION}.log" 2>&1 ||
+      fail "R $VERSION locked libcurl7 prefix changed during preparation"
+  fi
   verify_recipe_sources_unchanged
+  verify_curl7_inputs_unchanged
   verify_tool_inventory_unchanged
 
   [[ -f "$build_root/src/include/Rconfig.h" &&
@@ -1653,6 +2064,7 @@ if ! validate_entry "$ENTRY"; then
 fi
 
 verify_recipe_sources_unchanged
+verify_curl7_inputs_unchanged
 input_sha=$(sha256_value "$ENTRY/inputs.tsv")
 receipt_sha=$(sha256_value "$ENTRY/headers-tree.tsv")
 tools_sha=$(sha256_value "$ENTRY/configure-tools.tsv")
@@ -1686,6 +2098,7 @@ input_copy="$METADATA_DIRECTORY/header-cache-input-R-${VERSION}.tsv"
 receipt_copy="$METADATA_DIRECTORY/header-cache-headers-R-${VERSION}.tsv"
 run_receipt_copy="$METADATA_DIRECTORY/header-cache-run-headers-R-${VERSION}.tsv"
 tools_copy="$METADATA_DIRECTORY/header-cache-configure-tools-R-${VERSION}.tsv"
+curl_preflight_copy="$METADATA_DIRECTORY/header-cache-curl-preflight-R-${VERSION}.txt"
 seal_copy="$METADATA_DIRECTORY/header-cache-seal-R-${VERSION}.tsv"
 seal_hash_copy="$METADATA_DIRECTORY/header-cache-seal-R-${VERSION}.sha256"
 evidence="$METADATA_DIRECTORY/header-cache-evidence-R-${VERSION}.tsv"
@@ -1697,6 +2110,8 @@ publish_file_no_clobber "$RUN_HEADERS_RECEIPT" "$run_receipt_copy" ||
   fail "could not publish run-header metadata without clobbering"
 publish_file_no_clobber "$ENTRY/configure-tools.tsv" "$tools_copy" ||
   fail "could not publish configure-tool metadata without clobbering"
+publish_file_no_clobber "$CURL_PREFLIGHT_OUTPUT_FILE" "$curl_preflight_copy" ||
+  fail "could not publish libcurl preflight evidence without clobbering"
 publish_file_no_clobber "$ENTRY/seal.tsv" "$seal_copy" ||
   fail "could not publish cache seal metadata without clobbering"
 publish_file_no_clobber "$ENTRY/seal.sha256" "$seal_hash_copy" ||

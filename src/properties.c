@@ -187,8 +187,8 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
     const param_class_t cls = classify_param(STRING_ELT(classes, row));
     if (cls == PARAM_CLASS_UNKNOWN) {
       Rf_error(
-        "Corrupt ParamSet storage: unsupported parameter class at row %lld",
-        (long long) (row + 1)
+        "Corrupt ParamSet storage: unsupported parameter class at row %.0f",
+        (double) (row + 1)
       );
     }
     const double row_lower = numeric_at(lower, row);

@@ -217,11 +217,13 @@ analyzer_files <- c(
   "test-native-paramset-value-mutation.R",
   "test-native-paramsetcollection-construction.R"
 )
-available_files <- sort(dir(
+sort_bytes <- function(x) sort(x, method = "radix")
+available_files <- sort_bytes(dir(
   test_directory, "^test.*\\.[rR]$", full.names = FALSE
 ))
 if (selection == "analyzer") {
-  if (!identical(sort(intersect(available_files, analyzer_files)), analyzer_files)) {
+  if (!identical(sort_bytes(intersect(available_files, analyzer_files)),
+      analyzer_files)) {
     fail("analyzer source inventory is absent or incomplete")
   }
   selected_files <- analyzer_files
@@ -240,7 +242,7 @@ if (selection == "focused") {
     )
   ]
 }
-observed_files <- sort(unique(tests$file))
+observed_files <- sort_bytes(unique(tests$file))
 if (!identical(observed_files, selected_files)) {
   fail("functional-test ledger did not execute the exact selected file inventory")
 }
@@ -363,7 +365,8 @@ if (!has_worker_hash) {
     strsplit(workers$files, ",", fixed = TRUE),
     use.names = FALSE
   )
-  if (!identical(sort(observed_worker_files), sort(selected_files)) ||
+  if (!identical(sort_bytes(observed_worker_files),
+      sort_bytes(selected_files)) ||
       anyDuplicated(observed_worker_files)) {
     fail("native-test worker evidence did not cover every selected file once")
   }
@@ -410,7 +413,8 @@ if (selection == "analyzer") {
     sep = "\t"
   )
   if (anyDuplicated(source_scope_keys) ||
-      !identical(sort(source_scope_keys), sort(required_source_keys)) ||
+      !identical(sort_bytes(source_scope_keys),
+        sort_bytes(required_source_keys)) ||
       scope_count != length(required_source_keys)) {
     fail("analyzer source differs from its reviewed NOT_CRAN inventory")
   }

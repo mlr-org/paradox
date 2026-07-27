@@ -87,7 +87,9 @@ esac
 # would otherwise corrupt the exact installed-package inventory being compared.
 unset \
   R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE \
+  R_DEFAULT_PACKAGES \
   R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON \
   R_MAKEVARS_SITE R_MAKEVARS_USER \
   CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
   AR AS LD NM OBJCOPY OBJDUMP RANLIB READELF SIZE STRINGS STRIP \
@@ -272,6 +274,10 @@ for version in "${versions[@]}"; do
   if [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
     "$LIBRARY_MANAGER" --runtime "$version" --verify-lock
   fi
+  if [[ "$version" == 3.6.3 ]]; then
+    "$LIBRARY_MANAGER" --runtime "$version" --profile declared-floor \
+      --verify-lock
+  fi
 done
 [[ "$mode" != verify_locks ]] || exit 0
 
@@ -426,6 +432,9 @@ fi
 exec {member_descriptor}<&-
 verify_open_directory "$member_workspace_descriptor" "$member_workspace" \
   "$member_workspace_identity" "micromamba extraction workspace"
+rmdir -- "$member_workspace"
+[[ ! -e "$member_workspace" && ! -L "$member_workspace" ]] ||
+  fail "micromamba extraction workspace was not removed"
 exec {member_workspace_descriptor}<&-
 [[ "$($MICROMAMBA --version)" == "$MICROMAMBA_VERSION" ]] ||
   fail "Authenticated micromamba reports an unexpected version"
@@ -679,6 +688,11 @@ verify_one() {
   exec {expected_inventory_descriptor}<&-
   exec {actual_inventory_descriptor}<&-
   exec {expected_receipt_descriptor}<&-
+  verify_open_directory "$workspace_descriptor" "$workspace" \
+    "$workspace_identity" "Runtime verification workspace"
+  rmdir -- "$workspace"
+  [[ ! -e "$workspace" && ! -L "$workspace" ]] ||
+    fail "Runtime verification workspace was not removed"
   exec {workspace_descriptor}<&-
   exec {receipt_descriptor}<&-
   printf 'runtime_matrix_prefix=passed\nruntime=%s\nprefix=%s\nreceipt=%s\n' \
@@ -734,22 +748,34 @@ verify_unreceipted_prefix() {
     "Unreceipted runtime verification workspace"
   exec {expected_descriptor}<&-
   exec {actual_descriptor}<&-
+  verify_open_directory "$workspace_descriptor" "$workspace" \
+    "$workspace_identity" "Unreceipted runtime verification workspace"
+  rmdir -- "$workspace"
+  [[ ! -e "$workspace" && ! -L "$workspace" ]] ||
+    fail "Unreceipted runtime verification workspace was not removed"
   exec {workspace_descriptor}<&-
 }
 
 if [[ "$mode" == verify || "$mode" == verify_prefix ]]; then
   source_library_versions=()
+  verify_declared_floor=false
   for version in "${versions[@]}"; do
     verify_one "$version"
     if [[ "$mode" == verify &&
         "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
       source_library_versions+=("$version")
     fi
+    if [[ "$mode" == verify && "$version" == 3.6.3 ]]; then
+      verify_declared_floor=true
+    fi
   done
   release_bootstrap_locks
   for version in "${source_library_versions[@]}"; do
     "$LIBRARY_MANAGER" --runtime "$version" --verify
   done
+  if [[ "$verify_declared_floor" == true ]]; then
+    "$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor --verify
+  fi
   exit 0
 fi
 if [[ "$mode" == refresh_receipts ]]; then
@@ -765,6 +791,7 @@ ensure_plain_directory "$RECEIPT_ROOT"
 ensure_plain_directory "$MAMBA_ROOT"
 ensure_plain_directory "$ROOT/.local/tmp"
 source_library_versions=()
+provision_declared_floor=false
 for version in "${versions[@]}"; do
   runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
   lock="$ROOT/$runtime_lock_relative"
@@ -799,7 +826,15 @@ for version in "${versions[@]}"; do
     verify_open_directory "$receipt_descriptor" "$receipt_directory" \
       "$receipt_directory_identity" "Unreceipted runtime receipt directory"
     receipt_root="/proc/$$/fd/$receipt_descriptor"
-    create_args=(create --yes --no-rc --no-env -r "$MAMBA_ROOT" -p "$prefix" -f "$lock")
+    # A content receipt is not an immutability boundary when the prefix and
+    # micromamba's writable package cache share regular-file inodes: an
+    # in-place cache write would silently mutate every sealed runtime.  Copy
+    # package members into each prefix instead.  The prefix-receipt helper
+    # independently rejects any remaining multiply-linked regular file before
+    # the prefix can be sealed or used.
+    create_args=(create --yes --no-rc --no-env --always-copy \
+      --safety-checks enabled --extra-safety-checks \
+      -r "$MAMBA_ROOT" -p "$prefix" -f "$lock")
     [[ "$offline" == false ]] || create_args+=(--offline)
     CONDARC=/dev/null MAMBARC=/dev/null MAMBA_ROOT_PREFIX="$MAMBA_ROOT" \
       "$MICROMAMBA" "${create_args[@]}"
@@ -973,6 +1008,12 @@ EOF
     exec {seal_descriptor}<&-
     clear_open_directory_contents "$manifest_workspace_descriptor" \
       "$manifest_workspace_identity" "Runtime prefix-manifest workspace"
+    verify_open_directory "$manifest_workspace_descriptor" \
+      "$manifest_workspace" "$manifest_workspace_identity" \
+      "Runtime prefix-manifest workspace"
+    rmdir -- "$manifest_workspace"
+    [[ ! -e "$manifest_workspace" && ! -L "$manifest_workspace" ]] ||
+      fail "Runtime prefix-manifest workspace was not removed"
     exec {manifest_workspace_descriptor}<&-
     verify_open_directory "$receipt_descriptor" "$receipt_directory" \
       "$receipt_directory_identity" "Unreceipted runtime receipt directory"
@@ -982,6 +1023,9 @@ EOF
   if [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
     source_library_versions+=("$version")
   fi
+  if [[ "$version" == 3.6.3 ]]; then
+    provision_declared_floor=true
+  fi
 done
 release_bootstrap_locks
 for version in "${source_library_versions[@]}"; do
@@ -989,3 +1033,8 @@ for version in "${source_library_versions[@]}"; do
   [[ "$offline" == false ]] || library_args+=(--offline)
   "$LIBRARY_MANAGER" "${library_args[@]}"
 done
+if [[ "$provision_declared_floor" == true ]]; then
+  library_args=(--runtime 3.6.3 --profile declared-floor)
+  [[ "$offline" == false ]] || library_args+=(--offline)
+  "$LIBRARY_MANAGER" "${library_args[@]}"
+fi

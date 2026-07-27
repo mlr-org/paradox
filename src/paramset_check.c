@@ -208,27 +208,61 @@ static SEXP check_message(const char *format, ...)
   PARADOX_PRINTF_FORMAT(1, 2);
 
 static SEXP check_message(const char *format, ...) {
-  va_list length_arguments;
-  va_start(length_arguments, format);
-  const int length = vsnprintf(NULL, 0, format, length_arguments);
-  va_end(length_arguments);
-  if (length < 0 || (uintmax_t) length >= (uintmax_t) SIZE_MAX) {
-    Rf_error("Internal error while formatting a ParamSet diagnostic");
+  /*
+   * Rtools35 ultimately targets the historical MSVCRT formatter.  Its
+   * `vsnprintf` compatibility path is not required to implement the C99
+   * null-buffer sizing extension, and returns -1 rather than the required
+   * length when an actual buffer is too small.  Render into a real buffer on
+   * every attempt and handle both return conventions.
+   *
+   * Every current caller emits a short package-owned diagnostic.  The generous
+   * ceiling therefore changes no supported message, while bounding a repeated
+   * negative return caused by an encoding/formatter failure instead of growing
+   * until R exhausts the process address space.  The small local first buffer
+   * also keeps ordinary failure formatting allocation-free until mkChar.
+   */
+  enum {
+    INITIAL_CAPACITY = 32,
+    MAXIMUM_CAPACITY = 65536
+  };
+  char local_buffer[INITIAL_CAPACITY];
+  char *buffer = local_buffer;
+  size_t capacity = sizeof(local_buffer);
+
+  va_list arguments;
+  va_start(arguments, format);
+  for (;;) {
+    va_list attempt;
+    va_copy(attempt, arguments);
+    const int written = vsnprintf(buffer, capacity, format, attempt);
+    va_end(attempt);
+
+    if (written >= 0 && (size_t) written < capacity) {
+      va_end(arguments);
+      return Rf_mkString(buffer);
+    }
+
+    size_t next_capacity;
+    if (written >= 0) {
+      const size_t required = (size_t) written + 1U;
+      if (required <= capacity || required > (size_t) MAXIMUM_CAPACITY) {
+        va_end(arguments);
+        Rf_error("Internal error while formatting a ParamSet diagnostic");
+      }
+      next_capacity = required;
+    } else {
+      if (capacity >= (size_t) MAXIMUM_CAPACITY) {
+        va_end(arguments);
+        Rf_error("Internal error while formatting a ParamSet diagnostic");
+      }
+      next_capacity = capacity > (size_t) MAXIMUM_CAPACITY / 2U
+        ? (size_t) MAXIMUM_CAPACITY
+        : capacity * 2U;
+    }
+
+    buffer = R_alloc(next_capacity, sizeof(*buffer));
+    capacity = next_capacity;
   }
-
-  char *buffer = R_alloc((size_t) length + 1U, sizeof(*buffer));
-
-  va_list render_arguments;
-  va_start(render_arguments, format);
-  const int written = vsnprintf(
-    buffer, (size_t) length + 1U, format, render_arguments
-  );
-  va_end(render_arguments);
-  if (written != length) {
-    Rf_error("Internal error while formatting a ParamSet diagnostic");
-  }
-
-  return Rf_mkString(buffer);
 }
 
 static SEXP format_public_number(double value) {

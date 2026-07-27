@@ -27,13 +27,18 @@ bindings, active-binding functions (never their values), closures and safe
 enclosing environments, unforced binding and \code{...} promises without forcing
 them, language objects, S4 attributes, and ordinary containers. A native
 direct-binding classifier distinguishes realized language/symbol values from
-delayed promises without evaluating either. R 3.6--4.5
-can also inspect a detached promise; strict R 4.6 and newer expose no safe
-API for that edge, so a promise reached outside a binding or \code{...} cell is
-opaque. It does not enter
-\code{.GlobalEnv}, package namespaces, attached package/import environments, the
-search path, base/empty environments, or arbitrary external-pointer and
-weak-reference internals. The protected ordinary-R payload of an
+delayed promises without evaluating either. R 3.6--4.4 can also inspect a
+detached promise. R 4.5 has no policy-compliant promise-inspection API, so
+recursive migration fails closed on a reached promise and asks the caller to
+migrate under R >= 4.6. R 4.6 and newer treat a detached promise reached
+outside a binding or \code{...} cell as opaque. It does not enter
+\code{.GlobalEnv}, package namespaces or package environments, authenticated
+namespace-imports environments, attached search-path environments, or
+base/empty environments. A namespace-imports boundary is recognized only
+when the raw \code{name} attribute is an ordinary, attribute-free character scalar
+beginning \code{imports:} and the direct parent is the base namespace; a merely
+spoofed display name remains traversable. Arbitrary external-pointer and
+weak-reference internals are opaque. The protected ordinary-R payload of an
 authenticated current Paradox capsule is traversed so a legacy object stored
 as an opaque parameter value is not missed.
 

@@ -3,7 +3,7 @@
 usage <- paste(
   "usage: install-reverse-dependency-dependencies.R",
   "--root ROOT --max-priority N --dependency-library LIBRARY",
-  "--run-id ID [--package NAME ...] [--plan-only]"
+  "--run-id ID [--state-root DIRECTORY] [--package NAME ...] [--plan-only]"
 )
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -18,7 +18,7 @@ if (length(args) == 1L && args[[1L]] %in% c("-h", "--help")) {
 }
 values <- list(
   root = NULL, max_priority = NULL, dependency_library = NULL,
-  run_id = NULL, packages = character(), plan_only = FALSE
+  run_id = NULL, state_root = NULL, packages = character(), plan_only = FALSE
 )
 index <- 1L
 while (index <= length(args)) {
@@ -32,7 +32,7 @@ while (index <= length(args)) {
   matched <- FALSE
   for (option in c(
       "--root", "--max-priority", "--dependency-library", "--run-id",
-      "--package")) {
+      "--state-root", "--package")) {
     prefix <- paste0(option, "=")
     if (startsWith(argument, prefix)) {
       value <- substring(argument, nchar(prefix) + 1L)
@@ -61,6 +61,11 @@ while (index <= length(args)) {
     } else if (identical(option, "--run-id")) {
       if (!is.null(values$run_id)) stop("--run-id may be supplied only once", call. = FALSE)
       values$run_id <- value
+    } else if (identical(option, "--state-root")) {
+      if (!is.null(values$state_root)) {
+        stop("--state-root may be supplied only once", call. = FALSE)
+      }
+      values$state_root <- value
     } else {
       values$packages <- c(values$packages, value)
     }
@@ -302,8 +307,14 @@ source_plan <- do.call(rbind, source_plan_rows)
 
 local_root <- require_plain_local_directory(file.path(root, ".local"),
   "repository-local state root")
-compat_root <- require_plain_local_directory(file.path(local_root, "compat"),
-  "compatibility state root")
+compat_root <- if (is.null(values$state_root)) {
+  require_plain_local_directory(file.path(local_root, "compat"),
+    "compatibility state root")
+} else {
+  require_plain_local_directory(
+    sub("/+$", "", values$state_root), "compatibility state root"
+  )
+}
 runs_root <- file.path(compat_root, "runs")
 if (!dir.exists(runs_root)) {
   if (file.exists(runs_root) || is_symbolic(runs_root) ||

@@ -132,10 +132,14 @@ The migration implementation has three layers:
    visited node, and periodic interrupt checks. It traverses ordinary
    container/language/attribute/S4/environment/closure/bytecode and promise-
    binding edges. Active bindings contribute their functions but are not
-   invoked; unforced binding/`...` promises contribute expression and
-   evaluation environment but are not forced. R 3.6--4.5 also inspect a
-   detached `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as
-   opaque. Because R 3.6 exposes no accessor for an active binding's function,
+   invoked; where policy-compliant accessors exist, unforced binding/`...`
+   promises contribute expression and evaluation environment but are not
+   forced. R 3.6--4.4 inspect reached promises. R 4.5 fails recursive
+   migration closed on such a promise because its compiled-code policy rejects
+   the old accessors and no replacement exists. R >= 4.6 uses public
+   binding/dots accessors and treats a detached `PROMSXP` outside those cells
+   as opaque. Because R 3.6 exposes no accessor for an active binding's
+   function,
    encountering an arbitrary one on that runtime fails migration closed and
    asks for R >= 4.0; it is never invoked. Exact built-in current Paradox-2
    shells use a narrow authenticated capsule traversal that omits their locked
@@ -151,7 +155,10 @@ The migration implementation has three layers:
    language object or symbol from a delayed promise whose expression has that
    type; it never infers binding kind from expression shape. Search-path,
    global, package, namespace, imports, base, and empty
-   environments stop traversal. Generic external-pointer and weak-reference
+   environments stop traversal. An imports boundary requires both an ordinary
+   scalar raw `name` beginning `imports:` and the exact base namespace as its
+   direct parent; a user environment with only the display prefix remains an
+   ordinary graph node. Generic external-pointer and weak-reference
    internals are opaque; an authenticated Paradox core contributes its
    protected payload.
 2. `R/upgrade_paradox_object.R` authenticates discovered ParamSet-family
@@ -758,6 +765,16 @@ Characterization tests require byte-identical design/sampler results and
 semantic equivalence on complete rows; this specialization cannot be reused as
 or grow into a second point/store activity authority.
 
+Simple Domain construction has one bounded native printable-ID renderer across
+the complete R 3.6+ range. The compatibility facade snapshots `scipen` with
+public `base::getOption()` before R 4.5 and with documented
+`Rf_GetOption1` thereafter; the representation parser and renderer are shared.
+It rereads the option around allocation-sensitive work and declines to the
+single R `deparse1()` correctness fallback if the option changes, is malformed,
+or the representation is outside the bounded grammar. Old R therefore does not
+carry a parallel renderer and does not pay the R deparse path for ordinary
+constructors.
+
 ## Operation transaction
 
 Every operation follows the same lifecycle:
@@ -883,10 +900,14 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   adapters, never alternate semantics. `r_utils.c` distinguishes the compact
   facade completion for genuinely fresh package-owned tables from the
   defensive caller-owned finalizer. Raw stored-attribute selection uses
-  `R_mapAttrib()` on R >= 4.6 and the established `ATTRIB` traversal on R
-  3.6--4.5; older supported R releases also use the documented public `FORMALS`
-  backport for newer closure inspection. These adapters never evaluate
-  `formals()`, `attributes()`, or another R/data.table helper. R 3.6--4.1 use
+  `R_mapAttrib()` on R >= 4.6 and one centralized, ledgered `ATTRIB` traversal
+  on R 3.6--4.5. Before R 4.5, one ledgered `FORMALS` accessor preserves
+  allocation-free transformation callback admission, while cold `body()` and
+  `environment()` calls replace native accessors that were not yet API. A
+  directly reached bytecode object takes the cold public
+  `as.function.default()`/`body()` bridge without executing it. Attribute and
+  hot binding adapters never evaluate `attributes()` or another
+  R/data.table helper. R 3.6--4.1 use
   `base::exists(..., inherits = FALSE)` only for cold optional existence
   queries. Candidate-shell and fresh-destination classifiers take that path;
   admitted capsule/generation reads retain an allocation-free native path, so
@@ -897,18 +918,24 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   an incompatible layout.
   A terminal optional receipt scan must not allocate, so it uses old-only
   `R_HasFancyBindings()` to reject a fancy frame before the stored-cell scan.
-  The exact non-public compatibility entries are centralized here. R < 4.6 uses one
-  declared/exported `Rf_findVarInFrame` call to obtain the stored binding cell
-  and the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE` when
-  that cell is a `PROMSXP`.
-  R >= 4.6 uses only the documented experimental binding/delayed-binding/dots
-  APIs. Strict headers hide all three detached-promise accessors; none is
-  declared locally or present in the current DSO, and a detached `PROMSXP`
-  reached outside those public binding boundaries is opaque. The older branch
-  is required
+  The exact non-public compatibility entries are centralized here. The single
+  old attribute and hot-formals selectors are described above. R < 4.6
+  uses one declared/exported `Rf_findVarInFrame` call to obtain the stored
+  binding cell. Only R < 4.5 uses the header-declared/exported
+  `R_PromiseExpr`, `PRENV`, and `PRVALUE` when that cell is a `PROMSXP`.
+  R 4.5 fails recursive migration closed on a reached promise because its
+  compiled-code policy classifies those accessors as non-API. R >= 4.6 uses
+  only the documented experimental binding/delayed-binding/dots APIs. None of
+  the three detached-promise accessors is declared locally or present in an
+  R >= 4.5 DSO. On R >= 4.6, a detached `PROMSXP` reached outside the public
+  binding boundaries is opaque. The older branches are required
   because R-level `substitute()`, while non-forcing, returns a promise
   expression rather than a binding-kind/generation receipt and therefore makes
-  simultaneous receipt and graph scans unsound. Expression shape is not a substitute for binding
+  simultaneous receipt and graph scans unsound. Public `R_getVar` is likewise
+  excluded from every pre-4.6 DSO: without `R_GetBindingType`, it can force a
+  delayed binding. The R >= 4.6 source has three reviewed retrieval call sites
+  and every call follows direct/forced-value classification; the DSO has one
+  undefined-symbol row. Expression shape is not a substitute for binding
   classification: realized language objects/symbols and delayed literals such
   as `TRUE`, `NULL`, language objects, symbols, environments, closures, and
   external pointers are deliberately covered by the runtime matrix. Every
@@ -1111,8 +1138,9 @@ Do not add any of the following:
 - generated-surface creator-provenance authentication for an exact BASE
   ObjectTuneToken shell; safe genuine-private/core aliases must remain harmless
   because no alias method is invoked;
-- any internal R API beyond the exact non-forcing stored-binding/promise
-  compatibility entries ledgered by symbol, version, count, and source in
+- any internal R API beyond the exact raw-attribute, hot closure-formals, and
+  non-forcing stored-binding/promise compatibility entries ledgered by symbol, version,
+  count, and source in
   `environment/r-api-exceptions.tsv`;
 - permanent semantic ALTREP vectors or repeated observation inside one native
   semantic admission/kernel (prior R-side representation capture is explicitly

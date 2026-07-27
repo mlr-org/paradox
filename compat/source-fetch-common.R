@@ -219,10 +219,13 @@ compat_fetch_archive_metadata <- function(archive, package, version) {
     compat_fetch_stop("source archive has an unexpected package tree: ", archive)
   }
 
-  inspection <- tempfile("inspect-", tmpdir = dirname(archive))
-  if (!dir.create(inspection, recursive = FALSE, mode = "0700")) {
-    compat_fetch_stop("could not reserve archive inspection directory")
-  }
+  # Archive authentication is read-only with respect to the pinned source
+  # cache.  Extract the single DESCRIPTION member below R's process-private
+  # temporary root so a read-only cache can be verified inside a worker.
+  inspection <- compat_fetch_reserve_directory(
+    normalizePath(tempdir(), winslash = "/", mustWork = TRUE),
+    "compat-archive-inspect-"
+  )
   on.exit(unlink(inspection, recursive = TRUE, force = FALSE), add = TRUE)
   utils::untar(
     archive,

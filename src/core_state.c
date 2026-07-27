@@ -371,8 +371,7 @@ static SEXP core_from_owner(SEXP owner) {
   return paradox_core_from_private_optional(owner);
 }
 
-SEXP paradox_param_set_core_state(SEXP owner) {
-  SEXP core = core_from_owner(owner);
+static SEXP state_from_selected_core(SEXP core) {
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
@@ -381,6 +380,14 @@ SEXP paradox_param_set_core_state(SEXP owner) {
     Rf_error("Corrupt ParamSetShadow native snapshot metadata");
   }
   return R_ExternalPtrProtected(core);
+}
+
+SEXP paradox_param_set_core_state(SEXP owner) {
+  return state_from_selected_core(
+    paradox_core_is_canonical(owner)
+      ? owner
+      : paradox_core_from_private(owner)
+  );
 }
 
 SEXP paradox_param_set_core_kind(SEXP owner) {

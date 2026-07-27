@@ -12,6 +12,10 @@ PARADOX_REQUESTED_ROOT=$(pwd -P)
 PARADOX_ROOT=$PARADOX_REQUESTED_ROOT
 PARADOX_PREFIX="$PARADOX_ROOT/.local/toolchain"
 unset PARADOX_REQUESTED_ROOT
+# Rscript --vanilla still honors an inherited default-package list.  Clear it
+# before activation can invoke any R helper; the complete reset below repeats
+# this after the local toolchain has been selected.
+unset R_DEFAULT_PACKAGES
 
 paradox_activation_error() {
   echo "$*" >&2
@@ -116,8 +120,9 @@ if ! unset \
   PARADOX_COMPAT_SYSTEM_P1 PARADOX_COMPAT_SYSTEM_CHILD_PATH \
   PARADOX_COMPAT_SYSTEM_ACTIVE \
   PARADOX_COMPAT_SYSTEM_GEO_PREFIX PARADOX_COMPAT_SYSTEM_P1_PREFIX \
-  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE \
+  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE R_DEFAULT_PACKAGES \
   R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON \
   R_MAKEVARS_SITE R_MAKEVARS_USER R_HISTFILE R_TEXI2DVICMD \
   RSTUDIO_WHICH_R RSTUDIO_WHICH_R_PREV \
   CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
@@ -194,6 +199,9 @@ export R_LIBS_SITE=
 export R_ENVIRON_USER="$PARADOX_ROOT/environment/Renviron"
 export R_PROFILE_USER="$PARADOX_ROOT/environment/Rprofile.R"
 export R_MAKEVARS_USER="$PARADOX_ROOT/environment/Makevars"
+export R_BUILD_ENVIRON="$PARADOX_ROOT/environment/Renviron"
+export R_CHECK_ENVIRON="$PARADOX_ROOT/environment/Renviron"
+export R_INSTALL_ENVIRON="$PARADOX_ROOT/environment/Renviron"
 export R_HISTFILE=/dev/null
 export TMPDIR="$PARADOX_ROOT/.local/tmp"
 export XDG_RUNTIME_DIR="$PARADOX_ROOT/.local/runtime"

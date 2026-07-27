@@ -133,39 +133,49 @@ expect_error(
 )
 restore_environment()
 
-# Exercise the shared shell authenticator against a detached source while the
-# real primary checkout contains the caller's unrelated worktree changes.
-auth_commit <- git_run(root, c("rev-parse", "--verify", "HEAD^{commit}"))
-auth_tree <- git_run(root, c("rev-parse", "--verify", "HEAD^{tree}"))
-auth_ref <- paste0("refs/paradox-selftest/repository-runner-", Sys.getpid())
+# Exercise the shared shell authenticator against a detached source while its
+# primary checkout contains unrelated worktree changes.  Keep the complete Git
+# graph below this test's scratch root: verification workers mount the real
+# checkout and its .git directory read-only.
+auth_primary <- file.path(scratch, "auth-primary")
+auth_toolchain <- file.path(auth_primary, ".local", "toolchain")
+dir.create(file.path(auth_toolchain, "bin"), recursive = TRUE)
+auth_git <- file.path(auth_toolchain, "bin", "git")
+if (!file.copy(git, auth_git, copy.mode = TRUE) ||
+    !file.symlink(file.path(root, ".local", "toolchain", "lib"),
+      file.path(auth_toolchain, "lib"))) {
+  stop("could not construct the detached-authentication toolchain fixture",
+    call. = FALSE)
+}
+git_run(auth_primary, c("init", "--quiet"))
+git_run(auth_primary, c("config", "user.name", "Repository Runner"))
+git_run(auth_primary, c("config", "user.email", "runner@example.invalid"))
+write_file(file.path(auth_primary, ".gitignore"), ".local/")
+write_file(file.path(auth_primary, "candidate"), "candidate")
+git_run(auth_primary, c("add", "--", ".gitignore", "candidate"))
+git_run(auth_primary, c("commit", "--quiet", "-m", "candidate"))
+auth_commit <- git_run(auth_primary,
+  c("rev-parse", "--verify", "HEAD^{commit}"))
+auth_tree <- git_run(auth_primary,
+  c("rev-parse", "--verify", "HEAD^{tree}"))
+auth_ref <- "refs/paradox-selftest/repository-runner"
 auth_source <- file.path(scratch, "detached-auth-source")
-auth_cleaned <- FALSE
-on.exit({
-  if (!auth_cleaned) {
-    processx::run(git, c("worktree", "remove", "--force", auth_source),
-      wd = root, env = git_environment, stdout = NULL, stderr = NULL,
-      error_on_status = FALSE)
-    processx::run(git, c("update-ref", "-d", auth_ref), wd = root,
-      env = git_environment, stdout = NULL, stderr = NULL,
-      error_on_status = FALSE)
-  }
-}, add = TRUE)
-git_run(root, c("update-ref", auth_ref, auth_commit))
-git_run(root, c("worktree", "add", "--quiet", "--detach", auth_source,
+git_run(auth_primary, c("update-ref", auth_ref, auth_commit))
+git_run(auth_primary, c("worktree", "add", "--quiet", "--detach", auth_source,
   auth_commit))
+write_file(file.path(auth_primary, "unrelated-primary-dirt"), "dirty")
+auth_path <- paste(c(dirname(auth_git), Sys.getenv("PATH")),
+  collapse = .Platform$path.sep)
 auth_result <- processx::run(file.path(root, "compat",
   "authenticate-candidate-git"),
-  c(root, auth_ref, auth_commit, auth_tree, auth_source),
-  wd = root, stdout = "|", stderr = "|", error_on_status = FALSE,
-  cleanup_tree = TRUE)
+  c(auth_primary, auth_ref, auth_commit, auth_tree, auth_source),
+  wd = auth_primary, env = c(PATH = auth_path), stdout = "|", stderr = "|",
+  error_on_status = FALSE, cleanup_tree = TRUE)
 if (!identical(auth_result$status, 0L) || !identical(trimws(auth_result$stdout),
     "candidate_git_authentication=passed")) {
   stop("five-argument detached candidate authentication failed: ",
     auth_result$stderr, call. = FALSE)
 }
-git_run(root, c("worktree", "remove", "--force", auth_source))
-git_run(root, c("update-ref", "-d", auth_ref))
-auth_cleaned <- TRUE
 
 candidate_primary <- file.path(scratch, "candidate-primary")
 dir.create(candidate_primary)

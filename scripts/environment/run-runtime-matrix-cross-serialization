@@ -1,0 +1,232 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Produce one current Paradox-2 graph under R 4.0 and consume/exercise it under
+# R 3.6.  This runs only after both independently isolated matrix stages have
+# passed, and reads their installed candidate libraries without mutating them.
+
+fail() {
+  printf 'run-runtime-matrix-cross-serialization: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 2 ]] ||
+  fail "usage: run-runtime-matrix-cross-serialization ROOT RUN_ROOT"
+
+ROOT=$1
+RUN_ROOT=$2
+PRODUCER_RUNTIME=4.0.5
+CONSUMER_RUNTIME=3.6.3
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+MANAGED_PATH="$ROOT/scripts/environment/runtime-matrix-managed-path"
+SEMANTIC_RELATIVE=scripts/environment/runtime-matrix-cross-serialization.R
+CROSS_DIRECTORY="$RUN_ROOT/cross-runtime-serialization"
+ARTIFACTS="$CROSS_DIRECTORY/artifacts"
+STATE="$CROSS_DIRECTORY/state"
+METADATA="$CROSS_DIRECTORY/metadata"
+
+[[ "$ROOT" == /* && -d "$ROOT" && ! -L "$ROOT" &&
+  "$(cd "$ROOT" && pwd -P)" == "$ROOT" ]] ||
+  fail "ROOT is not one canonical plain directory"
+[[ "$RUN_ROOT" == "$ROOT/.local/checks/"*/runtime-matrix &&
+  -d "$RUN_ROOT" && ! -L "$RUN_ROOT" &&
+  "$(cd "$RUN_ROOT" && pwd -P)" == "$RUN_ROOT" ]] ||
+  fail "RUN_ROOT is not one canonical retained runtime-matrix directory"
+[[ -x "$PREFIX_RECEIPT" && -x "$MANAGED_PATH" ]] ||
+  fail "runtime receipt or managed-path helper is absent"
+"$MANAGED_PATH" "$ROOT" "$RUN_ROOT" existing >/dev/null
+"$MANAGED_PATH" "$ROOT" "$CROSS_DIRECTORY" allow-missing >/dev/null
+[[ ! -e "$CROSS_DIRECTORY" && ! -L "$CROSS_DIRECTORY" ]] ||
+  fail "cross-runtime output directory already exists"
+
+top_run="$RUN_ROOT/metadata/run.tsv"
+[[ -f "$top_run" && ! -L "$top_run" ]] ||
+  fail "prepared top-level run metadata is absent"
+metadata_value() {
+  local key=$1
+  awk -F '\t' -v key="$key" '$1 == key {print $2}' "$top_run"
+}
+run_id=$(metadata_value run_id)
+source_ref=$(metadata_value source_ref)
+source_commit=$(metadata_value source_commit)
+source_tree=$(metadata_value source_tree)
+[[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ &&
+  "$source_ref" =~ ^refs/[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
+  "$source_commit" =~ ^[0-9a-f]{40}$ &&
+  "$source_tree" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "prepared top-level provenance is malformed"
+
+for version in "$PRODUCER_RUNTIME" "$CONSUMER_RUNTIME"; do
+  stage="$RUN_ROOT/R-$version"
+  stage_artifacts="$stage/artifacts"
+  stage_inputs="$stage_artifacts/inputs"
+  stage_library="$stage_artifacts/library"
+  stage_metadata="$stage/metadata"
+  for directory in "$stage" "$stage_artifacts" "$stage_inputs" \
+      "$stage_library" "$stage_metadata"; do
+    [[ -d "$directory" && ! -L "$directory" &&
+      "$(cd "$directory" && pwd -P)" == "$directory" ]] ||
+      fail "required R $version stage directory is absent or symbolic"
+  done
+  for file in "$stage_metadata/run.tsv" "$stage_metadata/completion.seal" \
+      "$stage_inputs/bootstrap-receipt/receipt.tsv" \
+      "$stage_inputs/$SEMANTIC_RELATIVE" \
+      "$stage_library/paradox/DESCRIPTION" \
+      "$stage_library/paradox/libs/paradox.so"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "required R $version stage input is absent or symbolic: $file"
+  done
+  [[ "$(awk -F '\t' '$1 == "status" {print $2}' \
+      "$stage_metadata/run.tsv")" == passed ]] ||
+    fail "R $version stage is not sealed as passed"
+done
+
+producer_semantic="$RUN_ROOT/R-$PRODUCER_RUNTIME/artifacts/inputs/$SEMANTIC_RELATIVE"
+consumer_semantic="$RUN_ROOT/R-$CONSUMER_RUNTIME/artifacts/inputs/$SEMANTIC_RELATIVE"
+cmp -s -- "$producer_semantic" "$consumer_semantic" ||
+  fail "producer and consumer semantic drivers differ"
+cmp -s -- "$producer_semantic" "$ROOT/$SEMANTIC_RELATIVE" ||
+  fail "retained semantic driver differs from the authenticated live input"
+
+mkdir -p -- "$ARTIFACTS" "$STATE" "$METADATA"
+"$MANAGED_PATH" "$ROOT" "$CROSS_DIRECTORY" existing >/dev/null
+cross_identity=$(/usr/bin/stat -c '%d:%i' -- "$CROSS_DIRECTORY")
+exec {cross_descriptor}< "$CROSS_DIRECTORY"
+[[ "$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$cross_descriptor")" == \
+    "$cross_identity" ]] ||
+  fail "cross-runtime directory changed while opening"
+
+fixture="$ARTIFACTS/current-v2-from-r-4.0.5.rds"
+roundtrip="$ARTIFACTS/r-3.6-roundtrip.rds"
+producer_result="$ARTIFACTS/producer.tsv"
+consumer_result="$ARTIFACTS/consumer.tsv"
+producer_log="$ARTIFACTS/producer.log"
+consumer_log="$ARTIFACTS/consumer.log"
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+configure_and_run() {
+  local mode=$1 version=$2 result=$3 log=$4
+  local stage="$RUN_ROOT/R-$version"
+  local stage_artifacts="$stage/artifacts"
+  local stage_inputs="$stage_artifacts/inputs"
+  local stage_library="$stage_artifacts/library"
+  local runtime_state="$STATE/R-$version"
+  mkdir -p -- "$runtime_state/home" || return 1
+  (
+    cd "$ROOT" || exit 1
+    export PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT="$runtime_state"
+    export PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$stage_inputs"
+    export PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF=\
+"$stage_inputs/bootstrap-receipt"
+    export PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF=\
+"$stage_inputs/dependency-library-receipt"
+    # shellcheck disable=SC1091
+    if ! . "$ROOT/scripts/activate-runtime-matrix" "$version"; then
+      exit 1
+    fi
+    export R_LIBS_USER="$stage_library"
+    export R_LIBS_SITE="$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"
+    export HOME="$runtime_state/home"
+    export R_USER="$runtime_state/home"
+    export LC_ALL=C.UTF-8
+    export LANG=C.UTF-8
+    export MAKEFLAGS=-j1
+    export TESTTHAT_CPUS=1
+    export MC_CORES=1
+    export OMP_NUM_THREADS=1
+    export OPENBLAS_NUM_THREADS=1
+    export MKL_NUM_THREADS=1
+    export BLIS_NUM_THREADS=1
+    exec Rscript --vanilla "$producer_semantic" "$mode" "$version" \
+      "$stage_library" "$fixture" "$roundtrip" "$result"
+  ) > "$log" 2>&1
+}
+
+configure_and_run produce "$PRODUCER_RUNTIME" "$producer_result" \
+  "$producer_log" ||
+  fail "R $PRODUCER_RUNTIME serialization producer failed"
+configure_and_run consume "$CONSUMER_RUNTIME" "$consumer_result" \
+  "$consumer_log" ||
+  fail "R $CONSUMER_RUNTIME serialization consumer failed"
+
+grep -Fqx 'cross_runtime_serialization_producer=passed' "$producer_log" ||
+  fail "producer completion marker is absent"
+grep -Fqx 'cross_runtime_serialization_consumer=passed' "$consumer_log" ||
+  fail "consumer completion marker is absent"
+for output in "$fixture" "$roundtrip" "$producer_result" "$consumer_result" \
+    "$producer_log" "$consumer_log"; do
+  [[ -f "$output" && ! -L "$output" ]] ||
+    fail "cross-runtime output is absent or symbolic: $output"
+done
+
+producer_version=$(awk -F '\t' '$1 == "package_version" {print $2}' \
+  "$producer_result")
+consumer_version=$(awk -F '\t' '$1 == "package_version" {print $2}' \
+  "$consumer_result")
+[[ -n "$producer_version" && "$producer_version" == "$consumer_version" ]] ||
+  fail "producer and consumer loaded different candidate package versions"
+
+"$PREFIX_RECEIPT" create "$ARTIFACTS" \
+  "$METADATA/artifacts.manifest.tsv" >/dev/null
+"$PREFIX_RECEIPT" create "$STATE" "$METADATA/state.manifest.tsv" >/dev/null
+producer_stage="$RUN_ROOT/R-$PRODUCER_RUNTIME"
+consumer_stage="$RUN_ROOT/R-$CONSUMER_RUNTIME"
+{
+  printf 'field\tvalue\n'
+  printf 'status\tpassed\n'
+  printf 'schema\t1\n'
+  printf 'run_id\t%s\n' "$run_id"
+  printf 'source_ref\t%s\n' "$source_ref"
+  printf 'source_commit\t%s\n' "$source_commit"
+  printf 'source_tree\t%s\n' "$source_tree"
+  printf 'producer_runtime\t%s\n' "$PRODUCER_RUNTIME"
+  printf 'consumer_runtime\t%s\n' "$CONSUMER_RUNTIME"
+  printf 'serialization_version\t3\n'
+  printf 'package_version\t%s\n' "$producer_version"
+  printf 'semantic_driver_sha256\t%s\n' \
+    "$(sha256_file "$producer_semantic")"
+  printf 'producer_stage_seal_sha256\t%s\n' \
+    "$(sha256_file "$producer_stage/metadata/completion.seal")"
+  printf 'consumer_stage_seal_sha256\t%s\n' \
+    "$(sha256_file "$consumer_stage/metadata/completion.seal")"
+  printf 'producer_prefix_receipt_sha256\t%s\n' \
+    "$(sha256_file "$producer_stage/artifacts/inputs/bootstrap-receipt/receipt.tsv")"
+  printf 'consumer_prefix_receipt_sha256\t%s\n' \
+    "$(sha256_file "$consumer_stage/artifacts/inputs/bootstrap-receipt/receipt.tsv")"
+  printf 'producer_candidate_dso_sha256\t%s\n' \
+    "$(sha256_file "$producer_stage/artifacts/library/paradox/libs/paradox.so")"
+  printf 'consumer_candidate_dso_sha256\t%s\n' \
+    "$(sha256_file "$consumer_stage/artifacts/library/paradox/libs/paradox.so")"
+  printf 'fixture_sha256\t%s\n' "$(sha256_file "$fixture")"
+  printf 'roundtrip_sha256\t%s\n' "$(sha256_file "$roundtrip")"
+  printf 'producer_result_sha256\t%s\n' \
+    "$(sha256_file "$producer_result")"
+  printf 'consumer_result_sha256\t%s\n' \
+    "$(sha256_file "$consumer_result")"
+  printf 'producer_log_sha256\t%s\n' "$(sha256_file "$producer_log")"
+  printf 'consumer_log_sha256\t%s\n' "$(sha256_file "$consumer_log")"
+  printf 'artifacts_manifest_sha256\t%s\n' \
+    "$(sha256_file "$METADATA/artifacts.manifest.tsv")"
+  printf 'state_manifest_sha256\t%s\n' \
+    "$(sha256_file "$METADATA/state.manifest.tsv")"
+} > "$METADATA/run.tsv"
+(
+  cd "$METADATA"
+  sha256sum run.tsv artifacts.manifest.tsv state.manifest.tsv \
+    > completion.inputs.tsv
+  printf '%s  completion.inputs.tsv\n' \
+    "$(sha256_file completion.inputs.tsv)" > completion.seal
+)
+[[ "$(/usr/bin/stat -c '%d:%i' -- "$CROSS_DIRECTORY")" == \
+    "$cross_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$cross_descriptor")" == \
+    "$cross_identity" ]] ||
+  fail "cross-runtime directory changed during execution"
+exec {cross_descriptor}<&-
+
+printf 'cross_runtime_serialization=passed\n'
+printf 'producer_runtime=%s\n' "$PRODUCER_RUNTIME"
+printf 'consumer_runtime=%s\n' "$CONSUMER_RUNTIME"

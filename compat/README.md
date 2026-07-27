@@ -193,6 +193,11 @@ ledger, lock, resolved plan, package-library endpoints, logs, and completion
 metadata are sealed below
 `.local/compat/runs/<ID>/reverse-dependency-dependencies-priority-<N>/`.
 Verify the stage with `compat/verify-repository-evidence.R`.
+For an isolated read-only worker, `--state-root ABSOLUTE_DIRECTORY` may select
+an already existing plain directory below this checkout's `.local`; only the
+run ledger and global mutation lock move there. Pinned source archives remain
+read-only inputs, and their temporary DESCRIPTION inspection is kept below the
+worker's process-private temporary directory.
 
 Repeated `--package NAME` selects a bounded subset. `--plan-only` resolves and
 seals the exact lock while requiring a pre-existing dependency library to
@@ -200,9 +205,9 @@ remain byte-identical; it does not create the library or install anything. Run
 `scripts/environment/test-reverse-dependency-preparation.R` after ordinary
 activation for deterministic parser, archive, lock-policy, path-escape, and
 evidence-tamper fixtures, plus real plan-only success and injected post-lock
-failure/retry runs. Those fixtures use a disposable library below `.local/tmp`,
-verify function-scoped lock cleanup, and never inspect or mutate the shared
-compatibility library.
+failure/retry runs. Those fixtures use a disposable library and state root
+below `.local/tmp`, verify function-scoped lock cleanup, and never inspect or
+mutate the shared compatibility library or run ledger.
 
 ## Freeze and install one candidate
 
@@ -483,7 +488,11 @@ Every external task atomically publishes a launch receipt before invoking R and
 a completion receipt only after its identity-bound result exists; resume uses
 those receipts to distinguish completed siblings, failed workers, and tasks
 that were never started. Process-group and token cleanup bound interruption
-even when nested tools create new sessions.
+even when nested tools create new sessions. A non-reaping container PID 1 may
+retain a zombie-only process group after all executable work has ended. The
+wrapper accepts that group as quiescent only after `kill -0` and a successful
+procps snapshot prove that every remaining member is a zombie; any live member
+or failed snapshot remains a cleanup blocker.
 `--no-stop-on-test-error` collects each package's complete bounded test-script
 batch, and later packages continue. Counts are `exact`, `partial`, or
 `unavailable` rather than manufactured zeros. If interrupted, resume the same

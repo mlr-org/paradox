@@ -255,7 +255,6 @@ assert_local_image() {
   [[ "$inspection" == "$expected" ]] ||
     fail "the local rchk image identity differs from the pinned digest"
 }
-assert_local_image
 
 write_input_receipt() {
   printf 'key\tvalue\n'
@@ -416,6 +415,11 @@ if [[ "$MODE" == verify ]]; then
   printf 'bcheck=%s\n' "$CACHE_DIRECTORY/payload/bin/bcheck"
   exit 0
 fi
+
+# Receipt printing and cache verification are intentionally offline: the
+# pinned config and retained image identity are sufficient to authenticate
+# their bytes.  Only a real build needs the corresponding local OCI payload.
+assert_local_image
 
 REFERENCE_SOURCE="$ROOT/.local/sources/${config[source_name]}"
 REFERENCE_CHECKOUTS="$REFERENCE_DOCS/git-checkouts.tsv"

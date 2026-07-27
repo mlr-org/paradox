@@ -1,10 +1,24 @@
 #!/usr/bin/env sh
 # shellcheck disable=SC2317 # return-or-exit idiom supports sourcing and execution.
+#
+# The body remains portable shell, but the documented `. script VERSION`
+# interface requires a shell such as Bash or zsh that forwards arguments to
+# the dot command. dash does not; automation in this repository uses Bash.
 
 runtime_matrix_activation_fail() {
   echo "$*" >&2
   return 1
 }
+
+# Rscript --vanilla still honors R_DEFAULT_PACKAGES, and the R command
+# front-ends honor their command-specific environment selectors. Prefix,
+# dependency-receipt, and stage authentication must not execute caller-selected
+# startup code before the complete activation reset below.
+unset \
+  R_DEFAULT_PACKAGES \
+  R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON \
+  R_MAKEVARS_SITE R_MAKEVARS_USER
 
 if [ ! -f DESCRIPTION ]; then
   runtime_matrix_activation_fail \
@@ -34,6 +48,85 @@ else
 fi
 
 PARADOX_ROOT=$(pwd -P)
+runtime_matrix_dependency_mode=$("$PARADOX_RUNTIME_MATRIX_REGISTRY" field \
+  "$PARADOX_RUNTIME_MATRIX_VERSION" dependency_mode)
+runtime_matrix_r_input_root="$PARADOX_ROOT/environment"
+if [ -n "${PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT:-}" ] &&
+    [ -z "${PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT:-}" ]; then
+  runtime_matrix_activation_fail \
+    "Stage-private runtime state requires its matching input root" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+if [ -z "${PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT:-}" ] &&
+    { [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF:-}" ] ||
+      [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF:-}" ]; }; then
+  runtime_matrix_activation_fail \
+    "Verified receipt handoffs require stage-private state and inputs" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+if [ -n "${PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT:-}" ]; then
+  if [ -z "${PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT:-}" ]; then
+    runtime_matrix_activation_fail \
+      "Stage-private R inputs require their matching stage-state root" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+  case "$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT" in
+    "$PARADOX_ROOT"/*) ;;
+    *)
+      runtime_matrix_activation_fail \
+        "Stage-private R inputs escaped the repository" ||
+        { return 1 2>/dev/null || exit 1; }
+      ;;
+  esac
+  if [ ! -d "$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT" ] ||
+      [ -L "$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT" ] ||
+      [ "$(cd "$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT" 2>/dev/null &&
+        pwd -P)" != "$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT" ]; then
+    runtime_matrix_activation_fail \
+      "Stage-private R inputs are not one canonical plain directory" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+  if [ "${PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF:-}" != \
+      "$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT/bootstrap-receipt" ]; then
+    runtime_matrix_activation_fail \
+      "Stage-private prefix handoff escaped the authenticated input root" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+  if [ "$runtime_matrix_dependency_mode" = source-library ] &&
+      [ "${PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF:-}" != \
+        "$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT/dependency-library-receipt" ]; then
+    runtime_matrix_activation_fail \
+      "Source-library stage requires its authenticated dependency handoff" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+  if [ "$runtime_matrix_dependency_mode" != source-library ] &&
+      [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF:-}" ]; then
+    runtime_matrix_activation_fail \
+      "Non-source-library stage supplied a dependency handoff" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+  runtime_matrix_r_input_root="$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT/environment"
+fi
+if [ ! -d "$runtime_matrix_r_input_root" ] ||
+    [ -L "$runtime_matrix_r_input_root" ]; then
+  runtime_matrix_activation_fail \
+    "R startup-input directory is absent or symbolic" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+for runtime_matrix_r_input in Renviron Rprofile.R Makevars; do
+  if [ ! -f "$runtime_matrix_r_input_root/$runtime_matrix_r_input" ] ||
+      [ -L "$runtime_matrix_r_input_root/$runtime_matrix_r_input" ]; then
+    runtime_matrix_activation_fail \
+      "R startup input is absent or symbolic: $runtime_matrix_r_input" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+done
+export R_ENVIRON_USER="$runtime_matrix_r_input_root/Renviron"
+export R_PROFILE_USER="$runtime_matrix_r_input_root/Rprofile.R"
+export R_MAKEVARS_USER="$runtime_matrix_r_input_root/Makevars"
+export R_BUILD_ENVIRON="$runtime_matrix_r_input_root/Renviron"
+export R_CHECK_ENVIRON="$runtime_matrix_r_input_root/Renviron"
+export R_INSTALL_ENVIRON="$runtime_matrix_r_input_root/Renviron"
 PARADOX_RUNTIME_MATRIX_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/prefixes/R-$PARADOX_RUNTIME_MATRIX_VERSION"
 if ! "$PARADOX_ROOT/scripts/bootstrap-runtime-matrix" \
     --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" \
@@ -51,8 +144,6 @@ if [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF:-}" ] &&
     { return 1 2>/dev/null || exit 1; }
 fi
 PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=
-runtime_matrix_dependency_mode=$("$PARADOX_RUNTIME_MATRIX_REGISTRY" field \
-  "$PARADOX_RUNTIME_MATRIX_VERSION" dependency_mode)
 if [ "$runtime_matrix_dependency_mode" = source-library ]; then
   if [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF:-}" ]; then
     PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=$(
@@ -108,10 +199,38 @@ runtime_matrix_require_plain_directory_chain() {
   done
 }
 
-PARADOX_RUNTIME_MATRIX_LIBRARY="$PARADOX_ROOT/.local/runtime-matrix/libraries/R-$PARADOX_RUNTIME_MATRIX_VERSION"
-PARADOX_RUNTIME_MATRIX_TMP="$PARADOX_ROOT/.local/runtime-matrix/tmp/R-$PARADOX_RUNTIME_MATRIX_VERSION"
-PARADOX_RUNTIME_MATRIX_CACHE="$PARADOX_ROOT/.cache/runtime-matrix/R-$PARADOX_RUNTIME_MATRIX_VERSION"
-PARADOX_RUNTIME_MATRIX_XDG="$PARADOX_ROOT/.local/runtime-matrix/runtime/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+if [ -n "${PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT:-}" ]; then
+  if [ -z "${PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF:-}" ]; then
+    runtime_matrix_activation_fail \
+      "Stage-private runtime state requires a verified prefix handoff" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+  case "$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT" in
+    "$PARADOX_ROOT"/*) ;;
+    *)
+      runtime_matrix_activation_fail \
+        "Stage-private runtime state escaped the repository" ||
+        { return 1 2>/dev/null || exit 1; }
+      ;;
+  esac
+  if [ ! -d "$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT" ] ||
+      [ -L "$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT" ] ||
+      [ "$(cd "$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT" 2>/dev/null &&
+        pwd -P)" != "$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT" ]; then
+    runtime_matrix_activation_fail \
+      "Stage-private runtime state is not one canonical plain directory" ||
+      { return 1 2>/dev/null || exit 1; }
+  fi
+  PARADOX_RUNTIME_MATRIX_LIBRARY="$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT/library"
+  PARADOX_RUNTIME_MATRIX_TMP="$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT/tmp"
+  PARADOX_RUNTIME_MATRIX_CACHE="$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT/cache"
+  PARADOX_RUNTIME_MATRIX_XDG="$PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT/runtime"
+else
+  PARADOX_RUNTIME_MATRIX_LIBRARY="$PARADOX_ROOT/.local/runtime-matrix/libraries/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+  PARADOX_RUNTIME_MATRIX_TMP="$PARADOX_ROOT/.local/runtime-matrix/tmp/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+  PARADOX_RUNTIME_MATRIX_CACHE="$PARADOX_ROOT/.cache/runtime-matrix/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+  PARADOX_RUNTIME_MATRIX_XDG="$PARADOX_ROOT/.local/runtime-matrix/runtime/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+fi
 for runtime_matrix_directory in \
   "$PARADOX_ROOT/.local" "$PARADOX_ROOT/.local/runtime-matrix" \
   "$PARADOX_RUNTIME_MATRIX_PREFIX" "$PARADOX_RUNTIME_MATRIX_LIBRARY" \
@@ -134,8 +253,9 @@ unset runtime_matrix_directory runtime_matrix_path runtime_matrix_current
 unset runtime_matrix_remainder runtime_matrix_component
 
 if ! unset \
-  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE \
+  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE R_DEFAULT_PACKAGES \
   R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON \
   R_MAKEVARS_SITE R_MAKEVARS_USER R_HISTFILE \
   CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
   CC_FOR_BUILD CPP_FOR_BUILD CXX_FOR_BUILD FC_FOR_BUILD \
@@ -204,9 +324,12 @@ export CONDA_PREFIX="$PARADOX_RUNTIME_MATRIX_PREFIX"
 export MAMBA_ROOT_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/micromamba"
 export R_LIBS_USER="$PARADOX_RUNTIME_MATRIX_LIBRARY"
 export R_LIBS_SITE="$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"
-export R_ENVIRON_USER="$PARADOX_ROOT/environment/Renviron"
-export R_PROFILE_USER="$PARADOX_ROOT/environment/Rprofile.R"
-export R_MAKEVARS_USER="$PARADOX_ROOT/environment/Makevars"
+export R_ENVIRON_USER="$runtime_matrix_r_input_root/Renviron"
+export R_PROFILE_USER="$runtime_matrix_r_input_root/Rprofile.R"
+export R_MAKEVARS_USER="$runtime_matrix_r_input_root/Makevars"
+export R_BUILD_ENVIRON="$runtime_matrix_r_input_root/Renviron"
+export R_CHECK_ENVIRON="$runtime_matrix_r_input_root/Renviron"
+export R_INSTALL_ENVIRON="$runtime_matrix_r_input_root/Renviron"
 export R_HISTFILE=/dev/null
 export TMPDIR="$PARADOX_RUNTIME_MATRIX_TMP"
 export XDG_RUNTIME_DIR="$PARADOX_RUNTIME_MATRIX_XDG"
@@ -293,5 +416,6 @@ export PARADOX_RUNTIME_MATRIX_ACTIVE=1
 hash -r 2>/dev/null || true
 unset runtime_matrix_clean_path runtime_matrix_path_remainder runtime_matrix_path_entry
 unset runtime_matrix_dependency_mode
+unset runtime_matrix_r_input runtime_matrix_r_input_root
 unset runtime_matrix_hook runtime_matrix_had_nounset
 unset -f runtime_matrix_require_plain_directory_chain runtime_matrix_activation_fail 2>/dev/null || true

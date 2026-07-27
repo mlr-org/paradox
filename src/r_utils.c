@@ -391,11 +391,11 @@ void paradox_require_column_checked(SEXP column, SEXPTYPE type,
     R_xlen_t size, const char *corrupt_context, const char *column_name) {
   if ((SEXPTYPE) TYPEOF(column) != type) {
     Rf_error(
-      "Corrupt %s: `%s` must have type `%s` and length %lld",
+      "Corrupt %s: `%s` must have type `%s` and length %.0f",
       corrupt_context,
       column_name,
       Rf_type2char(type),
-      (long long) size
+      (double) size
     );
   }
   /* Canonical table columns are always ordinary vectors.  Reject an ALTREP
@@ -412,11 +412,11 @@ void paradox_require_column_checked(SEXP column, SEXPTYPE type,
   }
   if (XLENGTH(column) != size) {
     Rf_error(
-      "Corrupt %s: `%s` must have type `%s` and length %lld",
+      "Corrupt %s: `%s` must have type `%s` and length %.0f",
       corrupt_context,
       column_name,
       Rf_type2char(type),
-      (long long) size
+      (double) size
     );
   }
 }
@@ -437,10 +437,10 @@ paradox_numeric_column_t paradox_get_numeric_column(SEXP column,
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
   if (type != REALSXP && type != INTSXP) {
     Rf_error(
-      "Corrupt %s: `%s` must be numeric and have length %lld",
+      "Corrupt %s: `%s` must be numeric and have length %.0f",
       corrupt_context,
       column_name,
-      (long long) size
+      (double) size
     );
   }
   if (ALTREP(column)) {
@@ -452,10 +452,10 @@ paradox_numeric_column_t paradox_get_numeric_column(SEXP column,
   }
   if (XLENGTH(column) != size) {
     Rf_error(
-      "Corrupt %s: `%s` must be numeric and have length %lld",
+      "Corrupt %s: `%s` must be numeric and have length %.0f",
       corrupt_context,
       column_name,
-      (long long) size
+      (double) size
     );
   }
 
@@ -534,9 +534,9 @@ void paradox_require_character_argument(SEXP value, const char *argument_name) {
     }
     if (STRING_ELT(value, index) == NA_STRING) {
       Rf_error(
-        "Assertion on '%s' failed: Contains missing values (element %lld).",
+        "Assertion on '%s' failed: Contains missing values (element %.0f).",
         argument_name,
-        (long long) (index + 1)
+        (double) (index + 1)
       );
     }
   }
@@ -915,8 +915,8 @@ static void own_named_data_table_columns(SEXP table) {
       SEXP owned = PROTECT(Rf_shallow_duplicate(value));
       if (owned == value) {
         Rf_error(
-          "Internal error: cannot own named data.table column %lld",
-          (long long) (column + 1)
+          "Internal error: cannot own named data.table column %.0f",
+          (double) (column + 1)
         );
       }
       Rf_setAttrib(owned, R_NamesSymbol, R_NilValue);

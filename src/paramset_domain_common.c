@@ -262,41 +262,68 @@ int paradox_domain_owns_private_environment(SEXP self,
    * Registered entry points receive `self` and `private` from thin package
    * wrappers; direct calls with a different environment remain unsupported,
    * while every payload field is still structurally validated before use. */
-  SEXP owned_private = PROTECT(paradox_domain_private_environment(self));
+  SEXP owned_private = PROTECT(
+    paradox_domain_required_private_environment(self)
+  );
   const int owns = owned_private != R_UnboundValue &&
     owned_private == private_environment;
   UNPROTECT(1);
   return owns;
 }
 
+/*
+ * Generate the required operation reader and the absence-tolerant candidate
+ * reader from one source template.  This is deliberately compile-time rather
+ * than a function-pointer or run-time-flag abstraction: on R < 4.2 the
+ * optional reader must call base::exists(), while a known package shell must
+ * stay on the allocation-free required-binding API.  The two readers otherwise
+ * retain exactly the same structural admission.
+ */
+#define PARADOX_DEFINE_PRIVATE_ENVIRONMENT_READER( \
+    name, binding_snapshot, core_snapshot) \
+  static SEXP name(SEXP self) { \
+    if (TYPEOF(self) != ENVSXP || Rf_isS4(self)) { \
+      return R_UnboundValue; \
+    } \
+    SEXP enclosure_symbol = Rf_install(".__enclos_env__"); \
+    SEXP enclosure = PROTECT(binding_snapshot(self, enclosure_symbol)); \
+    if (TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure)) { \
+      UNPROTECT(1); \
+      return R_UnboundValue; \
+    } \
+    SEXP private_symbol = Rf_install("private"); \
+    SEXP private_environment = PROTECT( \
+      binding_snapshot(enclosure, private_symbol) \
+    ); \
+    SEXP result = TYPEOF(private_environment) == ENVSXP && \
+        !Rf_isS4(private_environment) && \
+        core_snapshot(private_environment) != R_UnboundValue \
+      ? private_environment \
+      : R_UnboundValue; \
+    UNPROTECT(2); \
+    return result; \
+  }
+
+PARADOX_DEFINE_PRIVATE_ENVIRONMENT_READER(
+  required_private_environment,
+  paradox_api_plain_binding_snapshot,
+  paradox_core_from_private
+)
+
+PARADOX_DEFINE_PRIVATE_ENVIRONMENT_READER(
+  optional_private_environment,
+  paradox_api_optional_plain_binding_snapshot,
+  paradox_core_from_private_optional
+)
+
+#undef PARADOX_DEFINE_PRIVATE_ENVIRONMENT_READER
+
+SEXP paradox_domain_required_private_environment(SEXP self) {
+  return required_private_environment(self);
+}
+
 SEXP paradox_domain_private_environment(SEXP self) {
-  if (TYPEOF(self) != ENVSXP || Rf_isS4(self)) {
-    return R_UnboundValue;
-  }
-  SEXP enclosure_symbol = Rf_install(".__enclos_env__");
-  SEXP enclosure = PROTECT(paradox_api_optional_plain_binding_snapshot(
-    self,
-    enclosure_symbol
-  ));
-  if (TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure)) {
-    UNPROTECT(1);
-    return R_UnboundValue;
-  }
-  SEXP private_symbol = Rf_install("private");
-  SEXP private_environment = PROTECT(
-    paradox_api_optional_plain_binding_snapshot(
-      enclosure,
-      private_symbol
-    )
-  );
-  SEXP result = TYPEOF(private_environment) == ENVSXP &&
-      !Rf_isS4(private_environment) &&
-      paradox_core_from_private_optional(private_environment) !=
-        R_UnboundValue
-    ? private_environment
-    : R_UnboundValue;
-  UNPROTECT(2);
-  return result;
+  return optional_private_environment(self);
 }
 
 static domain_kind_t domain_kind(SEXP cls, SEXP storage_type) {

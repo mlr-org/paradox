@@ -77,7 +77,7 @@ domain2_altrep_helpers_available = function() {
   )
 }
 
-test_that("the declared backports floor supplies deparse1 on old R", {
+test_that("the backports integration supplies deparse1 on old R", {
   if (getRversion() < "4.0.0") {
     expect_true(exists(
       "deparse1",
@@ -109,6 +109,52 @@ test_that("Domain construction uses fixed registered native interfaces", {
     .Call("domain_construct", PACKAGE = "paradox"),
     "not available",
     fixed = TRUE
+  )
+})
+
+test_that("simple Domain representation rendering stays native on old R", {
+  renderer = function(call) {
+    .Call(domain2_symbol("domain_simple_repr_id"), call)
+  }
+  deparse_one = get(
+    "deparse1",
+    envir = asNamespace("paradox"),
+    inherits = TRUE
+  )
+  named_call = function(constructor, name, value) {
+    as.call(structure(
+      list(as.name(constructor), value),
+      names = c("", name)
+    ))
+  }
+  calls = list(
+    quote(p_dbl()),
+    quote(p_lgl()),
+    named_call("p_int", "lower", 1L),
+    named_call("p_fct", "levels", c("small", "large")),
+    named_call("p_dbl", "lower", 1)
+  )
+
+  old_scipen = getOption("scipen")
+  on.exit(options(scipen = old_scipen), add = TRUE)
+  options(scipen = 0)
+  for (call in calls) {
+    observed = renderer(call)
+    expect_false(is.null(observed), info = deparse(call))
+    expect_identical(
+      observed,
+      deparse_one(call, collapse = "\n", width.cutoff = 80)
+    )
+  }
+
+  finite_real = named_call("p_dbl", "lower", 1)
+  options(scipen = 100)
+  expect_null(renderer(finite_real))
+  expect_identical(renderer(quote(p_dbl())), "p_dbl()")
+  domain = p_dbl(1, 2)
+  expect_identical(
+    domain$id,
+    deparse_one(attr(domain, "repr"), collapse = "\n", width.cutoff = 80)
   )
 })
 

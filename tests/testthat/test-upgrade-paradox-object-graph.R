@@ -16,6 +16,60 @@ same_environment_set = function(actual, expected) {
     }, logical(1L)))
 }
 
+test_that("recursive discovery traverses a directly reached bytecode object", {
+  candidate = graph_candidate("bytecode-expression")
+  bytecode = compiler::compile(call("identity", candidate))
+
+  discovery = discover_upgrade_candidates(list(bytecode))
+
+  expect_identical(typeof(bytecode), "bytecode")
+  expect_true(same_environment_set(discovery$objects, list(candidate)))
+  expect_true("x[[1]].expression.cdr.car" %in% discovery$paths)
+})
+
+test_that("direct bytecode traversal never evaluates its expression", {
+  bytecode = compiler::compile(
+    quote(stop("bytecode traversal evaluated its expression")),
+    env = baseenv()
+  )
+
+  expect_silent(discovery = discover_upgrade_candidates(list(bytecode)))
+  expect_identical(discovery$objects, list())
+  expect_identical(discovery$paths, character())
+})
+
+test_that("delayed-binding discovery is inert on every supported branch", {
+  candidate = graph_candidate("delayed-binding-environment")
+  sentinel = new.env(parent = emptyenv())
+  sentinel$forced = FALSE
+  evaluation_environment = new.env(parent = baseenv())
+  evaluation_environment$candidate = candidate
+  evaluation_environment$sentinel = sentinel
+  promise_host = new.env(parent = emptyenv())
+  delayedAssign(
+    "danger",
+    {
+      sentinel$forced = TRUE
+      stop("delayed binding was forced")
+    },
+    eval.env = evaluation_environment,
+    assign.env = promise_host
+  )
+
+  if (getRversion() >= "4.5.0" && getRversion() < "4.6.0") {
+    expect_error(
+      discover_upgrade_candidates(list(promise_host)),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
+  } else {
+    discovery = discover_upgrade_candidates(list(promise_host))
+    expect_true(same_environment_set(discovery$objects, list(candidate)))
+    expect_true(any(grepl(".promise.environment", discovery$paths, fixed = TRUE)))
+  }
+  expect_false(sentinel$forced)
+})
+
 test_that("current ParamSet stubs bypass historical migration gateways", {
   parameter_set = ps(x = p_dbl())
   stub = paste(deparse(body(parameter_set$ids)), collapse = "\n")
@@ -393,29 +447,35 @@ test_that("native graph discovery is iterative, identity-aware, and inert", {
   global_closure = function() NULL
   environment(global_closure) = .GlobalEnv
 
+  promise_graph_supported =
+    getRversion() < "4.5.0" || getRversion() >= "4.6.0"
+  promise_graph_fails_closed =
+    getRversion() >= "4.5.0" && getRversion() < "4.6.0"
   root = list(
     cyclic,
     active_host,
-    promise_host,
-    dots_frame,
     dots_host,
     closure,
     attribute_carrier,
     current,
     global_closure
   )
+  if (promise_graph_supported) {
+    root = append(root, list(promise_host, dots_frame), after = 2L)
+  }
   discovery = discover_upgrade_candidates(root)
   expected = list(
     ordinary,
     active,
-    promised,
-    dots_promised,
     ordinary_dots,
     closure_parent,
     attributed,
     current,
     protected
   )
+  if (promise_graph_supported) {
+    expected = append(expected, list(promised, dots_promised), after = 2L)
+  }
   expect_true(same_environment_set(discovery$objects, expected))
   expect_false(any(vapply(
     discovery$objects,
@@ -424,9 +484,24 @@ test_that("native graph discovery is iterative, identity-aware, and inert", {
     y = boundary
   )))
   expect_true(any(grepl("\\.active", discovery$paths, fixed = FALSE)))
-  expect_true(any(grepl("\\.promise\\.environment", discovery$paths)))
+  expect_identical(
+    any(grepl("\\.promise\\.environment", discovery$paths)),
+    promise_graph_supported
+  )
   expect_true(any(grepl("@attr", discovery$paths, fixed = TRUE)))
   expect_true(any(grepl("\\.protected", discovery$paths)))
+  if (promise_graph_fails_closed) {
+    expect_error(
+      discover_upgrade_candidates(promise_host),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
+    expect_error(
+      discover_upgrade_candidates(dots_frame),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
+  }
   expect_error(promise_host$danger, "delayed binding was forced", fixed = TRUE)
   expect_error(
     eval(quote(..1), envir = dots_frame),
@@ -439,6 +514,21 @@ test_that("native graph discovery is iterative, identity-aware, and inert", {
     discover_upgrade_candidates(asNamespace("paradox"))$objects,
     list()
   )
+})
+
+test_that("only genuine namespace imports environments are graph boundaries", {
+  candidate = graph_candidate("fake-imports-name")
+  fake_imports = new.env(parent = emptyenv())
+  attr(fake_imports, "name") = "imports:not-a-namespace"
+  fake_imports$hidden = candidate
+
+  discovery = discover_upgrade_candidates(fake_imports)
+  expect_true(same_environment_set(discovery$objects, list(candidate)))
+
+  real_imports = parent.env(asNamespace("stats"))
+  expect_match(attr(real_imports, "name"), "^imports:stats$")
+  expect_identical(parent.env(real_imports), asNamespace("base"))
+  expect_identical(discover_upgrade_candidates(real_imports)$objects, list())
 })
 
 test_that("user-database environments are opaque graph boundaries", {

@@ -654,29 +654,46 @@ does not invoke active bindings. Required authenticated ordinary-frame binding
 snapshots remain allocation-free. A terminal genuine-shell optional receipt
 scan cannot allocate, so on those runtimes it uses the
 header-declared/exported `R_HasFancyBindings()` only to fail closed for a fancy
-frame before selecting a stored cell. R 3.6--4.5 uses
-the declared/exported `Rf_findVarInFrame` to retrieve that stored frame cell;
-recursive migration may then inspect a returned `PROMSXP` through the
-header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE` without
-forcing it.
+frame before selecting a stored cell. R 3.6--4.5 uses the declared/exported
+`Rf_findVarInFrame` to retrieve that stored frame cell. R 3.6--4.4 may then
+inspect a returned `PROMSXP` through the header-declared/exported
+`R_PromiseExpr`, `PRENV`, and `PRVALUE` without forcing it. R 4.5's compiled-
+code policy classifies those accessors as non-API and offers no replacement,
+so recursive migration fails closed when it reaches a promise and requests
+that the operation be performed under R >= 4.6.
 R >= 4.6 uses only the documented experimental binding classifier and delayed/
-forced-binding/dots accessors. Strict headers hide all three detached-promise
-accessors, so none is locally declared or present in the current DSO and a
-`PROMSXP` reached outside one of those public binding boundaries is opaque. An
+forced-binding/dots accessors. None of the three detached-promise accessors is
+locally declared or present in an R >= 4.5 DSO, and a `PROMSXP` reached outside
+one of the R >= 4.6 public binding boundaries is opaque. An
 R-level `substitute()` is non-forcing but returns a promise expression rather
 than a binding-kind/generation receipt; it cannot distinguish that expression
 from a realized language/symbol value and therefore makes receipt scans and
 recursive graph discovery unsound.
+Likewise, public `R_getVar` is absent from every pre-4.6 DSO: without
+`R_GetBindingType` it may force the very delayed binding being inspected. The
+R >= 4.6 source contains exactly three reviewed `R_getVar` call sites, one in
+the direct-value facade and two in graph direct/forced-value branches. Every
+call follows the classifier; the DSO inventory contains one undefined-symbol
+row.
 The registered direct-binding projection preserves the API classification:
 realized language objects and symbols are returned as values, while delayed
 promises carrying language/symbol expressions remain promises and are never
 evaluated. Expression or R storage type is not a substitute for binding kind.
 
+Option access does not enlarge that exception ledger. The shared bounded
+simple-Domain renderer uses public `base::getOption()` through the facade on
+R 3.6--4.4 and documented `Rf_GetOption1` on R >= 4.5. Runtime symbol gates
+forbid the latter in old DSOs and require one occurrence in newer DSOs; only
+the option snapshot is versioned, not the representation engine.
+
 Every exceptional symbol, version range, source occurrence, and rationale is
 listed exactly in `environment/r-api-exceptions.tsv` and must pass raw-token,
 DSO, pinned-header, and real-runtime audits before freeze. These entries are not
 a CRAN allowlist and authorize neither another internal API nor an alternate
-semantic path. R 3.6 also exposes no function accessor for an active binding.
+semantic path. The exact R 4.5.2 runtime also runs its own
+`tools:::check_compiled_code()` over the installed package and retains a
+manifest-bound zero-issue receipt. R 3.6 also exposes no function accessor for
+an active binding.
 Direct and recursive legacy ParamSet-family migration fail closed if active-
 binding inspection is required and ask the user to migrate under R >= 4.0; they
 never invoke or silently skip the binding. Paradox-1 ParamSet-family R6 shells
@@ -954,8 +971,8 @@ column, preserves column identities, canonicalizes row names from the captured
 count, and drops ignored data.table caches. Base R's lazy attribute-only
 duplicate is the common motivating case; admission does not depend on its
 current internal width threshold. Semantic atomic columns may themselves be
-stable ALTREP. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and an
-`ATTRIB` traversal on R 3.6--4.5; neither route evaluates R code, calls
+stable ALTREP. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and one
+exact, ledgered `ATTRIB` traversal on R 3.6--4.5; neither route evaluates R code, calls
 data.table, or supplies a fallback engine. This narrow table exception does not
 extend to general list, row, callback-result, or package-state shells.
 Direct checked and unchecked `$values <-` reject an outer ALTREP
@@ -1102,10 +1119,12 @@ migration boundary for a containing object:
   environment bindings and enclosing parents; active-binding functions without
   invoking the binding; closure environments, formals, bodies and bytecode
   expressions; and forced or unforced binding/`...` promise structure without
-  forcing an unforced promise. A forced binding promise contributes its stored
-  value and expression; an unforced one contributes its expression and
-  evaluation environment. R 3.6--4.5 additionally inspect a detached
-  `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as opaque.
+  forcing an unforced promise where the runtime has a policy-compliant
+  inspection API. A forced binding promise contributes its stored value and
+  expression; an unforced one contributes its expression and evaluation
+  environment on R 3.6--4.4 and R >= 4.6. R 4.5 fails recursive migration
+  closed on a reached promise with an R >= 4.6 instruction. R >= 4.6 treats a
+  detached `PROMSXP` outside a binding/dots cell as opaque.
   R 3.6 cannot retrieve an arbitrary active-binding function and therefore
   fails this migration closed with an R >= 4.0 upgrade instruction rather than
   invoking or silently omitting the binding. Exact built-in current Paradox-2
@@ -1120,7 +1139,11 @@ migration boundary for a containing object:
   actual binding kind without forcing.
 - `.GlobalEnv`, every attached search-path environment (including Autoloads),
   package and namespace environments, imports environments, base, and the empty
-  environment are traversal boundaries. Thus a closure made by `crate()` or a
+  environment are traversal boundaries. Imports classification requires an
+  ordinary raw scalar `name` with the `imports:` prefix and
+  `R_BaseNamespace` as the direct parent; a user environment cannot become a
+  boundary by spoofing descriptive metadata alone. Thus a closure made by
+  `crate()` or a
   local R6 private enclosure is searched, but reaching package/global
   infrastructure cannot expand the migration to the whole session.
 - Weak-reference internals and generic external-pointer address/tag/protected
@@ -1403,10 +1426,13 @@ prerequisites and candidate bytes are frozen:
 
 1. strict GCC and Clang C99 builds, registered-routine/export audit, static
    analyzers, and the complete package suite;
-2. R 3.6.3, R 4.0.5, R 4.3.3, R 4.5.2, and development-R execution plus compilation
-   against the pinned R 3.6.0 and later headers and the exact stored-binding/
-   promise
-   `environment/r-api-exceptions.tsv` audit;
+2. R 3.6.3, R 4.0.5, R 4.3.3, R 4.5.2, and development-R execution plus
+   compilation against all seven pinned R 3.6.0--4.6.1 header axes; the exact
+   raw-attribute/hot-closure-formals/stored-binding/promise exception ledger,
+   raw-token/version-gated DSO audit, and option-access symbol policy; the
+   authenticated R 3.6 complete-test closure and separate exact declared-floor
+   smoke with `R_DEFAULT_PACKAGES` isolated; and the full-only sealed
+   R 4.0.5-to-R 3.6.3 serialization handoff;
 3. a new normalized upstream differential whose intentional deltas describe
    this contract reset rather than the superseded seven-delta policy;
 4. focused bridge rows, then all priority-zero/one GitHub and CRAN/Bioconductor
@@ -1416,7 +1442,8 @@ prerequisites and candidate bytes are frozen:
 6. package checks, examples, vignettes, manuals, pure/recursive/first-use/
    owner-bridge legacy upgrade workloads, and the active book/website
    documentation;
-7. Windows x86-64 and real Apple-silicon ARM64 CI against the exact candidate;
+7. current Windows x86-64, exact Windows x86-64 R 3.6.3/Rtools35, and real
+   Apple-silicon ARM64 CI against the exact candidate;
 8. representative paired benchmarks, alone on an idle host, after behavior and
    bytes freeze; accept their release conclusion only after every correctness
    gate is green.

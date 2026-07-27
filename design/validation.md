@@ -288,9 +288,20 @@ families.
   Realized direct language objects and symbols are distinguished from delayed
   promises carrying language/symbol expressions by the native classifier;
   neither path uses `substitute()` or evaluates the binding.
-  R 3.6--4.5 also inspect detached `PROMSXP` structure; strict R >= 4.6 treats
-  one outside a binding/dots cell as opaque. Tests record side effects and
-  cover both supported pre-4.6 and development-R API branches. On R 3.6 the
+  R 3.6--4.4 also inspect detached `PROMSXP` structure. R 4.5 fails recursive
+  migration closed on any reached promise, proves it remains unforced, and
+  requests R >= 4.6. R >= 4.6 treats a detached promise outside a binding/dots
+  cell as opaque. The DSO inventory excludes `R_getVar` before R 4.6 because
+  it could force a delayed cell without `R_GetBindingType`; current source must
+  contain the exact three reviewed call sites and every call must follow the
+  classifier, while the DSO contains one undefined-symbol row. Tests record
+  side effects and cover all three policy branches.
+  The same inventory authenticates the independent Domain-rendering policy:
+  `Rf_GetOption1` is absent through R 4.4, where the compatibility facade uses
+  public `base::getOption()`, and occurs exactly once from R 4.5 onward. The
+  old/current semantic test compares the bounded native result with the
+  existing `deparse1()` fallback under integer and numeric `scipen` states.
+  On R 3.6 the
   active-binding case must fail closed without invocation and direct the user
   to migrate under R >= 4.0; because Paradox-1 ParamSet-family R6 shells use
   active bindings, their practical migration runs only on R >= 4.0. The exact-
@@ -524,13 +535,25 @@ The frozen candidate must pass:
   supported API branch;
 - no forbidden private data.table API or unledgered/unsupported R API symbol;
 - exact authentication of `environment/r-api-exceptions.tsv`: every
-  non-forcing stored-binding/promise symbol has its precise source, count,
-  version range, and rationale. R 3.6--4.1 must additionally contain the exact
-  old-only `R_HasFancyBindings` receipt-scan entry. R 3.6--4.5 must contain the one
-  `Rf_findVarInFrame` call plus the ledgered header-declared/exported
-  `R_PromiseExpr`, `PRENV`, and `PRVALUE`; R >= 4.6 must exclude all four and
-  use its experimental binding/delayed-binding/dots APIs. Raw-token,
-  pinned-header, and DSO inventories verify both branches.
+  raw-attribute, hot closure-formals, non-forcing stored-binding, and promise symbol has its
+  precise source, count, version range, and rationale. R 3.6--4.5 must contain
+  the one centralized `ATTRIB` occurrence; R 3.6--4.4 must additionally ledger
+  one `FORMALS` occurrence while excluding `R_ClosureExpr` and
+  `R_BytecodeExpr` in favor of their cold public bridges. R 4.5 must instead
+  require the five public closure/bytecode/environment accessors
+  `R_ClosureFormals`, `R_ClosureExpr`, `R_BytecodeExpr`, `R_ClosureEnv`, and
+  `R_ParentEnv`.
+  R 3.6--4.1 must contain the exact
+  old-only `R_HasFancyBindings` receipt-scan entry. R 3.6--4.4 must contain the
+  one `Rf_findVarInFrame` call plus the ledgered header-declared/exported
+  `R_PromiseExpr`, `PRENV`, and `PRVALUE`. R 4.5 must retain only
+  `Rf_findVarInFrame` and exclude all three promise accessors; R >= 4.6 must
+  exclude all four and use its experimental binding/delayed-binding/dots APIs.
+  Raw-token, pinned-header, and DSO inventories verify every branch.
+  The real R 4.5.2 stage must also retain a zero-issue result from that
+  runtime's own `tools:::check_compiled_code()` on the installed package; its
+  evidence verifier rejects absence, extra output, a nonzero issue count, or a
+  digest mismatch.
   None of these
   entries is CRAN-allowlisted. An R-level `substitute()` workaround is not
   accepted because its promise expression is not an unambiguous binding-kind
@@ -589,6 +612,25 @@ overlay before Paradox is built. This is not a reason to skip tests or accept
 1.17 behavior. R 4.5.2 and development R resolve 1.18.4 directly. Runtime
 stages may run concurrently when the resource report admits their outer
 workers; nested work stays at one.
+
+Every selected R 3.6.3 stage also installs the same built candidate archive
+against the sealed `declared-floor` library profile: the exact five direct
+dependency floors plus `digest` 0.6.39. The bounded smoke authenticates every
+installed package identity and dependency namespace origin, plus the candidate
+Paradox DLL origin and registration. Representative
+constructor/check/dormant/grid paths, logs, the dependency receipt, and the DSO
+are retained and replayed. This lane does not rerun the complete suite and its
+package closure is cached by exact inputs. Ambient `R_DEFAULT_PACKAGES` is
+removed before admission so machine startup configuration cannot preload a
+floor dependency.
+
+Only the complete four-runtime selection may claim the post-stage
+cross-serialization result. It must produce the current-v2 fixture under the
+exact R 4.0.5 stage package, load/exercise/mutate/reserialize it under the exact
+R 3.6.3 stage package, and seal both package/DLL origins, stage receipts,
+fixture and round-trip bytes, semantic ledgers, logs, and isolated state.
+Partial selections retain no cross-runtime artifacts and explicitly report the
+gate as not applicable.
 
 No fixed “57 of 79 files” or expected skip count is a contract. Exclusions must
 be narrow, behavior-based, documented, and validated against the discovered
@@ -780,10 +822,19 @@ Then exercise the active pkgdown/book/gallery/website/cheatsheet workloads and
 both serialized `mbo_config` upgrades, including the recursive containing-object
 path and each exact owner bridge.
 
-Windows release x86-64 and real macOS Apple-silicon ARM64 CI must check the
-exact candidate source. Each workflow step and its final completion check must
-propagate R errors and nonzero status; a green wrapper around a failed R command
-is a harness defect. Retain job/run/source identities and artifacts.
+Windows release x86-64, exact Windows x86-64 R 3.6.3/Rtools35, and real macOS
+Apple-silicon ARM64 CI must check the exact candidate source. The old-Windows
+job is a separate source-build/link/load/smoke lane over the authenticated
+seven-package runtime closure; the local real R 3.6.3 stage retains ownership
+of complete old-R behavior. Its R 3.6 dependency check may retain only the
+single exact unavailable-Suggests NOTE and final `Status: 1 NOTE`; current
+platform checks retain exact `Status: OK`. The independent local R 3.6.3
+source-package check has the analogous exact four-package missing-Suggests
+contract defined in `portability-ci.md`; neither lane may relabel its bounded
+NOTE as clean. Each workflow step and its final completion check
+must propagate R errors and nonzero status; a green wrapper around a failed R
+command is a harness defect. Retain job/run/source identities and all three
+platform artifacts.
 
 Portability requirements are detailed in [`portability-ci.md`](portability-ci.md).
 

@@ -43,8 +43,9 @@ check <- function(value, message) {
 
 # These operations jointly exercise closure formals, attribute allow-lists,
 # callbacks, capsule-backed R6 shells, and outward facades through the native
-# engine. R 4.3 uses the public ATTRIB/FORMALS backports documented in Writing
-# R Extensions; neither runtime replays an operation through an R engine.
+# engine. R 4.3 exercises the ledgered hot-formals/raw-attribute branches and
+# the public cold closure bridge; ordinary operations are not replayed through
+# a second semantic engine.
 left <- ps(
   width = p_dbl(lower = 0, upper = 4, default = 1,
     tags = "numeric", trafo = function(x) x * 2),
@@ -96,6 +97,8 @@ for (iteration in seq_len(25L)) {
 
 cat("runtime=", runtime, "\n", sep = "")
 cat("r_api_compat_branch=", branch, "\n", sep = "")
-cat("public_api_compatibility_policy=documented-versioned-accessors\n")
+cat(
+  "r_api_compatibility_policy=public-current-ledgered-old-runtime-exceptions\n"
+)
 cat("focused_cases=", cases, "\n", sep = "")
 cat("runtime_matrix_focused_probe=passed\n")

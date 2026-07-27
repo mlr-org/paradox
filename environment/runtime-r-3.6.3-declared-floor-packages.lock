@@ -1,0 +1,7 @@
+Package	Version	Role	SHA256	URL	FallbackURL
+backports	1.1.7	runtime-import	b277e28716059d29841ccc1d2411accb4c2b9e8f95a1ae70f0a4f0192a9e6e0b	https://cloud.r-project.org/src/contrib/backports_1.1.7.tar.gz	https://cloud.r-project.org/src/contrib/Archive/backports/backports_1.1.7.tar.gz
+checkmate	2.0.0	runtime-import	0dc25b0e20c04836359df1885d099c6e4ad8ae0e585a9e4107f7ea945d9c6fa4	https://cloud.r-project.org/src/contrib/checkmate_2.0.0.tar.gz	https://cloud.r-project.org/src/contrib/Archive/checkmate/checkmate_2.0.0.tar.gz
+data.table	1.18.4	runtime-import	d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9	https://cloud.r-project.org/src/contrib/data.table_1.18.4.tar.gz	https://cloud.r-project.org/src/contrib/Archive/data.table/data.table_1.18.4.tar.gz
+mlr3misc	0.10.0	runtime-import	2154c39887d473d23b3a2c68405db3aaf878ee7d69c937d6acfa981e64f4dff2	https://cloud.r-project.org/src/contrib/mlr3misc_0.10.0.tar.gz	https://cloud.r-project.org/src/contrib/Archive/mlr3misc/mlr3misc_0.10.0.tar.gz
+R6	2.6.1	runtime-import	59c6eba8b1b912eb7e104f65053235604be853425ee67c152ac4e86a1f2073b4	https://cloud.r-project.org/src/contrib/R6_2.6.1.tar.gz	https://cloud.r-project.org/src/contrib/Archive/R6/R6_2.6.1.tar.gz
+digest	0.6.39	runtime-dependency	8bf048b49b2d17077138fae758bda56bbd53278d9437f2fdeaedf979c90a13c9	https://cloud.r-project.org/src/contrib/digest_0.6.39.tar.gz	https://cloud.r-project.org/src/contrib/Archive/digest/digest_0.6.39.tar.gz

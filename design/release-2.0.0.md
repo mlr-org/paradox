@@ -47,10 +47,13 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 ## Decisions frozen for the first public release
 
 - Version is 2.0.0; R >= 3.6; portable C99; data.table >= 1.18.4.
-- R C API use is public except for the exact centralized non-forcing
-  stored-binding/promise compatibility entries described below.
-  Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the established
-  `ATTRIB` traversal on R 3.6--4.5 without evaluating R or data.table code.
+- R C API use is public except for the exact centralized, versioned
+  raw-attribute, hot closure-formals, and non-forcing stored-binding/promise compatibility
+  entries described below. Raw attribute selection uses `R_mapAttrib()` on
+  R >= 4.6 and one ledgered `ATTRIB` traversal on R 3.6--4.5 without
+  evaluating R or data.table code. Before R 4.5, one ledgered `FORMALS`
+  accessor preserves callback hot-path speed; cold closure inspection uses
+  public base calls instead of native accessors that were not yet API.
   R 3.6--4.1 use `base::exists(..., inherits = FALSE)` only for cold optional
   existence queries; required ordinary-frame binding snapshots stay
   allocation-free, and the terminal optional receipt scan uses exact old-only
@@ -63,13 +66,24 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   binding APIs; callback-backed object tables are not ParamSet/R6 shells, and
   old `R_HasFancyBindings()` is valid only for ordinary frame layouts.
   The compatibility facade uses exported `Rf_findVarInFrame` on R 3.6--4.5 to
-  retrieve a stored frame cell and inspects any returned `PROMSXP` through
-  the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
-  R >= 4.6 instead uses only its experimental binding/delayed-binding/dots APIs;
-  strict headers hide all three detached-promise accessors, the current DSO
-  excludes them, and a `PROMSXP` reached outside a binding/dots cell is opaque.
-  An R-level `substitute()` workaround is
-  forcing/unsound for simultaneous receipt and recursive object-graph scans.
+  retrieve a stored frame cell. R 3.6--4.4 may inspect a returned `PROMSXP`
+  through the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
+  R 4.5 compiled-code policy classifies those accessors as non-API, so recursive
+  migration fails closed on a reached promise and requests R >= 4.6.
+  R >= 4.6 instead uses only its experimental binding/delayed-binding/dots
+  APIs. An R >= 4.5 DSO excludes all three detached-promise accessors. On
+  R >= 4.6, a `PROMSXP` reached outside a binding/dots cell is opaque.
+  Public `R_getVar` is also excluded before R 4.6 because, without the binding
+  classifier introduced there, it can force a delayed binding. Current-R code
+  has three reviewed call sites, each after `R_GetBindingType` proves a direct
+  or already-forced value; the DSO has one undefined-symbol inventory row.
+  Simple Domain rendering is not a second old-R implementation: one native
+  renderer receives `scipen` from public `base::getOption()` on R 3.6--4.4 and
+  from documented `Rf_GetOption1` on R >= 4.5. Exact DSO inventories forbid
+  that symbol on the former runtimes and require it once on the latter.
+  An R-level `substitute()` workaround is non-forcing but unsound for
+  simultaneous receipt and recursive object-graph scans because it returns an
+  expression, not a binding-kind/generation receipt.
   The native direct-binding projection distinguishes realized language/symbol
   values from delayed promises carrying the same expression types without
   evaluating either.
@@ -77,6 +91,9 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   recorded in `environment/r-api-exceptions.tsv` and pass raw-token, DSO,
   pinned-header, and real-runtime audits before freeze. None is a CRAN allowlist
   or broader internal-API permission.
+  The R 4.5.2 runtime stage additionally retains a manifest-bound zero-issue
+  receipt from that runtime's own `tools:::check_compiled_code()` over the
+  installed package.
   R 3.6 has no accessor for an active-binding function. Direct and recursive
   legacy ParamSet-family migration therefore fail closed when its inspection is
   required and ask for R >= 4.0; because Paradox-1 ParamSet-family R6 shells use
@@ -561,7 +578,20 @@ source. The replacement candidate still requires:
 - [ ] strict C99 compilation against R 3.6.0 and every later pinned header/API
   branch;
 - [ ] an authenticated real R 3.6.3 source-library build/install/test stage,
-  including the precise active-binding and list-ALTREP capability results;
+  including its complete-test closure, the precise active-binding and
+  list-ALTREP capability results, and the exact bounded
+  four-missing-Suggests package-check NOTE;
+- [ ] the separate exact R 3.6 declared-floor install/smoke authenticates every
+  package identity and dependency namespace origin plus the candidate Paradox
+  DLL, with ambient `R_DEFAULT_PACKAGES` isolated;
+- [ ] a complete four-runtime selection seals the exact
+  R 4.0.5-to-R 3.6.3 current-v2 serialization handoff; a partial selection
+  makes no cross-runtime claim;
+- [ ] the source-derived bounded `NOT_CRAN=true` GC/reentry slice passes all
+  exact selected targets under both R 3.6.3 and R 4.0.5, including the
+  selector isolation self-test and independently regenerated title filter;
+- [ ] an authenticated hosted Windows x86-64 R 3.6.3/Rtools35 source-build,
+  PE-DLL load/registration, and focused smoke/check artifact;
 - [ ] the complete applicable current-R, portability, memory, compatibility,
   documentation, and benchmark gates after source freeze.
 
@@ -941,12 +971,14 @@ For the exact candidate ref, retain and verify:
 
 1. strict GCC and Clang C99 warning-clean builds, registration/probe audit,
    ASan/UBSan, complete unit tests, examples, and `R CMD check --as-cran`;
-2. real R 3.6.3, 4.0.5, 4.3.3, and 4.5.2 runtime stages plus development R,
-   compilation against R 3.6.0 and every later pinned API branch, and the exact
-   R-API-exception ledger/raw-token/version-gated DSO audit for optional
-   existence, receipt scans, stored bindings, and non-forcing promise
-   inspection, including the authenticated R-3.6/R-4.0 source-package closures
-   and R-4.3 data.table 1.18.4 overlay;
+2. real R 3.6.3, 4.0.5, 4.3.3, and 4.5.2 runtime stages plus development R;
+   compilation against all seven pinned R 3.6.0--4.6.1 header axes; and the
+   exact raw-attribute/hot-closure-formals/stored-binding/promise exception
+   ledger, raw-token/version-gated DSO audit, and option-access symbol policy.
+   This includes the authenticated R-3.6/R-4.0 complete-test source-package
+   closures, the R-4.3 data.table 1.18.4 overlay, the separate exact R-3.6
+   declared-floor smoke with `R_DEFAULT_PACKAGES` isolated, and the full-only
+   sealed R-4.0.5-to-R-3.6.3 serialization handoff;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
 4. every exact default head in `compat/github-bridge-provenance.tsv`, the four
    superseding heads in the `release-refresh-20260720` profile against both
@@ -959,8 +991,9 @@ For the exact candidate ref, retain and verify:
 6. package manuals/vignettes, active book/gallery/website/cheatsheets, and
    pure/recursive/default/opt-in/owner-bridge legacy serialized configuration
    upgrades;
-7. GitHub Windows x86-64 and macOS Apple-silicon ARM64 checks whose failure
-   status is correctly propagated and whose exact source provenance is retained;
+7. GitHub current Windows x86-64, exact Windows x86-64 R 3.6.3/Rtools35, and
+   macOS Apple-silicon ARM64 checks whose failure status is correctly
+   propagated and whose exact source provenance is retained;
 8. representative paired benchmarks on an idle host, including downstream
    call patterns, with raw distributions and regression thresholds reviewed.
 

@@ -87,6 +87,15 @@ and their admission-bound plans; the API parent also retains exact header-task
 and authenticated cleanup-retry ledgers before compiling. Their fast
 adversarial tests are:
 
+Compiler, header-preparation, and supported-runtime workers never share their
+output descriptor with GNU `timeout`. The supervisor log has a closed grammar:
+the full executable path and basename forms emitted by supported coreutils are
+accepted, status 124/137 needs the corresponding singleton TERM/KILL evidence,
+and markerless 124/137 remains an ordinary child failure. Unknown, duplicate,
+or status-inconsistent diagnostics fail closed. The exact timeout executable,
+version identity, content-bound logging wrapper, and worker are authenticated
+before launch and again after the batch.
+
 ```sh
 scripts/environment/test-resource-jobs
 scripts/environment/test-compiler-batch
@@ -103,32 +112,92 @@ constructs each valid focused/full native-evidence fixture once, then restores
 independent cached copies for its mutations; adding a tamper case must not
 regenerate the same valid fixture from scratch.
 
-The GitHub portability workflow has a separate always-run completion job in
-addition to its platform matrix. Keep its raw-log and aggregate-result guards
-covered by the cheap structural/adversarial tests:
+The GitHub portability workflow has a separate exact R 3.6.3/Rtools35 Windows
+source-build job and an always-run completion job in addition to its ordinary
+platform matrix. Keep its raw-log, source-lock, DLL-smoke, and aggregate-result
+guards covered by the cheap structural/adversarial tests:
+
+The locked closure's `digest` 0.6.39 source requires C++11 but does not request
+it; exact R 3.6.3 Windows already includes `-std=gnu++11` in default `CXX`.
+All three old-Windows execution steps dot-source
+`enter-hosted-r36-windows.ps1`. It replaces user/site startup and Makevars
+inputs with six authenticated empty read-only files, gives each phase a fresh
+home and temporary directory, selects an empty controlled site library, and
+clears the exact reviewed compiler/make/package-flag list before R starts.
+The same authenticated empty environment file is explicitly selected through
+`R_BUILD_ENVIRON`, `R_CHECK_ENVIRON`, and `R_INSTALL_ENVIRON`.
+The installer therefore leaves `R_PKG_CXX_STD` absent while building every
+dependency and retains digest's four ordinary compiler commands as proof.
+Three read-only phase receipts are retained and replayed by the offline
+verifier; do not weaken this to a self-reported banner. Do not add a
+dependency-specific workaround or broaden it to Paradox. The acceptance
+verifier requires the exact Rtools35 x86-64 G++ path and complete 4.9.3
+first-line banner. The workflow and retained `rtools35.tsv`
+also require the official GCC, G++, `objdump`, and Make SHA-256 values recorded
+in `design/portability-ci.md`; a pre-existing look-alike `C:\Rtools` must fail.
 
 ```sh
 Rscript scripts/environment/test-portability-workflow.R "$PARADOX_ROOT" general
+Rscript scripts/environment/test-portability-release-renderer.R
 Rscript scripts/environment/test-portability-ci-evidence-verifier.R
 "$PARADOX_ROOT/.local/tools/bin/actionlint" \
   "$PARADOX_ROOT/.github/workflows/r-cmd-check.yml"
 ```
 
-The release-only direct-child companion may reduce the matrix to macOS ARM64
-and Windows x86-64 and pin the immutable candidate checkout, but it retains the
-completion job. Its offline evidence must contain three successful REST jobs
-(both platform rows plus completion) and exactly two platform artifacts.
+The release-only direct-child companion may reduce the ordinary matrix to
+macOS ARM64 and current Windows x86-64 and pin the immutable candidate
+checkout, but it retains the separate old-Windows job and completion job. Its
+offline evidence must contain four successful REST jobs (both ordinary
+platform rows, exact R 3.6.3/Rtools35 Windows, and completion) and exactly three
+platform artifacts.
+
+Render a candidate-bound companion into a new, absent path with:
+
+```sh
+Rscript scripts/environment/render-portability-release-workflow.R \
+  paradox-2.0.0-ci-<short-candidate> \
+  <exact-40-hex-candidate-commit> \
+  /absolute/new/path/r-cmd-check.yml
+```
+
+The deterministic renderer first validates the general workflow, reduces only
+its ordinary matrix, pins both job checkouts credential-free, inserts the same
+exact frozen-commit assertion into the matrix and old-Windows jobs, and runs
+the release validator before atomically publishing the new file. It refuses an
+existing or symbolic output.
+
+The old-Windows artifact is the sole check-log exception to final
+`Status: OK`. R 3.6's `_R_CHECK_DEPENDS_ONLY_` isolates execution libraries but
+does not remove the missing-Suggests dependency NOTE. Its verifier therefore
+requires process exit zero, exactly one dependency NOTE containing the complete
+nine-package direct-Suggests set, no other NOTE/WARNING/ERROR/halt, and one sole
+final `Status: 1 NOTE`. Current Windows and macOS artifacts remain exact
+`Status: OK`.
 
 The offline public-R-API gate uses `r-api-header-cache` to avoid retaining a
 roughly 424 MiB extraction in every run. On a cache miss the helper verifies
 the pinned archive, configures R in a supervised private process group, copies
 the complete `src/include` tree and generated `Rconfig.h`/`Rversion.h`, then
 deletes all source/build staging before it receipts and atomically promotes the
-small entry. The schema 3 key and receipts bind every configure input, the
+small entry. The schema 4 key and receipts bind every configure input, the
 archive, platform, toolchain lock, the executing helper and tree-receipt helper,
 the fixed configure shell, and the complete reviewed configure/make command
-inventory. That inventory records present and absent commands, selected paths,
-bounded link chains, executable bytes, and identity probes. Same-key builders
+inventory. R 3.6.0 and 4.0.0 retain one configure-only
+`-Wno-error=implicit-function-declaration` adaptation for upstream bzip2/HTTPS
+test programs that omitted standard declarations; their real compile/run
+probes still execute. R 3.6.0, 4.0.0, and 4.2.0 use the fully receipted libcurl
+7.86 closure in the mandatory R 3.6.3 runtime prefix, preserving each source
+release's own major-7/minimum/header/link/HTTPS admission with zero Autoconf
+result overrides. A strict direct probe additionally requires identical
+major-7 header/runtime versions and HTTPS. The complete runtime-prefix receipt
+is verified before every old-header cache lookup and again after a cache-miss
+build; the receipt helper, manifest, seal, runtime lock, selected curl-config,
+flags, probe source, and result all enter the cache input identity. The prefix
+is prepared by `scripts/bootstrap-runtime-matrix`; it is a declared
+prerequisite, not ambient host state.
+
+The reviewed command inventory records present and absent commands, selected
+paths, bounded link chains, executable bytes, and identity probes. Same-key builders
 serialize with `flock`; interrupted staging is removed on exit or by the next
 lock owner. A hit verifies the canonical input, seal, and full header tree
 without hashing the archive. Compilation never reads the cache directly: each
@@ -397,8 +466,22 @@ scripts/environment/test-runtime-matrix
 scripts/environment/test-runtime-matrix-installed all
 ```
 
+Interactive `. scripts/activate-runtime-matrix VERSION` use requires Bash or
+zsh. The activation body is portable shell, but dash does not forward operands
+to its dot builtin; all automated matrix callers use Bash.
+
+Prefix provisioning passes micromamba `--always-copy`, and the complete-tree
+receipt rejects every multiply-linked regular file. This is an immutability
+requirement, not a storage preference: the default package-cache hard links
+allow one in-place cache write to change multiple sealed runtimes. Prefixes
+created by the older linking policy must be deliberately reprovisioned from
+their exact locks; verification fails closed and never silently deletes or
+reseals them. This costs roughly one private copy of each runtime, but prevents
+cross-run and cross-prefix mutation.
+
 The fast fixture checks registry, shell/R syntax, lock shape, complete-tree tamper
-detection, and outward-link refusal. The installed fixture starts hostile
+detection, multiply-linked-file rejection, and outward-link refusal. The
+installed fixture starts hostile
 clean shells and proves every activation repairs injected R libraries, startup
 files, compiler/linker/pkg-config inputs, caches, temporary paths, and XDG
 runtime state. It also re-sources activation to prove idempotence. No matrix
@@ -414,6 +497,31 @@ The real R 4.0.5 axis uniquely executes active-binding inspection while still
 exercising the pre-R-4.2 optional-binding and element-setter compatibility
 branches.
 
+Whenever R 3.6.3 is provisioned, `bootstrap-runtime-matrix` also prepares the
+`declared-floor` profile of `runtime-matrix-library`; its `--verify` mode
+checks that profile read-only. The source-bound coordinator only consumes the
+verified receipt and never provisions or repairs the cache. This separate sealed
+six-package closure contains the five exact direct `DESCRIPTION` floors plus
+`digest` 0.6.39. The stage installs the already-built Paradox tarball into a
+fresh candidate-only library against those packages and runs
+`run-r36-declared-floor-smoke.R`. That bounded probe authenticates every
+installed package identity and dependency namespace origin, plus the candidate
+Paradox DLL origin and registration, and exercises representative imported
+paths; the ordinary R 3.6 stage remains the sole complete test run. The
+profile has its own cache key and receipt handoff, so it is built once and
+reused. Activation removes ambient `R_DEFAULT_PACKAGES`, preventing an
+operator setting from preloading a dependency before the origin check.
+
+The trusted-input inventory also contains `environment/Renviron`,
+`environment/Rprofile.R`, and `environment/Makevars`. Interactive activation
+selects those live files for developer convenience. A retained stage instead
+passes its detached input root into activation, which binds all ordinary and
+command-specific variables, including
+`R_BUILD_ENVIRON`, `R_CHECK_ENVIRON`, and `R_INSTALL_ENVIRON`, to its detached
+authenticated copies before activation's first R child or build command. A concurrent edit in
+the checkout therefore cannot change the source-bound compiler or startup
+configuration.
+
 `scripts/test-runtime-matrix --help` describes the retained execution gate.
 For each selected actual interpreter it archives a committed source ref,
 builds and installs paradox into a fresh stage library, runs the focused
@@ -425,9 +533,14 @@ regression, and native source suite. The header-only
 no remaining pre-R-4.6 implementation exclusions. The coordinator validates
 that zero-row contract from the exact extracted candidate before admitting
 any build/install worker, and each old-runtime runner reuses the same
-validator. R 3.6--4.5 use the ATTRIB and
-FORMALS backports documented in Writing R Extensions rather than evaluating R
-inspection shims. R 3.6--4.1 use a cold `base::exists()` path only for optional
+validator. R 3.6--4.5 use one exact, ledgered raw-attribute traversal; before
+R 4.5 one ledgered `FORMALS` accessor keeps transformation callback admission
+allocation-free, while cold closure inspection uses public base calls instead
+of native accessors that were not yet API.
+Directly reached bytecode takes a cold, non-executing public
+`as.function.default()`/`body()` bridge. Every genuine exception remains
+count-audited.
+R 3.6--4.1 use a cold `base::exists()` path only for optional
 absence checks and an old-only `R_HasFancyBindings()` receipt-scan exception;
 required authenticated ordinary-frame binding reads remain allocation-free.
 Recognized callback-backed `UserDefinedDatabase` environments are rejected
@@ -442,17 +555,49 @@ suite must be clean and nonempty; file, context, support, and skip counts are
 joined to their retained inventories instead of frozen prose floors. The stage
 retains the exact scope ledger, staged source copies, testthat-reported
 inventory, skip ledgers, counts, and hashes.
+R 3.6.3 and R 4.0.5 then run one additional bounded slice with
+`NOT_CRAN=true`. Its reviewed
+`environment/runtime-matrix-old-r-stress.tsv` rows name exact literal
+`test_that()` titles from nine selected source files: the skipped gctorture
+cases cover native entry points, Domain callback reentry, ParamSet values,
+collection construction, active-binding rejection, and live/detached
+transformations; small companion rows cover the pre-R-4.2 non-forcing binding
+facade and an allocation-finalizer generation check. The policy helper parses
+the authenticated candidate and requires every `not-cran` target still to
+begin with `skip_on_cran()`. The runner stages only those files plus the normal
+test helpers and one deterministically generated final helper that leaves
+top-level setup intact but does not force unselected `test_that()` bodies. The
+verifier regenerates that title filter from the retained source and manifest;
+each old runtime first proves that it leaves an unselected body unforced and
+passes a selected braced expression into testthat's isolated test environment;
+the retained result ledger proves every exact selected target actually passed.
+Counts are always derived from that manifest and the
+testthat result structure; no expectation floor or frozen target count is an
+authority. Newer runtimes do not repeat this old-branch slice.
 Only the declared-minimum R 3.6.3 axis additionally runs a clean source-package
 check from the built tarball. Its exact bounded scope is
-`_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --no-manual
---no-build-vignettes`: the authenticated old-runtime library deliberately
+`_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --ignore-vignettes
+--no-manual`: the authenticated old-runtime library deliberately
 omits heavy Suggests, while package installation, examples, compiled code, and
 ordinary check policy still execute. The separately receipted complete-source
 test stage already executes every supported test exactly once, so the package
 check does not repeat the same suite. The driver log, complete
-`paradox.Rcheck` tree, exact `Status: OK`, status ledger, and their hashes are
-retained and replayed by the evidence verifier. This check is not multiplied
-across the newer runtime axes.
+`paradox.Rcheck` tree, status ledger, and their hashes are retained and replayed
+by the evidence verifier. The locked local test library contains five of the
+nine direct Suggests, so the only accepted result is child exit zero, one
+dependency NOTE naming exactly `reticulate`, `rmarkdown`, `mlr3learners`, and
+`e1071`, no other NOTE/WARNING/ERROR/halt, and one sole final
+`Status: 1 NOTE`. This check is not multiplied across the newer runtime axes.
+
+A complete `--runtime all` run has one additional post-stage gate:
+`run-runtime-matrix-cross-serialization` creates a representative current-v2
+object graph with the exact R 4.0.5 stage candidate, then loads, exercises,
+mutates, and reserializes it with the exact R 3.6.3 stage candidate. The
+producer/consumer package and DSO paths, fixture and round-trip bytes, isolated
+state, stage seals, prefix receipts, logs, and semantic result ledgers are
+sealed and replayed offline. Partial runtime selections explicitly record this
+gate as not applicable and retain no cross-runtime artifact.
+
 The coordinator also runs `mbo-config-fixtures` before resource admission.
 That helper joins the candidate's snapshot and organization-review manifests,
 reads the two upgrade fixtures from the selected immutable Git commit rather

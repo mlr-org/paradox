@@ -18,6 +18,9 @@ env -i \
   PATH="$ROOT/.local/compat/system/p1/bin:$ROOT/.local/compat/system/geo/bin:$ROOT/.local/runtime-matrix/prefixes/R-4.3.3/bin:/usr/bin:/bin" \
   XDG_RUNTIME_DIR=/outside/inherited-runtime \
   CCACHE_TEMPDIR=/outside/inherited-ccache \
+  R_BUILD_ENVIRON=/outside/build-environ \
+  R_CHECK_ENVIRON=/outside/check-environ \
+  R_INSTALL_ENVIRON=/outside/install-environ \
   PARADOX_RUNTIME_MATRIX_ACTIVE=1 \
   PARADOX_RUNTIME_MATRIX_VERSION=4.3.3 \
   PARADOX_RUNTIME_MATRIX_PREFIX="$ROOT/.local/runtime-matrix/prefixes/R-4.3.3" \
@@ -65,6 +68,9 @@ env -i \
     test "$XDG_RUNTIME_DIR" = "$root/.local/runtime"
     test "$CCACHE_TEMPDIR" = "$root/.local/tmp/ccache"
     test "$TMPDIR" = "$root/.local/tmp"
+    test "$R_BUILD_ENVIRON" = "$root/environment/Renviron"
+    test "$R_CHECK_ENVIRON" = "$root/environment/Renviron"
+    test "$R_INSTALL_ENVIRON" = "$root/environment/Renviron"
     test -d "$XDG_RUNTIME_DIR"
     test ! -L "$XDG_RUNTIME_DIR"
     test -d "$CCACHE_TEMPDIR"

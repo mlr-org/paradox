@@ -146,6 +146,498 @@ verify_check_log <- function(path) {
   invisible(TRUE)
 }
 
+verify_old_windows_check_log <- function(path) {
+  require_plain_file(path, "old-Windows artifact R CMD check log")
+  info <- file.info(path, extra_cols = FALSE)
+  if (info$size > 16 * 1024^2) {
+    fail("old-Windows check log exceeds the reviewed 16-MiB bound: ", path)
+  }
+  lines <- readLines(path, warn = FALSE, encoding = "UTF-8")
+  expected_unavailable_suggests <- c(
+    "callr", "reticulate", "rmarkdown", "mlr3learners", "e1071",
+    "knitr", "lhs", "spacefillr", "testthat"
+  )
+  status <- grep("^Status:", lines, value = TRUE)
+  nonempty <- lines[nzchar(trimws(lines))]
+  problem_markers <- grep(
+    "^\\* checking .* \\.\\.\\. (NOTE|WARNING|ERROR)$",
+    lines
+  )
+  expected_marker <- "* checking package dependencies ... NOTE"
+  marker <- if (length(problem_markers) == 1L) {
+    problem_markers[[1L]]
+  } else {
+    NA_integer_
+  }
+  later_checks <- if (!is.na(marker)) {
+    which(seq_along(lines) > marker & startsWith(lines, "* checking "))
+  } else {
+    integer()
+  }
+  block_end <- if (length(later_checks)) {
+    later_checks[[1L]] - 1L
+  } else {
+    NA_integer_
+  }
+  note_block <- if (!is.na(marker) && !is.na(block_end) &&
+      block_end >= marker + 1L) {
+    trimws(lines[seq.int(marker + 1L, block_end)])
+  } else {
+    character()
+  }
+  note_block <- note_block[nzchar(note_block)]
+  suggest_tokens <- if (length(note_block) >= 2L) {
+    token_text <- paste(note_block[-1L], collapse = " ")
+    matches <- gregexpr("[A-Za-z][A-Za-z0-9.]*", token_text, perl = TRUE)
+    regmatches(token_text, matches)[[1L]]
+  } else {
+    character()
+  }
+  note_words <- grepl("(^|[[:space:]])NOTE($|[[:space:]])", lines)
+  warning_or_error <- grepl(
+    "(^|[[:space:]])(WARNING|ERROR)(:|[[:space:]]|$)",
+    lines
+  )
+  if (any(grepl("Execution halted", lines, fixed = TRUE)) ||
+      !identical(status, "Status: 1 NOTE") ||
+      !length(nonempty) ||
+      !identical(tail(nonempty, 1L), "Status: 1 NOTE") ||
+      !identical(lines[problem_markers], expected_marker) ||
+      sum(note_words) != 2L ||
+      any(warning_or_error) ||
+      !length(note_block) ||
+      !identical(
+        note_block[[1L]],
+        "Packages suggested but not available for checking:"
+      ) ||
+      length(suggest_tokens) != length(expected_unavailable_suggests) ||
+      anyDuplicated(suggest_tokens) ||
+      !setequal(suggest_tokens, expected_unavailable_suggests)) {
+    fail(paste0(
+      "old-Windows check log does not contain only the exact unavailable-",
+      "Suggests NOTE and final `Status: 1 NOTE`: ",
+      path
+    ))
+  }
+  invisible(TRUE)
+}
+
+verify_old_windows_isolation <- function(artifact_root) {
+  isolation <- require_plain_directory(
+    file.path(artifact_root, "environment-isolation"),
+    "old-Windows hostile-environment evidence"
+  )
+  phases <- c("toolchain", "closure", "candidate")
+  receipt_names <- paste0(phases, ".tsv")
+  observed_receipts <- list.files(
+    isolation,
+    all.files = TRUE,
+    no.. = TRUE
+  )
+  if (!identical(sort(observed_receipts), sort(receipt_names))) {
+    fail("old-Windows isolation receipt inventory differs from three phases")
+  }
+
+  empty_sha256 <-
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  empty_files <- c(
+    R_ENVIRON = "Renviron.site",
+    R_ENVIRON_USER = "Renviron.user",
+    R_PROFILE = "Rprofile.site",
+    R_PROFILE_USER = "Rprofile.user",
+    R_MAKEVARS_SITE = "Makevars.site",
+    R_MAKEVARS_USER = "Makevars.user"
+  )
+  reset_variables <- c(
+    "R_HOME", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE",
+    "R_DEFAULT_PACKAGES", "R_ENVIRON", "R_ENVIRON_USER", "R_PROFILE",
+    "R_PROFILE_USER", "R_BUILD_ENVIRON", "R_CHECK_ENVIRON",
+    "R_INSTALL_ENVIRON", "R_MAKEVARS_SITE", "R_MAKEVARS_USER", "R_USER",
+    "R_HISTFILE", "R_ARCH", "R_INSTALL_TAR", "R_PKG_CFLAGS",
+    "R_PKG_CPPFLAGS", "R_PKG_CXXFLAGS", "R_PKG_CXX_STD",
+    "R_PKG_FFLAGS", "R_PKG_FCFLAGS", "R_PKG_LIBS", "CC", "CPP",
+    "CXX", "CXX11", "CXX14", "CXX17", "CXX20", "CXX23", "FC",
+    "F77", "F90", "F95", "OBJC", "OBJCXX", "CC_FOR_BUILD",
+    "CPP_FOR_BUILD", "CXX_FOR_BUILD", "FC_FOR_BUILD", "AR", "AS",
+    "LD", "NM", "OBJCOPY", "OBJDUMP", "RANLIB", "READELF", "SIZE",
+    "STRINGS", "STRIP", "WINDRES", "DLLTOOL", "BINPREF", "BINPREF64",
+    "M_ARCH", "CFLAGS", "CPPFLAGS", "CXXFLAGS", "CXX11FLAGS",
+    "CXX14FLAGS", "CXX17FLAGS", "CXX20FLAGS", "CXX23FLAGS",
+    "FCFLAGS", "FFLAGS", "FORTRANFLAGS", "LDFLAGS", "CPATH",
+    "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "OBJC_INCLUDE_PATH",
+    "LIBRARY_PATH", "COMPILER_PATH", "GCC_EXEC_PREFIX", "MAKE",
+    "MAKEFLAGS", "MFLAGS", "GNUMAKEFLAGS", "MAKEFILES", "CONFIG_SITE",
+    "PKG_CONFIG", "PKG_CONFIG_PATH", "PKG_CONFIG_LIBDIR",
+    "PKG_CONFIG_SYSROOT_DIR"
+  )
+  if (anyDuplicated(reset_variables)) {
+    fail("internal old-Windows reset-variable policy contains a duplicate")
+  }
+
+  append_row <- function(table, kind, name, value, sha256 = "-") {
+    rbind(
+      table,
+      data.frame(
+        Kind = kind,
+        Name = name,
+        Value = value,
+        SHA256 = sha256,
+        stringsAsFactors = FALSE,
+        check.names = FALSE
+      )
+    )
+  }
+  for (phase in phases) {
+    receipt <- require_plain_file(
+      file.path(isolation, paste0(phase, ".tsv")),
+      paste0("old-Windows ", phase, " isolation receipt")
+    )
+    observed <- utils::read.delim(
+      receipt,
+      stringsAsFactors = FALSE,
+      colClasses = "character",
+      check.names = FALSE,
+      quote = "",
+      comment.char = ""
+    )
+    expected <- data.frame(
+      Kind = character(),
+      Name = character(),
+      Value = character(),
+      SHA256 = character(),
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    expected <- append_row(
+      expected, "metadata", "schema", "hosted-r36-isolation-v1"
+    )
+    expected <- append_row(expected, "metadata", "phase", phase)
+    home <- paste0("C:/p36-isolation/home/", phase)
+    temporary <- paste0("C:/p36-isolation/tmp/", phase)
+    user_library <- if (identical(phase, "toolchain")) {
+      "C:/p36-isolation/libraries/toolchain"
+    } else {
+      "C:/p36/library"
+    }
+    site_library <- "C:/p36-isolation/libraries/site"
+    expected <- append_row(expected, "directory", "home", home)
+    expected <- append_row(expected, "directory", "tmp", temporary)
+    expected <- append_row(
+      expected, "directory", "user_library", user_library
+    )
+    expected <- append_row(
+      expected, "directory", "site_library", site_library
+    )
+    for (variable in names(empty_files)) {
+      expected <- append_row(
+        expected,
+        "file",
+        variable,
+        paste0("C:/p36-isolation/files/", empty_files[[variable]]),
+        empty_sha256
+      )
+    }
+    controlled <- c(
+      R_ENVIRON = "C:/p36-isolation/files/Renviron.site",
+      R_ENVIRON_USER = "C:/p36-isolation/files/Renviron.user",
+      R_PROFILE = "C:/p36-isolation/files/Rprofile.site",
+      R_PROFILE_USER = "C:/p36-isolation/files/Rprofile.user",
+      R_BUILD_ENVIRON = "C:/p36-isolation/files/Renviron.site",
+      R_CHECK_ENVIRON = "C:/p36-isolation/files/Renviron.site",
+      R_INSTALL_ENVIRON = "C:/p36-isolation/files/Renviron.site",
+      R_MAKEVARS_SITE = "C:/p36-isolation/files/Makevars.site",
+      R_MAKEVARS_USER = "C:/p36-isolation/files/Makevars.user",
+      R_USER = home,
+      HOME = home,
+      USERPROFILE = home,
+      TMP = temporary,
+      TEMP = temporary,
+      TMPDIR = temporary,
+      R_HISTFILE = paste0(home, "/Rhistory"),
+      R_LIBS_USER = user_library,
+      R_LIBS_SITE = site_library,
+      R_KEEP_PKG_SOURCE = "yes",
+      PARADOX_R36_ISOLATION_SCHEMA = "hosted-r36-isolation-v1",
+      PARADOX_R36_ISOLATION_ROOT = "C:/p36-isolation",
+      PARADOX_R36_ISOLATION_PHASE = phase,
+      PARADOX_R36_ISOLATION_RECEIPT = paste0(
+        "C:/p36-isolation/receipts/", phase, ".tsv"
+      )
+    )
+    for (variable in names(controlled)) {
+      expected <- append_row(
+        expected, "controlled", variable, controlled[[variable]]
+      )
+    }
+    cleared <- reset_variables[!reset_variables %in% names(controlled)]
+    for (variable in cleared) {
+      expected <- append_row(expected, "cleared", variable, "absent")
+    }
+    if (!identical(observed, expected)) {
+      fail(
+        "old-Windows ", phase,
+        " isolation receipt differs from the reviewed hostile-input policy"
+      )
+    }
+  }
+  invisible(TRUE)
+}
+
+verify_old_windows_artifact <- function(artifact_root) {
+  verify_old_windows_isolation(artifact_root)
+  closure <- file.path(artifact_root, "runtime-closure")
+  lock <- require_plain_file(
+    file.path(closure, "runtime-r-3.6.3-packages.lock"),
+    "old-Windows runtime source lock"
+  )
+  expected_lock_sha256 <-
+    "9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5"
+  if (!identical(sha256_file(lock), expected_lock_sha256)) {
+    fail("old-Windows runtime source lock differs from the reviewed lock")
+  }
+  retained_lock_sha256 <- readLines(
+    require_plain_file(
+      file.path(closure, "lock-sha256.txt"),
+      "old-Windows retained lock digest"
+    ),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  if (!identical(retained_lock_sha256, expected_lock_sha256)) {
+    fail("old-Windows retained lock digest differs")
+  }
+
+  ledger <- utils::read.delim(
+    require_plain_file(
+      file.path(closure, "sources.tsv"),
+      "old-Windows authenticated source ledger"
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    quote = "",
+    comment.char = ""
+  )
+  locked <- utils::read.delim(
+    lock,
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    quote = "",
+    comment.char = ""
+  )
+  expected_packages <- c(
+    "backports", "checkmate", "data.table", "R6",
+    "cli", "digest", "mlr3misc"
+  )
+  expected_versions <- c(
+    "1.5.1", "2.3.4", "1.18.4", "2.6.1",
+    "3.6.6", "0.6.39", "0.22.0"
+  )
+  expected_roles <- c(
+    rep("runtime-import", 4L),
+    rep("runtime-dependency", 2L),
+    "runtime-import"
+  )
+  expected_columns <- c(
+    "Package", "Version", "Role", "SHA256", "SourceURL", "Archive"
+  )
+  if (!identical(names(ledger), expected_columns) ||
+      nrow(ledger) != length(expected_packages) ||
+      !identical(ledger$Package, expected_packages) ||
+      !identical(ledger$Version, expected_versions) ||
+      !identical(ledger$Role, expected_roles) ||
+      anyDuplicated(ledger$Package)) {
+    fail("old-Windows source ledger is not the exact reviewed closure")
+  }
+  selected <- locked[match(expected_packages, locked$Package), , drop = FALSE]
+  expected_archives <- paste0(
+    expected_packages, "_", expected_versions, ".tar.gz"
+  )
+  if (anyNA(match(expected_packages, locked$Package)) ||
+      !identical(ledger$SHA256, selected$SHA256) ||
+      !identical(ledger$Archive, expected_archives) ||
+      any(!vapply(seq_len(nrow(ledger)), function(index) {
+        ledger$SourceURL[[index]] %in%
+          c(selected$URL[[index]], selected$FallbackURL[[index]])
+      }, logical(1L)))) {
+    fail("old-Windows source ledger is not authenticated by the retained lock")
+  }
+
+  rtools <- utils::read.delim(
+    require_plain_file(
+      file.path(closure, "rtools35.tsv"),
+      "old-Windows exact Rtools35 executable evidence"
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    quote = "",
+    comment.char = ""
+  )
+  expected_rtools <- data.frame(
+    Tool = c("gcc", "g++", "objdump", "make"),
+    Path = c(
+      "C:/Rtools/mingw_64/bin/gcc.exe",
+      "C:/Rtools/mingw_64/bin/g++.exe",
+      "C:/Rtools/mingw_64/bin/objdump.exe",
+      "C:/Rtools/bin/make.exe"
+    ),
+    SHA256 = c(
+      "2d415b0fd5eacb43268e2ddf080b50f706d9fa2465b1e32d04f54ce936fac3da",
+      "0d3d581bca702c777fc045a2fe69696e5979d86e819efe2350e2ac43f33f2b7f",
+      "cbf5f996ef759be73502387c9d1296176f8bb7b6320b63cfb61371f7a98e7b59",
+      "ce462e4ca812718a077ae4b67ebec0bd2df0e7a3bc1e31897e40895023e13c72"
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  if (!identical(rtools, expected_rtools)) {
+    fail("old-Windows Rtools35 executable identities differ from official bytes")
+  }
+
+  digest_evidence <- utils::read.delim(
+    require_plain_file(
+      file.path(closure, "digest-cxx11.tsv"),
+      "old-Windows digest C++11 evidence"
+    ),
+    stringsAsFactors = FALSE,
+    check.names = FALSE,
+    quote = "",
+    comment.char = ""
+  )
+  expected_digest_sources <- c(
+    "SpookyV2.cpp", "crc32c.cpp", "crc32c_portable.cpp",
+    "spooky_serialize.cpp"
+  )
+  expected_digest_fields <- c(
+    "gxx_path", "gxx_first_line", "standard",
+    rep("source", length(expected_digest_sources))
+  )
+  expected_digest_values <- c(
+    "C:/Rtools/mingw_64/bin/g++.exe",
+    "g++.exe (x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3",
+    "-std=gnu++11",
+    expected_digest_sources
+  )
+  if (!identical(names(digest_evidence), c("Field", "Value")) ||
+      nrow(digest_evidence) != length(expected_digest_fields) ||
+      !identical(digest_evidence$Field, expected_digest_fields) ||
+      !identical(digest_evidence$Value, expected_digest_values)) {
+    fail("old-Windows digest C++11 evidence differs from exact Rtools35 policy")
+  }
+  digest_log <- readLines(
+    require_plain_file(
+      file.path(closure, "digest-install.log"),
+      "old-Windows digest source-install log"
+    ),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  tokenize_command <- function(line) {
+    tokens <- strsplit(trimws(line), "[[:space:]]+", perl = TRUE)[[1L]]
+    tokens <- sub("^[\"']", "", tokens)
+    sub("[\"']$", "", tokens)
+  }
+  token_basename <- function(tokens) {
+    sub("^.*[/\\\\]", "", tokens)
+  }
+  compile_indices <- integer(length(expected_digest_sources))
+  for (index in seq_along(expected_digest_sources)) {
+    source <- expected_digest_sources[[index]]
+    matches <- which(vapply(digest_log, function(line) {
+      source %in% token_basename(tokenize_command(line))
+    }, logical(1L)))
+    if (length(matches) != 1L) {
+      fail(
+        "old-Windows digest install log does not contain one command for ",
+        source
+      )
+    }
+    tokens <- tokenize_command(digest_log[[matches]])
+    compiler <- token_basename(tokens)
+    standards <- grep("^-std=", tokens, value = TRUE)
+    if (!any(compiler %in% c("g++", "g++.exe")) ||
+        !identical(standards, "-std=gnu++11")) {
+      fail(
+        "old-Windows digest compile command is not exact Rtools35 C++11: ",
+        source
+      )
+    }
+    compile_indices[[index]] <- matches
+  }
+  if (anyDuplicated(compile_indices)) {
+    fail("old-Windows digest translation units share one forged compiler command")
+  }
+
+  summary <- readLines(
+    require_plain_file(
+      file.path(artifact_root, "old-windows-summary.txt"),
+      "old-Windows validation summary"
+    ),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  matches <- regexec("^([a-z0-9_]+)=(.*)$", summary, perl = TRUE)
+  pieces <- regmatches(summary, matches)
+  expected_keys <- c(
+    "r_version", "r_platform", "r_arch", "package_archive",
+    "package_archive_sha256", "dll", "registered_call_routines",
+    "compiler", "compiler_first_line", "formatted_diagnostics", "smoke"
+  )
+  if (length(summary) != length(expected_keys) ||
+      any(lengths(pieces) != 3L)) {
+    fail("old-Windows validation summary has malformed rows")
+  }
+  keys <- vapply(pieces, `[[`, character(1L), 2L)
+  values <- vapply(pieces, `[[`, character(1L), 3L)
+  names(values) <- keys
+  if (!identical(keys, expected_keys) ||
+      !identical(values[["r_version"]], "3.6.3") ||
+      !identical(values[["r_platform"]], "x86_64-w64-mingw32") ||
+      !grepl("^(x86_64|x64)$", values[["r_arch"]], ignore.case = TRUE) ||
+      !identical(values[["package_archive"]], "paradox_2.0.0.tar.gz") ||
+      !grepl("^[0-9a-f]{64}$", values[["package_archive_sha256"]]) ||
+      !grepl("paradox\\.dll$", values[["dll"]], ignore.case = TRUE) ||
+      !grepl("^[1-9][0-9]*$", values[["registered_call_routines"]]) ||
+      !identical(
+        values[["compiler"]],
+        "C:/Rtools/mingw_64/bin/gcc.exe"
+      ) ||
+      !identical(
+        values[["compiler_first_line"]],
+        "gcc.exe (x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3"
+      ) ||
+      !identical(values[["formatted_diagnostics"]], "pass") ||
+      !identical(values[["smoke"]], "pass")) {
+    fail("old-Windows summary does not authenticate R 3.6.3/Rtools35")
+  }
+
+  objdump <- readLines(
+    require_plain_file(
+      file.path(artifact_root, "paradox-dll-objdump.txt"),
+      "old-Windows DLL object-format report"
+    ),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  session <- readLines(
+    require_plain_file(
+      file.path(artifact_root, "session-info.txt"),
+      "old-Windows session information"
+    ),
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  if (!any(grepl(
+      "pei-x86-64|architecture:[[:space:]]*i386:x86-64",
+      objdump,
+      ignore.case = TRUE
+    )) ||
+      !any(grepl("R version 3\\.6\\.3", session)) ||
+      !any(grepl("x86_64-w64-mingw32", session, fixed = TRUE))) {
+    fail("old-Windows DLL or session evidence differs from the exact platform")
+  }
+  invisible(TRUE)
+}
+
 resolve_manifest_member <- function(member, evidence, manifest) {
   if (!nzchar(member) || grepl("[[:cntrl:]]", member) ||
       grepl("^/|\\\\|(^|/)\\.\\.?(/|$)", member, perl = TRUE)) {
@@ -327,11 +819,11 @@ verify_portability_ci_evidence <- function(
 
   jobs_response <- read_json(jobs_path, "retained REST jobs metadata")
   jobs <- jobs_response$jobs
-  if (!is.list(jobs) || length(jobs) != 3L ||
+  if (!is.list(jobs) || length(jobs) != 4L ||
       !identical(integer_string(
         jobs_response$total_count, "jobs.total_count", allow_zero = TRUE
-      ), "3")) {
-    fail("retained REST jobs metadata does not contain exactly three jobs")
+      ), "4")) {
+    fail("retained REST jobs metadata does not contain exactly four jobs")
   }
   job_names <- vapply(jobs, function(job) {
     scalar_character(job$name, "job.name")
@@ -339,6 +831,7 @@ verify_portability_ci_evidence <- function(
   expected_job_names <- c(
     "macos-15 / arm64 (release)",
     "windows-latest / x86_64 (release)",
+    "windows-latest / x86_64 (R 3.6.3 / Rtools35)",
     "Verify required check jobs"
   )
   if (!identical(sort(job_names), sort(expected_job_names)) ||
@@ -353,6 +846,14 @@ verify_portability_ci_evidence <- function(
     "Verify R CMD check completion" = "9",
     "Retain run provenance" = "10",
     "Upload check evidence" = "11"
+  )
+  expected_old_windows_steps <- c(
+    "Verify frozen candidate checkout" = "3",
+    "Verify exact R 3.6 Windows toolchain" = "5",
+    "Install exact R 3.6 source closure" = "6",
+    "Build, smoke, and check on R 3.6 Windows" = "7",
+    "Retain old-Windows provenance" = "8",
+    "Upload old-Windows evidence" = "9"
   )
   job_ids <- character(length(jobs))
   for (index in seq_along(jobs)) {
@@ -384,9 +885,15 @@ verify_portability_ci_evidence <- function(
     step_names <- vapply(steps, function(step) {
       scalar_character(step$name, "job step name")
     }, character(1L))
-    required_job_steps <- if (identical(job_names[[index]],
-        "Verify required check jobs")) {
+    required_job_steps <- if (identical(
+        job_names[[index]], "Verify required check jobs"
+      )) {
       c("Verify required job conclusions" = "2")
+    } else if (identical(
+        job_names[[index]],
+        "windows-latest / x86_64 (R 3.6.3 / Rtools35)"
+      )) {
+      expected_old_windows_steps
     } else {
       expected_steps
     }
@@ -429,11 +936,11 @@ verify_portability_ci_evidence <- function(
     artifacts_path, "retained REST artifacts metadata"
   )
   artifacts <- artifacts_response$artifacts
-  if (!is.list(artifacts) || length(artifacts) != 2L ||
+  if (!is.list(artifacts) || length(artifacts) != 3L ||
       !identical(integer_string(
         artifacts_response$total_count, "artifacts.total_count", allow_zero = TRUE
-      ), "2")) {
-    fail("retained REST artifacts metadata does not contain exactly two artifacts")
+      ), "3")) {
+    fail("retained REST artifacts metadata does not contain exactly three artifacts")
   }
   expected_artifacts <- list(
     "paradox-2.0.0-portability-macos-15-arm64" = c(
@@ -445,6 +952,11 @@ verify_portability_ci_evidence <- function(
       runner_os = "Windows",
       runner_arch = "X64",
       r_platform = "x86_64-w64-mingw32"
+    ),
+    "paradox-2.0.0-portability-windows-r3.6.3-x86_64" = c(
+      runner_os = "Windows",
+      runner_arch = "X64",
+      r_platform = "x86_64-w64-mingw32"
     )
   )
   artifact_names <- vapply(artifacts, function(artifact) {
@@ -452,7 +964,7 @@ verify_portability_ci_evidence <- function(
   }, character(1L))
   if (!identical(sort(artifact_names), sort(names(expected_artifacts))) ||
       anyDuplicated(artifact_names)) {
-    fail("retained REST artifact names differ from the two-platform inventory")
+    fail("retained REST artifact names differ from the three-platform inventory")
   }
   artifact_ids <- character(length(artifacts))
   for (index in seq_along(artifacts)) {
@@ -551,7 +1063,15 @@ verify_portability_ci_evidence <- function(
         )) {
       fail("artifact does not contain one exact expected check log: ", artifact_name)
     }
-    verify_check_log(expected_log)
+    if (identical(
+        artifact_name,
+        "paradox-2.0.0-portability-windows-r3.6.3-x86_64"
+      )) {
+      verify_old_windows_check_log(expected_log)
+      verify_old_windows_artifact(artifact_root)
+    } else {
+      verify_check_log(expected_log)
+    }
     verify_archive_extraction(
       archive_path, artifact_root,
       paste0("retained artifact archive ", artifact_name)
@@ -641,8 +1161,8 @@ verify_portability_ci_evidence <- function(
     "portability_ci_evidence=passed",
     paste0("run_id=", run_id),
     paste0("run_attempt=", run_attempt),
-    "jobs=3",
-    "artifacts=2",
+    "jobs=4",
+    "artifacts=3",
     paste0("sha_manifests=", length(manifest_paths)),
     paste0("sha_manifest_members=", sum(lengths(manifest_members)))
   )

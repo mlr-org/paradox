@@ -28,7 +28,6 @@ runtime	file	test	reason
 3.6.3	test-native-public-table-wrappers.R	real data.table key and index carriers pass every public ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-public-table-wrappers.R	wide ALTREP table admission observes each top-level element once	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-regression-psc-test-constraint.R	constraint checks do not authenticate a replaced R6 getter	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object-graph.R	authentic Paradox 1 shells upgrade everywhere by identity	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object-graph.R	graph discovery balances a self-duplicating ALTREP root	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-upgrade-paradox-object-graph.R	legacy shells inside a current capsule are upgraded in place	Reason: R < 4.0 cannot safely inspect active-binding functions

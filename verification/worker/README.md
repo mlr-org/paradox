@@ -2,7 +2,9 @@
 
 This recipe supplies only the ordinary Linux commands used around the
 repository-mounted, lockfile-built `.local/toolchain`. It deliberately does
-not copy the checkout or install R packages.
+not copy the checkout or install R packages.  The ordinary command contract
+includes ripgrep because structural harness checks use `rg` for literal and
+regular-expression source-policy assertions.
 
 Use a Debian-compatible base by exact digest:
 

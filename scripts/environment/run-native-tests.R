@@ -231,18 +231,20 @@ filter <- switch(selection,
   NULL
 )
 test_directory <- file.path(snapshot, "tests", "testthat")
+sort_bytes <- function(x) sort(x, method = "radix")
 available_files <- dir(
   test_directory,
   "^test.*\\.[rR]$",
   full.names = FALSE
 )
 if (selection == "analyzer") {
-  if (!identical(sort(intersect(available_files, analyzer_files)), analyzer_files)) {
+  if (!identical(sort_bytes(intersect(available_files, analyzer_files)),
+      analyzer_files)) {
     stop("analyzer test inventory is absent or incomplete", call. = FALSE)
   }
   selected_files <- analyzer_files
 } else {
-  selected_files <- sort(available_files)
+  selected_files <- sort_bytes(available_files)
   if (!is.null(filter)) selected_files <- selected_files[grepl(filter, selected_files)]
 }
 

@@ -1543,8 +1543,6 @@ SEXP paradox_domain_uty_check_result(SEXP result) {
   return Rf_ScalarLogical(valid);
 }
 
-#if R_VERSION >= R_Version(4, 5, 0)
-
 #define DOMAIN_REPR_MAX_OUTPUT ((size_t) 80)
 #define DOMAIN_REPR_MAX_ARGUMENTS ((size_t) 13)
 #define DOMAIN_REPR_MAX_CHARACTER_VALUES ((R_xlen_t) 16)
@@ -1701,13 +1699,28 @@ static const struct domain_repr_formal *domain_repr_formal(
 }
 
 static int domain_repr_scipen_value(SEXP symbol, int *value) {
-  SEXP option = PROTECT(Rf_GetOption1(symbol));
-  const int result = TYPEOF(option) == INTSXP && !ALTREP(option) &&
-    !Rf_isS4(option) && !Rf_isObject(option) &&
-    paradox_api_has_no_attributes(option) &&
-    XLENGTH(option) == 1 && INTEGER_ELT(option, 0) != NA_INTEGER;
-  if (result) {
-    *value = INTEGER_ELT(option, 0);
+  SEXP option = PROTECT(paradox_api_option_snapshot(symbol));
+  int result = FALSE;
+  if (!ALTREP(option) && !Rf_isS4(option) && !Rf_isObject(option) &&
+      paradox_api_has_no_attributes(option) && XLENGTH(option) == 1) {
+    if (TYPEOF(option) == INTSXP &&
+        INTEGER_ELT(option, 0) != NA_INTEGER) {
+      *value = INTEGER_ELT(option, 0);
+      result = TRUE;
+    } else if (TYPEOF(option) == REALSXP) {
+      /*
+       * R 3.6's public getOption() preserves a numeric scipen assignment as a
+       * REALSXP, whereas newer R normalizes the same option to integer. Both
+       * represent the documented integer-valued option. Keep malformed,
+       * non-integral, and out-of-range option states on the deparse fallback.
+       */
+      const double real = REAL_ELT(option, 0);
+      if (R_FINITE(real) && real >= (double) INT_MIN &&
+          real <= (double) INT_MAX && real == (double) ((int) real)) {
+        *value = (int) real;
+        result = TRUE;
+      }
+    }
   }
   UNPROTECT(1);
   return result;
@@ -1956,13 +1969,7 @@ static int domain_repr_render(
   return TRUE;
 }
 
-#endif
-
 SEXP paradox_domain_simple_repr_id(SEXP representation) {
-#if R_VERSION < R_Version(4, 5, 0)
-  (void) representation;
-  return R_NilValue;
-#else
   SEXP scipen_symbol = PROTECT(Rf_install("scipen"));
   const int first_scipen_zero =
     domain_repr_scipen_is_zero(scipen_symbol);
@@ -1989,5 +1996,4 @@ SEXP paradox_domain_simple_repr_id(SEXP representation) {
 
   UNPROTECT(2);
   return result;
-#endif
 }

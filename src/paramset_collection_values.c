@@ -741,7 +741,9 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
     Rf_error("Corrupt ParamSetCollection root capsule");
   }
   retain_root(root_core, roots, roots_index);
-  SEXP owned_private = PROTECT(paradox_domain_private_environment(self));
+  SEXP owned_private = PROTECT(
+    paradox_domain_required_private_environment(self)
+  );
   if (owned_private != private_environment) {
     UNPROTECT(2);
     Rf_error("Corrupt ParamSetCollection shell ownership");
@@ -803,7 +805,9 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
       SEXP child_source_core = R_UnboundValue;
       SEXP child_operation_core = R_UnboundValue;
       if (!reused) {
-        child_private = PROTECT(paradox_domain_private_environment(child_self));
+        child_private = PROTECT(
+          paradox_domain_required_private_environment(child_self)
+        );
         if (child_private == R_UnboundValue) {
           UNPROTECT(2);
           Rf_error("Corrupt ParamSetCollection child shell");

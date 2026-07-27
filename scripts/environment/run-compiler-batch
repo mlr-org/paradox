@@ -87,6 +87,18 @@ verify_setsid_identity() {
      "$(setsid_identity_sha256)" == "$SETSID_IDENTITY_SHA256" ]]
 }
 
+timeout_identity_sha256() {
+  LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | sha256sum | cut -d ' ' -f 1
+}
+
+verify_timeout_identity() {
+  [[ -f "$TIMEOUT_TOOL" && -x "$TIMEOUT_TOOL" && ! -L "$TIMEOUT_TOOL" &&
+     "$(cd "$(dirname "$TIMEOUT_TOOL")" && pwd -P)/$(basename "$TIMEOUT_TOOL")" == \
+       "$TIMEOUT_TOOL" &&
+     "$(sha256_value "$TIMEOUT_TOOL")" == "$TIMEOUT_TOOL_SHA256" &&
+     "$(timeout_identity_sha256)" == "$TIMEOUT_TOOL_IDENTITY_SHA256" ]]
+}
+
 validate_admission_report() {
   local report=$1 mode=$2 expected_fields actual_fields
   local online affinity cgroup_cpu cpu_limit cpu_reserve cpu_per cpu_jobs
@@ -271,11 +283,17 @@ TASK_WRAPPER_BASH_SHA256=$(sha256_value "$TASK_WRAPPER_BASH")
 if [[ -z "$TIMEOUT_TOOL" ]]; then
   TIMEOUT_TOOL=$(command -v timeout 2>/dev/null || true)
 fi
-[[ "$TIMEOUT_TOOL" == /* && -x "$TIMEOUT_TOOL" && ! -L "$TIMEOUT_TOOL" ]] ||
+[[ "$TIMEOUT_TOOL" == /* && -f "$TIMEOUT_TOOL" && -x "$TIMEOUT_TOOL" &&
+   ! -L "$TIMEOUT_TOOL" && "$TIMEOUT_TOOL" != *$'\t'* &&
+   "$TIMEOUT_TOOL" != *$'\r'* && "$TIMEOUT_TOOL" != *$'\n'* ]] ||
   fail "--timeout-tool must name a plain absolute executable"
-"$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |
+[[ "$(cd "$(dirname "$TIMEOUT_TOOL")" && pwd -P)/$(basename "$TIMEOUT_TOOL")" == \
+   "$TIMEOUT_TOOL" ]] || fail "--timeout-tool path is not canonical"
+LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |
   grep -Fq 'timeout (GNU coreutils)' ||
   fail "--timeout-tool is not GNU coreutils timeout"
+TIMEOUT_TOOL_SHA256=$(sha256_value "$TIMEOUT_TOOL")
+TIMEOUT_TOOL_IDENTITY_SHA256=$(timeout_identity_sha256)
 [[ "$SETSID" == /* && -f "$SETSID" && -x "$SETSID" && ! -L "$SETSID" &&
    "$SETSID" != *$'\t'* && "$SETSID" != *$'\r'* &&
    "$SETSID" != *$'\n'* ]] ||
@@ -342,10 +360,9 @@ mkdir "$OUTPUT_DIRECTORY"
   printf 'setsid_identity_sha256\t%s\n' "$SETSID_IDENTITY_SHA256"
   printf 'task_timeout_seconds\t%s\n' "$TASK_TIMEOUT_SECONDS"
   printf 'timeout_tool_path\t%s\n' "$TIMEOUT_TOOL"
-  printf 'timeout_tool_sha256\t%s\n' \
-    "$(sha256sum "$TIMEOUT_TOOL" | cut -d ' ' -f 1)"
+  printf 'timeout_tool_sha256\t%s\n' "$TIMEOUT_TOOL_SHA256"
   printf 'timeout_tool_identity_sha256\t%s\n' \
-    "$("$TIMEOUT_TOOL" --version | sha256sum | cut -d ' ' -f 1)"
+    "$TIMEOUT_TOOL_IDENTITY_SHA256"
   printf 'task_wrapper_path\t%s\n' "$TASK_WRAPPER"
   printf 'task_wrapper_sha256\t%s\n' "$TASK_WRAPPER_SHA256"
   printf 'task_wrapper_bash_path\t%s\n' "$TASK_WRAPPER_BASH"
@@ -361,6 +378,7 @@ launched=0
 waited=0
 failures=0
 timeouts=0
+supervisor_evidence_failures=0
 statuses=()
 timed_out=()
 source_sha256=()
@@ -409,39 +427,66 @@ trap 'exit 143' TERM
 
 wait_one() {
   local task_index=$1 pid attempt status=0 timeout=false line
-  local term_marker kill_marker marker_seen=false supervisor_valid=true
+  local timeout_name term_marker term_marker_short
+  local kill_marker kill_marker_short supervisor_valid=true
+  local term_markers=0 kill_markers=0
+  local classification_valid=true task_failed=false
   pid=${pids[$task_index]}
   if wait "${pids[$task_index]}"; then
     status=0
   else
     status=$?
   fi
+  timeout_name=${TIMEOUT_TOOL##*/}
   term_marker="$TIMEOUT_TOOL: sending signal TERM to command '$TASK_WRAPPER_BASH'"
+  term_marker_short="$timeout_name: sending signal TERM to command '$TASK_WRAPPER_BASH'"
   kill_marker="$TIMEOUT_TOOL: sending signal KILL to command '$TASK_WRAPPER_BASH'"
+  kill_marker_short="$timeout_name: sending signal KILL to command '$TASK_WRAPPER_BASH'"
   while IFS= read -r line || [[ -n "$line" ]]; do
     case "$line" in
-      "$term_marker") marker_seen=true ;;
-      "$kill_marker") ;;
+      "$term_marker"|"$term_marker_short")
+        term_markers=$((term_markers + 1))
+        ;;
+      "$kill_marker"|"$kill_marker_short")
+        kill_markers=$((kill_markers + 1))
+        ;;
       *) supervisor_valid=false ;;
     esac
   done < "${supervisor_logs[$task_index]}"
-  # Status 124 is ambiguous: an ordinary compiler is allowed to return it.
-  # Classification additionally requires GNU timeout's exact verbose TERM
-  # marker from the supervisor-only log.  Compiler output never reaches that
+  # Status 124 and 137 are both ambiguous: an ordinary compiler may return
+  # either.  GNU timeout normally returns 124 after TERM, while versions that
+  # escalate a TERM-resistant child to KILL may report 137.  Authenticate
+  # either result only from the exact, singleton diagnostics on the
+  # supervisor-only descriptor.  Compiler output never reaches that
   # descriptor and therefore cannot forge a deadline.
-  if [[ "$status" -eq 124 && "$marker_seen" == true &&
-      "$supervisor_valid" == true ]]; then
+  if [[ "$supervisor_valid" != true || "$term_markers" -gt 1 ||
+      "$kill_markers" -gt 1 || "$kill_markers" -gt "$term_markers" ]]; then
+    classification_valid=false
+  elif [[ "$term_markers" -eq 0 ]]; then
+    :
+  elif [[ "$status" -eq 124 ||
+      ( "$status" -eq 137 && "$kill_markers" -eq 1 ) ]]; then
     timeout=true
+  else
+    classification_valid=false
+  fi
+  if [[ "$timeout" == true ]]; then
     printf 'compiler_timeout_seconds=%s\n' "$TASK_TIMEOUT_SECONDS" \
       >> "${logs[$task_index]}"
     timeouts=$((timeouts + 1))
+  elif [[ "$classification_valid" != true ]]; then
+    printf 'compiler supervisor evidence invalid: %s\n' \
+      "${labels[$task_index]}" >&2
+    supervisor_evidence_failures=$((supervisor_evidence_failures + 1))
+    task_failed=true
   fi
   statuses[task_index]=$status
   timed_out[task_index]=$timeout
   if [[ "$status" -ne 0 ]]; then
     printf 'compiler task failed: %s\n' "${labels[$task_index]}" >&2
-    failures=$((failures + 1))
+    task_failed=true
   fi
+  [[ "$task_failed" == false ]] || failures=$((failures + 1))
   # A compiler is not allowed to leave a background descendant behind after
   # its own result has been collected.
   if kill -0 -- "-$pid" 2>/dev/null; then
@@ -467,6 +512,8 @@ for source in "${sources[@]}"; do
     fail "task output unexpectedly became symbolic"
   verify_compiler_identity ||
     fail "compiler identity changed before task $task_number was launched"
+  verify_timeout_identity ||
+    fail "timeout identity changed before task $task_number was launched"
   [[ "$(sha256_value "$TASK_WRAPPER")" == "$TASK_WRAPPER_SHA256" &&
      "$(sha256_value "$TASK_WRAPPER_BASH")" == \
        "$TASK_WRAPPER_BASH_SHA256" ]] ||
@@ -502,6 +549,8 @@ verify_compiler_identity ||
   fail "compiler identity changed while the batch was running"
 verify_setsid_identity ||
   fail "setsid identity changed while the batch was running"
+verify_timeout_identity ||
+  fail "timeout identity changed while the batch was running"
 [[ "$(sha256_value "$TASK_WRAPPER")" == "$TASK_WRAPPER_SHA256" &&
    "$(sha256_value "$TASK_WRAPPER_BASH")" == \
      "$TASK_WRAPPER_BASH_SHA256" ]] ||
@@ -550,7 +599,8 @@ for task_number in "${!sources[@]}"; do
     >> "$AGGREGATE_LOG"
 done
 ((failures == 0)) || {
-  printf 'run-compiler-batch: %s of %s %s task(s) failed (%s timeout(s)); every log was retained\n' \
-    "$failures" "${#sources[@]}" "$LABEL" "$timeouts" >&2
+  printf 'run-compiler-batch: %s of %s %s task(s) failed (%s timeout(s)); %s supervisor-evidence failure(s); every log was retained\n' \
+    "$failures" "${#sources[@]}" "$LABEL" "$timeouts" \
+    "$supervisor_evidence_failures" >&2
   exit 1
 }

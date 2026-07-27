@@ -28,11 +28,20 @@ run_fixture() {
   local proc=$1 cgroup=$2
   shift 2
   env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
     PARADOX_RESOURCE_TEST_MODE=true \
     PARADOX_RESOURCE_TEST_PLATFORM=Linux \
     PARADOX_RESOURCE_PROC_ROOT="$proc" \
     PARADOX_RESOURCE_CGROUP_ROOT="$cgroup" \
     PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" "$@"
+}
+
+run_unassigned_helper() {
+  env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
     "$HELPER" "$@"
 }
 
@@ -96,6 +105,7 @@ fi
 grep -q 'assigned memory envelope cannot fit one api-compile job' \
   "$SCRATCH/assigned-small.err"
 if env \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
     PARADOX_VERIFY_ASSIGNED_CPUS=3 \
     PARADOX_RESOURCE_TEST_MODE=true \
     PARADOX_RESOURCE_TEST_PLATFORM=Linux \
@@ -261,6 +271,8 @@ write_file "$DARWIN/bin/vm_stat" \
 chmod 0700 "$DARWIN/bin/sysctl" "$DARWIN/bin/vm_stat"
 DARWIN_REPORT="$SCRATCH/darwin-report.tsv"
 env \
+  -u PARADOX_VERIFY_ASSIGNED_CPUS \
+  -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
   "PATH=$DARWIN/bin:/usr/bin:/bin" \
   PARADOX_RESOURCE_TEST_MODE=true \
   PARADOX_RESOURCE_TEST_PLATFORM=Darwin \
@@ -298,12 +310,12 @@ if env PARADOX_RESOURCE_PROC_ROOT="$V1/proc" "$HELPER" api-compile \
   exit 1
 fi
 grep -q 'test overrides require' "$SCRATCH/leak.err"
-ACTUAL=$($HELPER api-compile)
-LIMITED=$($HELPER api-compile --max-jobs 1)
-ACTUAL_COMPILE=$($HELPER compile)
-ACTUAL_CONSUMER=$($HELPER consumer)
+ACTUAL=$(run_unassigned_helper api-compile)
+LIMITED=$(run_unassigned_helper api-compile --max-jobs 1)
+ACTUAL_COMPILE=$(run_unassigned_helper compile)
+ACTUAL_CONSUMER=$(run_unassigned_helper consumer)
 ACTUAL_REPORT="$SCRATCH/actual-report.tsv"
-$HELPER api-compile --report > "$ACTUAL_REPORT"
+run_unassigned_helper api-compile --report > "$ACTUAL_REPORT"
 [[ "$ACTUAL" =~ ^[1-9][0-9]*$ && "$LIMITED" == 1 ]]
 [[ "$ACTUAL_COMPILE" =~ ^[1-9][0-9]*$ && "$ACTUAL_COMPILE" -le 16 ]]
 [[ "$ACTUAL_CONSUMER" =~ ^[1-9][0-9]*$ && "$ACTUAL_CONSUMER" -le 4 ]]

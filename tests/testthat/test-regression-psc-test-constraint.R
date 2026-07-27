@@ -27,12 +27,12 @@ test_that("ParamSetCollection strict checks use live child constraints", {
 })
 
 test_that("constraint checks do not authenticate a replaced R6 getter", {
-  skip_if_no_active_binding_inspection()
-
   collection = psc(component = ps(x = p_int(0, 10)))
   reads = 0L
-  original = activeBindingFunction("constraint", collection)
-  on.exit(makeActiveBinding("constraint", original, collection), add = TRUE)
+  # This shell is local to the test, so it need not recover the generated
+  # binding through R >= 4.0's activeBindingFunction(). Keeping the hostile
+  # replacement until collection lets the same non-invoking boundary run on
+  # the declared-minimum R 3.6 runtime.
   makeActiveBinding("constraint", function(value) {
     if (!missing(value)) stop("constraint is read-only")
     reads <<- reads + 1L

@@ -5,6 +5,18 @@
 
 #define PARADOX_API_MAX_ALLOWED_ATTRIBUTES ((size_t) 16)
 
+static SEXP evaluate_base_unary(const char *name, SEXP argument) {
+  if (name == NULL) {
+    Rf_error("Internal error: missing base function name");
+  }
+  PROTECT(argument);
+  SEXP function = PROTECT(Rf_findFun(Rf_install(name), R_BaseEnv));
+  SEXP call = PROTECT(Rf_lang2(function, argument));
+  SEXP result = PROTECT(Rf_eval(call, R_BaseEnv));
+  UNPROTECT(4);
+  return result;
+}
+
 SEXP paradox_api_closure_formals(SEXP closure) {
 #if R_VERSION >= R_Version(4, 5, 0)
   return R_ClosureFormals(closure);
@@ -13,13 +25,95 @@ SEXP paradox_api_closure_formals(SEXP closure) {
 #endif
 }
 
+SEXP paradox_api_closure_expression(SEXP closure) {
+#if R_VERSION >= R_Version(4, 5, 0)
+  return R_ClosureExpr(closure);
+#else
+  return evaluate_base_unary("body", closure);
+#endif
+}
+
+SEXP paradox_api_bytecode_expression(SEXP bytecode) {
+#if R_VERSION >= R_Version(4, 5, 0)
+  return R_BytecodeExpr(bytecode);
+#else
+  /*
+   * Old R has no public direct-BCODESXP expression accessor.  Its public
+   * as.function.default() accepts bytecode as the sole body element without
+   * executing it; public body() then returns the underlying expression. This
+   * is a cold recursive-migration edge, not an ordinary package hot path.
+   */
+  PROTECT(bytecode);
+  SEXP definition = PROTECT(Rf_allocVector(VECSXP, 1));
+  SET_VECTOR_ELT(definition, 0, bytecode);
+  SEXP function = PROTECT(Rf_findFun(
+    Rf_install("as.function.default"),
+    R_BaseEnv
+  ));
+  SEXP call = PROTECT(Rf_lang3(function, definition, R_EmptyEnv));
+  SET_TAG(CDDR(call), Rf_install("envir"));
+  SEXP closure = PROTECT(Rf_eval(call, R_BaseEnv));
+  SEXP result = PROTECT(evaluate_base_unary("body", closure));
+  UNPROTECT(6);
+  return result;
+#endif
+}
+
+SEXP paradox_api_closure_environment(SEXP closure) {
+#if R_VERSION >= R_Version(4, 5, 0)
+  return R_ClosureEnv(closure);
+#else
+  return evaluate_base_unary("environment", closure);
+#endif
+}
+
+SEXP paradox_api_parent_environment(SEXP environment) {
+#if R_VERSION >= R_Version(4, 5, 0)
+  return R_ParentEnv(environment);
+#else
+  return evaluate_base_unary("parent.env", environment);
+#endif
+}
+
+SEXP paradox_api_option_snapshot(SEXP symbol) {
+  if (TYPEOF(symbol) != SYMSXP) {
+    Rf_error("Internal error: option selector must be a symbol");
+  }
+#if R_VERSION >= R_Version(4, 5, 0)
+  return Rf_GetOption1(symbol);
+#else
+  /*
+   * Rf_GetOption1 is exported and header-declared here, but Writing R
+   * Extensions first documents it as API in R 4.5. Keep the old-runtime
+   * branch on the public R spelling rather than enlarging the exceptional
+   * native-API ledger for a performance-only operation.
+   */
+  SEXP label = PROTECT(Rf_ScalarString(PRINTNAME(symbol)));
+  SEXP function = PROTECT(Rf_findFun(Rf_install("getOption"), R_BaseEnv));
+  SEXP call = PROTECT(Rf_lang2(function, label));
+  SEXP result = PROTECT(Rf_eval(call, R_BaseEnv));
+  UNPROTECT(4);
+  return result;
+#endif
+}
+
 #if R_VERSION < R_Version(4, 6, 0)
+/*
+ * R 4.6 provides public attribute iteration.  Earlier supported headers have
+ * no API operation that can count or enumerate the raw stored attributes
+ * without evaluating R or changing compact row.names.  Keep their one
+ * reviewed, header-declared ATTRIB use at this compatibility boundary.
+ */
+static inline SEXP stored_attributes_unchecked(SEXP value) {
+  return ATTRIB(value);
+}
+
 static int attributes_match(SEXP value,
     const char *const *allowed_names, size_t allowed_count,
     R_xlen_t required_count) {
   unsigned char seen[PARADOX_API_MAX_ALLOWED_ATTRIBUTES] = {0};
   R_xlen_t count = 0;
-  SEXP attributes = ATTRIB(value);
+  SEXP attributes = stored_attributes_unchecked(value);
   while (attributes != R_NilValue) {
     if (TYPEOF(attributes) != LISTSXP ||
         count >= (R_xlen_t) allowed_count) {
@@ -50,7 +144,7 @@ int paradox_api_has_no_attributes(SEXP value) {
 #if R_VERSION >= R_Version(4, 5, 0)
   return !ANY_ATTRIB(value);
 #else
-  return ATTRIB(value) == R_NilValue;
+  return stored_attributes_unchecked(value) == R_NilValue;
 #endif
 }
 
@@ -124,7 +218,7 @@ SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol) {
   (void) R_mapAttrib(value, select_raw_attribute, &state);
   return state.found ? state.value : R_NilValue;
 #else
-  for (SEXP attributes = ATTRIB(value);
+  for (SEXP attributes = stored_attributes_unchecked(value);
       attributes != R_NilValue;
       attributes = CDR(attributes)) {
     if (TYPEOF(attributes) != LISTSXP || TYPEOF(TAG(attributes)) != SYMSXP) {
@@ -160,7 +254,7 @@ R_xlen_t paradox_api_stored_attribute_count(SEXP value) {
   return state.count;
 #else
   R_xlen_t count = 0;
-  for (SEXP attributes = ATTRIB(value);
+  for (SEXP attributes = stored_attributes_unchecked(value);
       attributes != R_NilValue;
       attributes = CDR(attributes)) {
     if (TYPEOF(attributes) != LISTSXP) {
@@ -186,7 +280,7 @@ void paradox_api_map_stored_attributes(
   attribute_map_state_t state = {callback, data, 0};
   (void) R_mapAttrib(value, map_stored_attribute, &state);
 #else
-  for (SEXP attributes = ATTRIB(value);
+  for (SEXP attributes = stored_attributes_unchecked(value);
       attributes != R_NilValue;
       attributes = CDR(attributes)) {
     if (TYPEOF(attributes) != LISTSXP) {
@@ -244,12 +338,25 @@ static int evaluated_frame_has_binding(SEXP environment, SEXP symbol) {
 }
 #endif
 
+#if R_VERSION < R_Version(4, 6, 0)
+/*
+ * Keep the one reviewed non-public stored-cell selector at a single source
+ * location. Both the pre-4.2 terminal topology scan and the pre-4.6 required
+ * binding snapshot use this helper after their respective ordinary-frame
+ * boundaries have been established.
+ */
+static inline SEXP stored_binding_snapshot_unchecked(
+    SEXP environment, SEXP symbol) {
+  return Rf_findVarInFrame(environment, symbol);
+}
+#endif
+
 int paradox_api_frame_has_binding(SEXP environment, SEXP symbol) {
   if (!valid_binding_request(environment, symbol)) {
     return FALSE;
   }
 #if R_VERSION >= R_Version(4, 2, 0)
-  return R_existsVarInFrame(environment, symbol);
+  return R_existsVarInFrame(environment, symbol) != FALSE;
 #else
   return evaluated_frame_has_binding(environment, symbol);
 #endif
@@ -260,7 +367,7 @@ int paradox_api_frame_has_binding_scan(SEXP environment, SEXP symbol) {
     return TRUE;
   }
 #if R_VERSION >= R_Version(4, 2, 0)
-  return R_existsVarInFrame(environment, symbol);
+  return R_existsVarInFrame(environment, symbol) != FALSE;
 #else
   /*
    * R_HasFancyBindings is the only header-declared, exported old-R operation
@@ -268,8 +375,8 @@ int paradox_api_frame_has_binding_scan(SEXP environment, SEXP symbol) {
    * active-binding callback. Treating a fancy frame as occupied fails closed.
    * This spelling is confined to R 3.6--4.1 and to this compatibility facade.
    */
-  return R_HasFancyBindings(environment) ||
-    Rf_findVarInFrame(environment, symbol) != R_UnboundValue;
+  return R_HasFancyBindings(environment) != FALSE ||
+    stored_binding_snapshot_unchecked(environment, symbol) != R_UnboundValue;
 #endif
 }
 
@@ -289,15 +396,10 @@ static int plain_binding_boundary(SEXP environment, SEXP symbol) {
    * outcome. Crucially, this never evaluates an active binding and preserves
    * the allocation-free authenticated ordinary-frame second-scan barrier.
    */
-  return !R_BindingIsActive(symbol, environment);
+  return R_BindingIsActive(symbol, environment) == FALSE;
 }
 
 #if R_VERSION < R_Version(4, 6, 0)
-static SEXP stored_binding_snapshot_unchecked(
-    SEXP environment, SEXP symbol) {
-  return Rf_findVarInFrame(environment, symbol);
-}
-
 SEXP paradox_api_stored_binding_snapshot(
     SEXP environment, SEXP symbol) {
   if (!plain_binding_boundary(environment, symbol)) {
@@ -375,7 +477,7 @@ SEXP paradox_api_active_binding_function(
 #endif
 }
 
-#if R_VERSION < R_Version(4, 6, 0)
+#if R_VERSION < R_Version(4, 5, 0)
 void paradox_api_promise_snapshot(
     SEXP promise, paradox_api_promise_snapshot_t *snapshot) {
   if (TYPEOF(promise) != PROMSXP || snapshot == NULL) {

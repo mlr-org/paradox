@@ -15,6 +15,7 @@ RUN apt-get update \
       gawk \
       grep \
       procps \
+      ripgrep \
       sed \
       tar \
       util-linux \

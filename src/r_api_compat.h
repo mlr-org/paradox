@@ -5,12 +5,28 @@
 
 #include "paradox.h"
 
-/* Keep the few version-dependent public API spellings behind one small
- * facade. Writing R Extensions documents FORMALS as the pre-4.5 backport for
- * R_ClosureFormals and ATTRIB traversal as the pre-4.6 attribute-inspection
- * backport. */
+/* Keep version-dependent old-runtime spellings behind one small facade. R 4.5
+ * promoted the native closure accessors below to API. Earlier runtimes retain
+ * one exact FORMALS exception because callback-formal inspection is a semantic
+ * hot path, while cold body/environment inspection uses public base calls and
+ * a directly reached bytecode object takes the public
+ * as.function.default()/body() bridge. R 4.6 added public raw-attribute
+ * iteration; that genuinely irreplaceable older operation is also recorded in
+ * the exact exception ledger. */
 
 attribute_hidden SEXP paradox_api_closure_formals(SEXP closure);
+attribute_hidden SEXP paradox_api_closure_expression(SEXP closure);
+attribute_hidden SEXP paradox_api_bytecode_expression(SEXP bytecode);
+attribute_hidden SEXP paradox_api_closure_environment(SEXP closure);
+attribute_hidden SEXP paradox_api_parent_environment(SEXP environment);
+
+/* Snapshot one base option. R >= 4.5 uses the documented allocation-free
+ * Rf_GetOption1 API. Older R declared that entry point but did not yet
+ * document it as API, so the compatibility branch evaluates the public
+ * base::getOption() spelling instead. Callers must protect the returned value
+ * immediately; repeated reads remain responsible for detecting option changes
+ * across intervening allocations. */
+attribute_hidden SEXP paradox_api_option_snapshot(SEXP symbol);
 
 attribute_hidden int paradox_api_has_no_attributes(SEXP value);
 attribute_hidden int paradox_api_has_single_attribute(
@@ -24,9 +40,9 @@ attribute_hidden int paradox_api_has_only_attributes(
 );
 
 /* Return the stored attribute value without R's special row.names expansion.
- * R >= 4.6 provides a public iterator. Older supported R versions use the
- * documented ATTRIB traversal compatibility spelling already confined to this
- * facade. The returned value is unprotected and remains owned by `value`. */
+ * R >= 4.6 provides a public iterator. Older supported R versions use the one
+ * reviewed ATTRIB exception confined to this facade. The returned value is
+ * unprotected and remains owned by `value`. */
 attribute_hidden SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol);
 
 /* The R_NO_REMAP declarations for SET_RAW_ELT() / SET_COMPLEX_ELT(), and the
@@ -71,7 +87,10 @@ static inline int paradox_api_identical_default_flags(void) {
  * is a general CRAN allowlist. Both branches are tested against pinned
  * headers, real runtimes, and delayed-binding regressions. After an ordinary-
  * class frame is admitted, neither selection branch allocates or evaluates an
- * active/delayed binding. */
+ * active/delayed binding. Although R_getVar is public beginning with R 4.5,
+ * using it before the R 4.6 binding classifier could force a delayed binding.
+ * Pre-4.6 DSOs must therefore exclude it; the R >= 4.6 branch uses it only
+ * after R_GetBindingType has authenticated a direct value. */
 attribute_hidden SEXP paradox_api_plain_binding_snapshot(
   SEXP environment,
   SEXP symbol
@@ -116,9 +135,9 @@ typedef void (*paradox_api_attribute_callback_t)(
 );
 
 /* Enumerate the raw stored attribute pairlist without row.names expansion.
- * R >= 4.6 uses its public mapper; ATTRIB remains confined to this facade as
- * the documented compatibility spelling on R 3.6--4.5. The count and mapping
- * deliberately exclude the virtual names reported for tagged pairlists by
+ * R >= 4.6 uses its public mapper; one reviewed ATTRIB exception remains
+ * confined to this facade on R 3.6--4.5. The count and mapping deliberately
+ * exclude the virtual names reported for tagged pairlists by
  * R_getAttribCount(): pairlist tags are not stored attributes. */
 attribute_hidden R_xlen_t paradox_api_stored_attribute_count(SEXP value);
 attribute_hidden void paradox_api_map_stored_attributes(
@@ -139,6 +158,15 @@ attribute_hidden SEXP paradox_api_stored_binding_snapshot(
 );
 #endif
 
+/*
+ * R 4.5's compiled-code policy classifies PRENV, PRVALUE, and
+ * R_PromiseExpr as non-API even though that release's headers still expose
+ * them. Keep the compatibility snapshot strictly below that boundary. The
+ * R 4.5 crawler fails closed when it reaches a promise; R >= 4.6 instead uses
+ * the public binding/dots inspection API where a promise is still attached to
+ * such a cell.
+ */
+#if R_VERSION < R_Version(4, 5, 0)
 typedef struct {
   SEXP expression;
   SEXP environment;
@@ -148,11 +176,11 @@ typedef struct {
 
 /* Inspect a promise without evaluating it. `value` is R_UnboundValue for an
  * unforced promise; a forced value is returned exactly as stored. This narrow
- * R 3.6--4.5 facade uses the accessors declared and exported by those headers
- * and is authenticated by the reviewed exception ledger. R >= 4.6 instead
- * uses its public binding and dots APIs; a PROMSXP reached outside such a
- * binding is opaque because strict headers expose no detached-promise API. */
-#if R_VERSION < R_Version(4, 6, 0)
+ * R 3.6--4.4 facade uses the accessors declared and exported by those headers
+ * and is authenticated by the reviewed exception ledger. R 4.5 fails
+ * recursive migration closed on every reached PROMSXP. R >= 4.6 instead uses
+ * its public binding and dots APIs; a PROMSXP reached outside such a binding is
+ * still opaque. */
 attribute_hidden void paradox_api_promise_snapshot(
   SEXP promise,
   paradox_api_promise_snapshot_t *snapshot

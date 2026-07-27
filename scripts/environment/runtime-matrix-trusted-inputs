@@ -34,19 +34,32 @@ inputs=(
   scripts/environment/runtime-matrix-library
   scripts/environment/runtime-matrix-library.R
   scripts/environment/runtime-matrix-git
+  scripts/environment/enter-hosted-r36-windows.ps1
   scripts/environment/mbo-config-fixtures
   scripts/environment/runtime-matrix-inventory.R
+  scripts/environment/runtime-matrix-cross-serialization.R
+  scripts/environment/run-r36-declared-floor-smoke.R
   scripts/environment/runtime-matrix-probe.R
+  scripts/environment/runtime-matrix-old-r-stress-policy.R
   scripts/environment/runtime-matrix-skip-policy.R
   scripts/environment/runtime-matrix-testthat-audit.R
+  scripts/environment/run-runtime-matrix-old-r-stress.R
   scripts/environment/run-runtime-matrix-tests.R
+  scripts/environment/verify-r36-declared-check-log
   scripts/environment/resource-jobs
+  scripts/environment/run-runtime-matrix-cross-serialization
   scripts/environment/run-runtime-matrix-stage
   scripts/environment/run-runtime-matrix-wave
+  scripts/environment/test-r36-declared-floor-smoke.R
   environment/runtime-matrix-pre46-exclusions.tsv
+  environment/runtime-matrix-old-r-stress.tsv
   environment/runtime-matrix-whole-file-skips.tsv
   environment/runtime-matrix-result-skips.tsv
   environment/runtime-matrix.tsv
+  environment/Renviron
+  environment/Rprofile.R
+  environment/Makevars
+  environment/runtime-r-3.6.3-declared-floor-packages.lock
   environment/r-packages-linux-64.lock
   compat/github-snapshot.tsv
   compat/mlr-org-review.tsv

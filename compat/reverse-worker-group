@@ -106,7 +106,19 @@ owned_pids() {
 group_running() {
   group_pid=$1
   valid_pid "$group_pid" || return 1
-  /bin/kill -0 "-$group_pid" 2>/dev/null
+  /bin/kill -0 "-$group_pid" 2>/dev/null || return 1
+  # A rootless container can have a non-reaping PID 1.  An already terminated
+  # orphan may therefore remain as the sole member of its former process group
+  # until the container exits.  kill(2) still reports that zombie-only group as
+  # existing, although it contains no executable work and no signal can make
+  # progress.  Keep the conservative kill probe, but classify liveness from a
+  # successful process snapshot and ignore only terminal zombie members.
+  group_snapshot=$(/bin/ps -eo pgid=,stat= 2>/dev/null) || return 0
+  printf '%s\n' "$group_snapshot" |
+    /usr/bin/awk -v group="$group_pid" '
+      $1 == group && substr($2, 1, 1) != "Z" { live = 1 }
+      END { exit live ? 0 : 1 }
+    '
 }
 
 signal_group() {

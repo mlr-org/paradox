@@ -374,24 +374,49 @@ printf '%s\n' "$api_prepare_body" |
   grep -Fq -- '--signal=TERM --kill-after=10s "${HEADER_CACHE_TASK_TIMEOUT_SECONDS}s" \' ||
   fail "API preparation has no bounded TERM/KILL outer deadline"
 printf '%s\n' "$api_prepare_body" |
+  grep -Fq '"$BASH_EXECUTABLE" "$PREPARE_TASK_WRAPPER" \' ||
+  fail "API preparation deadline does not use its content-bound logging wrapper"
+printf '%s\n' "$api_prepare_body" |
+  grep -Fq -- '--internal-prepare-wrapper "$prepare_log" \' ||
+  fail "API preparation does not isolate helper output from timeout diagnostics"
+printf '%s\n' "$api_prepare_body" |
   grep -Fq '"$RETAINED_HEADER_CACHE_HELPER" prepare \' ||
-  fail "API preparation deadline does not directly supervise the retained helper"
+  fail "API preparation wrapper does not execute the retained helper"
 if grep -Fq 'prepare_timeout_watchdog' "$API_GATE"; then
   fail "API preparation retains the obsolete custom outer watchdog"
 fi
 api_wait_prepare_body=$(function_body wait_prepare_task "$API_GATE")
-printf '%s\n' "$api_wait_prepare_body" |
-  grep -Fq 'timeout_diagnostic="$TIMEOUT_TOOL: sending signal TERM to command '\''$RETAINED_HEADER_CACHE_HELPER'\''"' ||
+api_classify_prepare_body=$(function_body classify_prepare_supervisor "$API_GATE")
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'timeout_name=${TIMEOUT_TOOL##*/}' ||
+  fail "API preparation does not derive GNU timeout's authenticated display name"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'term_marker="$TIMEOUT_TOOL: sending signal TERM to command '\''$BASH_EXECUTABLE'\''"' ||
   fail "API preparation cannot authenticate GNU timeout's exact diagnostic"
-printf '%s\n' "$api_wait_prepare_body" |
-  grep -Fq 'timeout_count=$(grep -Fxc -- "$timeout_diagnostic" "$prepare_log" || true)' ||
-  fail "API preparation does not count the exact GNU timeout diagnostic"
-printf '%s\n' "$api_wait_prepare_body" |
-  grep -Fq '[[ "$timeout_count" =~ ^[0-9]+$ && "$timeout_count" -le 1 ]]' ||
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'term_marker_short="$timeout_name: sending signal TERM to command '\''$BASH_EXECUTABLE'\''"' ||
+  fail "API preparation cannot authenticate GNU timeout's basename diagnostic"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'kill_marker="$TIMEOUT_TOOL: sending signal KILL to command '\''$BASH_EXECUTABLE'\''"' ||
+  fail "API preparation cannot authenticate GNU timeout's exact KILL diagnostic"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'kill_marker_short="$timeout_name: sending signal KILL to command '\''$BASH_EXECUTABLE'\''"' ||
+  fail "API preparation cannot authenticate GNU timeout's basename KILL diagnostic"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '*) diagnostics_valid=false ;;' ||
+  fail "API preparation accepts unknown supervisor output"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '"$diagnostics_valid" == true && "$term_count" -eq 1' ||
   fail "API preparation accepts ambiguous outer timeout diagnostics"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '{ [[ "$status" -eq 124 ]] ||' ||
+  fail "API preparation does not authenticate GNU timeout status 124"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '[[ "$status" -eq 137 && "$kill_count" -eq 1 ]]; }; then' ||
+  fail "API preparation does not authenticate GNU timeout KILL escalation"
 printf '%s\n' "$api_wait_prepare_body" |
-  grep -Fq 'if [[ "$status" -eq 124 && "$timeout_count" -eq 1 ]]; then' ||
-  fail "API preparation confuses an ordinary status 124 with a real timeout"
+  grep -Fq 'classify_prepare_supervisor "$status" "$supervisor_log"' ||
+  fail "API preparation does not classify its supervisor-only log"
 [[ $(printf '%s\n' "$api_wait_prepare_body" | \
   grep -Fc 'if cleanup_prepare_active_record "$active_file" "$cleanup_log"; then') -eq 2 ]] ||
   fail "API preparation does not clean failed and unexpectedly live nested groups"
@@ -410,10 +435,10 @@ api_prepare_cleanup_body=$(function_body terminate_api_prepare_task "$API_GATE")
 printf '%s\n' "$api_prepare_cleanup_body" |
   grep -Fq '"$RETAINED_HEADER_CACHE_HELPER" terminate-active \' ||
   fail "API exit cleanup bypasses authenticated nested-group termination"
-grep -Fq "printf 'version\\texit_status\\touter_timed_out\\tresult\\tcleanup_state\\tprepare_log_sha256\\tcleanup_log_sha256\\n'" \
+grep -Fq "printf 'version\\texit_status\\touter_timed_out\\tresult\\tcleanup_state\\tprepare_log_sha256\\tsupervisor_log_sha256\\tcleanup_log_sha256\\n'" \
   "$API_GATE" ||
   fail "API preparation does not retain a complete result/cleanup ledger"
-grep -Fq "\$'version\\texit_status\\touter_timed_out\\tresult\\tcleanup_state\\tprepare_log_sha256\\tcleanup_log_sha256'" \
+grep -Fq "\$'version\\texit_status\\touter_timed_out\\tresult\\tcleanup_state\\tprepare_log_sha256\\tsupervisor_log_sha256\\tcleanup_log_sha256'" \
   "$API_GATE" ||
   fail "API preparation does not postflight its exact result-ledger schema"
 grep -Fq 'R API preparation ledger does not cover every release' "$API_GATE" ||
@@ -424,6 +449,11 @@ grep -Fq 'HEADER_PREPARATION_SHA256=$(sha256_value \' "$API_GATE" ||
   fail "API preparation result ledger is not sealed for later boundaries"
 grep -Fq 'HEADER_PREPARATION_RETRIES_SHA256=$(sha256_value \' "$API_GATE" ||
   fail "API preparation retry ledger is not sealed for later boundaries"
+sha256_definition=$(exact_line 'sha256_value() {' "$API_GATE")
+sha256_first_call=$(first_line '$(sha256_value "' "$API_GATE")
+[[ -n "$sha256_definition" && -n "$sha256_first_call" &&
+   "$sha256_definition" -lt "$sha256_first_call" ]] ||
+  fail "API gate calls sha256_value before defining it"
 grep -Fq 'source-tree-preparation-failure-verify.log' "$API_GATE" ||
   fail "API preparation failure evidence omits source reauthentication"
 grep -Fq 'artifacts-tree-preparation-failure-verify.log' "$API_GATE" ||
@@ -440,11 +470,11 @@ grep -Fq 'run_supervised_group "$COMMAND_TIMEOUT_SECONDS"' \
   "$API_HEADER_CACHE" ||
   fail "API configure/make preparation has no per-group deadline"
 
-# Cache schema 3 binds the executing helper, receipt helper, complete reviewed
-# command inventory, fixed recipe, and fresh run-local output receipt.  A hit
-# must authenticate without rereading the large source archive.
-grep -Fqx 'CACHE_SCHEMA=3' "$API_HEADER_CACHE" ||
-  fail "API header cache is not the reviewed schema 3"
+# Cache schema 4 additionally binds the narrowly versioned configure
+# compatibility recipe and its direct libcurl compile/link/run evidence.  A
+# hit must authenticate without rereading the large source archive.
+grep -Fqx 'CACHE_SCHEMA=4' "$API_HEADER_CACHE" ||
+  fail "API header cache is not the reviewed schema 4"
 grep -Fq 'CACHE_ROOT="$ROOT/.cache/r-api-headers/schema-${CACHE_SCHEMA}"' \
   "$API_HEADER_CACHE" ||
   fail "API headers have no schema-separated repository-local cache"
@@ -455,21 +485,45 @@ for cache_key_binding in \
     'receipt_row configure_tool_inventory_sha256 "$TOOL_INVENTORY_SHA256"' \
     'receipt_row configure_tool_inventory_schema 1' \
     'receipt_row configure_tool_inventory_commands \' \
-    'receipt_row process_identity_policy linux-proc-starttime-group-members-v1'; do
+    'receipt_row process_identity_policy linux-proc-starttime-group-members-v1' \
+    'receipt_row configure_compatibility_mode "$CONFIGURE_COMPATIBILITY_MODE"' \
+    'receipt_row configure_cache_override_count 0' \
+    'receipt_row curl7_manifest_sha256 "$CURL7_MANIFEST_SHA256"' \
+    'receipt_row curl7_receipt_helper_sha256 \' \
+    'receipt_row curl_preflight_source_sha256 \' \
+    'receipt_row curl_preflight_output_sha256 \' \
+    'emit_tool_receipt curl_config "$CURL_CONFIG_EXECUTABLE"'; do
   grep -Fq "$cache_key_binding" "$API_HEADER_CACHE" ||
     fail "API cache key omits recipe identity: $cache_key_binding"
 done
+for compatibility_binding in \
+    'select_configure_compatibility "$VERSION"' \
+    'CONFIGURE_CFLAGS_SUFFIX=-Wno-error=implicit-function-declaration' \
+    'CONFIGURE_CURL_ENVIRONMENT+=(' \
+    '"CURL_CONFIG=$CURL_CONFIG_EXECUTABLE"' \
+    '"LD_LIBRARY_PATH=$LD_LIBRARY_PATH_VALUE"' \
+    '"${CONFIGURE_CURL_ENVIRONMENT[@]}" \' \
+    '"$CURL7_RECEIPT_HELPER" verify "$CURL7_PREFIX" "$CURL7_MANIFEST" \' \
+    'validate_curl_preflight_output "$CURL_PREFLIGHT_OUTPUT_FILE" \' \
+    'gnu-c99-wall-wextra-werror-locked-curl7-v1' \
+    'publish_file_no_clobber "$CURL_PREFLIGHT_OUTPUT_FILE" "$curl_preflight_copy"'; do
+  grep -Fq "$compatibility_binding" "$API_HEADER_CACHE" ||
+    fail "API header cache omits old-R compatibility proof: $compatibility_binding"
+done
+if grep -Fq 'r_cv_have_curl' "$API_HEADER_CACHE"; then
+  fail "API header cache bypasses an upstream libcurl admission probe"
+fi
 mapfile -t configure_tool_names < <(awk '
   /^CONFIGURE_TOOL_NAMES=\(/ { inside = 1; next }
   inside && /^\)$/ { exit }
   inside { for (field = 1; field <= NF; ++field) print $field }
 ' "$API_HEADER_CACHE")
-[[ ${#configure_tool_names[@]} -eq 153 ]] ||
-  fail "API configure/make inventory no longer has its 153 reviewed command names"
+[[ ${#configure_tool_names[@]} -eq 154 ]] ||
+  fail "API configure/make inventory no longer has its 154 reviewed command names"
 [[ $(printf '%s\n' "${configure_tool_names[@]}" | LC_ALL=C sort -u | wc -l) \
    -eq ${#configure_tool_names[@]} ]] ||
   fail "API configure/make inventory contains duplicate command names"
-for tool in R Rscript bash env gcc gfortran make pkg-config setsid flock \
+for tool in R Rscript bash curl-config env gcc gfortran make pkg-config setsid flock \
     awk sed tar x86_64-conda-linux-gnu-gcc; do
   printf '%s\n' "${configure_tool_names[@]}" | grep -Fxq "$tool" ||
     fail "API configure/make inventory omits reviewed command: $tool"
@@ -521,18 +575,21 @@ grep -Fq 'mv -T --no-clobber -- "$source" "$destination"' \
   "$API_HEADER_CACHE" ||
   fail "API cache directory publication can nest or replace a raced target"
 
-# The parent verifies every schema-3 field, promotes it to one exact release
+# The parent verifies every schema-4 field, promotes it to one exact release
 # ledger, and binds that ledger plus helper/schema identities into completion.
-grep -Fq "printf 'version\\tcache_key\\tcache_result\\tinputs_sha256\\theaders_tree_sha256\\tconfigure_tools_sha256\\tbuilder_helper_sha256\\ttree_receipt_helper_sha256\\tcache_seal_sha256\\tcache_seal_file_sha256\\trun_headers_tree_sha256\\trun_headers_receipt_semantics\\tevidence_sha256\\n'" \
+grep -Fq "printf 'version\\tcache_key\\tcache_result\\tinputs_sha256\\theaders_tree_sha256\\tconfigure_tools_sha256\\tbuilder_helper_sha256\\ttree_receipt_helper_sha256\\tcache_seal_sha256\\tcache_seal_file_sha256\\trun_headers_tree_sha256\\trun_headers_receipt_semantics\\tcurl_preflight_output_sha256\\tevidence_sha256\\n'" \
   "$API_GATE" || fail "API parent does not create the expanded header-cache ledger"
-grep -Fq '[[ "$header_cache_header" == $'"'"'version\tcache_key\tcache_result\tinputs_sha256\theaders_tree_sha256\tconfigure_tools_sha256\tbuilder_helper_sha256\ttree_receipt_helper_sha256\tcache_seal_sha256\tcache_seal_file_sha256\trun_headers_tree_sha256\trun_headers_receipt_semantics\tevidence_sha256'"'"' ]]' \
+grep -Fq "printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \\" \
+  "$API_GATE" ||
+  fail "API parent header-cache row does not populate all fourteen fields"
+grep -Fq '[[ "$header_cache_header" == $'"'"'version\tcache_key\tcache_result\tinputs_sha256\theaders_tree_sha256\tconfigure_tools_sha256\tbuilder_helper_sha256\ttree_receipt_helper_sha256\tcache_seal_sha256\tcache_seal_file_sha256\trun_headers_tree_sha256\trun_headers_receipt_semantics\tcurl_preflight_output_sha256\tevidence_sha256'"'"' ]]' \
   "$API_GATE" || fail "API parent does not postflight the exact header-cache ledger schema"
 for parent_header_binding in \
     'expected_evidence_fields=$' \
     'require_exact_two_column_tsv "$cache_evidence"' \
     'require_exact_two_column_tsv "$input_receipt"' \
     'require_exact_two_column_tsv "$cache_seal"' \
-    '"$(tsv_record_value "$cache_evidence" schema)" == 3' \
+    '"$(tsv_record_value "$cache_evidence" schema)" == 4' \
     '"$builder_helper_sha" == "$HEADER_CACHE_HELPER_SHA256"' \
     '"$tree_receipt_helper_sha" == "$TREE_RECEIPT_HELPER_SHA256"' \
     '"$(tsv_record_value "$input_receipt" configure_tool_inventory_sha256)" == \' \
@@ -546,14 +603,27 @@ for parent_header_binding in \
     '"$(tsv_record_value "$input_receipt" env_config_shell)" == \' \
     '"$(tsv_record_value "$input_receipt" env_shell)" == \' \
     '"$(tsv_record_value "$input_receipt" make_argument_shell)" == \' \
+    'expected_compatibility_mode=legacy-implicit-declarations-locked-curl7' \
+    'expected_compatibility_mode=locked-curl7' \
+    'verify_sha256 "$curl_output_sha" "$curl_preflight"' \
+    'curl_preflight_source_sha256)" =~ ^[0-9a-f]{64}$' \
+    'curl_preflight_header_version_hex)" == "$curl_header_hex"' \
+    'curl_preflight_runtime_version_hex)" == "$curl_runtime_hex"' \
+    'curl_preflight_compile_policy)" == \' \
+    'configure_compatibility_mode)" == "$expected_compatibility_mode"' \
+    'configure_cache_override_count)" == 0' \
+    '"$(tsv_record_value "$input_receipt" curl7_manifest_sha256)" == \' \
+    'curl7_receipt_helper_sha256)" == \' \
+    'curl_config_identity_sha256)" == \' \
     '"$(tsv_record_value "$input_receipt" toolchain_lock_sha256)" == \' \
     'verify_configure_tool_inventory "$configure_tools" "$configure_tool_count" \' \
     '"$run_headers_receipt_semantics" == actual-published-output-receipt-v1' \
     'cmp -s "$header_receipt" "$run_header_receipt"' \
     'header-cache-configure-tools-R-${version}.tsv' \
+    'header-cache-curl-preflight-R-${version}.txt' \
     'header-cache-run-headers-R-${version}.tsv'; do
   grep -Fq "$parent_header_binding" "$API_GATE" ||
-    fail "API parent omits schema-3 header evidence binding: $parent_header_binding"
+    fail "API parent omits schema-4 header evidence binding: $parent_header_binding"
 done
 api_tool_inventory_body=$(function_body verify_configure_tool_inventory \
   "$API_GATE")
@@ -593,7 +663,12 @@ for completion_binding in \
     'header_preparation_ledger_sha256=' \
     'header_preparation_retries_sha256=' \
     'header_cache_helper_sha256=' \
-    'header_cache_schema=3' \
+    'header_cache_schema=4' \
+    'curl7_prefix_manifest_sha256=' \
+    'curl7_prefix_receipt_sha256=' \
+    'curl7_prefix_seal_sha256=' \
+    'curl7_runtime_lock_sha256=' \
+    'runtime_prefix_receipt_helper_sha256=' \
     'tree_receipt_helper_sha256=' \
     'resource_jobs_helper_sha256=' \
     'resource_decision_sha256=' \
@@ -627,6 +702,15 @@ cache_self_test=$($API_HEADER_CACHE self-test 2>&1) || {
 printf '%s\n' "$cache_self_test" |
   grep -Fq 'r_api_header_cache_self_test=passed' ||
   fail "API header cache synthetic self-test retained no success marker"
+printf '%s\n' "$cache_self_test" |
+  grep -Fq 'configure_compatibility_selection=passed' ||
+  fail "API header cache did not self-test its exact old-R selection"
+printf '%s\n' "$cache_self_test" |
+  grep -Fq 'curl_preflight_validation=passed' ||
+  fail "API header cache did not self-test libcurl proof rejection"
+printf '%s\n' "$cache_self_test" |
+  grep -Fq 'fast_watchdog_cancellation=passed' ||
+  fail "API header cache did not self-test fast watchdog cancellation"
 
 # Compiler batches retain exact admission, deadline, process provenance,
 # NUL-framed argument-vector, per-task, and paired-lane evidence.  Plan schema
@@ -698,6 +782,13 @@ for runner in "$COMPILER_BATCH_RUNNER" "$COMPILER_WAVE_RUNNER"; do
     fail "compiler runner accepts an unidentified setsid: $runner"
   grep -Fq 'verify_setsid_identity' "$runner" ||
     fail "compiler runner does not reauthenticate setsid: $runner"
+  for timeout_binding in timeout_tool_path timeout_tool_sha256 \
+      timeout_tool_identity_sha256; do
+    grep -Fq "$timeout_binding" "$runner" ||
+      fail "compiler runner omits timeout provenance: $runner: $timeout_binding"
+  done
+  grep -Fq 'verify_timeout_identity' "$runner" ||
+    fail "compiler runner does not reauthenticate GNU timeout: $runner"
 done
 grep -Fq 'LC_ALL=C "$SETSID" --wait -- "$TIMEOUT_TOOL" --foreground --verbose \' \
   "$COMPILER_BATCH_RUNNER" ||
@@ -722,6 +813,14 @@ grep -Fq "expected_header=\$'$task_ledger_source'" "$API_GATE" ||
 grep -Fq 'term_marker="$TIMEOUT_TOOL: sending signal TERM to command '\''$TASK_WRAPPER_BASH'\''"' \
   "$COMPILER_BATCH_RUNNER" ||
   fail "compiler timeout classification lacks its exact supervisor marker"
+grep -Fq 'term_marker_short="$timeout_name: sending signal TERM to command '\''$TASK_WRAPPER_BASH'\''"' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler timeout classification lacks GNU timeout's basename marker"
+grep -Fq '*) supervisor_valid=false ;;' "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler timeout classification accepts unknown supervisor output"
+grep -Fq 'supervisor_evidence_failures=$((supervisor_evidence_failures + 1))' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler runner does not fail closed on impossible supervisor evidence"
 grep -Fq '"$TIMEOUT_TOOL" --foreground --verbose' \
   "$COMPILER_BATCH_RUNNER" ||
   fail "compiler batch tasks are not supervised by retained GNU timeout"

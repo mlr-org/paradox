@@ -346,9 +346,8 @@ done
 mapfile -t build_homes < <(find "$concurrent_repository/.local/tmp" \
   -mindepth 1 -maxdepth 1 -type d \
   -name "runtime-library-home.R-$RUNTIME.*" -print)
-[[ ${#build_homes[@]} -eq 1 &&
-  -z "$(find "${build_homes[0]}" -mindepth 1 -print -quit)" ]] ||
-  fail "successful source-library build retained mutable HOME/cache contents"
+[[ ${#build_homes[@]} -eq 0 ]] ||
+  fail "successful source-library build retained its temporary HOME/cache directory"
 env FIXTURE_INSTALL_LOG="$install_log" \
   "$concurrent_repository/scripts/environment/runtime-matrix-library" \
   --runtime "$RUNTIME" --verify >/dev/null
@@ -589,8 +588,14 @@ cp -- "$ROOT/scripts/environment/run-runtime-matrix-stage" \
   "$stage_repository/scripts/environment/run-runtime-matrix-stage"
 cp -- "$managed_helper" \
   "$stage_repository/scripts/environment/runtime-matrix-managed-path"
+cp -- "$LIBRARY_MANAGER" \
+  "$stage_repository/scripts/environment/runtime-matrix-library"
+cp -- "$ROOT/scripts/environment/verify-r36-declared-check-log" \
+  "$stage_repository/scripts/environment/verify-r36-declared-check-log"
 chmod 0755 "$stage_repository/scripts/environment/run-runtime-matrix-stage" \
-  "$stage_repository/scripts/environment/runtime-matrix-managed-path"
+  "$stage_repository/scripts/environment/runtime-matrix-library" \
+  "$stage_repository/scripts/environment/runtime-matrix-managed-path" \
+  "$stage_repository/scripts/environment/verify-r36-declared-check-log"
 cat > "$stage_repository/scripts/environment/runtime-matrix-registry" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail

@@ -109,6 +109,7 @@ printf '%s\n' \
   'printf "compiler_output=%s\\n" "$(basename "$source")"' \
   'if grep -qx SPOOF "$source"; then printf "timeout: sending signal TERM to command fake\\n" >&2; exit 17; fi' \
   'if grep -qx RETURN124 "$source"; then printf "timeout: sending signal TERM to command fake\\n" >&2; exit 124; fi' \
+  'if grep -qx RETURN137 "$source"; then printf "timeout: sending signal TERM to command fake\\ntimeout: sending signal KILL to command fake\\n" >&2; exit 137; fi' \
   'if grep -qx FAIL "$source"; then exit 17; fi' \
   > "$FAKE"
 chmod +x "$FAKE"
@@ -135,6 +136,7 @@ verify_task_ledger() {
   local retained_wrapper_bash_sha status timed_out log_relative log_sha
   local supervisor_relative supervisor_sha extra source_path
   local expected_status expected_timeout timeout_tool
+  local timeout_name term_count kill_count supervisor_count
   expected_header=$'schema\tordinal\tsource_relative\tsource_sha256\tcompiler_invoked_path\tcompiler_link_target\tcompiler_canonical_path\tcompiler_canonical_sha256\tcompiler_identity_sha256\ttask_wrapper_path\ttask_wrapper_sha256\ttask_wrapper_bash_path\ttask_wrapper_bash_sha256\texit_status\ttimed_out\tlog_relative\tlog_sha256\tsupervisor_log_relative\tsupervisor_log_sha256'
   [[ -f "$ledger" && ! -L "$ledger" ]] || return 1
   [[ "$(head -n 1 "$ledger")" == "$expected_header" ]] || return 1
@@ -159,6 +161,7 @@ verify_task_ledger() {
   timeout_tool=$(awk -F '\t' '$1 == "timeout_tool_path" { print $2 }' \
     "$output/batch-plan.tsv")
   [[ "$timeout_tool" == /* ]] || return 1
+  timeout_name=${timeout_tool##*/}
   declare -A observed_sources=()
   while IFS=$'\t' read -r schema ordinal relative source_sha compiler_invoked \
       retained_link retained_canonical retained_compiler_sha retained_identity \
@@ -198,14 +201,30 @@ verify_task_ledger() {
     case "$mode:$row" in
       failing:2|failing:5|spoof:1) expected_status=17 ;;
       return124:1) expected_status=124 ;;
-      deadline:1) expected_status=124; expected_timeout=true ;;
+      return137:1) expected_status=137 ;;
+      deadline:1) expected_status=deadline; expected_timeout=true ;;
       left:2|right:5) expected_status=19 ;;
     esac
-    [[ "$status" -eq "$expected_status" &&
-       "$timed_out" == "$expected_timeout" ]] || return 1
+    if [[ "$expected_status" == deadline ]]; then
+      [[ "$status" =~ ^(124|137)$ ]] || return 1
+    else
+      [[ "$status" -eq "$expected_status" ]] || return 1
+    fi
+    [[ "$timed_out" == "$expected_timeout" ]] || return 1
     if [[ "$expected_timeout" == true ]]; then
-      grep -Fqx "$timeout_tool: sending signal TERM to command '$wrapper_bash'" \
-        "$output/$supervisor_relative" || return 1
+      term_count=$(grep -Fxc \
+        -e "$timeout_tool: sending signal TERM to command '$wrapper_bash'" \
+        -e "$timeout_name: sending signal TERM to command '$wrapper_bash'" \
+        "$output/$supervisor_relative" || true)
+      kill_count=$(grep -Fxc \
+        -e "$timeout_tool: sending signal KILL to command '$wrapper_bash'" \
+        -e "$timeout_name: sending signal KILL to command '$wrapper_bash'" \
+        "$output/$supervisor_relative" || true)
+      supervisor_count=$(wc -l < "$output/$supervisor_relative")
+      [[ "$term_count" -eq 1 && "$kill_count" -le 1 &&
+         "$supervisor_count" -eq "$((term_count + kill_count))" ]] ||
+        return 1
+      [[ "$status" -ne 137 || "$kill_count" -eq 1 ]] || return 1
     else
       [[ ! -s "$output/$supervisor_relative" ]] || return 1
     fi
@@ -356,6 +375,143 @@ verify_task_ledger "$SCRATCH/output/return124-tasks/task-ledger.tsv" \
   printf '%s\n' 'test-compiler-batch: ordinary exit-124 ledger is invalid' >&2
   exit 1
 }
+
+# KILL's conventional status 137 is equally ambiguous.  Compiler diagnostics
+# still go only to the task log, so even exact TERM/KILL-looking text cannot
+# forge the supervisor-only escalation evidence.
+printf 'RETURN137\n' > "$SCRATCH/source/return137.c"
+printf '%s\n' "$SCRATCH/source/return137.c" > "$SCRATCH/return137-sources.txt"
+if "$RUNNER" --jobs 1 --label return137 --compiler "$FAKE" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/return137-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/return137-tasks" \
+    --aggregate-log "$SCRATCH/output/return137.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/return137.stdout" 2> "$SCRATCH/return137.stderr"; then
+  printf '%s\n' 'test-compiler-batch: compiler exit 137 returned success' >&2
+  exit 1
+fi
+grep -Fq '1 of 1 return137 task(s) failed (0 timeout(s))' \
+  "$SCRATCH/return137.stderr"
+verify_task_ledger "$SCRATCH/output/return137-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/return137-tasks" "$FAKE" return137 1 || {
+  printf '%s\n' 'test-compiler-batch: ordinary exit-137 ledger is invalid' >&2
+  exit 1
+}
+
+# Supervisor output has a closed grammar. Even a zero-status child may not turn
+# an unknown line into a successful batch merely because no timeout was
+# classified.
+export PARADOX_REAL_TIMEOUT
+PARADOX_REAL_TIMEOUT=$(command -v timeout)
+NOISY_TIMEOUT="$SCRATCH/noisy-timeout"
+# The single-quoted expressions are fixture source and expand only in the
+# synthetic timeout process.
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then' \
+  '  exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" --version' \
+  'fi' \
+  'printf "unexpected authenticated-supervisor output\n" >&2' \
+  'exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" "$@"' \
+  > "$NOISY_TIMEOUT"
+chmod +x "$NOISY_TIMEOUT"
+printf 'PASS\n' > "$SCRATCH/source/noisy-supervisor.c"
+printf '%s\n' "$SCRATCH/source/noisy-supervisor.c" \
+  > "$SCRATCH/noisy-supervisor-sources.txt"
+if "$RUNNER" --jobs 1 --label noisy-supervisor --compiler "$FAKE" \
+    --setsid "$SETSID" --timeout-tool "$NOISY_TIMEOUT" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/noisy-supervisor-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/noisy-supervisor-tasks" \
+    --aggregate-log "$SCRATCH/output/noisy-supervisor.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/noisy-supervisor.stdout" \
+    2> "$SCRATCH/noisy-supervisor.stderr"; then
+  printf '%s\n' 'test-compiler-batch: unknown supervisor output passed' >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $14 ":" $15}' \
+    "$SCRATCH/output/noisy-supervisor-tasks/task-ledger.tsv") == 0:false ]]
+grep -Fq '1 of 1 noisy-supervisor task(s) failed (0 timeout(s)); 1 supervisor-evidence failure(s)' \
+  "$SCRATCH/noisy-supervisor.stderr"
+
+# Exact-looking diagnostics are evidence only when their status has one of the
+# two GNU-timeout deadline meanings. TERM plus an unrelated child status is an
+# inconsistent supervisor result, not an ordinary compiler failure.
+MISMATCH_TIMEOUT="$SCRATCH/mismatch-timeout"
+export PARADOX_TIMEOUT_EXPECTED_COMMAND
+PARADOX_TIMEOUT_EXPECTED_COMMAND=$(readlink -f -- "${BASH}")
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then' \
+  '  exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" --version' \
+  'fi' \
+  'printf "%s: sending signal TERM to command '\''%s'\''\n" "$0" "${PARADOX_TIMEOUT_EXPECTED_COMMAND:?}" >&2' \
+  'exit 17' \
+  > "$MISMATCH_TIMEOUT"
+chmod +x "$MISMATCH_TIMEOUT"
+printf 'PASS\n' > "$SCRATCH/source/mismatch-supervisor.c"
+printf '%s\n' "$SCRATCH/source/mismatch-supervisor.c" \
+  > "$SCRATCH/mismatch-supervisor-sources.txt"
+if "$RUNNER" --jobs 1 --label mismatch-supervisor --compiler "$FAKE" \
+    --setsid "$SETSID" --timeout-tool "$MISMATCH_TIMEOUT" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/mismatch-supervisor-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/mismatch-supervisor-tasks" \
+    --aggregate-log "$SCRATCH/output/mismatch-supervisor.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/mismatch-supervisor.stdout" \
+    2> "$SCRATCH/mismatch-supervisor.stderr"; then
+  printf '%s\n' 'test-compiler-batch: mismatched supervisor evidence passed' >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $14 ":" $15}' \
+    "$SCRATCH/output/mismatch-supervisor-tasks/task-ledger.tsv") == 17:false ]]
+grep -Fq '1 of 1 mismatch-supervisor task(s) failed (0 timeout(s)); 1 supervisor-evidence failure(s)' \
+  "$SCRATCH/mismatch-supervisor.stderr"
+
+# The plan binds the executable bytes and version identity. Mutation after a
+# task starts must invalidate the batch before it can publish a result ledger.
+MUTATING_TIMEOUT="$SCRATCH/mutating-timeout"
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then' \
+  '  exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" --version' \
+  'fi' \
+  'printf "# identity mutation\n" >> "$0"' \
+  'exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" "$@"' \
+  > "$MUTATING_TIMEOUT"
+chmod +x "$MUTATING_TIMEOUT"
+printf 'PASS\n' > "$SCRATCH/source/timeout-mutation.c"
+printf '%s\n' "$SCRATCH/source/timeout-mutation.c" \
+  > "$SCRATCH/timeout-mutation-sources.txt"
+if "$RUNNER" --jobs 1 --label timeout-mutation --compiler "$FAKE" \
+    --setsid "$SETSID" --timeout-tool "$MUTATING_TIMEOUT" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/timeout-mutation-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/timeout-mutation-tasks" \
+    --aggregate-log "$SCRATCH/output/timeout-mutation.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/timeout-mutation.stdout" \
+    2> "$SCRATCH/timeout-mutation.stderr"; then
+  printf '%s\n' 'test-compiler-batch: timeout identity mutation passed' >&2
+  exit 1
+fi
+grep -Fq 'timeout identity changed while the batch was running' \
+  "$SCRATCH/timeout-mutation.stderr"
+[[ ! -e "$SCRATCH/output/timeout-mutation-tasks/task-ledger.tsv" ]]
 
 # A reviewed leaf invocation symlink is retained separately from its immediate
 # target and canonical executable, while the canonical bytes run with the
@@ -521,6 +677,7 @@ make_counting_compiler() {
     "lane=$lane" \
     'if [[ "${1:-}" == --version ]]; then printf "counting-compiler-%s-v1\n" "$lane"; exit 0; fi' \
     'state=${PARADOX_COMPILER_TEST_STATE:?}' \
+    'target=${PARADOX_COMPILER_TEST_TARGET:?}' \
     'expected_strict="-DSTRICT_${lane}_API"' \
     'expected_include="-I${state}/include-${lane,,}"' \
     'strict_seen=false' \
@@ -553,6 +710,13 @@ make_counting_compiler() {
     '  release' \
     '}' \
     'trap decrement EXIT HUP INT TERM' \
+    '# Hold the first wave behind a bounded barrier so this fixture proves the' \
+    '# admitted concurrency even when the host is busy enough that an 80 ms' \
+    '# sleep alone would serialize otherwise independent compiler processes.' \
+    'for ((attempt = 0; attempt < 400; ++attempt)); do' \
+    '  [[ "$(<"$state/maximum")" -ge "$target" ]] && break' \
+    '  sleep 0.005' \
+    'done' \
     'printf "lane=%s source=%s\n" "$lane" "$(basename "$source")"' \
     'sleep 0.08' \
     'if grep -qx "FAIL_${lane^^}" "$source"; then exit 19; fi' \
@@ -563,6 +727,7 @@ make_counting_compiler() {
 LEFT_COMPILER_REAL="$SCRATCH/left-compiler-real"
 LEFT_COMPILER="$SCRATCH/left-compiler"
 RIGHT_COMPILER="$SCRATCH/right-compiler"
+export PARADOX_COMPILER_TEST_TARGET=3
 make_counting_compiler "$LEFT_COMPILER_REAL" LEFT
 ln -s "$(basename "$LEFT_COMPILER_REAL")" "$LEFT_COMPILER"
 make_counting_compiler "$RIGHT_COMPILER" RIGHT
@@ -652,6 +817,35 @@ grep -Fqx $'setsid_sha256\t'"$SETSID_SHA256" \
   "$SCRATCH/output/failing-wave/wave-plan.tsv"
 grep -Fqx $'setsid_identity_sha256\t'"$SETSID_IDENTITY_SHA256" \
   "$SCRATCH/output/failing-wave/wave-plan.tsv"
+wave_timeout_tool=$(
+  awk -F '\t' '$1 == "timeout_tool_path" { print $2 }' \
+    "$SCRATCH/output/failing-wave/wave-plan.tsv"
+)
+wave_timeout_sha256=$(
+  awk -F '\t' '$1 == "timeout_tool_sha256" { print $2 }' \
+    "$SCRATCH/output/failing-wave/wave-plan.tsv"
+)
+wave_timeout_identity_sha256=$(
+  awk -F '\t' '$1 == "timeout_tool_identity_sha256" { print $2 }' \
+    "$SCRATCH/output/failing-wave/wave-plan.tsv"
+)
+[[ "$wave_timeout_tool" == /* && -f "$wave_timeout_tool" &&
+   ! -L "$wave_timeout_tool" ]]
+[[ "$wave_timeout_sha256" == \
+   "$(sha256sum "$wave_timeout_tool" | cut -d ' ' -f 1)" ]]
+[[ "$wave_timeout_identity_sha256" == \
+   "$(LC_ALL=C "$wave_timeout_tool" --version 2>&1 |
+     sha256sum | cut -d ' ' -f 1)" ]]
+for batch_plan in \
+    "$SCRATCH/output/failing-wave/left/batch-plan.tsv" \
+    "$SCRATCH/output/failing-wave/right/batch-plan.tsv"; do
+  grep -Fqx $'task_timeout_seconds\t300' "$batch_plan"
+  grep -Fqx $'timeout_tool_path\t'"$wave_timeout_tool" "$batch_plan"
+  grep -Fqx $'timeout_tool_sha256\t'"$wave_timeout_sha256" "$batch_plan"
+  grep -Fqx \
+    $'timeout_tool_identity_sha256\t'"$wave_timeout_identity_sha256" \
+    "$batch_plan"
+done
 grep -Fqx $'compiler_arguments_sha256\t'"$(argument_vector_sha256 \
   "${WAVE_LEFT_ARGUMENTS[@]}")" \
   "$SCRATCH/output/failing-wave/left/batch-plan.tsv"
@@ -702,6 +896,7 @@ done
 for source in "$SCRATCH/source/"wave-*.c; do printf 'PASS\n' > "$source"; done
 printf '0\n' > "$STATE/current"
 printf '0\n' > "$STATE/maximum"
+export PARADOX_COMPILER_TEST_TARGET=1
 "$WAVE_RUNNER" --jobs 1 --batch-runner "$RUNNER" \
   --setsid "$SETSID" \
   --source-root "$SCRATCH/source" --source-list "$WAVE_SOURCE_LIST" \

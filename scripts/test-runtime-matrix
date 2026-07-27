@@ -9,6 +9,7 @@ LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
 RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
 STAGE_WORKER="$ROOT/scripts/environment/run-runtime-matrix-stage"
 WAVE_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-wave"
+CROSS_SERIALIZATION_WORKER="$ROOT/scripts/environment/run-runtime-matrix-cross-serialization"
 MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
 MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
 REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
@@ -16,6 +17,7 @@ LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
 TRUSTED_INPUT_HELPER="$ROOT/scripts/environment/runtime-matrix-trusted-inputs"
 MANAGED_PATH_HELPER="$ROOT/scripts/environment/runtime-matrix-managed-path"
 STAGE_TIMEOUT_SECONDS=7200
+CROSS_SERIALIZATION_TIMEOUT_SECONDS=900
 DATATABLE_VERSION=1.18.4
 DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
 DATATABLE_ARCHIVE="$ROOT/.cache/downloads/r-packages/data.table_${DATATABLE_VERSION}.tar.gz"
@@ -37,9 +39,14 @@ Each stage builds a source archive, installs it in a fresh run-specific
 library, executes a focused r_api_compat probe and the authenticated supported
 source-test scope with NOT_CRAN=false, audits the DSO's version-specific
 undefined public R symbols, and seals all retained artifacts below
-.local/checks/ID/.  The isolated stages share one resource-aware light-test
-admission; at most two run concurrently. PARADOX_RUNTIME_MATRIX_JOBS may lower
-that ceiling to 1.
+.local/checks/ID/.  R 3.6 and R 4.0 additionally execute the authenticated,
+source-derived old-runtime GC/reentry slice with NOT_CRAN=true.  A complete
+`--runtime all` run then serializes one nested current-v2 R6/ParamSet graph
+under R 4.0 and loads, exercises, mutates, and reserializes it under R 3.6.
+The R 3.6 stage also reinstalls the candidate against the exact declared
+direct-dependency floors and runs a dependency-origin and imported-path smoke.
+The isolated stages share one resource-aware light-test admission; at most two
+run concurrently. PARADOX_RUNTIME_MATRIX_JOBS may lower that ceiling to 1.
 USAGE
 }
 
@@ -262,6 +269,17 @@ for version in "${versions[@]}"; do
     cp -R -- "$ROOT/.local/runtime-matrix/dependency-receipts/R-$version/$dependency_key" \
       "$inputs/dependency-library-receipt"
   fi
+  if [[ "$version" == 3.6.3 ]]; then
+    declared_floor_library=$(
+      "$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor \
+        --verify --print-path
+    )
+    declared_floor_key=${declared_floor_library%/library}
+    declared_floor_key=${declared_floor_key##*/}
+    cp -R -- \
+      "$ROOT/.local/runtime-matrix/dependency-receipts/R-3.6.3-declared-floor/$declared_floor_key" \
+      "$inputs/declared-floor-library-receipt"
+  fi
   {
     printf 'step\tcommand\n'
     printf 'snapshot\treplacement-disabled Git archive with isolated attributes and pre/post repository audits\n'
@@ -272,7 +290,9 @@ for version in "${versions[@]}"; do
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
     if [[ "$version" == 3.6.3 ]]; then
-      printf 'declared-minimum-check\t_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --no-manual --no-build-vignettes ARCHIVE\n'
+      printf 'declared-minimum-check\t_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --ignore-vignettes --no-manual ARCHIVE\n'
+      printf 'declared-floor-install\tR CMD INSTALL into a fresh candidate library with the exact declared direct-dependency floors\n'
+      printf 'declared-floor-smoke\texact R 3.6.3 dependency-origin and representative imported-path probe\n'
     fi
     if [[ "$dependency_mode" == data-table-overlay ]]; then
       printf 'dependency-overlay\tSHA-256-authenticated R CMD INSTALL of data.table %s into the fresh stage library\n' "$DATATABLE_VERSION"
@@ -284,6 +304,9 @@ for version in "${versions[@]}"; do
     printf 'focused\tRscript runtime-matrix-probe.R LIBRARY\n'
     printf 'symbols\tauthenticated prefix NM -D --undefined-only paradox.so\n'
     printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
+    if [[ "$version" == 3.6.3 || "$version" == 4.0.5 ]]; then
+      printf 'old-runtime-stress\tNOT_CRAN=true Rscript run-runtime-matrix-old-r-stress.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
+    fi
     printf 'scheduling\tresource-jobs light-test; at most two outer stages; all nested parallelism fixed to one\n'
   } > "$inputs/commands.tsv"
 done
@@ -314,6 +337,9 @@ mbo_config_manifest_sha256=$(sha256_file \
   "$run_root/metadata/mbo-config-fixtures.manifest.tsv")
 Rscript --vanilla \
   "$preflight_source/scripts/environment/runtime-matrix-skip-policy.R" \
+  "$preflight_source"
+Rscript --vanilla \
+  "$preflight_source/scripts/environment/runtime-matrix-old-r-stress-policy.R" \
   "$preflight_source"
 
 resource_report="$run_root/metadata/resource-jobs.tsv"
@@ -402,6 +428,35 @@ for version in "${versions[@]}"; do
     -f "$scope/observed-whole-file-skips.tsv" &&
     -f "$scope/observed-result-skips.tsv" ]] ||
     fail "Runtime stage outputs are incomplete"
+  old_stress_scope="$inputs/old-r-stress-scope"
+  old_stress_log="$logs/old-r-stress.log"
+  if [[ "$version" == 3.6.3 || "$version" == 4.0.5 ]]; then
+    [[ -d "$old_stress_scope" && ! -L "$old_stress_scope" &&
+      -d "$old_stress_scope/testthat" &&
+      ! -L "$old_stress_scope/testthat" &&
+      -f "$old_stress_scope/selection.tsv" &&
+      ! -L "$old_stress_scope/selection.tsv" &&
+      -f "$old_stress_scope/results.tsv" &&
+      ! -L "$old_stress_scope/results.tsv" &&
+      -f "$old_stress_scope/testthat-reported-files.tsv" &&
+      ! -L "$old_stress_scope/testthat-reported-files.tsv" &&
+      -f "$old_stress_log" && ! -L "$old_stress_log" ]] ||
+      fail "Old-runtime stress evidence is incomplete"
+  else
+    [[ ! -e "$old_stress_scope" && ! -L "$old_stress_scope" &&
+      ! -e "$old_stress_log" && ! -L "$old_stress_log" ]] ||
+      fail "A newer runtime retained unexpected old-runtime stress evidence"
+  fi
+  compiled_code_policy_log="$logs/r45-compiled-code-policy.log"
+  if [[ "$version" == 4.5.2 ]]; then
+    [[ -f "$compiled_code_policy_log" &&
+      ! -L "$compiled_code_policy_log" ]] ||
+      fail "R 4.5 compiled-code policy evidence is incomplete"
+  else
+    [[ ! -e "$compiled_code_policy_log" &&
+      ! -L "$compiled_code_policy_log" ]] ||
+      fail "A non-4.5 runtime retained unexpected compiled-code policy evidence"
+  fi
   if [[ "$dependency_mode" == data-table-overlay ]]; then
     [[ -f "$inputs/data.table_${DATATABLE_VERSION}.tar.gz" &&
       ! -L "$inputs/data.table_${DATATABLE_VERSION}.tar.gz" &&
@@ -424,15 +479,31 @@ for version in "${versions[@]}"; do
       -f "$logs/r-cmd-check-status.tsv" &&
       ! -L "$logs/r-cmd-check-status.tsv" &&
       -f "$check/paradox.Rcheck/00check.log" &&
-      ! -L "$check/paradox.Rcheck/00check.log" ]] ||
-      fail "Declared-minimum R CMD check evidence is incomplete"
+      ! -L "$check/paradox.Rcheck/00check.log" &&
+      -d "$inputs/declared-floor-library-receipt" &&
+      ! -L "$inputs/declared-floor-library-receipt" &&
+      -d "$artifacts/declared-floor-candidate-library" &&
+      ! -L "$artifacts/declared-floor-candidate-library" &&
+      -f "$logs/declared-floor-install.log" &&
+      ! -L "$logs/declared-floor-install.log" &&
+      -f "$logs/declared-floor-smoke.log" &&
+      ! -L "$logs/declared-floor-smoke.log" ]] ||
+      fail "Declared-minimum R CMD check or dependency-floor evidence is incomplete"
   else
     [[ -d "$check" && ! -L "$check" &&
       -z $(find "$check" -mindepth 1 -print -quit) &&
       ! -e "$logs/r-cmd-check.log" && ! -L "$logs/r-cmd-check.log" &&
       ! -e "$logs/r-cmd-check-status.tsv" &&
-      ! -L "$logs/r-cmd-check-status.tsv" ]] ||
-      fail "A non-minimum runtime retained unexpected R CMD check evidence"
+      ! -L "$logs/r-cmd-check-status.tsv" &&
+      ! -e "$inputs/declared-floor-library-receipt" &&
+      ! -L "$inputs/declared-floor-library-receipt" &&
+      ! -e "$artifacts/declared-floor-candidate-library" &&
+      ! -L "$artifacts/declared-floor-candidate-library" &&
+      ! -e "$logs/declared-floor-install.log" &&
+      ! -L "$logs/declared-floor-install.log" &&
+      ! -e "$logs/declared-floor-smoke.log" &&
+      ! -L "$logs/declared-floor-smoke.log" ]] ||
+      fail "A non-minimum runtime retained unexpected R CMD check or dependency-floor evidence"
   fi
   [[ $(sha256_file "$inputs/source.git.tar") == "$source_git_tar_sha256" &&
     $(sha256_file "$inputs/source.manifest.tsv") == "$source_manifest_sha256" &&
@@ -503,6 +574,122 @@ for version in "${versions[@]}"; do
     result_skips == expected_result_skips &&
     total_skips == result_skips + whole_file_skips)) ||
     fail "Runtime source-test inventory or skip accounting is inconsistent"
+  old_stress_manifest_sha256=-
+  old_stress_selection_sha256=-
+  old_stress_results_sha256=-
+  old_stress_reported_files_sha256=-
+  old_stress_log_sha256=-
+  old_stress_selected_files=-
+  old_stress_selected_targets=-
+  old_stress_test_blocks=-
+  old_stress_target_passes=-
+  old_stress_non_target_skips=-
+  old_stress_support_files=-
+  old_stress_expectations_passed=-
+  if [[ "$version" == 3.6.3 || "$version" == 4.0.5 ]]; then
+    old_stress_manifest="$inputs/environment/runtime-matrix-old-r-stress.tsv"
+    old_stress_selection="$old_stress_scope/selection.tsv"
+    old_stress_results="$old_stress_scope/results.tsv"
+    old_stress_reported="$old_stress_scope/testthat-reported-files.tsv"
+    stress_log_value() {
+      local key=$1
+      awk -F = -v key="$key" '$1 == key {
+        sub(/^[^=]*=/, "")
+        print
+      }' "$old_stress_log"
+    }
+    cmp -s -- "$old_stress_manifest" "$old_stress_selection" ||
+      fail "Old-runtime stress selection differs from its source manifest"
+    old_stress_selected_files=$(stress_log_value selected_file_count)
+    old_stress_selected_targets=$(stress_log_value selected_target_count)
+    old_stress_support_files=$(stress_log_value \
+      staged_test_support_file_count)
+    old_stress_test_blocks=$(stress_log_value test_block_count)
+    old_stress_target_passes=$(stress_log_value target_pass_count)
+    old_stress_non_target_skips=$(stress_log_value non_target_skip_count)
+    old_stress_expectations_passed=$(stress_log_value expectations_passed)
+    for value in "$old_stress_selected_files" \
+        "$old_stress_selected_targets" "$old_stress_support_files" \
+        "$old_stress_test_blocks" "$old_stress_target_passes" \
+        "$old_stress_non_target_skips" \
+        "$old_stress_expectations_passed"; do
+      [[ "$value" =~ ^(0|[1-9][0-9]*)$ ]] ||
+        fail "Old-runtime stress count is malformed"
+    done
+    manifest_stress_targets=$(awk 'END {print NR - 1}' \
+      "$old_stress_manifest")
+    manifest_stress_files=$(tail -n +2 "$old_stress_manifest" |
+      cut -f 1 | LC_ALL=C sort -u | wc -l)
+    retained_stress_results=$(awk 'END {print NR - 1}' \
+      "$old_stress_results")
+    retained_stress_reported=$(awk 'END {print NR - 1}' \
+      "$old_stress_reported")
+    retained_stress_target_passes=$(awk -F '\t' \
+      'NR > 1 && $3 == "true" && $11 == "passed" {count++}
+       END {print count + 0}' "$old_stress_results")
+    retained_stress_non_target_skips=$(awk -F '\t' \
+      'NR > 1 && $3 == "false" && $11 == "skipped" {count++}
+       END {print count + 0}' "$old_stress_results")
+    retained_stress_files=$(find "$old_stress_scope/testthat" -maxdepth 1 \
+      -type f | wc -l)
+    ((old_stress_selected_files > 0 &&
+      old_stress_selected_targets > 0 &&
+      old_stress_test_blocks == old_stress_selected_targets &&
+      old_stress_target_passes == old_stress_selected_targets &&
+      old_stress_non_target_skips == 0 &&
+      old_stress_expectations_passed > 0 &&
+      old_stress_selected_files == manifest_stress_files &&
+      old_stress_selected_targets == manifest_stress_targets &&
+      old_stress_test_blocks == retained_stress_results &&
+      old_stress_selected_files == retained_stress_reported &&
+      old_stress_target_passes == retained_stress_target_passes &&
+      old_stress_non_target_skips == retained_stress_non_target_skips &&
+      retained_stress_files ==
+        old_stress_selected_files + old_stress_support_files)) ||
+      fail "Old-runtime stress inventory or result accounting is inconsistent"
+    [[ $(stress_log_value not_cran) == true &&
+      $(stress_log_value lc_all) == unset &&
+      $(stress_log_value stress_scope) == \
+        old-runtime-source-derived-selection &&
+      $(stress_log_value stress_manifest) == \
+        environment/runtime-matrix-old-r-stress.tsv &&
+      $(stress_log_value stress_selection) == \
+        old-r-stress-scope/selection.tsv &&
+      $(stress_log_value selection_filter) == \
+        helper_zz_runtime_old_r_stress_filter.R &&
+      $(stress_log_value selection_filter_self_test) == passed &&
+      $(stress_log_value testthat_reported_file_count) == \
+        "$old_stress_selected_files" &&
+      $(stress_log_value expectations_failed) == 0 &&
+      $(stress_log_value warnings) == 0 &&
+      $(stress_log_value errors) == 0 ]] ||
+      fail "Old-runtime stress policy or clean status is inconsistent"
+    grep -Fqx 'runtime_matrix_old_r_stress=passed' "$old_stress_log" ||
+      fail "Old-runtime stress completion marker is absent"
+    old_stress_manifest_sha256=$(sha256_file "$old_stress_manifest")
+    old_stress_selection_sha256=$(sha256_file "$old_stress_selection")
+    old_stress_results_sha256=$(sha256_file "$old_stress_results")
+    old_stress_reported_files_sha256=$(sha256_file "$old_stress_reported")
+    old_stress_log_sha256=$(sha256_file "$old_stress_log")
+    unset -f stress_log_value
+  fi
+  declared_floor_lock_sha256=-
+  declared_floor_library_receipt_sha256=-
+  declared_floor_install_log_sha256=-
+  declared_floor_smoke_log_sha256=-
+  declared_floor_candidate_dso_sha256=-
+  if [[ "$version" == 3.6.3 ]]; then
+    declared_floor_lock_sha256=$(sha256_file \
+      "$inputs/environment/runtime-r-3.6.3-declared-floor-packages.lock")
+    declared_floor_library_receipt_sha256=$(sha256_file \
+      "$inputs/declared-floor-library-receipt/receipt.tsv")
+    declared_floor_install_log_sha256=$(sha256_file \
+      "$logs/declared-floor-install.log")
+    declared_floor_smoke_log_sha256=$(sha256_file \
+      "$logs/declared-floor-smoke.log")
+    declared_floor_candidate_dso_sha256=$(sha256_file \
+      "$artifacts/declared-floor-candidate-library/paradox/libs/paradox.so")
+  fi
   "$PREFIX_RECEIPT" create "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
   {
     printf 'field\tvalue\n'
@@ -581,8 +768,47 @@ for version in "${versions[@]}"; do
     printf 'expectations_passed\t%s\n' "$expectations_passed"
     printf 'result_test_blocks_skipped\t%s\n' "$result_skips"
     printf 'total_test_skips\t%s\n' "$total_skips"
+    printf 'old_r_stress_manifest_sha256\t%s\n' \
+      "$old_stress_manifest_sha256"
+    printf 'old_r_stress_selection_sha256\t%s\n' \
+      "$old_stress_selection_sha256"
+    printf 'old_r_stress_results_sha256\t%s\n' \
+      "$old_stress_results_sha256"
+    printf 'old_r_stress_reported_files_sha256\t%s\n' \
+      "$old_stress_reported_files_sha256"
+    printf 'old_r_stress_log_sha256\t%s\n' "$old_stress_log_sha256"
+    printf 'old_r_stress_selected_file_count\t%s\n' \
+      "$old_stress_selected_files"
+    printf 'old_r_stress_selected_target_count\t%s\n' \
+      "$old_stress_selected_targets"
+    printf 'old_r_stress_test_block_count\t%s\n' \
+      "$old_stress_test_blocks"
+    printf 'old_r_stress_target_pass_count\t%s\n' \
+      "$old_stress_target_passes"
+    printf 'old_r_stress_non_target_skip_count\t%s\n' \
+      "$old_stress_non_target_skips"
+    printf 'old_r_stress_support_file_count\t%s\n' \
+      "$old_stress_support_files"
+    printf 'old_r_stress_expectations_passed\t%s\n' \
+      "$old_stress_expectations_passed"
+    printf 'declared_floor_lock_sha256\t%s\n' \
+      "$declared_floor_lock_sha256"
+    printf 'declared_floor_library_receipt_sha256\t%s\n' \
+      "$declared_floor_library_receipt_sha256"
+    printf 'declared_floor_install_log_sha256\t%s\n' \
+      "$declared_floor_install_log_sha256"
+    printf 'declared_floor_smoke_log_sha256\t%s\n' \
+      "$declared_floor_smoke_log_sha256"
+    printf 'declared_floor_candidate_dso_sha256\t%s\n' \
+      "$declared_floor_candidate_dso_sha256"
     printf 'archive_sha256\t%s\n' "$(sha256_file "$archive")"
     printf 'candidate_dso_sha256\t%s\n' "$(sha256_file "$library/paradox/libs/paradox.so")"
+    if [[ "$version" == 4.5.2 ]]; then
+      printf 'r45_compiled_code_policy_sha256\t%s\n' \
+        "$(sha256_file "$compiled_code_policy_log")"
+    else
+      printf 'r45_compiled_code_policy_sha256\t-\n'
+    fi
     if [[ "$version" == 3.6.3 ]]; then
       printf 'declared_minimum_check_status_sha256\t%s\n' \
         "$(sha256_file "$logs/r-cmd-check-status.tsv")"
@@ -607,6 +833,49 @@ done
   "$source_tree" >/dev/null ||
   fail "Source ref or tree moved during the runtime-matrix run"
 
+cross_serialization_status=not-applicable
+cross_serialization_producer_runtime=-
+cross_serialization_consumer_runtime=-
+cross_serialization_seal_sha256=-
+cross_serialization_driver_log_sha256=-
+cross_serialization_driver_log="$run_root/metadata/cross-runtime-serialization-driver.log"
+if [[ "$selection" == all ]]; then
+  mapfile -t registered_versions < <("$REGISTRY" versions)
+  [[ "${versions[*]}" == "${registered_versions[*]}" ]] ||
+    fail "Complete cross-runtime serialization requires every registered runtime"
+  verify_live_trusted_inputs
+  cross_serialization_exit=0
+  "$timeout_path" --signal=TERM --kill-after=10s \
+    "$CROSS_SERIALIZATION_TIMEOUT_SECONDS" \
+    "$CROSS_SERIALIZATION_WORKER" "$ROOT" "$run_root" \
+    > "$cross_serialization_driver_log" 2>&1 ||
+    cross_serialization_exit=$?
+  if ((cross_serialization_exit != 0)); then
+    fail "Cross-runtime serialization gate failed with status $cross_serialization_exit"
+  fi
+  verify_live_trusted_inputs
+  grep -Fqx 'cross_runtime_serialization=passed' \
+    "$cross_serialization_driver_log" ||
+    fail "Cross-runtime serialization completion marker is absent"
+  cross_serialization_metadata="$run_root/cross-runtime-serialization/metadata"
+  [[ -f "$cross_serialization_metadata/completion.seal" &&
+    ! -L "$cross_serialization_metadata/completion.seal" ]] ||
+    fail "Cross-runtime serialization completion seal is absent"
+  cross_serialization_status=passed
+  cross_serialization_producer_runtime=4.0.5
+  cross_serialization_consumer_runtime=3.6.3
+  cross_serialization_seal_sha256=$(sha256_file \
+    "$cross_serialization_metadata/completion.seal")
+  cross_serialization_driver_log_sha256=$(sha256_file \
+    "$cross_serialization_driver_log")
+else
+  [[ ! -e "$run_root/cross-runtime-serialization" &&
+    ! -L "$run_root/cross-runtime-serialization" &&
+    ! -e "$cross_serialization_driver_log" &&
+    ! -L "$cross_serialization_driver_log" ]] ||
+    fail "A partial matrix retained unexpected cross-runtime evidence"
+fi
+
 {
   printf 'runtime\tstage_seal_sha256\n'
   for version in "${versions[@]}"; do
@@ -624,6 +893,18 @@ done
     "$mbo_config_commit" "$mbo_config_tree" \
     "$mbo_config_provenance_sha256" "$mbo_config_manifest_sha256" \
     "$mbo_config_mixed_sha256" "$mbo_config_numeric_sha256"
+  printf 'cross_runtime_serialization_status\t%s\n' \
+    "$cross_serialization_status"
+  printf 'cross_runtime_serialization_producer_runtime\t%s\n' \
+    "$cross_serialization_producer_runtime"
+  printf 'cross_runtime_serialization_consumer_runtime\t%s\n' \
+    "$cross_serialization_consumer_runtime"
+  printf 'cross_runtime_serialization_timeout_seconds\t%s\n' \
+    "$CROSS_SERIALIZATION_TIMEOUT_SECONDS"
+  printf 'cross_runtime_serialization_seal_sha256\t%s\n' \
+    "$cross_serialization_seal_sha256"
+  printf 'cross_runtime_serialization_driver_log_sha256\t%s\n' \
+    "$cross_serialization_driver_log_sha256"
 } > "$run_root/metadata/run.tsv"
 (
   cd "$run_root/metadata"
@@ -635,6 +916,11 @@ done
   for version in "${versions[@]}"; do
     sha256sum "../R-$version/metadata/completion.seal" >> completion.inputs.tsv
   done
+  if [[ "$cross_serialization_status" == passed ]]; then
+    sha256sum cross-runtime-serialization-driver.log \
+      ../cross-runtime-serialization/metadata/completion.seal \
+      >> completion.inputs.tsv
+  fi
   printf '%s  completion.inputs.tsv\n' "$(sha256_file completion.inputs.tsv)" > completion.seal
 )
 "$ROOT/scripts/verify-runtime-matrix-evidence" --run-id "$run_id"

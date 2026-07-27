@@ -6,6 +6,11 @@
 
 set -euo pipefail
 
+# This fixture constructs reviewed synthetic resource ledgers.  An enclosing
+# verification worker's real assignment must not silently rewrite those
+# fixtures or make their expected task partitions machine-dependent.
+unset PARADOX_VERIFY_ASSIGNED_CPUS PARADOX_VERIFY_ASSIGNED_MEMORY_MIB
+
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 TOOLCHAIN="$ROOT/.local/toolchain"
 RSCRIPT="$TOOLCHAIN/bin/Rscript"
@@ -22,7 +27,9 @@ REVERSE_DEPENDENCY_PREP_TEST="$ROOT/scripts/environment/test-reverse-dependency-
 SNAPSHOT_HELPER="$ROOT/scripts/environment/snapshot-worktree.R"
 COPY_SNAPSHOT_HELPER="$ROOT/scripts/environment/copy-check-snapshot.R"
 CANDIDATE_GIT_AUTHENTICATOR="$ROOT/compat/authenticate-candidate-git"
+DIFFERENTIAL_RUNNER="$ROOT/compat/differential/run"
 CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
+GCC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc"
 PACKAGE_MANIFEST="$ROOT/environment/valgrind-r-packages.tsv"
 mkdir -p "$ROOT/.local/tmp" "$ROOT/.local/checks"
 TEST_ROOT=$(mktemp -d "$ROOT/.local/tmp/validation-hardening.XXXXXX")
@@ -58,12 +65,13 @@ expect_failure() {
   fi
 }
 
-[[ -x "$RSCRIPT" ]] || fail "local Rscript is missing"
+[[ -x "$RSCRIPT" && -x "$GCC" ]] ||
+  fail "local Rscript or GCC is missing"
 [[ -x "$SOURCE_VALIDATOR" && -x "$RECEIPT_HELPER" && \
     -x "$EVIDENCE_HELPER" && -x "$API_TOKEN_AUDITOR" && -x "$CLANG" && \
     -x "$COMPILER_BATCH_RUNNER" && -x "$COMPILER_WAVE_RUNNER" && \
     -x "$REVERSE_DEPENDENCY_PREP_TEST" && \
-    -x "$CANDIDATE_GIT_AUTHENTICATOR" ]] ||
+    -x "$CANDIDATE_GIT_AUTHENTICATOR" && -x "$DIFFERENTIAL_RUNNER" ]] ||
   fail "validation helpers are not executable"
 [[ -f "$SNAPSHOT_HELPER" && ! -L "$SNAPSHOT_HELPER" && \
     -f "$COPY_SNAPSHOT_HELPER" && ! -L "$COPY_SNAPSHOT_HELPER" ]] ||
@@ -130,7 +138,10 @@ cmp "$SNAPSHOT_METADATA/source-manifest.tsv" \
 CANDIDATE_FIXTURE="$TEST_ROOT/candidate git fixture"
 CANDIDATE_SOURCE_FIXTURE="$TEST_ROOT/candidate source fixture"
 mkdir -p "$CANDIDATE_FIXTURE/.local/toolchain/bin"
-ln "$TOOLCHAIN/bin/git" "$CANDIDATE_FIXTURE/.local/toolchain/bin/git"
+# The harness worker gives each writable fixture its own bind mount.  Copy the
+# authenticated executable bytes rather than assuming hard links work across
+# those mount IDs.
+cp -p -- "$TOOLCHAIN/bin/git" "$CANDIDATE_FIXTURE/.local/toolchain/bin/git"
 ln -s "$TOOLCHAIN/lib" "$CANDIDATE_FIXTURE/.local/toolchain/lib"
 CANDIDATE_GIT="$CANDIDATE_FIXTURE/.local/toolchain/bin/git"
 PATH="$CANDIDATE_FIXTURE/.local/toolchain/bin:$PATH" \
@@ -199,6 +210,23 @@ grep -Fq 'core.fsmonitor=false' "$CANDIDATE_GIT_AUTHENTICATOR" ||
   fail "candidate Git authentication does not disable filesystem monitors"
 grep -Fq 'core.untrackedCache=false' "$CANDIDATE_GIT_AUTHENTICATOR" ||
   fail "candidate Git authentication does not disable the untracked cache"
+grep -Fq \
+  'GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0' \
+  "$CANDIDATE_GIT_AUTHENTICATOR" ||
+  fail "candidate Git authentication is not explicitly read-only and offline"
+for differential_git_control in GIT_EXTERNAL_DIFF GIT_EXEC_PATH GIT_ASKPASS \
+    GIT_SSH_COMMAND GIT_CEILING_DIRECTORIES; do
+  grep -Fq -- "-u $differential_git_control" "$DIFFERENTIAL_RUNNER" ||
+    fail "differential Git does not clear $differential_git_control"
+done
+grep -Fq -- 'diff --binary --no-ext-diff' "$DIFFERENTIAL_RUNNER" ||
+  fail "differential dirty snapshot permits an external diff helper"
+GIT_EXEC_PATH=/definitely/absent/paradox-git-exec \
+GIT_EXTERNAL_DIFF=/definitely/absent/paradox-external-diff \
+GIT_ASKPASS=/definitely/absent/paradox-askpass \
+GIT_CONFIG_PARAMETERS="'alias.remote=!exit 97'" \
+  "$DIFFERENTIAL_RUNNER" --help >/dev/null ||
+  fail "differential Git inherited an ambient execution control"
 
 printf '%s\n' replacement > "$CANDIDATE_FIXTURE/candidate.txt"
 "$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" add candidate.txt
@@ -1043,16 +1071,90 @@ expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
   "$CANDIDATE_TREE" "$CANDIDATE_SOURCE_FIXTURE" >/dev/null
 
 # Raw-token policy sees identifiers in inactive branches but ignores comments
-# and strings. It admits raw ATTRIB/FORMALS because Writing R Extensions
-# publishes them as backports, as well as documented APIs containing ATTRIB.
+# and strings. Exact non-API accessor identifiers require the centralized
+# facade and versioned ledger. Later public APIs require their exact reviewed
+# source/count entry; unrelated identifiers containing the same substrings
+# remain ordinary identifiers.
+VERSIONED_PUBLIC_EXPECTATIONS=(
+  'R_ClosureFormals:src/r_api_compat.c:1'
+  'R_ClosureExpr:src/r_api_compat.c:1'
+  'R_BytecodeExpr:src/r_api_compat.c:1'
+  'R_ClosureEnv:src/r_api_compat.c:1'
+  'R_ParentEnv:src/r_api_compat.c:1'
+  'Rf_GetOption1:src/r_api_compat.c:1'
+  'ANY_ATTRIB:src/r_api_compat.c:1'
+  'R_getAttribCount:src/r_api_compat.c:2'
+  'R_hasAttrib:src/r_api_compat.c:2'
+  'R_mapAttrib:src/r_api_compat.c:3'
+  'R_existsVarInFrame:src/r_api_compat.c:3'
+  'R_ActiveBindingFunction:src/r_api_compat.c:1'
+  'R_GetBindingType:src/r_api_compat.c:1'
+  'R_getVar:src/r_api_compat.c:1'
+  'SET_RAW_ELT:src/r_api_compat.h:1'
+  'SET_COMPLEX_ELT:src/r_api_compat.h:1'
+  'IDENT_USE_CLOENV:src/r_api_compat.h:1'
+  'R_GetBindingType:src/upgrade_graph.c:1'
+  'R_getVar:src/upgrade_graph.c:2'
+  'R_DotsExist:src/upgrade_graph.c:1'
+  'R_DotsLength:src/upgrade_graph.c:1'
+  'R_GetDotType:src/upgrade_graph.c:1'
+  'R_DotsElt:src/upgrade_graph.c:2'
+  'R_DotDelayedExpression:src/upgrade_graph.c:1'
+  'R_DotDelayedEnvironment:src/upgrade_graph.c:1'
+  'R_DotForcedExpression:src/upgrade_graph.c:1'
+  'R_DelayedBindingExpression:src/upgrade_graph.c:1'
+  'R_DelayedBindingEnvironment:src/upgrade_graph.c:1'
+  'R_ForcedBindingExpression:src/upgrade_graph.c:1'
+)
+
+write_versioned_public_fixture() {
+  local destination=$1
+  mkdir -p "$destination/src"
+  printf '%s\n' \
+    'R_ClosureFormals(closure); R_ClosureExpr(closure);' \
+    'R_BytecodeExpr(bytecode); R_ClosureEnv(closure);' \
+    'R_ParentEnv(environment); Rf_GetOption1(symbol);' \
+    'ANY_ATTRIB(value);' \
+    'R_getAttribCount(value); R_getAttribCount(value);' \
+    'R_hasAttrib(value, symbol); R_hasAttrib(value, symbol);' \
+    'R_mapAttrib(value, callback, data);' \
+    'R_mapAttrib(value, callback, data);' \
+    'R_mapAttrib(value, callback, data);' \
+    'R_existsVarInFrame(environment, symbol);' \
+    'R_existsVarInFrame(environment, symbol);' \
+    'R_existsVarInFrame(environment, symbol);' \
+    'R_ActiveBindingFunction(symbol, environment);' \
+    'R_GetBindingType(symbol, environment);' \
+    'R_getVar(symbol, environment, 0);' \
+    > "$destination/src/r_api_compat.c"
+  printf '%s\n' \
+    'SET_RAW_ELT(value, index, raw);' \
+    'SET_COMPLEX_ELT(value, index, complex);' \
+    'IDENT_USE_CLOENV;' \
+    > "$destination/src/r_api_compat.h"
+  printf '%s\n' \
+    'R_GetBindingType(symbol, environment);' \
+    'R_getVar(symbol, environment, 0);' \
+    'R_getVar(symbol, environment, 0);' \
+    'R_DotsExist(environment); R_DotsLength(environment);' \
+    'R_GetDotType(index, environment);' \
+    'R_DotsElt(index, environment); R_DotsElt(index, environment);' \
+    'R_DotDelayedExpression(index, environment);' \
+    'R_DotDelayedEnvironment(index, environment);' \
+    'R_DotForcedExpression(index, environment);' \
+    'R_DelayedBindingExpression(symbol, environment);' \
+    'R_DelayedBindingEnvironment(symbol, environment);' \
+    'R_ForcedBindingExpression(symbol, environment);' \
+    > "$destination/src/upgrade_graph.c"
+}
+
 TOKEN_OK="$TEST_ROOT/public api tokens ok"
-mkdir -p "$TOKEN_OK/src"
+write_versioned_public_fixture "$TOKEN_OK"
 printf '%s\n' \
   '/* ATTRIB BODY Rf_findVarInFrame3 */' \
   'const char *tokens = "FORMALS R_NamespaceRegistry";' \
-  'ATTRIB(value); FORMALS(value);' \
-  'SHALLOW_DUPLICATE_ATTRIB DUPLICATE_ATTRIB ANY_ATTRIB CLEAR_ATTRIB' \
-  'R_ClosureBody R_ClosureFormals R_ClosureEnv R_ParentEnv Rf_getAttrib' \
+  'SHALLOW_DUPLICATE_ATTRIB DUPLICATE_ATTRIB MAYBE_ANY_ATTRIB CLEAR_ATTRIB' \
+  'R_ClosureBody Rf_getAttrib' \
   'DATAPTR_RO STRING_PTR_RO R_ExternalPtrTag Rf_isObject' \
   > "$TOKEN_OK/src/allowed.c"
 "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_OK" \
@@ -1060,30 +1162,43 @@ printf '%s\n' \
 grep -qx 'result=passed' "$TEST_ROOT/public-api-allowed.txt" ||
   fail "public API token auditor did not pass allowed identifiers"
 
-# R 3.6--4.5 have one reviewed non-forcing binding exception and three exact
-# detached-promise accessors. R 3.6--4.1 additionally need the exported
-# fancy-frame query for the allocation-free terminal scan. Strict R >= 4.6
-# builds compile none of those old accessors. The raw-token auditor admits each
-# occurrence only at the centralized compatibility facade and with the exact
-# versioned ledger.
+# R 3.6--4.5 have reviewed raw-attribute and non-forcing binding exceptions.
+# R 3.6--4.4 additionally retain allocation-free FORMALS for the callback hot
+# path and have three exact detached-promise accessors, while
+# R 3.6--4.1 needs the exported fancy-frame query for the allocation-free
+# terminal scan. Avoidable closure accessors use public R bridges on those
+# runtimes and need no exception. The raw-token auditor admits each exceptional
+# occurrence only at the centralized facade and with the exact ledger.
 TOKEN_EXCEPTION="$TEST_ROOT/reviewed legacy binding token"
-mkdir -p "$TOKEN_EXCEPTION/src" "$TOKEN_EXCEPTION/environment"
+write_versioned_public_fixture "$TOKEN_EXCEPTION"
+mkdir -p "$TOKEN_EXCEPTION/environment"
 printf '%s\n' \
+  'ATTRIB(value); FORMALS(closure);' \
   'Rf_findVarInFrame(environment, symbol);' \
   'R_HasFancyBindings(environment);' \
   'R_PromiseExpr(promise); PRENV(promise);' \
   'PRVALUE(promise);' \
-  > "$TOKEN_EXCEPTION/src/r_api_compat.c"
+  >> "$TOKEN_EXCEPTION/src/r_api_compat.c"
 printf '%s\n' \
   $'symbol\tsource\tcount\tversions\tpolicy\trationale' \
+  $'ATTRIB\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\traw-attribute-traversal-pre-4.6-only\ttest fixture' \
+  $'FORMALS\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tclosure-formals-hot-path-pre-4.5-only\ttest fixture' \
   $'Rf_findVarInFrame\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdeclared-exported-pre-4.6-only\ttest fixture' \
   $'R_HasFancyBindings\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.1.x\tfancy-frame-terminal-scan-pre-4.2-only\ttest fixture' \
-  $'R_PromiseExpr\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
-  $'PRENV\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
-  $'PRVALUE\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
+  $'R_PromiseExpr\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tdetached-promise-snapshot-pre-4.5-only\ttest fixture' \
+  $'PRENV\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tdetached-promise-snapshot-pre-4.5-only\ttest fixture' \
+  $'PRVALUE\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tdetached-promise-snapshot-pre-4.5-only\ttest fixture' \
   > "$TOKEN_EXCEPTION/environment/r-api-exceptions.tsv"
 "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_EXCEPTION" \
   "$TEST_ROOT/public-api-exception.txt" >/dev/null
+grep -qx \
+  'reviewed_attribute_accessor=ATTRIB:src/r_api_compat.c:1' \
+  "$TEST_ROOT/public-api-exception.txt" ||
+  fail "public API token auditor did not ledger ATTRIB"
+grep -qx \
+  'reviewed_closure_formals=FORMALS:src/r_api_compat.c:1' \
+  "$TEST_ROOT/public-api-exception.txt" ||
+  fail "public API token auditor did not ledger FORMALS"
 grep -qx \
   'reviewed_legacy_binding=Rf_findVarInFrame:src/r_api_compat.c:1' \
   "$TEST_ROOT/public-api-exception.txt" ||
@@ -1098,6 +1213,34 @@ for promise_symbol in R_PromiseExpr PRENV PRVALUE; do
     "$TEST_ROOT/public-api-exception.txt" ||
     fail "public API token auditor did not ledger $promise_symbol"
 done
+for versioned_expectation in "${VERSIONED_PUBLIC_EXPECTATIONS[@]}"; do
+  grep -qx \
+    "reviewed_versioned_api=$versioned_expectation" \
+    "$TEST_ROOT/public-api-exception.txt" ||
+    fail "public API token auditor did not confine $versioned_expectation"
+done
+
+TOKEN_VERSIONED_BAD_FILE="$TEST_ROOT/versioned public token wrong file"
+cp -a "$TOKEN_OK" "$TOKEN_VERSIONED_BAD_FILE"
+printf '%s\n' 'R_DotsExist(environment);' \
+  > "$TOKEN_VERSIONED_BAD_FILE/src/unreviewed.c"
+expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_VERSIONED_BAD_FILE" \
+  "$TEST_ROOT/public-api-versioned-wrong-file.txt"
+grep -qx \
+  'versioned_api_unreviewed_file=src/unreviewed.c:R_DotsExist:1' \
+  "$TEST_ROOT/public-api-versioned-wrong-file.txt" ||
+  fail "public API token auditor accepted a versioned API in the wrong file"
+
+TOKEN_VERSIONED_BAD_COUNT="$TEST_ROOT/versioned public token wrong count"
+cp -a "$TOKEN_OK" "$TOKEN_VERSIONED_BAD_COUNT"
+printf '%s\n' 'R_mapAttrib(value, callback, data);' \
+  >> "$TOKEN_VERSIONED_BAD_COUNT/src/r_api_compat.c"
+expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_VERSIONED_BAD_COUNT" \
+  "$TEST_ROOT/public-api-versioned-wrong-count.txt"
+grep -qx \
+  'versioned_api_count_mismatch=R_mapAttrib:src/r_api_compat.c:3:4' \
+  "$TEST_ROOT/public-api-versioned-wrong-count.txt" ||
+  fail "public API token auditor accepted a versioned API count change"
 
 TOKEN_EXCEPTION_BAD_POLICY="$TEST_ROOT/legacy binding CRAN allowlist claim"
 cp -a "$TOKEN_EXCEPTION" "$TOKEN_EXCEPTION_BAD_POLICY"
@@ -1152,6 +1295,66 @@ grep -Fq "\"\$API_TOKEN_AUDITOR\" \"\$CLANG\" \"\$RUN/source\" \\" \
 [[ $(grep -Fc -- '-std=gnu99 -O2 -fsyntax-only' \
   "$API_COMPATIBILITY_GATE") -eq 2 ]] ||
   fail "R API compatibility gate does not enforce C99 for both compilers"
+
+# R headers are authenticated external inputs.  In particular, the supported
+# R 3.6 headers contain old-style declarations that modern strict compilers
+# correctly diagnose under -Wstrict-prototypes.  The gate must suppress those
+# external-header diagnostics without suppressing the same defect in Paradox
+# source.  Check both the producer arguments and the independently rebuilt
+# postflight arguments, then exercise the compiler distinction itself.
+for include_root in generated_include source_include; do
+  [[ $(grep -Fc -- "-isystem \"\$$include_root\"" \
+      "$API_COMPATIBILITY_GATE") -eq 2 ]] ||
+    fail "R API producer does not classify $include_root as external for both compilers"
+  [[ $(grep -Fc -- "-I\"\$$include_root\"" \
+      "$API_COMPATIBILITY_GATE" || true) -eq 0 ]] ||
+    fail "R API producer exposes external $include_root to package warning policy"
+done
+for retained_root in generated source; do
+  [[ $(grep -Fc -- \
+      "-isystem \"\$RUN/artifacts/headers/R-\${version}/$retained_root\"" \
+      "$API_COMPATIBILITY_GATE") -eq 2 ]] ||
+    fail "R API postflight misclassifies retained $retained_root headers"
+  [[ $(grep -Fc -- \
+      "-I\"\$RUN/artifacts/headers/R-\${version}/$retained_root\"" \
+      "$API_COMPATIBILITY_GATE" || true) -eq 0 ]] ||
+    fail "R API postflight accepts a weaker retained-header argument vector"
+done
+grep -Fq '3.6.0' "$ROOT/environment/r-api-sources.tsv" &&
+  [[ $(awk -F '\t' \
+      '$1 == "3.6.0" && $3 == "declared-minimum" { count++ }
+       END { print count + 0 }' \
+      "$ROOT/environment/r-api-sources.tsv") -eq 1 ]] ||
+  fail "R API source matrix lost its exact declared-minimum R 3.6.0 row"
+
+HEADER_CLASSIFICATION="$TEST_ROOT/r api external header classification"
+mkdir -p "$HEADER_CLASSIFICATION/external" "$HEADER_CLASSIFICATION/package"
+printf '%s\n' 'int legacy_external_declaration();' \
+  > "$HEADER_CLASSIFICATION/external/external.h"
+printf '%s\n' 'int package_declaration(void);' \
+  > "$HEADER_CLASSIFICATION/package/package.h"
+printf '%s\n' \
+  '#include <external.h>' \
+  '#include "package.h"' \
+  'int package_declaration(void) { return 0; }' \
+  > "$HEADER_CLASSIFICATION/probe.c"
+for compiler in "$GCC" "$CLANG"; do
+  "$compiler" -std=gnu99 -fsyntax-only -Wstrict-prototypes -Werror \
+    -isystem "$HEADER_CLASSIFICATION/external" \
+    "-I$HEADER_CLASSIFICATION/package" \
+    "$HEADER_CLASSIFICATION/probe.c" ||
+    fail "system R-header classification does not isolate external diagnostics"
+done
+printf '%s\n' 'int package_declaration();' \
+  > "$HEADER_CLASSIFICATION/package/package.h"
+for compiler in "$GCC" "$CLANG"; do
+  expect_failure "$compiler" -std=gnu99 -fsyntax-only \
+    -Wstrict-prototypes -Werror \
+    -isystem "$HEADER_CLASSIFICATION/external" \
+    "-I$HEADER_CLASSIFICATION/package" \
+    "$HEADER_CLASSIFICATION/probe.c"
+done
+
 [[ "$("$REFERENCE_SOURCE_FETCHER" --print-r-source-url 3.6.0)" == \
     'https://cran.r-project.org/src/base/R-3/R-3.6.0.tar.gz' &&
    "$("$REFERENCE_SOURCE_FETCHER" --print-r-source-url 4.6.1)" == \
@@ -1612,7 +1815,7 @@ write_functional_ledger_fixture() {
       "$FIXTURE_TESTS" "$worker_task" "$worker_file" \
       "$fixture_dso_sha" "$fixture_dso_sha" "$worker_counts" >> "$workers"
   done < <(find "$RUN_DIRECTORY/source/tests/testthat" -type f \
-    -printf '%f\n' | sort)
+    -printf '%f\n' | LC_ALL=C sort)
   [[ "$worker_task" -eq "$selected_count" ]] ||
     fail "fixture worker inventory does not match selected files"
   worker_sha=$(sha256sum "$workers" | cut -d ' ' -f 1)
@@ -1816,7 +2019,10 @@ build_valid_native_fixture() {
   for evidence in registration dynamic-symbols program-headers dynamic-section; do
     printf '%s\n' "$evidence-ok" > "$RUN_DIRECTORY/modes/symbols/logs/$evidence.log"
   done
-  printf '%s\n' '                 U R_GetBindingType' \
+  printf '%s\n' \
+    '                 U R_GetBindingType' \
+    '                 U R_getVar' \
+    '                 U Rf_GetOption1' \
     > "$RUN_DIRECTORY/modes/symbols/logs/undefined-symbols.log"
   write_fixture_resource_evidence
   {

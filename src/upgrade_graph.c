@@ -480,23 +480,6 @@ static void append_boundary(
   boundaries->items[boundaries->size++] = environment;
 }
 
-static SEXP evaluate_base_unary(const char *name, SEXP argument) {
-  PROTECT(argument);
-  SEXP function = PROTECT(Rf_findFun(Rf_install(name), R_BaseEnv));
-  SEXP call = PROTECT(Rf_lang2(function, argument));
-  SEXP result = PROTECT(Rf_eval(call, R_BaseEnv));
-  UNPROTECT(4);
-  return result;
-}
-
-static SEXP parent_environment(SEXP environment) {
-#if R_VERSION >= R_Version(4, 5, 0)
-  return R_ParentEnv(environment);
-#else
-  return evaluate_base_unary("parent.env", environment);
-#endif
-}
-
 static void initialize_search_boundaries(
     paradox_upgrade_boundaries_t *boundaries) {
   SEXP environment = R_GlobalEnv;
@@ -506,20 +489,34 @@ static void initialize_search_boundaries(
       Rf_error("Internal error: malformed R search path");
     }
     append_boundary(boundaries, environment);
-    environment = parent_environment(environment);
+    environment = paradox_api_parent_environment(environment);
   }
   append_boundary(boundaries, R_EmptyEnv);
   append_boundary(boundaries, R_BaseNamespace);
 }
 
 static int imports_environment(SEXP environment) {
-  SEXP name = PROTECT(evaluate_base_unary(
-    "environmentName",
-    environment
-  ));
-  const int imports = TYPEOF(name) == STRSXP && XLENGTH(name) == 1 &&
-    STRING_ELT(name, 0) != NA_STRING &&
-    strncmp(CHAR(STRING_ELT(name, 0)), "imports:", 8) == 0;
+  /*
+   * A namespace imports frame is not identified by its printable name alone.
+   * Ordinary user environments may carry the same `imports:` name. Mirror
+   * R's invariant through public operations: a safe scalar raw `name`
+   * attribute plus R_BaseNamespace as the direct parent. Requiring ordinary
+   * metadata also keeps a hostile ALTREP/classed name from becoming a
+   * traversal boundary merely by exposing the prefix.
+   */
+  SEXP name = paradox_api_raw_attribute(environment, R_NameSymbol);
+  if (TYPEOF(name) != STRSXP || ALTREP(name) || Rf_isS4(name) ||
+      Rf_isObject(name) || !paradox_api_has_no_attributes(name) ||
+      XLENGTH(name) != 1) {
+    return FALSE;
+  }
+  SEXP label = STRING_ELT(name, 0);
+  if (label == NA_STRING || Rf_getCharCE(label) == CE_BYTES ||
+      strncmp(CHAR(label), "imports:", 8) != 0) {
+    return FALSE;
+  }
+  SEXP parent = PROTECT(paradox_api_parent_environment(environment));
+  const int imports = parent == R_BaseNamespace;
   UNPROTECT(1);
   return imports;
 }
@@ -563,7 +560,7 @@ static SEXP environment_names(SEXP environment) {
   return result;
 }
 
-#if R_VERSION < R_Version(4, 6, 0)
+#if R_VERSION < R_Version(4, 5, 0)
 static void schedule_promise_edges(
     paradox_upgrade_walker_t *walker,
     SEXP promise,
@@ -592,6 +589,15 @@ static void schedule_promise_edges(
     literal_path(path, ".promise.expression")
   );
   UNPROTECT(3);
+}
+#elif R_VERSION < R_Version(4, 6, 0)
+static void fail_opaque_promise(const paradox_upgrade_path_t *path) {
+  SEXP location = PROTECT(render_path(path));
+  Rf_error(
+    "Recursive Paradox object upgrade cannot inspect a promise on R 4.5 "
+    "(at `%s`); load and upgrade this object under R >= 4.6",
+    CHAR(location)
+  );
 }
 #endif
 
@@ -754,7 +760,11 @@ static void schedule_binding(
   ));
   if (value != R_UnboundValue) {
     if (TYPEOF(value) == PROMSXP) {
+#if R_VERSION < R_Version(4, 5, 0)
       schedule_promise_edges(walker, value, path);
+#elif R_VERSION < R_Version(4, 6, 0)
+      fail_opaque_promise(path);
+#endif
     } else {
       schedule_node(walker, value, path);
     }
@@ -842,7 +852,7 @@ static void schedule_environment(
 #endif
   }
 
-  SEXP parent = PROTECT(parent_environment(environment));
+  SEXP parent = PROTECT(paradox_api_parent_environment(environment));
   schedule_node(
     walker,
     parent,
@@ -960,21 +970,13 @@ static void schedule_vector(
   UNPROTECT(1);
 }
 
-static SEXP closure_environment(SEXP closure) {
-#if R_VERSION >= R_Version(4, 5, 0)
-  return R_ClosureEnv(closure);
-#else
-  return evaluate_base_unary("environment", closure);
-#endif
-}
-
 static void schedule_closure(
     paradox_upgrade_walker_t *walker,
     SEXP closure,
     const paradox_upgrade_path_t *path) {
   SEXP formals = PROTECT(paradox_api_closure_formals(closure));
-  SEXP expression = PROTECT(R_ClosureExpr(closure));
-  SEXP environment = PROTECT(closure_environment(closure));
+  SEXP expression = PROTECT(paradox_api_closure_expression(closure));
+  SEXP environment = PROTECT(paradox_api_closure_environment(closure));
   schedule_node(
     walker,
     environment,
@@ -1037,12 +1039,14 @@ static void inspect_node(
     schedule_closure(walker, node, work.path);
     return;
   case PROMSXP:
-#if R_VERSION < R_Version(4, 6, 0)
+#if R_VERSION < R_Version(4, 5, 0)
     schedule_promise_edges(walker, node, work.path);
+#elif R_VERSION < R_Version(4, 6, 0)
+    fail_opaque_promise(work.path);
 #endif
     return;
   case BCODESXP: {
-    SEXP expression = PROTECT(R_BytecodeExpr(node));
+    SEXP expression = PROTECT(paradox_api_bytecode_expression(node));
     schedule_node(
       walker,
       expression,

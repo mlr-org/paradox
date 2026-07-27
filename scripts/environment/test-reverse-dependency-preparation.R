@@ -451,6 +451,8 @@ harness_path <- file.path(
 )
 harness_library <- file.path(test_root, "harness-library")
 stopifnot(dir.create(harness_library, recursive = FALSE, mode = "0700"))
+harness_state_root <- file.path(test_root, "harness-state")
+stopifnot(dir.create(harness_state_root, recursive = FALSE, mode = "0700"))
 harness_library_before <- compat_tree_content_sha256(harness_library)
 fixture_nonce <- gsub("[^A-Za-z0-9]", "", basename(test_root))
 fixture_run_prefix <- paste0(
@@ -461,7 +463,7 @@ fixture_run_ids <- paste0(
 )
 names(fixture_run_ids) <- c("success", "failure", "retry", "missing")
 fixture_run_directories <- file.path(
-  root, ".local", "compat", "runs", fixture_run_ids
+  harness_state_root, "runs", fixture_run_ids
 )
 if (any(file.exists(fixture_run_directories) |
     dir.exists(fixture_run_directories) |
@@ -480,6 +482,7 @@ run_harness <- function(run_id, dependency_library = harness_library,
     "--max-priority", "3",
     "--dependency-library", shQuote(dependency_library),
     "--run-id", shQuote(run_id),
+    "--state-root", shQuote(harness_state_root),
     "--package", "drape", "--plan-only"
   )
   command <- file.path(root, ".local", "toolchain", "bin", "Rscript")
@@ -500,7 +503,7 @@ run_harness <- function(run_id, dependency_library = harness_library,
 }
 assert_lock_absent <- function() {
   lock <- file.path(
-    root, ".local", "compat", ".reverse-dependency-preparation.lock"
+    harness_state_root, ".reverse-dependency-preparation.lock"
   )
   if (file.exists(lock) || dir.exists(lock) ||
       reverse_prep_is_symbolic(lock)) {
@@ -517,7 +520,7 @@ assert_successful_plan <- function(run_id, result) {
     )
   }
   stage <- file.path(
-    root, ".local", "compat", "runs", run_id,
+    harness_state_root, "runs", run_id,
     "reverse-dependency-dependencies-priority-3"
   )
   invisible(repository_verify_evidence(stage))
@@ -550,6 +553,9 @@ if (identical(missing_result$status, 0L) || file.exists(missing_library) ||
       missing_result$stderr, fixed = TRUE
     ))) {
   stop("plan-only absent-library fixture did not fail without mutation",
+    ": status=", missing_result$status,
+    "; stdout=", paste(missing_result$stdout, collapse = " | "),
+    "; stderr=", paste(missing_result$stderr, collapse = " | "),
     call. = FALSE)
 }
 assert_lock_absent()

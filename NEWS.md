@@ -21,6 +21,11 @@ hazards that Paradox 2 is intended to remove.
   operations, collection traversal, designs, and samplers enter registered
   portable C99 operations directly. Current objects have one semantic engine;
   operations are not retried through a second R/checkmate/data.table/S3 path.
+  Simple Domain IDs use the same bounded native representation renderer on
+  R 3.6 and current R. Before R 4.5 its `scipen` snapshot uses public
+  `base::getOption()`; newer R uses documented `Rf_GetOption1`. Ordinary old-R
+  constructors no longer fall back unconditionally to `deparse1()`, while
+  unsupported or unstable representations retain that correctness fallback.
 * Unknown parameter diagnostics again include a native
   `"Did you mean ...?"` hint when a close ID exists. Paradox 1 accidentally
   ranked the numeric position of the unknown entry instead of its name; the
@@ -262,12 +267,33 @@ hazards that Paradox 2 is intended to remove.
   without a second semantic implementation. The reusable runtime harness now
   includes real R 3.6.3 execution and strict compilation against R 3.6.0,
   4.0.0, and 4.2.0 transition headers.
+  The R 3.6 stage also reinstalls the candidate against every exact declared
+  direct dependency floor, authenticates every installed package identity and
+  dependency namespace origin, and verifies the candidate Paradox DLL origin
+  and registration. A complete runtime matrix serializes a representative
+  current Paradox-2 graph on R 4.0.5 and loads, mutates, and reserializes it on
+  R 3.6.3.
+  Retained stages authenticate detached startup, Makevars, and
+  build/install/check environment inputs, so caller files or concurrent
+  checkout edits cannot change a frozen candidate.
+  Exact old-runtime API exceptions are centralized and count-audited. One raw
+  attribute iterator remains through R 4.5, and one allocation-free
+  closure-formals accessor remains before R 4.5 for transformation callback
+  admission. Cold closure and directly reached bytecode traversal use public
+  base bridges until their native accessors become API.
   Callback-backed `UserDefinedDatabase` environments are rejected before
   native binding inspection; they are not supported ParamSet/R6 frames, and
   old binding helpers assume the ordinary frame layout.
-  Strict native gates now compile the package as C99, and graph paths avoid the
-  `%lld` formatting dependency that old Windows R toolchains did not
-  guarantee.
+  Recursive discovery now recognizes a namespace imports environment only
+  when its `imports:` name and base-namespace parent agree. A user environment
+  that merely has a similar name is no longer silently skipped.
+  Strict native gates now compile the package as C99. Graph paths use bounded
+  decimal arithmetic and diagnostic long-vector positions use exact
+  `%.0f`/double formatting, so shipped native code has no `%lld`, `%I64`, or
+  `j`/`z`/`t` integer-length dependency on old Windows R toolchains.
+  Native ParamSet diagnostics also use bounded real-buffer formatting instead
+  of `vsnprintf(NULL, 0, ...)`, preserving informative errors under
+  Rtools35's historical MSVCRT behavior.
   Legacy ParamSet-family migration has one R-3.6-only limitation: because that
   runtime exposes no accessor for an active-binding function, both direct and
   recursive migration fail closed and ask the user to perform the upgrade under
@@ -415,7 +441,14 @@ hazards that Paradox 2 is intended to remove.
   reference internals. Authenticated Paradox core payloads remain traversable.
   A native direct-binding classifier distinguishes realized language/symbol
   values from delayed promises without using `substitute()` or evaluating
-  either. Migration performs a full semantic and shell-shape preflight,
+  either. R 3.6--4.4 inspect reached promises through their compatibility
+  accessors. R 4.5's compiled-code policy rejects those accessors and provides
+  no replacement, so recursive migration fails closed on a reached promise and
+  asks the caller to migrate under R >= 4.6. R >= 4.6 uses its public
+  binding/dots inspection API; detached promises outside those cells remain
+  opaque. `R_getVar` is deliberately excluded before R 4.6 because it could
+  force a delayed binding without that release's classifier. Migration
+  performs a full semantic and shell-shape preflight,
   including a joint native validation of every prepared/current root before
   the first transplant, then commits valid nodes in post-order. Current Shadow
   preflight builds its authoritative live projection without installing it and
