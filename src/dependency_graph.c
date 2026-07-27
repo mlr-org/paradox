@@ -27,6 +27,8 @@ void paradox_dependency_graph_topological_order(
     R_xlen_t *work_since_interrupt) {
   if (plan == NULL || result == NULL || work_since_interrupt == NULL) {
     Rf_error("Internal error: missing dependency graph plan");
+    /* `Rf_error()` does not return; keep static analyzers on that path. */
+    return;
   }
 
   const R_xlen_t parameter_count = plan->parameter_count;
@@ -98,6 +100,8 @@ void paradox_dependency_graph_plan_build(SEXP parameter_ids,
   if (TYPEOF(parameter_ids) != STRSXP || dependencies == NULL ||
       plan == NULL || work_since_interrupt == NULL) {
     Rf_error("Internal error: malformed dependency graph input");
+    /* `Rf_error()` does not return; keep static analyzers on that path. */
+    return;
   }
 
   const R_xlen_t parameter_count = XLENGTH(parameter_ids);

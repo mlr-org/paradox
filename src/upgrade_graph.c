@@ -165,14 +165,18 @@ static paradox_upgrade_path_t *indexed_path(
     R_xlen_t index,
     const char *suffix) {
   char digits[32];
-  if (index < 0 || index == R_XLEN_T_MAX) {
+  if (index < 0 || index >= R_XLEN_T_MAX) {
     Rf_error("Object graph index is too large to report");
+    /* `Rf_error()` does not return; keep static analyzers on that path. */
+    return NULL;
   }
   R_xlen_t value = index + 1;
   size_t digits_size = 0;
   do {
-    if (digits_size == sizeof(digits)) {
+    if (digits_size >= sizeof(digits)) {
       Rf_error("Object graph index is too large to report");
+      /* `Rf_error()` does not return; keep static analyzers on that path. */
+      return NULL;
     }
     digits[digits_size++] =
       (char) ('0' + (int) (value % (R_xlen_t) 10));
@@ -188,8 +192,10 @@ static paradox_upgrade_path_t *indexed_path(
   const size_t prefix_size = strlen(prefix);
   const size_t suffix_size = strlen(suffix);
   if (prefix_size > SIZE_MAX - suffix_size ||
-      prefix_size + suffix_size > SIZE_MAX - digits_size) {
+      prefix_size + suffix_size >= SIZE_MAX - digits_size) {
     Rf_error("Object graph path is too large to report");
+    /* `Rf_error()` does not return; keep static analyzers on that path. */
+    return NULL;
   }
   const size_t size = prefix_size + digits_size + suffix_size;
   char *segment = temporary_size_alloc(size + 1, sizeof(*segment));
