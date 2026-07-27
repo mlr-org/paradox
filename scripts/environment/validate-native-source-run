@@ -759,6 +759,12 @@ inspected_symbol_scope=$(awk '
 [[ "$inspected_symbol_scope" == 0:1:1:0:0:0:1 ]] ||
   fail "current-R symbol evidence has the wrong binding/promise/option API inventory"
 if [[ "${run_fields[asan]}" == true ]]; then
+  asan_startup_log="$MODES/asan-clang/logs/runtime-startup.log"
+  require_nonempty_mode_file "$asan_startup_log"
+  mapfile -t asan_startup_lines < "$asan_startup_log"
+  [[ ${#asan_startup_lines[@]} -eq 1 &&
+     "${asan_startup_lines[0]}" == 'asan_runtime_startup=passed' ]] ||
+    fail "ASan runtime startup preflight is not the exact success record"
   verify_dso_mode asan-clang
   verify_probe_mode asan-clang
   require_nonempty_mode_file "$MODES/asan-clang/artifacts/scope.txt"

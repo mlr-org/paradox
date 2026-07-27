@@ -6,11 +6,17 @@ not copy the checkout or install R packages.  The ordinary command contract
 includes ripgrep because structural harness checks use `rg` for literal and
 regular-expression source-policy assertions.
 
-Use a Debian-compatible base by exact digest:
+Use a Debian-compatible base by exact digest. The mounted project toolchain,
+not packages copied into the image, supplies R and Clang. The base userland
+must therefore be ABI-compatible with those binaries and with Clang's
+preloaded sanitizer runtime. "Newer glibc" is not automatically compatible:
+the previously used glibc 2.42 worker started ordinary R but crashed in R's
+XDR lazy-load path under ASan before package code was loaded. On the current
+Linux x86-64 machine the reviewed glibc 2.31 Bullseye base is:
 
 ```sh
 podman build \
-  --build-arg 'BASE_IMAGE=debian@sha256:REPLACE_WITH_REVIEWED_DIGEST' \
+  --build-arg 'BASE_IMAGE=docker.io/library/debian@sha256:cba95a21c96c1f5fc2470081829363eed57706634f7dc26e8c6712934303d57a' \
   --tag localhost/paradox-verification-worker:local \
   --file verification/worker/Containerfile \
   verification/worker
@@ -33,6 +39,16 @@ Its active probe uses the real worker UID and the same read-only checkout plus
 nested writable bind layout as task workers. SELinux labels are explicitly
 disabled for these already authenticated local bind paths, so behavior does
 not depend on a host's automatic relabel policy.
+
+`scripts/verify doctor` proves containment and ordinary tool startup. A release
+native run that selects ASan additionally performs an exact preloaded-R startup
+and XDR `saveRDS()`/`readRDS()` round-trip before any expensive compiler mode.
+That source-bound preflight is the authoritative sanitizer/userland
+compatibility check and fails closed; do not weaken seccomp, capabilities,
+namespaces, sanitizer options, or read-only mounts to work around it. Such
+relaxations did not fix the glibc/XDR incompatibility and would reduce the
+quality of otherwise valid evidence. Build and pin a compatible worker
+instead.
 
 Do not build this image merely to work around a failed containment probe.
 Rootless Podman on cgroup v1 will still ignore resource controls regardless of

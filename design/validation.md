@@ -531,6 +531,9 @@ The frozen candidate must pass:
 - fixed-arity registered-routine inventory, dynamic lookup disabled, direct
   probe for every entry, and no unregistered native symbol use;
 - ASan and UBSan direct hazard/probe coverage;
+- for an ASan-selected contained run, exact preloaded-R startup plus an XDR
+  serialization round-trip before expensive compiler modes, with the singleton
+  success log included in the sealed and independently replayed mode tree;
 - pinned R-header compilation beginning with R 3.6.0 and covering every
   supported API branch;
 - no forbidden private data.table API or unledgered/unsupported R API symbol;

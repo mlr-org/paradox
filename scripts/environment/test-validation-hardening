@@ -1529,6 +1529,7 @@ tinytex_expected_sha=$(awk -F '\t' 'NR == 2 { print $6 }' \
   "$tinytex_expected_sha" ]] || fail "local TinyTeX tree differs from its manifest"
 
 FIXTURE_TESTS=focused
+FIXTURE_ASAN=false
 fixture_test_file() {
   case "$1" in
     1) printf '%s\n' test-native-adversarial-storage.R ;;
@@ -1602,7 +1603,7 @@ write_run_metadata() {
     'analyzer_clang=true' \
     'cppcheck=true' \
     'symbols=true' \
-    'asan=false' \
+    "asan=$FIXTURE_ASAN" \
     'ubsan=false' > "$RUN_DIRECTORY/metadata/run.txt"
 }
 
@@ -1633,7 +1634,7 @@ write_completion() {
     'analyzer_clang=true' \
     'cppcheck=true' \
     'symbols=true' \
-    'asan=false' \
+    "asan=$FIXTURE_ASAN" \
     'ubsan=false' > "$completion"
   (cd "$RUN_DIRECTORY/metadata" && sha256sum completion.txt > completion.sha256)
 }
@@ -1697,6 +1698,10 @@ write_fixture_resource_evidence() {
     modes/strict-clang/artifacts/install-resource-jobs.tsv
   append_fixture_resource_row install analyzer-gcc compile 1 \
     modes/analyzer-gcc/artifacts/install-resource-jobs.tsv
+  if [[ "$FIXTURE_ASAN" == true ]]; then
+    append_fixture_resource_row install asan-clang compile 4 \
+      modes/asan-clang/artifacts/install-resource-jobs.tsv
+  fi
 }
 
 write_functional_ledger_fixture() {
@@ -1897,11 +1902,15 @@ write_functional_ledger_fixture() {
 }
 
 build_valid_native_fixture() {
-  local cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS"
+  local cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS-asan-$FIXTURE_ASAN"
   local offline_artifacts offline_repository_root offline_relative
   case "$FIXTURE_TESTS" in
     focused|full) ;;
     *) fail "unsupported native fixture scope: $FIXTURE_TESTS" ;;
+  esac
+  case "$FIXTURE_ASAN" in
+    true|false) ;;
+    *) fail "unsupported native fixture ASan flag: $FIXTURE_ASAN" ;;
   esac
   chmod -R u+w "$RUN_DIRECTORY" 2>/dev/null || true
   rm -rf "$RUN_DIRECTORY"
@@ -2082,16 +2091,34 @@ build_valid_native_fixture() {
     '                 U R_getVar' \
     '                 U Rf_GetOption1' \
     > "$RUN_DIRECTORY/modes/symbols/logs/undefined-symbols.log"
+  if [[ "$FIXTURE_ASAN" == true ]]; then
+    cp -a -- "$RUN_DIRECTORY/modes/strict-clang" \
+      "$RUN_DIRECTORY/modes/asan-clang"
+    sha256sum \
+      "$RUN_DIRECTORY/modes/asan-clang/library/paradox/libs/paradox.so" \
+      > "$RUN_DIRECTORY/modes/asan-clang/artifacts/paradox.so.sha256"
+    printf '%s\n' 'asan_runtime_startup=passed' \
+      > "$RUN_DIRECTORY/modes/asan-clang/logs/runtime-startup.log"
+    printf '%s\n' 'scope=package DSO only' \
+      > "$RUN_DIRECTORY/modes/asan-clang/artifacts/scope.txt"
+  fi
   write_fixture_resource_evidence
   {
     printf 'mode\tstatus\tevidence\tsha256\n'
-    for entry in \
+    mode_status_entries=(
       "strict-gcc strict-gcc/logs/tests-$FIXTURE_TESTS.log" \
       'strict-clang strict-clang/logs/tests-probes.log' \
       'analyzer-gcc analyzer-gcc/logs/install.log' \
       'analyzer-clang analyzer-clang/artifacts/reports.sha256' \
       'cppcheck cppcheck/logs/cppcheck.log' \
-      'symbols symbols/logs/registration.log'; do
+      'symbols symbols/logs/registration.log'
+    )
+    if [[ "$FIXTURE_ASAN" == true ]]; then
+      mode_status_entries+=(
+        'asan-clang asan-clang/logs/tests-probes.log'
+      )
+    fi
+    for entry in "${mode_status_entries[@]}"; do
       mode=${entry%% *}
       evidence=${entry#* }
       printf '%s\t0\t%s\t%s\n' "$mode" "$evidence" \
@@ -2116,6 +2143,19 @@ build_valid_native_fixture() {
 
 build_valid_native_fixture
 "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+
+# ASan-selected completion is accepted only with the exact early runtime/XDR
+# startup result, even if an attacker recomputes the generic modes receipt.
+FIXTURE_ASAN=true
+build_valid_native_fixture
+"$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+printf '%s\n' 'substituted' \
+  > "$RUN_DIRECTORY/modes/asan-clang/logs/runtime-startup.log"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+FIXTURE_ASAN=false
 
 # Rehashing the complete modes tree cannot bless substituted historical
 # upgrade bytes: the source-run validator replays their reviewed Git objects.

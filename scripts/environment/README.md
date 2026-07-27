@@ -394,7 +394,12 @@ The sanitizer results have deliberately limited scope:
   executable is unsanitized, the runner places Clang's project-local ASan
   runtime first with `LD_PRELOAD`. Leak detection is disabled because the R
   4.6.1 extension manual documents process-lifetime allocations retained by R;
-  address errors remain fatal.
+  address errors remain fatal. ASan owns fatal-signal handling so a host
+  process handler cannot replace its diagnostic. Before any expensive native
+  mode, the runner starts the exact mounted R under that production preload and
+  completes an XDR `saveRDS()`/`readRDS()` round-trip. The exact one-line
+  success record is completion-bound and replayed by the source-run validator.
+  This catches a worker libc/runtime mismatch before package compilation.
 - UBSan instruments only the package DSO and dynamically links Clang's
   standalone runtime with a project-local rpath, as recommended for a package
   check under an unaltered R. Floating-point division by zero is excluded to
@@ -406,6 +411,15 @@ The sanitizer results have deliberately limited scope:
   an instrumented runtime would. A separately built sanitizer-enabled R would
   be a distinct validation scope; these package-only results do not claim that
   coverage.
+
+The worker image is part of sanitizer semantics. A former Debian
+forky/testing worker with glibc 2.42 ran ordinary mounted R but deterministically
+failed before Paradox loaded when Clang 22 ASan intercepted libR's legacy
+glibc-XDR calls. Relaxing seccomp, capabilities, namespaces, resource controls,
+or the read-only root did not change the failure. The reviewed local replacement
+uses an immutable Debian Bullseye/glibc 2.31 worker and retains every
+containment control. There is no direct-host fallback or retry: a failed startup
+preflight requires a compatible repinned worker.
 
 The symbol mode requires dynamic lookup to be disabled, forced registered
 symbols, a one-to-one mapping between `.Call` registrations and `C_*`

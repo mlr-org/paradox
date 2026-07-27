@@ -125,6 +125,33 @@ for logged_wrapper in run_logged run_in_directory_logged; do
     fail "native command wrapper no longer rejects warning text"
 done
 
+# The package-only ASan mode depends on preloading the project-local runtime
+# into the mounted R executable.  Prove that exact startup plus an XDR
+# round-trip before any expensive compiler mode, without a retry or weakened
+# sanitizer fallback.
+asan_preflight_call=$(exact_line '  run_asan_runtime_startup_preflight' "$NATIVE")
+first_native_install=$(first_line \
+  '  install_mode strict-gcc "$STRICT_GCC_PROFILE" none' "$NATIVE")
+[[ -n "$asan_preflight_call" && -n "$first_native_install" &&
+   "$asan_preflight_call" -lt "$first_native_install" ]] ||
+  fail "ASan runtime compatibility is not checked before expensive native modes"
+asan_preflight=$(function_body run_asan_runtime_startup_preflight "$NATIVE")
+printf '%s\n' "$asan_preflight" |
+  grep -Fq 'run_mode_r_logged "$asan_startup_log"' ||
+  fail "ASan startup preflight does not use the production sanitizer environment"
+printf '%s\n' "$asan_preflight" | grep -Fq 'saveRDS(value, path, version = 2L)' ||
+  fail "ASan startup preflight does not exercise R XDR serialization"
+printf '%s\n' "$asan_preflight" | grep -Fq 'identical(readRDS(path), value)' ||
+  fail "ASan startup preflight does not exercise R XDR deserialization"
+[[ $(grep -Fc 'ASAN_RUNTIME=$(env -i "PATH=$LOCAL_PATH"' "$NATIVE") -eq 1 ]] ||
+  fail "ASan runtime discovery is duplicated or absent"
+grep -Fq 'handle_segv=2:fast_unwind_on_fatal=0' "$NATIVE" ||
+  fail "ASan does not retain ownership of fatal-signal diagnostics"
+if printf '%s\n' "$asan_preflight" |
+    grep -Eqi 'retry|seccomp|privileged|host[ -]?fallback|verify_asan_link_order'; then
+  fail "ASan startup preflight weakens or retries around an incompatible worker"
+fi
+
 # Memory verification has two content boundaries, with no semantic execution
 # until the corresponding content receipt has authenticated every runtime tree.
 [[ $(grep -Fc '  run_valgrind_receipt_structure_verification \' "$MEMORY") -eq 2 ]] ||
@@ -958,12 +985,13 @@ for compiler_closure_binding in \
 done
 
 # The adversarial validator invokes the same large synthetic native fixture
-# many times. Construct it once per focused/full scope and restore independent
-# copies; rebuilding it before every one-line mutation adds no information.
+# many times. Construct it once per focused/full scope and ASan selection, then
+# restore independent copies; rebuilding it before every one-line mutation adds
+# no information.
 hardening_fixture=$(function_body build_valid_native_fixture "$HARDENING")
 printf '%s\n' "$hardening_fixture" |
-  grep -Fq 'cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS"' ||
-  fail "hardening suite has no scope-specific valid-fixture cache"
+  grep -Fq 'cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS-asan-$FIXTURE_ASAN"' ||
+  fail "hardening suite has no scope/ASan-specific valid-fixture cache"
 printf '%s\n' "$hardening_fixture" |
   grep -Fq 'cp -a -- "$cached_fixture" "$RUN_DIRECTORY"' ||
   fail "hardening suite regenerates valid fixtures instead of restoring copies"

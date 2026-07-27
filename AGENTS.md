@@ -195,6 +195,23 @@ absence-sensitive generation reauthentication, not trusted hot-path reads.
 Do not recover the old-R gain through caller-trust metadata or a second
 semantic path.
 
+The final native gate must use a worker userland compatible with the mounted
+project-local R and Clang sanitizer runtime. The former immutable worker
+`608af79d0330e7cb2f70ed8f0cf540b0550e07b33f842cb06e728a2b00875be4`
+(glibc 2.42) deterministically crashed in libR's XDR lazy-load path under
+ASan before Paradox loaded; the failed `r36-release-076eb44` ASan lane is
+invalid worker evidence, not a package failure. Relaxing Podman isolation and
+resource settings did not help. The reviewed local replacement is
+`localhost/paradox-verification-worker@sha256:1bf06cbf59385885df4f0e62a5736d95fc3c17f091e29fb7ff3e87dddd7833d9`,
+built from exact Debian Bullseye base
+`docker.io/library/debian@sha256:cba95a21c96c1f5fc2470081829363eed57706634f7dc26e8c6712934303d57a`.
+An ASan-selected native run now fails closed on exact preloaded-R startup and
+an XDR round-trip before any expensive compiler mode. Never add a direct-host
+fallback or weaken container isolation; provision and pin a compatible worker.
+The checked-in systemd example names the replacement digest, but changing the
+installed root-owned `/etc/paradox-verify-systemd.conf` remains a manual
+operator action.
+
 ## Non-negotiable design decisions
 
 - `ParamSet`, `ParamSetCollection`, and `ParamSetShadow` are serializable R6

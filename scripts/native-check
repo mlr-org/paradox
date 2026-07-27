@@ -1151,7 +1151,7 @@ run_mode_r_logged() {
       ;;
     asan)
       sanitizer_environment="LD_PRELOAD=$ASAN_RUNTIME"
-      sanitizer_options="ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:check_initialization_order=1:symbolize=1"
+      sanitizer_options="ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:abort_on_error=1:check_initialization_order=1:handle_segv=2:fast_unwind_on_fatal=0:symbolize=1"
       sanitizer_options_two="UBSAN_OPTIONS="
       symbolizer_environment="ASAN_SYMBOLIZER_PATH=$LLVM_SYMBOLIZER"
       ;;
@@ -1505,6 +1505,39 @@ ANALYZER_PROFILE="$SOURCE_DIRECTORY/environment/Makevars-check-analyzer-gcc"
 ASAN_PROFILE="$SOURCE_DIRECTORY/environment/Makevars-check-asan-clang"
 UBSAN_PROFILE="$SOURCE_DIRECTORY/environment/Makevars-check-ubsan-clang"
 
+# A worker userland can start ordinary R yet still be ABI-incompatible with
+# the project-local Clang ASan runtime preloaded into the mounted R executable.
+# Exercise startup and R's XDR serialization path before paying for any
+# compiler/analyzer mode.  This is intentionally the exact production
+# sanitizer environment, not a weakened diagnostic fallback.
+initialize_asan_runtime() {
+  [ -z "$ASAN_RUNTIME" ] || return 0
+  ASAN_RUNTIME=$(env -i "PATH=$LOCAL_PATH" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" "$CLANG" \
+    --print-file-name=libclang_rt.asan-x86_64.so)
+  [ -f "$ASAN_RUNTIME" ] || fail "Clang ASan runtime was not found"
+  case "$ASAN_RUNTIME" in
+    "$TOOLCHAIN"/*) ;;
+    *) fail "ASan runtime is not inside the project toolchain" ;;
+  esac
+}
+
+run_asan_runtime_startup_preflight() {
+  initialize_asan_runtime
+  prepare_mode asan-clang "$ASAN_PROFILE" asan
+  asan_startup_log="$MODE_DIRECTORY/logs/runtime-startup.log"
+  run_mode_r_logged "$asan_startup_log" \
+    "$TOOLCHAIN/bin/R" --vanilla --slave -e \
+    'value <- list(integer = -17L, real = pi, text = "paradox-asan-xdr"); path <- tempfile(); on.exit(unlink(path)); saveRDS(value, path, version = 2L); stopifnot(identical(readRDS(path), value)); cat("asan_runtime_startup=passed\n")'
+  [ "$(wc -l < "$asan_startup_log")" -eq 1 ] &&
+    [ "$(cat "$asan_startup_log")" = 'asan_runtime_startup=passed' ] ||
+    fail "ASan runtime startup preflight did not produce its exact success record"
+}
+
+if [ "$MODE_ASAN" = true ]; then
+  run_asan_runtime_startup_preflight
+fi
+
 if [ "$MODE_STRICT_GCC" = true ]; then
   install_mode strict-gcc "$STRICT_GCC_PROFILE" none
   test_mode strict-gcc "$STRICT_GCC_PROFILE" none "$STRICT_GCC_TEST_SCOPE"
@@ -1687,14 +1720,6 @@ if [ "$MODE_SYMBOLS" = true ]; then
 fi
 
 if [ "$MODE_ASAN" = true ]; then
-  ASAN_RUNTIME=$(env -i "PATH=$LOCAL_PATH" \
-    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" "$CLANG" \
-    --print-file-name=libclang_rt.asan-x86_64.so)
-  [ -f "$ASAN_RUNTIME" ] || fail "Clang ASan runtime was not found"
-  case "$ASAN_RUNTIME" in
-    "$TOOLCHAIN"/*) ;;
-    *) fail "ASan runtime is not inside the project toolchain" ;;
-  esac
   install_mode asan-clang "$ASAN_PROFILE" asan
   {
     printf '%s\n' \
@@ -1920,6 +1945,12 @@ validate_completed_mode_evidence() {
     done
   fi
   if [ "$MODE_ASAN" = true ]; then
+    require_nonempty_retained_file \
+      "$RUN_DIRECTORY/modes/asan-clang/logs/runtime-startup.log"
+    [ "$(wc -l < "$RUN_DIRECTORY/modes/asan-clang/logs/runtime-startup.log")" -eq 1 ] &&
+      [ "$(cat "$RUN_DIRECTORY/modes/asan-clang/logs/runtime-startup.log")" = \
+        'asan_runtime_startup=passed' ] ||
+      fail "retained ASan runtime startup preflight is not the exact success record"
     require_test_scope_evidence asan-clang "$ASAN_TEST_SCOPE"
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/asan-clang/artifacts/scope.txt"
     verify_retained_dso asan-clang

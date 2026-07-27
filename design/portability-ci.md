@@ -468,6 +468,17 @@ No sanitizer flag or analyzer suppression may weaken ordinary semantics. Every
 suppression is source- and tool-version-specific, minimal, documented, and
 reviewed. Zero exit without parsed reports is insufficient.
 
+The contained worker userland is also sanitizer input because the exact
+repository-local R and Clang runtime are mounted into it. Before strict builds,
+an ASan-selected native run must start that exact R with the production preload
+and complete an XDR serialization round-trip; its exact success record is
+completion-bound and independently replayed. A libc/interceptor mismatch fails
+closed. It is corrected by changing the immutable worker image, not by a host
+fallback, retry, disabled interceptor, or relaxed container isolation. The
+July 2026 glibc 2.42 worker failure occurred in R lazy loading before Paradox
+was loaded and therefore supplies neither positive nor negative package
+evidence.
+
 ## Remote-write boundary
 
 Agents may prepare workflow changes, local tags/refs only when explicitly
