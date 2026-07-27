@@ -23,10 +23,17 @@
 
 
 
-# data.table-variables to announce:
-# .init_given, .trafo
-
-utils::globalVariables(c("J", "id", "original_id", "owner_ps_index", ".tags", "tag", ".trafo", "trafo", ".", "cargo", "default", "cls", "cond", "on", "required"))
+# data.table columns and authenticated legacy-closure carrier bindings.  The
+# latter are deliberately free in the template functions used to recognize
+# Paradox 1 crate environments; they are supplied by the admitted environment,
+# not looked up in the package namespace.
+utils::globalVariables(c(
+  ".", ".tags", ".trafo", "J", "cargo", "children_with_constraints",
+  "children_with_trafos", "cls", "cond", "default", "id", "in_tune_fn",
+  "on", "original_id", "owner_ps_index", "pname", "postfix", "prefix",
+  "prefixed_set_ids", "psc_constraint", "psc_extra_trafo", "required",
+  "sets_with_constraints", "sets_with_trafos", "tag", "trafo", "translation"
+))
 
 .onLoad = function(libname, pkgname) { # nolint
   # nocov start

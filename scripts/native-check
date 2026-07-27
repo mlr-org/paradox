@@ -1367,17 +1367,114 @@ require_clean_check_status() {
   }
 }
 
+verify_offline_check_repository() {
+  offline_artifacts=$1
+  offline_seal="$offline_artifacts/offline-check-repository.sha256"
+  [ -s "$offline_seal" ] && [ ! -L "$offline_seal" ] ||
+    fail "offline check repository seal is missing, empty, or symbolic"
+
+  for offline_directory in \
+      "$offline_artifacts/offline-check-repositories" \
+      "$offline_artifacts/offline-check-repositories/cran" \
+      "$offline_artifacts/offline-check-repositories/cran/src" \
+      "$offline_artifacts/offline-check-repositories/cran/src/contrib" \
+      "$offline_artifacts/offline-check-repositories/bioc-empty" \
+      "$offline_artifacts/offline-check-repositories/bioc-empty/src" \
+      "$offline_artifacts/offline-check-repositories/bioc-empty/src/contrib"; do
+    [ -d "$offline_directory" ] && [ ! -L "$offline_directory" ] ||
+      fail "offline check repository directory is missing or symbolic"
+  done
+
+  offline_index_count=0
+  while read -r offline_digest offline_relative; do
+    offline_index_count=$((offline_index_count + 1))
+    case "$offline_digest" in
+      *[!0-9a-f]*|'') fail "offline check repository seal has a malformed digest" ;;
+    esac
+    [ "${#offline_digest}" -eq 64 ] ||
+      fail "offline check repository seal has a malformed digest"
+    case "$offline_index_count:$offline_relative" in
+      1:offline-check-repositories/cran/src/contrib/PACKAGES|\
+      2:offline-check-repositories/cran/src/contrib/PACKAGES.gz|\
+      3:offline-check-repositories/cran/src/contrib/PACKAGES.rds|\
+      4:offline-check-repositories/bioc-empty/src/contrib/PACKAGES) ;;
+      *) fail "offline check repository seal has an unexpected file inventory" ;;
+    esac
+    offline_index="$offline_artifacts/$offline_relative"
+    [ -f "$offline_index" ] && [ ! -L "$offline_index" ] ||
+      fail "offline check repository index is missing or symbolic"
+  done < "$offline_seal"
+  [ "$offline_index_count" -eq 4 ] ||
+    fail "offline check repository seal has an incomplete file inventory"
+  (
+    cd "$offline_artifacts"
+    sha256sum -c "$(basename -- "$offline_seal")" >/dev/null
+  ) || fail "offline check repository content differs from its seal"
+}
+
 check_strict_gcc_full() {
   prepare_mode strict-gcc "$STRICT_GCC_PROFILE" none
   ensure_source_tarball
 
   cran_output="$MODE_DIRECTORY/check-as-cran"
   depends_only_output="$MODE_DIRECTORY/check-depends-only"
+  offline_repository_root="$MODE_DIRECTORY/artifacts/offline-check-repositories"
+  offline_cran_repository="$offline_repository_root/cran"
+  offline_bioc_repository="$offline_repository_root/bioc-empty"
+  offline_repository_seal="$MODE_DIRECTORY/artifacts/offline-check-repository.sha256"
+  offline_profile="$SOURCE_DIRECTORY/environment/Rprofile-native-check-offline.R"
+  offline_repository_helper="$SOURCE_DIRECTORY/scripts/environment/create-offline-check-repository.R"
+  offline_package_lock="$SOURCE_DIRECTORY/environment/r-packages-linux-64.lock"
+  offline_archive_cache="$ROOT/.cache/downloads/r-packages"
   mkdir -p "$cran_output" "$depends_only_output"
+
+  [ -f "$offline_profile" ] && [ ! -L "$offline_profile" ] ||
+    fail "offline check profile is missing or symbolic"
+  [ -f "$offline_repository_helper" ] &&
+    [ ! -L "$offline_repository_helper" ] ||
+    fail "offline check repository helper is missing or symbolic"
+  [ -f "$offline_package_lock" ] && [ ! -L "$offline_package_lock" ] ||
+    fail "offline check package lock is missing or symbolic"
+  [ -d "$offline_archive_cache" ] && [ ! -L "$offline_archive_cache" ] ||
+    fail "offline check archive cache is missing or symbolic"
+  run_mode_r_logged "$MODE_DIRECTORY/logs/offline-check-repository.log" \
+    "$TOOLCHAIN/bin/Rscript" --vanilla \
+    "$offline_repository_helper" "$offline_cran_repository" \
+    "$offline_bioc_repository" "$offline_package_lock" \
+    "$offline_archive_cache" "$TARBALL"
+  : > "$offline_repository_seal"
+  for offline_repository_index in \
+      "$offline_cran_repository/src/contrib/PACKAGES" \
+      "$offline_cran_repository/src/contrib/PACKAGES.gz" \
+      "$offline_cran_repository/src/contrib/PACKAGES.rds" \
+      "$offline_bioc_repository/src/contrib/PACKAGES"; do
+    [ -f "$offline_repository_index" ] &&
+      [ ! -L "$offline_repository_index" ] ||
+      fail "offline check repository retained a missing or symbolic index"
+    offline_repository_relative=${offline_repository_index#"$MODE_DIRECTORY/artifacts/"}
+    [ "$offline_repository_relative" != "$offline_repository_index" ] ||
+      fail "offline check repository index escaped the mode artifacts"
+    printf '%s  %s\n' \
+      "$(sha256sum "$offline_repository_index" | cut -d ' ' -f 1)" \
+      "$offline_repository_relative" >> "$offline_repository_seal"
+    chmod 0444 "$offline_repository_index"
+  done
+  chmod 0444 "$offline_repository_seal"
+  chmod 0555 \
+    "$offline_cran_repository/src/contrib" \
+    "$offline_cran_repository/src" "$offline_cran_repository" \
+    "$offline_bioc_repository/src/contrib" \
+    "$offline_bioc_repository/src" "$offline_bioc_repository" \
+    "$offline_repository_root"
+  verify_offline_check_repository "$MODE_DIRECTORY/artifacts"
 
   run_mode_r_logged "$MODE_DIRECTORY/logs/check-as-cran.log" \
     NOT_CRAN=false \
     _R_CHECK_CRAN_INCOMING_REMOTE_=false \
+    _R_CHECK_SYSTEM_CLOCK_=false \
+    "PARADOX_OFFLINE_CHECK_CRAN=file://$offline_cran_repository" \
+    "PARADOX_OFFLINE_CHECK_BIOC=file://$offline_bioc_repository" \
+    "R_PROFILE_USER=$offline_profile" \
     "R_MAKEVARS_USER=$CRAN_PROFILE" \
     "$TOOLCHAIN/bin/R" CMD check --as-cran --timings --no-multiarch \
     "--output=$cran_output" "$TARBALL"
@@ -1386,13 +1483,19 @@ check_strict_gcc_full() {
   run_mode_r_logged "$MODE_DIRECTORY/logs/check-depends-only.log" \
     NOT_CRAN=false \
     _R_CHECK_CRAN_INCOMING_REMOTE_=false \
+    _R_CHECK_SYSTEM_CLOCK_=false \
     _R_CHECK_FORCE_SUGGESTS_=false \
     _R_CHECK_DEPENDS_ONLY_=true \
+    "PARADOX_OFFLINE_CHECK_CRAN=file://$offline_cran_repository" \
+    "PARADOX_OFFLINE_CHECK_BIOC=file://$offline_bioc_repository" \
+    "R_PROFILE_USER=$offline_profile" \
     "R_MAKEVARS_USER=$CRAN_PROFILE" \
     "$TOOLCHAIN/bin/R" CMD check --timings --no-multiarch \
     --no-tests --no-examples --no-manual --no-vignettes \
     "--output=$depends_only_output" "$TARBALL"
   require_clean_check_status check-depends-only "$depends_only_output"
+
+  verify_offline_check_repository "$MODE_DIRECTORY/artifacts"
 }
 
 STRICT_GCC_PROFILE="$SOURCE_DIRECTORY/environment/Makevars-check-strict-gcc"
@@ -1771,6 +1874,10 @@ validate_completed_mode_evidence() {
   if [ "$MODE_STRICT_GCC" = true ]; then
     require_test_scope_evidence strict-gcc "$STRICT_GCC_TEST_SCOPE"
     if [ "$STRICT_GCC_TEST_SCOPE" = full ]; then
+      require_nonempty_retained_file \
+        "$RUN_DIRECTORY/modes/strict-gcc/logs/offline-check-repository.log"
+      verify_offline_check_repository \
+        "$RUN_DIRECTORY/modes/strict-gcc/artifacts"
       for checked_profile in check-as-cran check-depends-only; do
         require_nonempty_retained_file \
           "$RUN_DIRECTORY/modes/strict-gcc/logs/$checked_profile.log"

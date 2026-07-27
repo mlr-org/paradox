@@ -247,6 +247,18 @@ that every source scope using `skip_on_cran()` was admitted by `NOT_CRAN=true`
 rather than silently skipped. Exact source discovery is the coverage authority;
 there is no historical count floor to become stale. Outside the bounded
 analyzer corpus no Linux skip is accepted implicitly.
+
+Both package checks are networkless but retain repository-backed dependency
+cycle analysis. The driver rechecks the SHA-256 of every non-bootstrap archive
+in `environment/r-packages-linux-64.lock`, combines that exact closure with the
+built candidate, and generates a per-run CRAN index with
+`tools::write_PACKAGES()`. The profile maps CRAN to that index and all three
+standard Bioconductor names to a valid empty local index. Every index encoding
+is sealed and verified before and after use. Remote incoming/currentness and
+external clock lookup are explicitly outside this local gate; warnings are
+still rejected, and an empty repository option or skipped cycle check is not
+accepted as “offline success.”
+
 On Linux, that one focused/full corpus uses independent file-level R workers
 under the `resource-jobs light-test` ceiling (lowerable with
 `PARADOX_NATIVE_TEST_JOBS`). Every worker starts with a unique home, temp, and

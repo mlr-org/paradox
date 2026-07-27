@@ -1525,10 +1525,13 @@ fixture_test_file() {
 write_source_manifest() {
   local manifest="$RUN_DIRECTORY/metadata/source-manifest.tsv"
   printf '"path"\t"kind"\t"sha256_or_target"\t"size"\t"mode"\n' > "$manifest"
-  for relative in environment/native-routine-coverage.tsv \
+  for relative in environment/Rprofile-native-check-offline.R \
+      environment/native-routine-coverage.tsv \
+      environment/r-packages-linux-64.lock \
       environment/tinytex-linux-x86_64.tsv \
       environment/toolchain-linux-64.lock \
       compat/github-snapshot.tsv compat/mlr-org-review.tsv \
+      scripts/environment/create-offline-check-repository.R \
       scripts/environment/mbo-config-fixtures \
       scripts/environment/runtime-matrix-git \
       scripts/environment/runtime-matrix-prefix-receipt \
@@ -1871,6 +1874,7 @@ write_functional_ledger_fixture() {
 
 build_valid_native_fixture() {
   local cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS"
+  local offline_artifacts offline_repository_root offline_relative
   case "$FIXTURE_TESTS" in
     focused|full) ;;
     *) fail "unsupported native fixture scope: $FIXTURE_TESTS" ;;
@@ -1898,6 +1902,10 @@ build_valid_native_fixture() {
     > "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
   cp "$ROOT/environment/toolchain-linux-64.lock" \
     "$RUN_DIRECTORY/source/environment/toolchain-linux-64.lock"
+  cp "$ROOT/environment/r-packages-linux-64.lock" \
+    "$RUN_DIRECTORY/source/environment/r-packages-linux-64.lock"
+  cp "$ROOT/environment/Rprofile-native-check-offline.R" \
+    "$RUN_DIRECTORY/source/environment/Rprofile-native-check-offline.R"
   cp "$ROOT/environment/toolchain-linux-64.lock" \
     "$RUN_DIRECTORY/metadata/toolchain-explicit.txt"
   cp "$ROOT/environment/tinytex-linux-x86_64.tsv" \
@@ -1914,6 +1922,8 @@ build_valid_native_fixture() {
     "$RUN_DIRECTORY/source/scripts/environment/run-native-test-worker-group"
   cp "$ROOT/scripts/environment/resource-jobs" \
     "$RUN_DIRECTORY/source/scripts/environment/resource-jobs"
+  cp "$ROOT/scripts/environment/create-offline-check-repository.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/create-offline-check-repository.R"
   cp "$ROOT/scripts/environment/mbo-config-fixtures" \
     "$RUN_DIRECTORY/source/scripts/environment/mbo-config-fixtures"
   cp "$ROOT/scripts/environment/runtime-matrix-git" \
@@ -1992,6 +2002,30 @@ build_valid_native_fixture() {
   printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
     "$probe_records_before_summary" >> "$probe_result"
   if [[ "$FIXTURE_TESTS" == full ]]; then
+    offline_artifacts="$RUN_DIRECTORY/modes/strict-gcc/artifacts"
+    offline_repository_root="$offline_artifacts/offline-check-repositories"
+    mkdir -p "$offline_repository_root/cran/src/contrib" \
+      "$offline_repository_root/bioc-empty/src/contrib"
+    printf '%s\n' cran-packages \
+      > "$offline_repository_root/cran/src/contrib/PACKAGES"
+    printf '%s\n' cran-packages-gzip \
+      > "$offline_repository_root/cran/src/contrib/PACKAGES.gz"
+    printf '%s\n' cran-packages-rds \
+      > "$offline_repository_root/cran/src/contrib/PACKAGES.rds"
+    : > "$offline_repository_root/bioc-empty/src/contrib/PACKAGES"
+    : > "$offline_artifacts/offline-check-repository.sha256"
+    for offline_relative in \
+        offline-check-repositories/cran/src/contrib/PACKAGES \
+        offline-check-repositories/cran/src/contrib/PACKAGES.gz \
+        offline-check-repositories/cran/src/contrib/PACKAGES.rds \
+        offline-check-repositories/bioc-empty/src/contrib/PACKAGES; do
+      printf '%s  %s\n' \
+        "$(sha256sum "$offline_artifacts/$offline_relative" | cut -d ' ' -f 1)" \
+        "$offline_relative" \
+        >> "$offline_artifacts/offline-check-repository.sha256"
+    done
+    printf '%s\n' offline_check_repository_packages=127 \
+      > "$RUN_DIRECTORY/modes/strict-gcc/logs/offline-check-repository.log"
     for checked_profile in check-as-cran check-depends-only; do
       printf '%s\n' "$checked_profile-ok" \
         > "$RUN_DIRECTORY/modes/strict-gcc/logs/$checked_profile.log"
@@ -2339,6 +2373,23 @@ expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 build_valid_native_fixture
 printf '%s\n' 'Status: 1 WARNING' \
   >> "$RUN_DIRECTORY/modes/strict-gcc/check-as-cran/paradox.Rcheck/00check.log"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' tampered \
+  >> "$RUN_DIRECTORY/modes/strict-gcc/artifacts/offline-check-repositories/cran/src/contrib/PACKAGES.rds"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+sed -n '1,3p' \
+  "$RUN_DIRECTORY/modes/strict-gcc/artifacts/offline-check-repository.sha256" \
+  > "$RUN_DIRECTORY/modes/strict-gcc/artifacts/offline-check-repository.sha256.new"
+mv "$RUN_DIRECTORY/modes/strict-gcc/artifacts/offline-check-repository.sha256.new" \
+  "$RUN_DIRECTORY/modes/strict-gcc/artifacts/offline-check-repository.sha256"
 "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
   "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
 write_completion

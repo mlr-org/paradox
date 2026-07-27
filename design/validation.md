@@ -822,6 +822,15 @@ Then exercise the active pkgdown/book/gallery/website/cheatsheet workloads and
 both serialized `mbo_config` upgrades, including the recursive containing-object
 path and each exact owner bridge.
 
+The local current-R package checks run without network access against a
+per-run, SHA-authenticated repository index generated from the exact locked
+source closure plus the candidate. CRAN is populated; the three standard BioC
+names share a valid empty local index so R cannot silently fall back to live
+URLs. Seal and replay `PACKAGES`, `PACKAGES.gz`, `PACKAGES.rds`, and the empty
+BioC `PACKAGES` before accepting exact `Status: OK`. This retains local
+dependency-cycle evidence; hosted CI owns claims about live repository
+freshness, remote orphan metadata, and external clock verification.
+
 Windows release x86-64, exact Windows x86-64 R 3.6.3/Rtools35, and real macOS
 Apple-silicon ARM64 CI must check the exact candidate source. The old-Windows
 job is a separate source-build/link/load/smoke lane over the authenticated

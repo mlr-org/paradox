@@ -1103,6 +1103,13 @@ converter nor graph preflight mutates serialized input. With
 but does not retain wrapper pointer or environment identity. No arbitrary
 callback environment becomes a migration edge.
 
+The recognition templates deliberately preserve the wrappers' free carrier
+symbols byte-for-byte. Their narrow `utils::globalVariables()` declaration is
+for codetools only: admitted fresh environments supply the values at execution
+time, and no package-namespace fallback is added. Binding dummy values or
+otherwise rewriting a template body would weaken compatibility by making the
+exact serialized wrapper fail authentication.
+
 `upgrade_paradox_object_graph(x)` is the identity-preserving recursive
 migration boundary for a containing object:
 

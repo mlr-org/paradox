@@ -57,6 +57,14 @@ Python/ConfigSpace prefixes before and after testing and passes their
 interpreters by exact environment-variable path. A missing or incomplete
 profile fails closed; it is never repaired or deleted by verification.
 
+Its current-R package checks construct their repository metadata inside the
+attempt. The source-bound helper authenticates the exact locked source-archive
+closure, adds the candidate archive, writes and seals the standard CRAN
+indexes, and provides a separate empty local Bioconductor index. Thus the
+worker does not contact package repositories but still runs recursive
+dependency-cycle analysis. Remote-current repository and clock evidence are
+left to hosted checks; local warnings are neither suppressed nor whitelisted.
+
 `verification/worker/Containerfile` is a portable starting point when no
 organization worker image exists. Build it as an explicit preparation step
 from a digest-pinned Debian-compatible base; the resulting image digest—not its

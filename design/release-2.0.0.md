@@ -36,7 +36,15 @@ uses two sealed, exact Python 3.10.20/ConfigSpace 1.2.2 and 0.5.0 prefixes
 instead of reticulate-managed resolution. Their checked-in SHA-256 locks and
 authenticated receipts are verified before and after networkless tests with
 `.local/configspace` read-only. This is validation infrastructure, not
-completed candidate evidence. While the remaining pre-release items are in
+completed candidate evidence. The same lane now builds a standard local CRAN
+index from the exact SHA-locked source closure plus the candidate and supplies
+all three standard BioC names from a sealed empty index. This preserves
+dependency-cycle checking without network access or warning exceptions; live
+repository freshness remains hosted evidence. The legacy-wrapper recognition
+templates' deliberate free carrier bindings are now narrowly declared to
+codetools, removing the corresponding `R CMD check` NOTE without adding a
+namespace lookup or changing the authenticated template bodies. While the
+remaining pre-release items are in
 flight, use only the focused development policy below. This development batch
 intentionally does not run or claim the complete compatibility or release
 matrix. Freeze one replacement candidate only after all package-facing source
@@ -598,7 +606,8 @@ source. The replacement candidate still requires:
 - [ ] an authenticated hosted Windows x86-64 R 3.6.3/Rtools35 source-build,
   PE-DLL load/registration, and focused smoke/check artifact;
 - [ ] the current-R full native lane verifies both sealed ConfigSpace
-  environments before and after its networkless, read-only test execution;
+  environments and all locked local CRAN/BioC repository indexes before and
+  after its networkless, read-only test and package-check execution;
 - [ ] the complete applicable current-R, portability, memory, compatibility,
   documentation, and benchmark gates after source freeze.
 

@@ -13,6 +13,8 @@ RECEIPTS="$ROOT/scripts/environment/valgrind-receipts"
 R_BUILD="$ROOT/scripts/build-valgrind-r"
 PACKAGE_BOOTSTRAP="$ROOT/scripts/bootstrap-valgrind-r-packages"
 NATIVE="$ROOT/scripts/native-check"
+OFFLINE_CHECK_PROFILE="$ROOT/environment/Rprofile-native-check-offline.R"
+OFFLINE_REPOSITORY_HELPER="$ROOT/scripts/environment/create-offline-check-repository.R"
 API_GATE="$ROOT/scripts/check-r-api-compatibility"
 API_HEADER_CACHE="$ROOT/scripts/environment/r-api-header-cache"
 RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
@@ -32,7 +34,8 @@ fail() {
 
 for required in "$MEMORY" "$MEMORY_VALIDATOR" "$RECEIPTS" "$R_BUILD" \
     "$PACKAGE_BOOTSTRAP" \
-    "$NATIVE" "$API_GATE" "$API_HEADER_CACHE" "$RESOURCE_JOBS" \
+    "$NATIVE" "$OFFLINE_CHECK_PROFILE" "$OFFLINE_REPOSITORY_HELPER" \
+    "$API_GATE" "$API_HEADER_CACHE" "$RESOURCE_JOBS" \
     "$COMPILER_BATCH_RUNNER" \
     "$COMPILER_WAVE_RUNNER" "$COMPILER_IDENTITY_HELPER" \
     "$TEST_RUNNER" "$TEST_VERIFIER" \
@@ -71,6 +74,56 @@ compiler_plan_fields() {
   sed -n "/^  printf 'field\\\\tvalue\\\\n'/,/^} > .*plan.tsv/p" "$file" |
     sed -n "s/^  printf '\\([a-z0-9_]*\\)\\\\t.*$/\\1/p"
 }
+
+# A deliberately networkless --as-cran run still retains repository-backed
+# dependency-cycle checks.  All standard repository labels must resolve to
+# authenticated local metadata; warnings and skipped cycle checks are not
+# acceptable substitutes.
+native_full_check=$(function_body check_strict_gcc_full "$NATIVE")
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc '_R_CHECK_CRAN_INCOMING_REMOTE_=false') -eq 2 ]] ||
+  fail "both native package checks do not disable only remote incoming work"
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc '_R_CHECK_SYSTEM_CLOCK_=false') -eq 2 ]] ||
+  fail "networkless native package checks still attempt remote clock access"
+for repository_variable in PARADOX_OFFLINE_CHECK_CRAN \
+    PARADOX_OFFLINE_CHECK_BIOC; do
+  [[ $(printf '%s\n' "$native_full_check" |
+    grep -Fc "\"$repository_variable=file://") -eq 2 ]] ||
+    fail "both native package checks do not select the sealed local repositories"
+done
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc '"R_PROFILE_USER=$offline_profile"') -eq 2 ]] ||
+  fail "both native package checks do not select the offline profile"
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc 'verify_offline_check_repository "$MODE_DIRECTORY/artifacts"') -eq 2 ]] ||
+  fail "native package checks do not authenticate repository metadata before and after use"
+if printf '%s\n' "$native_full_check" |
+    grep -Eq '_R_CHECK_ORPHANED_|options[(]repos[[:space:]]*=[[:space:]]*(NULL|character)'; then
+  fail "networkless native check disables a locally meaningful repository check"
+fi
+for repository_name in CRAN BioCsoft BioCann BioCexp; do
+  grep -Eq "^[[:space:]]*$repository_name =" "$OFFLINE_CHECK_PROFILE" ||
+    fail "offline check profile omits standard repository label $repository_name"
+done
+grep -Fq 'tools::write_PACKAGES(cran_contrib, type = "source")' \
+  "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline package metadata is not built with the public repository writer"
+grep -Fq 'tools::sha256sum(archive)' "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline package metadata does not authenticate its locked archives"
+grep -Fq 'lock = lock[lock$Role != "bootstrap-only", , drop = FALSE]' \
+  "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline repository can accidentally admit the Paradox 1 bootstrap archive"
+grep -Fq 'unlink(staged_archives, force = TRUE)' "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline repository does not remove its exact staged archive links"
+if grep -Eq 'suppressWarnings|withCallingHandlers|warning[[:space:]]*=' \
+    "$OFFLINE_CHECK_PROFILE" "$OFFLINE_REPOSITORY_HELPER"; then
+  fail "offline repository setup hides warnings instead of preventing them"
+fi
+for logged_wrapper in run_logged run_in_directory_logged; do
+  function_body "$logged_wrapper" "$NATIVE" | grep -Fq 'reject_warnings' ||
+    fail "native command wrapper no longer rejects warning text"
+done
 
 # Memory verification has two content boundaries, with no semantic execution
 # until the corresponding content receipt has authenticated every runtime tree.

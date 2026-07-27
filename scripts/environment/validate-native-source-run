@@ -49,7 +49,10 @@ TOOLCHAIN_EXPLICIT="$METADATA/toolchain-explicit.txt"
 TINY_TEX_RECEIPT="$METADATA/tinytex-tree.tsv"
 COMMANDS="$SOURCE_RUN_DIRECTORY/commands.sh"
 SOURCE_TOOLCHAIN_LOCK="$SOURCE/environment/toolchain-linux-64.lock"
+SOURCE_R_PACKAGE_LOCK="$SOURCE/environment/r-packages-linux-64.lock"
 SOURCE_TINY_TEX_MANIFEST="$SOURCE/environment/tinytex-linux-x86_64.tsv"
+SOURCE_OFFLINE_CHECK_PROFILE="$SOURCE/environment/Rprofile-native-check-offline.R"
+SOURCE_OFFLINE_REPOSITORY_HELPER="$SOURCE/scripts/environment/create-offline-check-repository.R"
 SOURCE_PROBE_MANIFEST="$SOURCE/environment/native-routine-coverage.tsv"
 SOURCE_PROBE_RUNNER="$SOURCE/scripts/environment/run-native-probes.R"
 SOURCE_PROBE_VERIFIER="$SOURCE/scripts/environment/verify-native-probes.R"
@@ -69,6 +72,9 @@ TRUSTED_HELPER_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 TRUSTED_TREE_RECEIPT_HELPER="$TRUSTED_HELPER_DIRECTORY/tree-receipt.R"
 TRUSTED_SNAPSHOT_HELPER="$TRUSTED_HELPER_DIRECTORY/copy-check-snapshot.R"
 TRUSTED_PROBE_MANIFEST="$ROOT/environment/native-routine-coverage.tsv"
+TRUSTED_R_PACKAGE_LOCK="$ROOT/environment/r-packages-linux-64.lock"
+TRUSTED_OFFLINE_CHECK_PROFILE="$ROOT/environment/Rprofile-native-check-offline.R"
+TRUSTED_OFFLINE_REPOSITORY_HELPER="$TRUSTED_HELPER_DIRECTORY/create-offline-check-repository.R"
 TRUSTED_PROBE_RUNNER="$TRUSTED_HELPER_DIRECTORY/run-native-probes.R"
 TRUSTED_PROBE_VERIFIER="$TRUSTED_HELPER_DIRECTORY/verify-native-probes.R"
 TRUSTED_FUNCTIONAL_RUNNER="$TRUSTED_HELPER_DIRECTORY/run-native-tests.R"
@@ -93,7 +99,9 @@ for path in "$RUN_METADATA" "$RESULT_METADATA" "$COMPLETION_METADATA" \
     "$RESOURCE_JOBS_HELPER" "$RESOURCE_JOBS_DECISIONS" \
     "$SOURCE_MANIFEST" "$SOURCE_TREE_RECEIPT" "$MODES_TREE_RECEIPT" \
     "$TOOL_VERSIONS" "$TOOLCHAIN_EXPLICIT" "$TINY_TEX_RECEIPT" "$COMMANDS" \
-    "$SOURCE_TOOLCHAIN_LOCK" "$SOURCE_TINY_TEX_MANIFEST" \
+    "$SOURCE_TOOLCHAIN_LOCK" "$SOURCE_R_PACKAGE_LOCK" \
+    "$SOURCE_TINY_TEX_MANIFEST" "$SOURCE_OFFLINE_CHECK_PROFILE" \
+    "$SOURCE_OFFLINE_REPOSITORY_HELPER" \
     "$SOURCE_PROBE_MANIFEST" "$SOURCE_PROBE_RUNNER" \
     "$SOURCE_PROBE_VERIFIER" \
     "$SOURCE_FUNCTIONAL_RUNNER" "$SOURCE_FUNCTIONAL_WORKER" \
@@ -116,6 +124,8 @@ for path in "$RESOURCE_JOBS_HELPER" "$SOURCE_RESOURCE_JOBS_HELPER" \
 done
 for path in "$TRUSTED_HARNESS" "$TRUSTED_TREE_RECEIPT_HELPER" \
     "$TRUSTED_SNAPSHOT_HELPER" "$TRUSTED_PROBE_MANIFEST" \
+    "$TRUSTED_R_PACKAGE_LOCK" "$TRUSTED_OFFLINE_CHECK_PROFILE" \
+    "$TRUSTED_OFFLINE_REPOSITORY_HELPER" \
     "$TRUSTED_PROBE_RUNNER" "$TRUSTED_PROBE_VERIFIER" \
     "$TRUSTED_FUNCTIONAL_RUNNER" \
     "$TRUSTED_FUNCTIONAL_WORKER" "$TRUSTED_FUNCTIONAL_WORKER_GROUP" \
@@ -375,6 +385,13 @@ cmp -s "$RESOURCE_JOBS_HELPER" "$TRUSTED_RESOURCE_JOBS_HELPER" ||
   fail "retained resource scheduler differs from the trusted current helper"
 cmp -s "$SOURCE_RESOURCE_JOBS_HELPER" "$TRUSTED_RESOURCE_JOBS_HELPER" ||
   fail "source resource scheduler differs from the trusted current helper"
+cmp -s "$SOURCE_R_PACKAGE_LOCK" "$TRUSTED_R_PACKAGE_LOCK" ||
+  fail "source R package lock differs from the trusted current lock"
+cmp -s "$SOURCE_OFFLINE_CHECK_PROFILE" "$TRUSTED_OFFLINE_CHECK_PROFILE" ||
+  fail "source offline-check profile differs from the trusted current profile"
+cmp -s "$SOURCE_OFFLINE_REPOSITORY_HELPER" \
+  "$TRUSTED_OFFLINE_REPOSITORY_HELPER" ||
+  fail "source offline-check repository helper differs from the trusted current helper"
 cmp -s "$SOURCE_MBO_CONFIG_HELPER" "$TRUSTED_MBO_CONFIG_HELPER" ||
   fail "source mbo_config helper differs from the trusted current helper"
 cmp -s "$SOURCE_RUNTIME_GIT_HELPER" "$TRUSTED_RUNTIME_GIT_HELPER" ||
@@ -559,6 +576,49 @@ require_nonempty_mode_file() {
   [[ -s "$1" ]] || fail "required native mode evidence is empty: $1"
 }
 
+verify_offline_check_repository() {
+  local artifacts=$1 seal line index digest relative path
+  local -a lines
+  local expected=(
+    "offline-check-repositories/cran/src/contrib/PACKAGES"
+    "offline-check-repositories/cran/src/contrib/PACKAGES.gz"
+    "offline-check-repositories/cran/src/contrib/PACKAGES.rds"
+    "offline-check-repositories/bioc-empty/src/contrib/PACKAGES"
+  )
+  local directories=(
+    "offline-check-repositories"
+    "offline-check-repositories/cran"
+    "offline-check-repositories/cran/src"
+    "offline-check-repositories/cran/src/contrib"
+    "offline-check-repositories/bioc-empty"
+    "offline-check-repositories/bioc-empty/src"
+    "offline-check-repositories/bioc-empty/src/contrib"
+  )
+
+  for relative in "${directories[@]}"; do
+    [[ -d "$artifacts/$relative" && ! -L "$artifacts/$relative" ]] ||
+      fail "offline check repository directory is missing or symbolic"
+  done
+  seal="$artifacts/offline-check-repository.sha256"
+  require_nonempty_mode_file "$seal"
+  mapfile -t lines < "$seal"
+  [[ ${#lines[@]} -eq ${#expected[@]} ]] ||
+    fail "offline check repository seal has an incomplete inventory"
+  for index in "${!expected[@]}"; do
+    line=${lines[$index]}
+    [[ "$line" =~ ^([0-9a-f]{64})\ \ ([^[:space:]]+)$ ]] ||
+      fail "offline check repository seal has a malformed row"
+    digest=${BASH_REMATCH[1]}
+    relative=${BASH_REMATCH[2]}
+    [[ "$relative" == "${expected[$index]}" ]] ||
+      fail "offline check repository seal has an unexpected inventory"
+    path="$artifacts/$relative"
+    require_mode_file "$path"
+    [[ "$(sha256 "$path")" == "$digest" ]] ||
+      fail "offline check repository content differs from its seal"
+  done
+}
+
 for mode_path in "$MODES"/*; do
   [[ -e "$mode_path" ]] || continue
   if [[ "$mode_path" == "$MODE_STATUS" ]]; then
@@ -641,6 +701,18 @@ verify_dso_mode strict-gcc
 verify_dso_mode strict-clang
 verify_probe_mode strict-clang
 if [[ "$tests" == full ]]; then
+  offline_repository_log="$MODES/strict-gcc/logs/offline-check-repository.log"
+  require_nonempty_mode_file "$offline_repository_log"
+  offline_repository_packages=$(awk -F '\t' '
+    NR > 1 && $3 != "bootstrap-only" { count += 1 }
+    END { print count + 1 }
+  ' "$SOURCE_R_PACKAGE_LOCK")
+  mapfile -t offline_repository_log_lines < "$offline_repository_log"
+  [[ ${#offline_repository_log_lines[@]} -eq 1 &&
+     "${offline_repository_log_lines[0]}" == \
+       "offline_check_repository_packages=$offline_repository_packages" ]] ||
+    fail "offline check repository log does not prove its exact package count"
+  verify_offline_check_repository "$MODES/strict-gcc/artifacts"
   for checked_profile in check-as-cran check-depends-only; do
     require_nonempty_mode_file \
       "$MODES/strict-gcc/logs/$checked_profile.log"

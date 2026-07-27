@@ -587,6 +587,12 @@ semantic path.
   Authenticate only the exact known Paradox-1 package-generated crate shapes:
   categorical mapping, collection-flattened `in_tune_fn`, tuning-ParamSet
   transformation, and detached collection transformation/constraint adapters.
+  Their matcher templates intentionally contain the same free carrier symbols
+  as the serialized wrappers. Keep those symbols in the narrow
+  `utils::globalVariables()` declaration in `R/zzz.R`; that declaration tells
+  codetools about environment-supplied names and does not create namespace
+  fallbacks. Do not “fix” the templates with dummy locals, because changing
+  their bodies would reject the exact legacy shapes they authenticate.
   Rebuild those wrappers without mutating the serialized input. An authenticated
   detached collection wrapper always receives a fresh closure environment so
   carriers can be rebound safely; with stripping disabled, preserve its source
@@ -1104,6 +1110,21 @@ exact interpreters through `PARADOX_CONFIGSPACE_CURRENT_PYTHON` and
 `.local/configspace` read-only with no network. Reticulate/uv resolution,
 provisioning, and shared dependency-prefix/cache mutation are not part of that
 gate; disposable per-mode caches remain outside the sealed fixture.
+
+The full current-R package checks are also genuinely networkless. Before
+`--as-cran`, `scripts/native-check` reauthenticates every non-bootstrap source
+archive in `environment/r-packages-linux-64.lock`, adds the just-built
+candidate, and uses public `tools::write_PACKAGES()` to construct a per-run
+CRAN index. A separate valid empty index supplies `BioCsoft`, `BioCann`, and
+`BioCexp`; omitting any standard name makes current R fall back to live
+repositories. The profile, all three CRAN index encodings, the empty BioC
+index, and their exact inventory are source- or content-bound and verified
+before and after both checks. `_R_CHECK_CRAN_INCOMING_REMOTE_=false` and
+`_R_CHECK_SYSTEM_CLOCK_=false` disable only work that inherently needs the
+network. Do not replace this with empty `options("repos")`, an empty CRAN
+index, warning suppression, or a whitelist: those approaches skip useful
+dependency-cycle evidence. Remote-current repository metadata remains a
+hosted-CI/CRAN claim, not a local one.
 
 ConfigSpace bootstrap never removes incomplete state. If only one side of a
 profile exists, review it and remove only the exact reported
