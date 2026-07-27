@@ -21,9 +21,12 @@ the relocated source-run validator did not receive its trusted offline-
 repository helper. The six-file harness repair now retains and authenticates
 that helper and preserves exact modes across both snapshot copies. This is a
 validation-provenance repair, not a package failure or a reason to rerun the
-already green API/runtime branches. It does require one fresh full native
-source run, followed by a fresh combined-memory run from that new replayable
-source proof. Do not mutate, reseal, or use
+already green API/runtime branches. The required replacement native run is now
+complete: `release-candidate-dbbdcc1-native-replay-r2` passed all four selected
+rows, its full native child passed, and direct independent source validation
+accepted the exact copied bytes and modes. Use child
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` for the fresh
+combined-memory run. Do not mutate, reseal, or use
 `release-candidate-dbbdcc1-native-release-a001` as a donor.
 
 The final harness repair itself passed shell syntax checks for the four changed
@@ -35,8 +38,15 @@ replay copies preserving exact `0664`/`0775` modes, relocated-helper
 removal/substitution rejection, and equality of the 21-row copied, hashed, and
 independently validated harness inventories. Focused probes also confirmed
 `Sys.chmod(..., use_umask = FALSE)` restores exact `0664` under both actual R
-3.6.3 and the local current R. These are exact repair tests, not a substitute
-for the fresh native or memory execution.
+3.6.3 and the local current R. These are exact repair tests; the fresh native
+execution is complete, but the combined-memory execution remains pending.
+
+The first isolated rchk discovery from the new donor,
+`release-candidate-dbbdcc1-rchk-discovery-r1`, stopped before analyzer start
+because live admission found 36,328 MiB against the reviewed 36,864-MiB
+analyzer-plus-host-reserve requirement. Preserve the 20-GiB analyzer allowance
+and 16-GiB host reserve; wait for or manually free about 1 GiB, then use a new
+run ID. This is neither an analyzer nor package failure.
 
 ## Unattended orchestration
 
@@ -798,12 +808,14 @@ an argument, the suffixed bridge library and evidence path.
 
 Ordinarily one final validation-tooling commit is frozen before constructing a
 fresh named overlay, and documentation, full checks, and the benchmark reuse it
-read-only. The active release follows that model with tooling
+read-only. The active `paradox2` axis pins the frozen `dbbdcc1` candidate; its
+new overlay and prepared gates remain to be constructed under the converged
+post-freeze tooling commit. Tooling
 `fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
-`05cc4e5213c5ee73d0bc764c3d102c15e4c57141`, for the final documentation,
-broad-corpus, Paradox-2 source-check, and benchmark stages. The earlier
-`bf64490` to `9e87556` test-only composition belongs only to the superseded
-`10c6a0e` release history. Do not cite it as active evidence. There is still no
+`05cc4e5213c5ee73d0bc764c3d102c15e4c57141`, belongs to the historical
+`8797f11` documentation, broad-corpus, source-check, and benchmark stages. The
+earlier `bf64490` to `9e87556` composition belongs only to the superseded
+`10c6a0e` history. Do not cite either as active evidence. There is still no
 arbitrary older-tooling replay, default unsuffixed-overlay substitution, or
 result relabeling.
 
@@ -945,9 +957,10 @@ similarity as release evidence.
 The active accepted run IDs and candidate hashes belong in
 [`release-2.0.0.md`](release-2.0.0.md). Until that ledger says `accepted`, no
 collection of partial green diagnostics is a release authorization. There is
-now a frozen candidate at `dbbdcc1`, but its otherwise green `release-core`
-native child has a non-replayable source snapshot and its memory attempt never
-crossed preflight. The repaired harness must produce a fresh native source
-proof and combined-memory result. The remaining applicable local and hosted
-matrix then completes against the package-facing-source-identical candidate,
-followed by user-performed remote publication.
+now a frozen candidate at `dbbdcc1`; the original `release-core` native child
+has a non-replayable source snapshot, but the repaired harness has produced and
+independently validated the replacement
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` source proof.
+The combined-memory result remains pending. The remaining applicable local and
+hosted matrix then completes against the package-facing-source-identical
+candidate, followed by user-performed remote publication.

@@ -42,8 +42,27 @@ validates that helper; preserves and verifies exact regular-file modes in both
 the initial and replayed snapshots regardless of caller umask; and tests the
 complete relocated-helper inventory. Do not mutate or rehabilitate
 `release-candidate-dbbdcc1-native-release-a001`. A fresh full native source run
-under the repaired, package-facing-source-identical harness must create the
-replayable source proof used by a fresh combined-memory run.
+under the repaired, package-facing-source-identical harness has now created the
+replayable source proof:
+`release-candidate-dbbdcc1-native-replay-r2` passed all four selected
+controller/harness/native rows, and child
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` passed the
+full native lane. Independent source-run validation reproduces its exact
+21-file harness inventory and source bytes and modes. The coordinator
+completion, JSON summary, and TSV summary SHA-256 values are respectively
+`2b4781b276583903f929f3b659037ce1ec228dbbe3755ca7ca2c29a2d776ba01`,
+`9a279062fa8f2d99ff97561b6530dd3944614d04fc133e953b772aee64f5cb80`,
+and
+`92eb669197c8cd82a43f2424143efe7f3967213a3a1da2006bcdc691ce519bd2`.
+Use only that child as the source donor for the fresh combined-memory run.
+
+The first isolated bounded-rchk discovery attempt from the new donor,
+`release-candidate-dbbdcc1-rchk-discovery-r1`, failed closed in resource
+preflight before starting the analyzer: 36,328 MiB was available against the
+reviewed 20-GiB analyzer allowance plus 16-GiB protected host reserve
+(36,864 MiB total). It is capacity evidence only and must not be reused. Keep
+both limits; wait for or manually free at least about 1 GiB of nonessential
+memory, then use a fresh discovery run ID.
 
 The provisional R 3.6 ref `refs/paradox-release/r36-39855c9`, commit
 `39855c919beec323fd5940e4c46286e8df1be8ff`, completed all eight
@@ -92,10 +111,11 @@ diagnostic. `schedule_vector` is absent from the final reviewed report.
 Post-freeze validation uses the named `release-refresh-20260720` profile and
 explicit `paradox2`/`paradox1` axes. Candidate, tooling, overlay, dependency,
 repository, documentation, and benchmark identities remain separate and must
-never be relabeled. The final benchmark/documentation tooling is
+never be relabeled. The last historical `8797f11` candidate's final
+benchmark/documentation tooling was
 `fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
-`05cc4e5213c5ee73d0bc764c3d102c15e4c57141`; its diff from the candidate
-contains no package-facing path. The sealed 77-row release benchmark passes
+`05cc4e5213c5ee73d0bc764c3d102c15e4c57141`; its diff from that candidate
+contains no package-facing path. Its sealed 77-row release benchmark passes
 with 73 pass, four bounded marginal reviews, and zero failures; completion,
 manifest, and seal SHA-256 values are
 `5d615637bd6448bb95b8ba798cc8f7e23d40a78e1a63a4e3988eb436914109a0`,
@@ -128,8 +148,9 @@ and is package-facing-source identical to the candidate. The only remaining
 release gates for that historical candidate were retained hosted Windows
 x86-64/macOS ARM64 results and the user-performed downstream branch/PR
 publication handoff. The active replacement candidate has now passed
-`release-core`, but still requires the fresh memory-source proof and remaining
-applicable local/hosted gates. Agents must not perform either remote write.
+`release-core` and has a fresh replayable memory-source proof, but still
+requires the combined-memory result and remaining applicable local/hosted
+gates. Agents must not perform either remote write.
 
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
@@ -2187,16 +2208,36 @@ but is not a replayable source donor: for example,
 then failed closed before package load because the retained validator's
 relocated offline-repository helper was absent. Keep both directories
 immutable. Their package results are informative, but neither directory
-supplies combined-memory acceptance. Run one fresh full native source proof
-after the six-file harness repair, then use only that new child run for a fresh
-combined-memory gate.
+supplies combined-memory acceptance.
+
+The replacement `release-candidate-dbbdcc1-native-replay-r2` coordinator and
+its child
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` passed under
+the six-file repair. The child also passes direct independent source-run
+validation: its source-manifest, source-tree, modes-tree, completion-content,
+and result SHA-256 values are respectively
+`d10b24eee410164ca28b3f456ddebf4a151d9f884ce9e648adde3f7efbdb2cee`,
+`821e28ab6db88a0125e4dbea167730235096bc2f699cb33a94d0c85cc2594a3a`,
+`6550f985a6bfc766618a95719ec638ec02988021e118c7b7f296a71df0c95b95`,
+`522490b19cf52e6a18b955207d797463f60b51b6c1a85537423fc6088b21fc36`,
+and
+`d89ff720ea1cda8be1f82538a1e92a245dd901fd7e31990ed2a37e97c62130b0`.
+Use only that child for the fresh combined-memory gate.
 
 The repair changes only `scripts/memory-check` and five
 `scripts/environment/` harness files. Before transferring any package-facing
-conclusion, prove the eventual repair commit package-facing-source identical
-to the candidate. The release remains pending after that memory rerun and the
-remaining applicable downstream, documentation, benchmark, and hosted
+conclusion, prove the repair commit package-facing-source identical to the
+candidate. That path-level proof is complete for `50a8593`; generated package
+archives are not claimed byte-identical because R injects nondeterministic
+metadata and vignette output. The release remains pending after the memory run
+and the remaining applicable downstream, documentation, benchmark, and hosted
 portability gates.
+
+The active `paradox2` row in `compat/paradox-evidence-axes.tsv` now names this
+same `dbbdcc1` ref/commit/tree. Its focused structural profile fixture passes.
+All retained overlays and consumer results owned by earlier Paradox-2
+candidates remain historical; construct one new candidate-run-owned
+`release-refresh-20260720` overlay before the prepared compatibility gates.
 
 The final repair passed shell syntax checks, R parsing of both snapshot
 helpers, and the complete activated validation-hardening suite in about 226

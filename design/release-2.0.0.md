@@ -2,8 +2,8 @@
 
 ## Status
 
-**The package-facing candidate is frozen; `release-core` is green, and the
-memory source-proof rerun is pending after a validation-harness repair.**
+**The package-facing candidate is frozen; `release-core` and the repaired
+memory source-proof rerun are green, while combined memory is pending.**
 The active candidate is
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
@@ -35,11 +35,22 @@ nor memory evidence.
 The six-file harness repair makes snapshot and replay modes exact and
 umask-independent, retains/hashes the offline-repository helper, validates the
 same exact relocated bundle independently, and tests the generic sibling-set
-relationship. The old run directories remain immutable. A fresh full native
-run under the repaired harness must produce the source proof for a fresh
-combined-memory run. The repair is confined to package-excluded harness paths;
-its eventual commit still requires the ordinary package-facing-source identity
-proof before any candidate conclusion transfers.
+relationship. The old run directories remain immutable. Replacement
+coordinator `release-candidate-dbbdcc1-native-replay-r2` passed all four
+selected rows; child
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` passed the
+full native lane and direct independent source-run validation. The repair is
+confined to package-excluded harness paths, and committed repair `50a8593` is
+package-facing-source identical to the candidate. Generated package archives
+are not claimed byte-identical because R injects nondeterministic metadata and
+vignette output.
+
+The replacement coordinator's completion, JSON summary, and TSV summary
+SHA-256 values are respectively
+`2b4781b276583903f929f3b659037ce1ec228dbbe3755ca7ca2c29a2d776ba01`,
+`9a279062fa8f2d99ff97561b6530dd3944614d04fc133e953b772aee64f5cb80`,
+and
+`92eb669197c8cd82a43f2424143efe7f3967213a3a1da2006bcdc691ce519bd2`.
 
 The finalized repair passed Bash syntax and R parse checks and the full
 activated validation-hardening suite in about 226 seconds. Its adversarial
@@ -390,8 +401,14 @@ remaining convergence and acceptance steps are:
 - [x] run the eight-task `release-core` profile; all rows pass, while the
   native child source proof is retained only as informative execution evidence
   because its copied modes do not replay;
-- [ ] create a fresh replayable native source run with the repaired harness and
-  complete the combined-memory gate from that exact source proof;
+- [x] repoint the exact `paradox2` compatibility axis at the frozen `dbbdcc1`
+  ref/commit/tree and pass its structural profile fixtures;
+- [x] create and independently validate a fresh replayable native source run
+  with the repaired harness;
+- [ ] complete the combined-memory gate from that exact source proof;
+- [ ] install one fresh candidate-owned
+  `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
+  reverse-dependency, repository, documentation, and benchmark gates;
 - [ ] run and retain the complete applicable gate matrix against that exact
   candidate, including the remaining downstream, documentation, benchmark, and
   hosted portability stages.
@@ -1104,13 +1121,15 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 The release decision is `pending`. The managed graph-root fix is committed, the
 replacement candidate is frozen at `dbbdcc1`, and its eight-task
-`release-core` run is green. Its native child is not a replayable memory donor,
-however, and the first memory attempt stopped at harness provenance preflight.
-A fresh full native source proof and combined-memory gate under the six-file
-harness repair remain mandatory, followed by the applicable documentation,
-downstream, source-package, benchmark, and hosted Windows x86-64/macOS ARM64
-gates. User publication of prepared downstream branches/PRs, the release tag,
-and workflow also remains required.
+`release-core` run is green. Its original native child is not a replayable
+memory donor and the first memory attempt stopped at harness provenance
+preflight, but the repaired
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` source proof
+is now green and independently replayable. The combined-memory gate remains
+mandatory, followed by the applicable documentation, downstream,
+source-package, benchmark, and hosted Windows x86-64/macOS ARM64 gates. User
+publication of prepared downstream branches/PRs, the release tag, and workflow
+also remains required.
 
 ## Historical rejected or superseded refs
 

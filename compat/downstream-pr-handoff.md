@@ -25,6 +25,18 @@ remote state and eventual human actions are:
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
 
+## Active replacement candidate
+
+The active `paradox2` compatibility axis now pins
+`refs/paradox-release/candidate-20260727T152133Z`, commit
+`dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
+`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. The branch heads above remain
+the reviewed migration inputs, but the retained Paradox-2 runs below predate
+the dormant-values, grid, source-reference, performance, R 3.6, and graph-root
+changes. Build one fresh candidate-owned `release-refresh-20260720`/`paradox2`
+overlay and rerun the prepared compatibility gates before the user publishes
+the branches.
+
 ## Historical retained evidence to refresh
 
 The dormant-value/default-aware dependency change reopens package-facing

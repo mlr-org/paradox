@@ -1,3 +1,3 @@
 axis	stage_suffix	version_major	candidate_ref	candidate_commit	candidate_tree	candidate_version	description
-paradox2	-	2	refs/paradox-release/candidate-20260724T105215Z	8797f1163fe612cb01d1facf517834d3f516a697	81e6f901266754b97a0906f88a472bf04795f13c	2.0.0	Frozen Paradox 2 serialized-object migration candidate compatibility evidence.
+paradox2	-	2	refs/paradox-release/candidate-20260727T152133Z	dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea	b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d	2.0.0	Frozen Paradox 2 release candidate compatibility evidence.
 paradox1	-paradox1	1	refs/tags/v1.0.1	cdcc8e616afe243cd7c54e15713c86f818a52626	09815307df797edab1c3241ff75f476289e2cb6c	1.0.1	Released Paradox 1.0.1 dual-version compatibility evidence.

@@ -53,6 +53,24 @@ sibling set generically. The candidate package results remain informative, but
 memory acceptance requires a fresh full native source run and a fresh combined
 memory run from that replayable proof.
 
+The first requirement is complete. Coordinator
+`release-candidate-dbbdcc1-native-replay-r2` passed all four selected rows and
+its full-native child
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` passes the
+independent relocated source-run validator, including exact source and harness
+modes. Its source-manifest, source-tree, and modes-tree SHA-256 values are
+`d10b24eee410164ca28b3f456ddebf4a151d9f884ce9e648adde3f7efbdb2cee`,
+`821e28ab6db88a0125e4dbea167730235096bc2f699cb33a94d0c85cc2594a3a`,
+and
+`6550f985a6bfc766618a95719ec638ec02988021e118c7b7f296a71df0c95b95`.
+Only the fresh combined-memory run remains for memory acceptance.
+
+An initial isolated rchk discovery from this donor,
+`release-candidate-dbbdcc1-rchk-discovery-r1`, failed closed before analyzer
+start because live capacity was 536 MiB below the reviewed 20-GiB analyzer
+allowance plus 16-GiB host reserve. Retain it as capacity evidence only; do not
+reduce either bound or reuse the failed run ID.
+
 ## Modes
 
 ### GCT

@@ -30,8 +30,12 @@ value() {
    $(value "$profile_output" axis) == paradox2 &&
    $(value "$legacy_output" suffix) == -release-refresh-20260720-paradox1 &&
    $(value "$legacy_output" version_major) == 1 &&
+   $(value "$profile_output" candidate_ref) == \
+     refs/paradox-release/candidate-20260727T152133Z &&
    $(value "$profile_output" candidate_commit) == \
-     348539ad141e1b75d424d7f92e3acd50c4549dec &&
+     dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea &&
+   $(value "$profile_output" candidate_tree) == \
+     b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d &&
    $(value "$legacy_output" candidate_commit) == \
      cdcc8e616afe243cd7c54e15713c86f818a52626 &&
    $(value "$profile_output" checkout_namespace) == \

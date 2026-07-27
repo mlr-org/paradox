@@ -6,13 +6,17 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 INSTALLER=$ROOT/compat/install-downstream-bridges
 PROVENANCE=$ROOT/compat/github-bridge-provenance.tsv
 SNAPSHOT=$ROOT/compat/github-snapshot.tsv
+PROFILE_TEST=$ROOT/scripts/environment/test-downstream-evidence-profiles
 
 fail() {
   printf '%s\n' "test-downstream-bridge-installer: $*" >&2
   exit 1
 }
 
-[[ -x $INSTALLER && ! -L $INSTALLER ]] || fail "installer is absent or not executable"
+[[ -x $INSTALLER && ! -L $INSTALLER &&
+   -x $PROFILE_TEST && ! -L $PROFILE_TEST ]] ||
+  fail "installer or profile test is absent, symbolic, or not executable"
+"$PROFILE_TEST"
 bash -n "$INSTALLER"
 "$INSTALLER" --help | grep -Fqx \
   'Usage: compat/install-downstream-bridges [--candidate-source PATH] [--verify]' ||
