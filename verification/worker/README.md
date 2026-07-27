@@ -13,6 +13,11 @@ symlinks because security-sensitive helpers deliberately reject symbolic
 executables. This contract therefore does not depend on which Debian
 generation supplied the base.
 
+The image need only provide the `C.UTF-8` locale; task execution pins that
+locale and UTC in `scripts/environment/verify-task-entry`. Do not rely on an
+image's default locale, which differs between otherwise compatible Debian
+bases and changes R's serialized parse metadata.
+
 Use a Debian-compatible base by exact digest. The mounted project toolchain,
 not packages copied into the image, supplies R and Clang. The base userland
 must therefore be ABI-compatible with those binaries and with Clang's

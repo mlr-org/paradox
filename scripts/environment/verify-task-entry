@@ -41,6 +41,10 @@ export TMP="$TASK_TMP"
 export TEMP="$TASK_TMP"
 export XDG_RUNTIME_DIR="$TASK_RUNTIME"
 export PYTHONDONTWRITEBYTECODE=1
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export TZ=UTC
+unset LANGUAGE
 
 # shellcheck source=../activate
 # shellcheck disable=SC1091

@@ -208,6 +208,9 @@ built from exact Debian Bullseye base
 Bullseye has an unmerged `/usr`, so the worker recipe must retain its explicit
 plain, non-symbolic compatibility copies for `/usr/bin/bash`,
 `/usr/bin/mktemp`, and the other exact authenticated command paths.
+The container entry point must continue to pin `C.UTF-8`, UTC, and an empty
+`LANGUAGE`; Bullseye otherwise defaults to C and changes R's serialized AST
+metadata even with the identical mounted R executable.
 An ASan-selected native run now fails closed on exact preloaded-R startup and
 an XDR round-trip before any expensive compiler mode. Never add a direct-host
 fallback or weaken container isolation; provision and pin a compatible worker.

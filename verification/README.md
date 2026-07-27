@@ -48,7 +48,9 @@ extra libraries are explicitly remounted read-only below their writable
 evidence parent. Generic activation state and the runtime matrix's development
 library, temporary, cache, and runtime subtrees are backed by attempt-private
 mounts; retained prefixes, receipts, and sealed dependency libraries remain
-read-only. The network is disabled unless a reviewed task explicitly
+read-only. The task entry pins `C.UTF-8`, UTC, and an empty `LANGUAGE` before
+any reviewed command, so R parse/serialization metadata and text ordering do
+not inherit an image's locale defaults. The network is disabled unless a reviewed task explicitly
 requests it. A different platform/toolchain can instead use a task-specific
 image plus overridden platform/machine constraints in `tasks.json`. All
 currently shipped local tasks inherit the repository's Linux/x86-64 toolchain

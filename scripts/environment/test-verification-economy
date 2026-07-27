@@ -26,6 +26,7 @@ TEST_VERIFIER="$ROOT/scripts/environment/verify-native-test-ledger.R"
 RUNTIME_MATRIX_TEST_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-tests.R"
 LEGACY_REPOSITORY_RUNNER="$ROOT/compat/test-repositories.R"
 HARDENING="$ROOT/scripts/environment/test-validation-hardening"
+TASK_ENTRY="$ROOT/scripts/environment/verify-task-entry"
 
 fail() {
   printf '%s\n' "test-verification-economy: $*" >&2
@@ -40,9 +41,21 @@ for required in "$MEMORY" "$MEMORY_VALIDATOR" "$RECEIPTS" "$R_BUILD" \
     "$COMPILER_WAVE_RUNNER" "$COMPILER_IDENTITY_HELPER" \
     "$TEST_RUNNER" "$TEST_VERIFIER" \
     "$RUNTIME_MATRIX_TEST_RUNNER" "$LEGACY_REPOSITORY_RUNNER" \
-    "$HARDENING"; do
+    "$HARDENING" "$TASK_ENTRY"; do
   [[ -f "$required" && ! -L "$required" ]] ||
     fail "required harness is absent or symbolic: $required"
+done
+
+# Worker images have different locale defaults, and R parse/serialization
+# metadata can legitimately differ between C and C.UTF-8. Pin the task locale
+# at the container entry boundary rather than relying on image ENV state.
+for task_environment_line in \
+    'export LANG=C.UTF-8' \
+    'export LC_ALL=C.UTF-8' \
+    'export TZ=UTC' \
+    'unset LANGUAGE'; do
+  [[ $(grep -Fxc "$task_environment_line" "$TASK_ENTRY") -eq 1 ]] ||
+    fail "worker task entry does not pin: $task_environment_line"
 done
 
 first_line() {
