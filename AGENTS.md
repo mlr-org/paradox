@@ -1295,6 +1295,13 @@ source and stress launchers therefore use `LANG=C` while the stage's
 stress runner clears `LC_ALL` only after R startup so temporary locale changes
 are not overridden. This prevents thousands of no-op framework warnings
 without changing package semantics or weakening the warning-free contract.
+Old R's shell front end also expands backslash escapes while transporting an
+inline `Rscript -e` expression. Inline harness expressions must therefore use
+R constructors such as `intToUtf8(9L)` for control characters (or a
+checked-in script), never a literal `"\t"` that R 3.6/4.0 can split before
+parsing. Source fixtures that require character dependency columns must spell
+`stringsAsFactors = FALSE`; factor-backed dependency IDs remain rejected by
+the native closed ingress rather than gaining version-dependent coercion.
 
 After every selected stage is sealed, a complete `--runtime all` run performs
 one R 4.0.5 -> R 3.6.3 serialization handoff. The producer and consumer are

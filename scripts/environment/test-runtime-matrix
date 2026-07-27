@@ -350,6 +350,16 @@ done
 rg -Fq \
   'fail "stage-aware activation did not retain authenticated R startup inputs"' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'sep = intToUtf8(9L)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage" || {
+  echo "Runtime package inventory is not safe for the old R launcher codec" >&2
+  exit 1
+}
+if rg -Fq 'sep = "\t"' \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage"; then
+  echo "Runtime stage retains an old-R-unsafe inline tab escape" >&2
+  exit 1
+fi
 declared_floor_create_line=$(rg -nF \
   'ensure_stage_directory "$declared_floor_candidate" 0700' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage" | cut -d : -f 1)

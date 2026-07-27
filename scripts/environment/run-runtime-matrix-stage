@@ -515,7 +515,7 @@ if [[ "$VERSION" == 3.6.3 ]]; then
     fail "R 3.6.3 declared-minimum R CMD check exceeded its bounded NOTE"
 fi
 Rscript --vanilla -e 'sessionInfo()' > "$STAGE_LOGS/session-info.log" 2>&1
-Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \
+Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = intToUtf8(9L), quote = FALSE, row.names = FALSE)' \
   > "$STAGE_LOGS/r-packages.tsv" 2>&1
 R CMD config CC > "$STAGE_LOGS/cc.txt" 2>&1
 cc=$(R CMD config CC)

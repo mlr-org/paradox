@@ -646,6 +646,10 @@ Both old-runtime test processes start with the stage's `LC_ALL=C.UTF-8` and
 old testthat/withr from requesting a no-op language change for every
 expectation. The stress runner clears `LC_ALL` after startup so its deliberate
 temporary locale changes are not overridden.
+R 3.6/4.0 also pass inline `Rscript -e` payloads through a shell codec whose
+`echo` expands backslash escapes. Inline harness expressions use R-side
+constructors such as `intToUtf8(9L)` for control characters, or a checked-in
+script; a literal `"\t"` may be split before parsing on those runtimes.
 Counts are always derived from that manifest and the
 testthat result structure; no expectation floor or frozen target count is an
 authority. Newer runtimes do not repeat this old-branch slice.

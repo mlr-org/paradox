@@ -161,7 +161,8 @@ test_that("dependency setters snapshot structure while add_dep checks feasibilit
   expect_error(
     {
       set$deps = data.frame(
-        id = "parent", on = "parent", cond = I(list(CondEqual(1L)))
+        id = "parent", on = "parent", cond = I(list(CondEqual(1L))),
+        stringsAsFactors = FALSE
       )
     },
     "depend on itself"
@@ -169,15 +170,28 @@ test_that("dependency setters snapshot structure while add_dep checks feasibilit
   expect_error(
     {
       set$deps = data.frame(
-        id = "absent", on = "parent", cond = I(list(CondEqual(1L)))
+        id = "absent", on = "parent", cond = I(list(CondEqual(1L))),
+        stringsAsFactors = FALSE
       )
     },
     "child is not a parameter"
   )
+  factor_dependencies = data.frame(
+    id = "child",
+    on = "parent",
+    cond = I(list(CondEqual(1L))),
+    stringsAsFactors = TRUE
+  )
+  expect_error(
+    { set$deps = factor_dependencies },
+    "`deps` columns have unsupported types",
+    fixed = TRUE
+  )
   set$deps = data.frame(
     id = "child",
     on = "parent",
-    cond = I(list(CondAnyOf(c(1L, 9L))))
+    cond = I(list(CondAnyOf(c(1L, 9L)))),
+    stringsAsFactors = FALSE
   )
   expect_identical(set$deps$cond[[1L]]$rhs, c(1L, 9L))
   expect_true(set$test(list(parent = 1L, child = TRUE)))
@@ -187,7 +201,8 @@ test_that("dependency setters snapshot structure while add_dep checks feasibilit
   # existing predicate constantly false.  Bulk assignment preserves that
   # graph exactly; the interactive authoring operation still catches typos.
   set$deps = data.frame(
-    id = "child", on = "parent", cond = I(list(CondEqual(9L)))
+    id = "child", on = "parent", cond = I(list(CondEqual(9L))),
+    stringsAsFactors = FALSE
   )
   expect_identical(set$deps$cond[[1L]]$rhs, 9L)
   expect_true(set$test(list(parent = 0L)))
