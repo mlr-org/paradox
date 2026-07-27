@@ -454,6 +454,18 @@ sibling runs behind the read-only checkout mount. Their Linux/x86-64
 requirement is declarative and appears during planning rather than as a late
 wrapper surprise.
 
+Under proved aggregate containment, the four independent phase-30 compatibility
+branches have cooperative minima of 8 GiB for reverse dependencies, 8 GiB for
+the repository corpus, and 4 GiB each for documentation and focused downstream
+checks. Their 24-GiB memory, 6,144-PID, and 8-GiB scratch totals fit below the
+ordinary aggregate budgets on the development host, so the controller may run
+all four at once. Reverse and corpus tasks can expand to 16 GiB and four CPUs
+when peers leave capacity. These figures are scheduler reservations, not claims
+about measured peaks; the aggregate cgroup and live disk-reserve monitor remain
+the hard safety boundaries, and any memory/PID event or protected-disk pressure
+invalidates the run. The global `resource-jobs consumer` profile retains its
+more conservative direct-run policy.
+
 Run the complete prepared compatibility DAG unattended with:
 
 ```sh

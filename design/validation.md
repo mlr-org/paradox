@@ -255,6 +255,21 @@ Podman cannot use this mode because their daemon may escape the controller
 cgroup. The root-owned launcher may set systemd properties as root, but
 mutable repository code must execute only after systemd changes to the
 configured unprivileged UID/GID.
+
+Reservations in this aggregate mode must not be confused with per-worker hard
+limits or hypothetical worst-case address spaces. In particular, the prepared
+release-compatibility phase uses one consumer-sized 8-GiB minimum for each of
+the reverse and broad-repository branches and 4-GiB minima for the serial
+documentation and focused branches. Their 24-GiB/6,144-PID/8-GiB-scratch
+combined admission fits inside the installed aggregate budgets and permits all
+four independent branches to overlap. The two broad branches may grow to 16
+GiB when capacity is otherwise idle. There are no retained per-task peak
+measurements for the old 26--51-GiB weights, so those values are not
+evidence-based safety limits. Fail-closed aggregate OOM/PID events, protected
+disk-pressure checks, immutable failed attempts, and a raised reservation on a
+replacement run are the deliberate feedback mechanism. This does not relax the
+conservative direct/non-aggregate `resource-jobs` policy.
+
 Nested drivers must treat `PARADOX_VERIFY_ASSIGNED_CPUS` and
 `PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` as upper bounds on their worker counts.
 Those values are already inside the outer safe budget, so inner admission must

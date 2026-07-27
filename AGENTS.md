@@ -2115,6 +2115,17 @@ render, and its task reserves one CPU because the retained driver is serial.
 Their additional compatibility-system, TinyTeX, and documentation contracts
 remain Linux x86-64 as well.
 
+The aggregate-contained phase-30 reservations are intentionally 8--16 GiB for
+reverse dependencies, 8--16 GiB for the repository corpus, and 4--8 GiB for
+each serial documentation/focused branch. Their phase total is 24 GiB of RAM,
+6,144 cooperative PIDs, and 8 GiB of scratch, permitting all four independent
+branches to run together beneath the hard systemd aggregate and protected-disk
+budgets. These values are admission weights, not measured peaks; no retained
+evidence supported the old 26--51-GiB weights. Keep the direct
+`resource-jobs consumer` reserve unchanged. An aggregate memory/PID event or
+protected-disk pressure invalidates only the verification unit and calls for a
+replacement run with the offending reservation raised.
+
 The coordinator self-test is the routine harness-change gate. It must cover
 strict container exited-state/exit agreement, fail-closed stale cleanup,
 attempt/interrupt cleanup, adaptive minima/ceilings, aggregate PID admission,

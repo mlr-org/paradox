@@ -423,6 +423,28 @@ class ManifestTests(unittest.TestCase):
         )
         self.assertIn("--resume", focused.command)
         self.assertEqual(focused.resources.memory_mib, 8192)
+        self.assertEqual(focused.resources.minimum_memory_mib, 4096)
+        phase_30 = tuple(
+            manifest.tasks[task_id]
+            for task_id in (
+                "reverse-dependencies",
+                "downstream-corpus",
+                "documentation-compatibility",
+                "downstream-focused",
+            )
+        )
+        self.assertEqual(
+            sum(task.resources.minimum_memory_mib for task in phase_30),
+            24 * 1024,
+        )
+        self.assertEqual(
+            sum(task.resources.pids for task in phase_30),
+            6144,
+        )
+        self.assertEqual(
+            sum(task.resources.scratch_mib for task in phase_30),
+            8 * 1024,
+        )
         smoke = manifest.profiles["smoke"]
         selected = harness.select_tasks(
             manifest,
@@ -2884,6 +2906,54 @@ class SchedulerTests(unittest.TestCase):
             [high, low], [], pid_limited, best_effort=False
         )
         self.assertEqual([item.task.task_id for item, _ in allocated], ["high"])
+
+    def test_prepared_compatibility_minima_admit_all_independent_branches(
+        self,
+    ) -> None:
+        root = pathlib.Path(__file__).resolve().parents[1]
+        manifest = harness.load_manifest(root, root / "verification" / "tasks.json")
+        task_ids = (
+            "reverse-dependencies",
+            "downstream-corpus",
+            "documentation-compatibility",
+            "downstream-focused",
+        )
+        ready = []
+        for score, task_id in enumerate(task_ids, start=1):
+            item = task(task_id, ("true",), score=float(score))
+            item.task = manifest.tasks[task_id]
+            ready.append(item)
+        host = harness.HostResources(
+            cpus=30,
+            memory_available_mib=40 * 1024,
+            disk_available_mib=32 * 1024,
+            memory_reserve_mib=12 * 1024,
+            disk_reserve_mib=8 * 1024,
+            cpu_budget=6,
+            memory_budget_mib=24 * 1024,
+            disk_budget_mib=8 * 1024,
+            memory_source="fixture",
+            pid_budget=8192,
+        )
+        allocated = harness.allocate_ready_tasks(
+            ready, [], host, best_effort=False
+        )
+        self.assertEqual(
+            {item.task.task_id for item, _ in allocated},
+            set(task_ids),
+        )
+        self.assertEqual(
+            sum(resources.memory_mib for _, resources in allocated),
+            24 * 1024,
+        )
+        self.assertEqual(
+            sum(resources.pids for _, resources in allocated),
+            6144,
+        )
+        self.assertEqual(
+            sum(resources.scratch_mib for _, resources in allocated),
+            8 * 1024,
+        )
 
     def test_task_fit_uses_reviewed_minimum_not_desired_ceiling(self) -> None:
         item = task("variable", ("true",))
