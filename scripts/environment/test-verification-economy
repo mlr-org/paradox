@@ -22,6 +22,7 @@ COMPILER_BATCH_RUNNER="$ROOT/scripts/environment/run-compiler-batch"
 COMPILER_WAVE_RUNNER="$ROOT/scripts/environment/run-compiler-wave"
 COMPILER_IDENTITY_HELPER="$ROOT/scripts/environment/compiler-identity.R"
 TEST_RUNNER="$ROOT/scripts/environment/run-native-tests.R"
+TEST_WORKER_GROUP="$ROOT/scripts/environment/run-native-test-worker-group"
 TEST_VERIFIER="$ROOT/scripts/environment/verify-native-test-ledger.R"
 RUNTIME_MATRIX_TEST_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-tests.R"
 LEGACY_REPOSITORY_RUNNER="$ROOT/compat/test-repositories.R"
@@ -39,12 +40,26 @@ for required in "$MEMORY" "$MEMORY_VALIDATOR" "$RECEIPTS" "$R_BUILD" \
     "$API_GATE" "$API_HEADER_CACHE" "$RESOURCE_JOBS" \
     "$COMPILER_BATCH_RUNNER" \
     "$COMPILER_WAVE_RUNNER" "$COMPILER_IDENTITY_HELPER" \
-    "$TEST_RUNNER" "$TEST_VERIFIER" \
+    "$TEST_RUNNER" "$TEST_WORKER_GROUP" "$TEST_VERIFIER" \
     "$RUNTIME_MATRIX_TEST_RUNNER" "$LEGACY_REPOSITORY_RUNNER" \
     "$HARDENING" "$TASK_ENTRY"; do
   [[ -f "$required" && ! -L "$required" ]] ||
     fail "required harness is absent or symbolic: $required"
 done
+
+# A dead coordinator can make processx signal both the worker supervisor and
+# its detached token watchdog. The watchdog must clean token descendants for
+# every terminating signal, not exit directly and race the supervisor.
+[[ $(grep -Fxc \
+  '  trap '\''terminate_tokens "$supervisor_pid"'\'' HUP TERM USR1' \
+  "$TEST_WORKER_GROUP") -eq 1 ]] ||
+  fail "native worker watchdog does not clean descendants on every termination path"
+[[ $(grep -Fxc "    trap '' HUP TERM USR1" \
+  "$TEST_WORKER_GROUP") -eq 1 ]] ||
+  fail "native worker watchdog cleanup can be interrupted by a second signal"
+if grep -Eq "trap 'exit 0' (HUP|INT|TERM)" "$TEST_WORKER_GROUP"; then
+  fail "native worker watchdog can exit without scanning token descendants"
+fi
 
 # Worker images have different locale defaults, and R parse/serialization
 # metadata can legitimately differ between C and C.UTF-8. Pin the task locale

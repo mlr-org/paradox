@@ -211,6 +211,12 @@ plain, non-symbolic compatibility copies for `/usr/bin/bash`,
 The container entry point must continue to pin `C.UTF-8`, UTC, and an empty
 `LANGUAGE`; Bullseye otherwise defaults to C and changes R's serialized AST
 metadata even with the identical mounted R executable.
+The native-test token watchdog must run `terminate_tokens` for catchable
+`HUP`, `TERM`, and `USR1`. Processx can signal it directly during coordinator
+teardown; a direct signal exit races the worker supervisor and can strand a
+nested processx session. Do not claim a direct `SIGINT` trap: an asynchronous
+POSIX-shell child inherits INT/QUIT ignored, while coordinator INT is covered
+by the watchdog's bounded parent-death poll.
 An ASan-selected native run now fails closed on exact preloaded-R startup and
 an XDR round-trip before any expensive compiler mode. Never add a direct-host
 fallback or weaken container isolation; provision and pin a compatible worker.

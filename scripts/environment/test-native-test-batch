@@ -400,6 +400,20 @@ pid_is_live() {
   state=$(ps -o stat= -p "$pid" 2>/dev/null | awk 'NR == 1 { print $1 }')
   [[ -n "$state" && "$state" != Z* ]]
 }
+watchdog_for_supervisor() {
+  local supervisor_pid=$1 candidate
+  while IFS= read -r candidate; do
+    candidate=${candidate//[[:space:]]/}
+    [[ "$candidate" =~ ^[1-9][0-9]*$ &&
+       -r "/proc/$candidate/cmdline" ]] || continue
+    if tr '\0' '\n' < "/proc/$candidate/cmdline" |
+        grep -Fqx -- '--watchdog'; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done < <(ps -o pid= --ppid "$supervisor_pid")
+  return 1
+}
 for _ in $(seq 1 100); do
   live_count=0
   for interrupt_pid in "${INTERRUPT_CHILD_PIDS[@]}"; do
@@ -416,6 +430,84 @@ done
   exit 1
 }
 INTERRUPT_CHILD_PIDS=()
+
+# processx may signal the detached watchdog directly while it tears down a
+# dead coordinator's descendant tree. Exercise every catchable direct signal
+# promised by the supervisor and require the token-marked shell plus its nested
+# session to disappear. SIGINT is intentionally absent: asynchronous POSIX
+# shell children inherit INT/QUIT ignored and cover coordinator INT through
+# the watchdog's parent-death poll instead.
+for watchdog_signal in HUP TERM USR1; do
+  watchdog_marker="$TEST_ROOT/watchdog-$watchdog_signal.pid"
+  env \
+    PARADOX_NATIVE_COORDINATOR_PID="$$" \
+    PARADOX_NATIVE_WORKER_TOKEN="native-watchdog-$watchdog_signal-$$" \
+    "$WORKER_GROUP" /bin/sh -c \
+      'trap "" HUP TERM USR1; printf "%s\n" "$$" > "$1"; sleep 60 & printf "%s\n" "$!" >> "$1"; wait' \
+      native-watchdog "$watchdog_marker" \
+      > "$TEST_ROOT/watchdog-$watchdog_signal.log" 2>&1 &
+  INTERRUPT_RUNNER_PID=$!
+  watchdog_pid=
+  watchdog_ready=false
+  for _ in $(seq 1 100); do
+    watchdog_lines=0
+    [[ ! -f "$watchdog_marker" ]] ||
+      watchdog_lines=$(wc -l < "$watchdog_marker")
+    if [[ "$watchdog_lines" -ge 2 ]]; then
+      watchdog_pid=$(watchdog_for_supervisor "$INTERRUPT_RUNNER_PID" || true)
+      if [[ -n "$watchdog_pid" ]]; then
+        watchdog_ready=true
+        break
+      fi
+    fi
+    sleep 0.05
+  done
+  [[ "$watchdog_ready" == true ]] || {
+    cat "$TEST_ROOT/watchdog-$watchdog_signal.log" >&2
+    printf 'test-native-test-batch: %s watchdog fixture did not start\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  mapfile -t watchdog_descendants < "$watchdog_marker"
+  INTERRUPT_CHILD_PIDS=("${watchdog_descendants[@]}" "$watchdog_pid")
+  # The command line is visible just before the shell installs its traps; give
+  # that bounded startup path one scheduling quantum before direct delivery.
+  sleep 0.1
+  kill "-$watchdog_signal" "$watchdog_pid"
+  for _ in $(seq 1 100); do
+    pid_is_live "$INTERRUPT_RUNNER_PID" || break
+    sleep 0.05
+  done
+  pid_is_live "$INTERRUPT_RUNNER_PID" && {
+    printf 'test-native-test-batch: %s watchdog cleanup was unbounded\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  set +e
+  wait "$INTERRUPT_RUNNER_PID"
+  watchdog_status=$?
+  set -e
+  INTERRUPT_RUNNER_PID=
+  [[ "$watchdog_status" -ne 0 ]] || {
+    printf 'test-native-test-batch: %s watchdog lost worker failure status\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  for _ in $(seq 1 100); do
+    live_count=0
+    for interrupt_pid in "${INTERRUPT_CHILD_PIDS[@]}"; do
+      pid_is_live "$interrupt_pid" && live_count=$((live_count + 1))
+    done
+    [[ "$live_count" -ne 0 ]] || break
+    sleep 0.05
+  done
+  [[ "$live_count" -eq 0 ]] || {
+    printf 'test-native-test-batch: %s watchdog left token descendants\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  INTERRUPT_CHILD_PIDS=()
+done
 
 # The process-group supervisor must not wait forever for a TERM-ignoring
 # worker leader.  Its bounded fallback kills and reaps the complete group.

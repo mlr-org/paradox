@@ -39,7 +39,10 @@ if [ "${1:-}" = --watchdog ]; then
 
   terminate_tokens() {
     excluded_pid=$1
-    trap - HUP INT TERM USR1
+    # Coalescing TERM from processx with USR1 from the supervisor is normal.
+    # Ignore further catchable termination signals once cleanup has begun so a
+    # second signal cannot restore the default action and interrupt the scan.
+    trap '' HUP TERM USR1
     token_pids "$excluded_pid" |
       while IFS= read -r candidate; do
         /bin/kill -TERM "$candidate" 2>/dev/null || true
@@ -52,8 +55,15 @@ if [ "${1:-}" = --watchdog ]; then
     exit 0
   }
 
-  trap 'terminate_tokens "$supervisor_pid"' USR1
-  trap 'exit 0' HUP INT TERM
+  # processx may terminate this detached watchdog itself while tearing down a
+  # dead coordinator's descendant tree. Every termination path must therefore
+  # perform the token scan; exiting directly would race the supervisor and
+  # could strand a nested processx session outside the worker process group.
+  # SIGINT/SIGQUIT are ignored by an asynchronous POSIX-shell child before
+  # exec. If coordinator interruption uses INT, the watchdog observes the dead
+  # coordinator in its polling loop; the direct cleanup signals are the three
+  # catchable paths below.
+  trap 'terminate_tokens "$supervisor_pid"' HUP TERM USR1
   while /bin/kill -0 "$coordinator_pid" 2>/dev/null; do
     sleep 0.1
   done

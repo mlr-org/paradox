@@ -274,8 +274,13 @@ requested jobs, effective jobs, and
 the scheduler backend; the trusted verifier joins the requested count to the
 retained `light-test` decision and the effective count to every worker row. A
 task-token watchdog removes nested callr/processx descendants if the
-coordinator is interrupted. The two ConfigSpace files share one exclusive
-worker after the ordinary wave. `scripts/bootstrap-configspace`, normally
+coordinator is interrupted. It performs the same token cleanup on catchable
+`HUP`, `TERM`, and the supervisor's explicit `USR1`; processx may signal the
+watchdog directly while tearing down a dead coordinator, so a signal-only exit
+would race the supervisor. Asynchronous POSIX-shell children inherit
+`SIGINT`/`SIGQUIT` ignored; an INT-terminated coordinator is instead detected
+by the watchdog's bounded parent polling. The two ConfigSpace files share one
+exclusive worker after the ordinary wave. `scripts/bootstrap-configspace`, normally
 called by `scripts/bootstrap`, provisions exact Python 3.10.20 environments
 for ConfigSpace 1.2.2 and 0.5.0 from the two checked-in SHA-256 `@EXPLICIT`
 locks. It uses copied package files, seals prefix directories and regular

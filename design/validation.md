@@ -534,6 +534,10 @@ The frozen candidate must pass:
 - for an ASan-selected contained run, exact preloaded-R startup plus an XDR
   serialization round-trip before expensive compiler modes, with the singleton
   success log included in the sealed and independently replayed mode tree;
+- native parallel-worker interruption cleanup in which both the process-group
+  supervisor and detached token watchdog converge on the same bounded
+  descendant scan for catchable direct `HUP`/`TERM`/`USR1`, while inherited-
+  ignored `SIGINT` is covered by bounded coordinator-death polling;
 - pinned R-header compilation beginning with R 3.6.0 and covering every
   supported API branch;
 - no forbidden private data.table API or unledgered/unsupported R API symbol;
