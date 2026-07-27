@@ -92,9 +92,12 @@ output descriptor with GNU `timeout`. The supervisor log has a closed grammar:
 the full executable path and basename forms emitted by supported coreutils are
 accepted, status 124/137 needs the corresponding singleton TERM/KILL evidence,
 and markerless 124/137 remains an ordinary child failure. Unknown, duplicate,
-or status-inconsistent diagnostics fail closed. The exact timeout executable,
-version identity, content-bound logging wrapper, and worker are authenticated
-before launch and again after the batch.
+or status-inconsistent diagnostics fail closed. The timeout executable's
+path, bytes, and complete `--version` identity are authenticated under
+`LC_ALL=C` with the same merged output stream in the coordinator and both
+compiler runners, then reauthenticated before completion; host locale cannot
+change a provenance hash. The content-bound logging wrapper and worker are
+authenticated before launch and again after the batch.
 
 ```sh
 scripts/environment/test-resource-jobs

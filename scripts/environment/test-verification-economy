@@ -694,6 +694,19 @@ for timeout_binding in \
   grep -Fq "$timeout_binding" <<< "$api_completion_body" ||
     fail "API completion lacks timeout binding: $timeout_binding"
 done
+api_timeout_identity=$(function_body timeout_identity_sha256 "$API_GATE")
+printf '%s\n' "$api_timeout_identity" |
+  grep -Fq 'LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 |' ||
+  fail "API timeout identity is locale-sensitive or omits diagnostics"
+grep -Fq 'TIMEOUT_TOOL_IDENTITY_SHA256=$(timeout_identity_sha256)' \
+  "$API_GATE" ||
+  fail "API timeout policy does not use its canonical identity helper"
+grep -Fq 'LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |' \
+  "$API_GATE" ||
+  fail "API GNU timeout admission is locale-sensitive"
+grep -Fq '"$(timeout_identity_sha256)" == "$TIMEOUT_TOOL_IDENTITY_SHA256"' \
+  "$API_GATE" ||
+  fail "API completion does not reauthenticate GNU timeout semantics"
 
 cache_self_test=$($API_HEADER_CACHE self-test 2>&1) || {
   printf '%s\n' "$cache_self_test" >&2

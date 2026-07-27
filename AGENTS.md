@@ -1800,6 +1800,9 @@ cache; synthetic Git mutations belong in a scratch repository, never the real
 runtime state to the attempt-private writable mount only after authenticating
 the coordinator's prefix receipt handoff. Pinned source archives remain
 read-only and are inspected below process-private temporary state. Runtime
+and compiler-tool semantic identities are hashed under an explicit C locale;
+coordinators and workers must use the same stream and locale rather than
+inheriting machine-specific localized `--version` output. Runtime
 prefix receipts force the C locale before enumerating and sorting members, and
 the bootstrap's explicit-package lock/installed-inventory comparisons use the
 same byte order. Their bytes and authentication result therefore cannot vary

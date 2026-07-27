@@ -46,6 +46,11 @@ sha256_value() {
   fi
 }
 
+timeout_identity_sha256() {
+  LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 |
+    sha256sum | cut -d ' ' -f 1
+}
+
 RUN_ID=
 while (($#)); do
   case "$1" in
@@ -140,7 +145,7 @@ LC_ALL=C "$SETSID" --version 2>&1 | head -n 1 |
 [[ "$BASH_EXECUTABLE" == /* && -f "$BASH_EXECUTABLE" &&
    -x "$BASH_EXECUTABLE" && ! -L "$BASH_EXECUTABLE" ]] ||
   fail "the executing Bash does not resolve to one plain executable"
-"$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |
+LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |
   grep -Fq 'timeout (GNU coreutils)' ||
   fail "compiler deadline tool is not GNU coreutils timeout"
 [[ "$(command -v Rscript)" == "$RSCRIPT" ]] ||
@@ -324,8 +329,7 @@ CURL7_RECEIPT_SHA256=$(sha256_value "$CURL7_RECEIPT")
 CURL7_SEAL_SHA256=$(sha256_value "$CURL7_SEAL")
 CURL7_LOCK_SHA256=$(sha256_value "$CURL7_LOCK")
 TIMEOUT_TOOL_SHA256=$(sha256sum "$TIMEOUT_TOOL" | cut -d ' ' -f 1)
-TIMEOUT_TOOL_IDENTITY_SHA256=$("$TIMEOUT_TOOL" --version | sha256sum |
-  cut -d ' ' -f 1)
+TIMEOUT_TOOL_IDENTITY_SHA256=$(timeout_identity_sha256)
 SETSID_SHA256=$(sha256sum "$SETSID" | cut -d ' ' -f 1)
 SETSID_IDENTITY_SHA256=$(LC_ALL=C "$SETSID" --version 2>&1 | sha256sum |
   cut -d ' ' -f 1)
@@ -2130,6 +2134,8 @@ verify_sha256 "$CURL7_LOCK_SHA256" "$CURL7_LOCK"
 verify_sha256 "$PREPARE_TASK_WRAPPER_SHA256" \
   "$PREPARE_TASK_WRAPPER"
 verify_sha256 "$TIMEOUT_TOOL_SHA256" "$TIMEOUT_TOOL"
+[[ "$(timeout_identity_sha256)" == "$TIMEOUT_TOOL_IDENTITY_SHA256" ]] ||
+  fail "GNU timeout identity changed during the API gate"
 verify_sha256 "$SETSID_SHA256" "$SETSID"
 [[ "$(LC_ALL=C "$SETSID" --version 2>&1 | sha256sum | cut -d ' ' -f 1)" == \
    "$SETSID_IDENTITY_SHA256" ]] ||
