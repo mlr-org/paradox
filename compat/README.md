@@ -495,7 +495,10 @@ even when nested tools create new sessions. A non-reaping container PID 1 may
 retain a zombie-only process group after all executable work has ended. The
 wrapper accepts that group as quiescent only after `kill -0` and a successful
 procps snapshot prove that every remaining member is a zombie; any live member
-or failed snapshot remains a cleanup blocker.
+or failed snapshot remains a cleanup blocker. Every negative process-group
+operand is separated from procps-ng `kill` options with `--`; without that
+boundary, the Bullseye utility interprets the operand as another signal option
+and targets the wrapper's current process group instead.
 `--no-stop-on-test-error` collects each package's complete bounded test-script
 batch, and later packages continue. Counts are `exact`, `partial`, or
 `unavailable` rather than manufactured zeros. If interrupted, resume the same

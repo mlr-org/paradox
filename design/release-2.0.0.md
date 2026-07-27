@@ -2,9 +2,10 @@
 
 ## Status
 
-**The package-facing candidate is frozen; `release-core` and the repaired
-source proof are green, reviewed rchk discovery is complete, and post-policy
-combined memory is pending.**
+**The package-facing candidate is frozen; `release-core`, the repaired source
+proof, reviewed rchk policy, and the post-policy combined-memory gate are
+green. Fresh compatibility, benchmark, and hosted portability evidence remain
+pending.**
 The active candidate is
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
@@ -84,6 +85,31 @@ fixtures cover exact `0664`/`0775` initial and replayed modes under umask
 `0077`, missing/tampered relocated helpers, and equality of all 21 copied,
 hashed, and independently validated harness inputs. Actual R 3.6.3 and current
 R probes also confirmed exact mode restoration with `use_umask = FALSE`.
+
+The exact combined-memory replacement
+`release-candidate-dbbdcc1-memory-r3` passed GCT, Valgrind, and the reviewed
+rchk policy. Independent offline validation selected all three modes with
+validator SHA-256
+`0d922790f73550d6a70bebd83008ce099a86f77fe0af18758f2332e97374b3b6`.
+The completion-content and result SHA-256 values are respectively
+`b903b0ba50f50d68704e947a725b47f0569bf395e5304f6d86143c580c560e44`
+and
+`d260a45c237654509a21e5579e392eb6278afec0c89c43863f30819cbbd9409e`.
+Its rchk policy-difference diagnostics are byte-empty.
+
+The first prepared compatibility coordinator,
+`release-candidate-dbbdcc1-prepared-compat-91ca588-r1`, retained four passing
+cheap harness rows, two failed cheap harness rows, and six dependency-blocked
+rows; no real compatibility task started. It is immutable diagnostic evidence,
+not a candidate failure. The reverse fixture exposed a procps-ng 3.3.17
+parsing hazard: an unseparated negative process-group operand can become
+another signal option and target process group zero. The wrapper now uses `--`
+before every negative group operand. The downstream fixture unnecessarily
+declared UTF-8 for an ASCII-only `Authors@R` package, causing R 4.6 to warn when
+the minimal worker lacked `en_US.UTF-8`; the declaration is removed while the
+strict real-check status classifier remains unchanged. A fresh candidate-owned
+overlay and coordinator are required under the corrected clean tooling commit;
+the published earlier overlay is never overwritten or relabeled.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and

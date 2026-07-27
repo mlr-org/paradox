@@ -106,7 +106,10 @@ owned_pids() {
 group_running() {
   group_pid=$1
   valid_pid "$group_pid" || return 1
-  /bin/kill -0 "-$group_pid" 2>/dev/null || return 1
+  # procps-ng kill parses an unseparated negative operand as another signal
+  # option and then targets process group zero.  The option terminator is a
+  # process-lifetime safety boundary, not cosmetic portability syntax.
+  /bin/kill -0 -- "-$group_pid" 2>/dev/null || return 1
   # A rootless container can have a non-reaping PID 1.  An already terminated
   # orphan may therefore remain as the sole member of its former process group
   # until the container exits.  kill(2) still reports that zombie-only group as
@@ -125,7 +128,7 @@ signal_group() {
   signal=$1
   group_pid=$2
   valid_pid "$group_pid" || return 0
-  /bin/kill "-$signal" "-$group_pid" 2>/dev/null || true
+  /bin/kill "-$signal" -- "-$group_pid" 2>/dev/null || true
 }
 
 signal_owned() {

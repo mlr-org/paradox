@@ -79,6 +79,13 @@ if (sum(grepl("rr_record_full_hash_pass\\(", tracked_lines)) != 2L ||
     !any(grepl('if (arguments$resume)', tracked_lines, fixed = TRUE))) {
   rr_fail("tracked reverse runner lost its verification-economy call graph")
 }
+worker_group_lines <- trimws(readLines(worker_group_script, warn = FALSE))
+if (!any(worker_group_lines ==
+      '/bin/kill -0 -- "-$group_pid" 2>/dev/null || return 1') ||
+    !any(worker_group_lines ==
+      '/bin/kill "-$signal" -- "-$group_pid" 2>/dev/null || true')) {
+  rr_fail("reverse process-group signals lost negative-PID disambiguation")
+}
 tracked_verifier <- file.path(
   dirname(script), "verify-reverse-dependency-evidence.R"
 )

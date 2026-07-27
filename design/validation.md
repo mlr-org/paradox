@@ -164,6 +164,15 @@ historical evidence. Their current authenticated TinyTeX/toolchain/system
 contracts make them intentionally Linux x86-64 gates, not substitutes for the
 hosted macOS and Windows matrix.
 
+Worker self-tests must not assume the host's procps-ng option parsing or locale
+inventory. Negative process-group operands passed to external `kill` are
+always separated from options with `--`; otherwise some procps-ng releases
+interpret the operand as a signal option and target process group zero. An
+ASCII-only package fixture does not declare an encoding merely to exercise
+`Authors@R` expansion: doing so makes current R request `en_US.UTF-8`, which a
+valid minimal worker need not install. These fixture constraints do not relax
+the production check-status rule: every real ERROR or WARNING remains fatal.
+
 ## Evidence classes
 
 ### Development diagnostics

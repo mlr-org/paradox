@@ -2285,6 +2285,28 @@ Post-freeze tooling admission explicitly includes the package-excluded
 that overlay; package-facing paths remain forbidden, and the tooling checkout
 must be clean at one recorded commit.
 
+Exact combined-memory run `release-candidate-dbbdcc1-memory-r3` passed GCT,
+Valgrind, and rchk and passes the independent offline validator. Its
+completion-content and result SHA-256 values are
+`b903b0ba50f50d68704e947a725b47f0569bf395e5304f6d86143c580c560e44`
+and
+`d260a45c237654509a21e5579e392eb6278afec0c89c43863f30819cbbd9409e`;
+the validator SHA-256 is
+`0d922790f73550d6a70bebd83008ce099a86f77fe0af18758f2332e97374b3b6`.
+
+Prepared compatibility attempt
+`release-candidate-dbbdcc1-prepared-compat-91ca588-r1` stopped after two cheap
+worker-only harness failures and did not start a real compatibility gate.
+Bullseye procps-ng parsed an unseparated negative process-group operand as a
+signal option and killed group zero; all reverse group operands now use `--`.
+The other fixture declared UTF-8 despite being ASCII-only, making R 4.6 request
+an unavailable `en_US.UTF-8` locale in the minimal worker; that irrelevant
+declaration is gone, while real downstream WARNING rejection is unchanged.
+Keep the failed coordinator and its already-published overlay immutable. After
+committing these package-excluded repairs, prepare a fresh candidate-run-owned
+overlay and a new coordinator rather than resuming, overwriting, or relabeling
+the old evidence.
+
 The final repair passed shell syntax checks, R parsing of both snapshot
 helpers, and the complete activated validation-hardening suite in about 226
 seconds. The latter covers the independent memory validator, the 21-row exact

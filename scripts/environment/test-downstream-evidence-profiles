@@ -211,6 +211,9 @@ authors_build=$fixture/authors-build
 authors_check=$fixture/authors-check
 mkdir -p "$authors_package/R" "$authors_package/man" "$authors_build" \
   "$authors_check" "$fixture/authors-home" "$fixture/authors-tmp"
+# This fixture exercises Authors@R expansion only and is entirely ASCII.
+# Declaring UTF-8 would make R 4.6 probe en_US.UTF-8 during its syntax check,
+# which is not installed in every otherwise-valid minimal worker.
 printf '%s\n' \
   'Package: authorsonlyfixture' \
   'Type: Package' \
@@ -218,8 +221,7 @@ printf '%s\n' \
   'Version: 0.0.1' \
   'Authors@R: person("Ada", "Lovelace", email = "ada@example.org", role = c("aut", "cre"))' \
   'Description: Verifies that full downstream checks consume a package tarball built from an Authors at R only source.' \
-  'License: GPL-3' \
-  'Encoding: UTF-8' >"$authors_package/DESCRIPTION"
+  'License: GPL-3' >"$authors_package/DESCRIPTION"
 printf '%s\n' 'export(answer)' >"$authors_package/NAMESPACE"
 printf '%s\n' 'answer <- function() 42L' >"$authors_package/R/answer.R"
 printf '%s\n' \
