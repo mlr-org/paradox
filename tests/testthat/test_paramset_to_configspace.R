@@ -1,18 +1,18 @@
 skip_if_not_installed("reticulate")
-configspace_python = Sys.getenv(
-  "PARADOX_CONFIGSPACE_CURRENT_PYTHON",
-  unset = ""
-)
-configspace_fixture_is_sealed = identical(
-  Sys.getenv("PARADOX_CONFIGSPACE_FIXTURE", unset = ""),
-  "sealed-v1"
-)
-if (nzchar(configspace_python)) {
-  Sys.setenv(RETICULATE_PYTHON = configspace_python)
-}
 skip_on_cran()
 
 test_that("paramset_to_configspace works without defaults for new ConfigSpace", {
+  configspace_python = Sys.getenv(
+    "PARADOX_CONFIGSPACE_CURRENT_PYTHON",
+    unset = ""
+  )
+  configspace_fixture_is_sealed = identical(
+    Sys.getenv("PARADOX_CONFIGSPACE_FIXTURE", unset = ""),
+    "sealed-v1"
+  )
+  if (nzchar(configspace_python)) {
+    Sys.setenv(RETICULATE_PYTHON = configspace_python)
+  }
   reticulate::py_require("ConfigSpace")
   ConfigSpace = reticulate::import("ConfigSpace")
   if (configspace_fixture_is_sealed) {
