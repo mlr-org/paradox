@@ -871,7 +871,7 @@ test_that("search_space admits exact TuneTokens before closed kind selection", {
     }),
     missing_core = local({
       shell = ps(value = p_int())
-      rm(".core", envir = shell$.__enclos_env__$private)
+      shell$.__enclos_env__$private = new.env(parent = emptyenv())
       shell
     })
   )

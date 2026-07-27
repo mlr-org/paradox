@@ -1,0 +1,339 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Provision the two Python environments used by the full ConfigSpace tests.
+# Verification workers are deliberately networkless and consume these sealed
+# prefixes directly; reticulate never resolves or installs packages in a test.
+
+umask 077
+
+ROOT=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+STATE_ROOT="$ROOT/.local/configspace"
+PREFIX_ROOT="$STATE_ROOT/prefixes"
+RECEIPT_ROOT="$STATE_ROOT/receipts"
+TEMP_ROOT="$ROOT/.local/tmp"
+MAMBA_ROOT="$ROOT/.local/micromamba"
+MICROMAMBA_VERSION=2.5.0
+MICROMAMBA_ARCHIVE_SHA256=cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-${MICROMAMBA_VERSION}-linux-64.tar.bz2"
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/bootstrap-configspace [--verify] [--offline]
+
+Provision or verify the exact repository-local Python/ConfigSpace test
+environments. --verify is read-only. --offline provisions an absent prefix
+only from the existing micromamba package cache.
+EOF
+}
+
+fail() {
+  printf 'bootstrap-configspace: %s\n' "$*" >&2
+  exit 1
+}
+
+mode=provision
+offline=false
+while (($#)); do
+  case "$1" in
+    --verify)
+      [[ "$mode" == provision ]] || fail "verification mode was selected twice"
+      mode=verify
+      shift
+      ;;
+    --offline)
+      offline=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+[[ "$mode" == provision || "$offline" == false ]] ||
+  fail "--offline is meaningful only while provisioning"
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *) fail "the checked-in ConfigSpace environments target Linux x86_64" ;;
+esac
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+require_plain_file() {
+  local path=$1 label=$2
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-regular, or symbolic: $path"
+}
+
+require_plain_directory() {
+  local path=$1 label=$2
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-directory, or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label is not canonical: $path"
+}
+
+require_private_directory() {
+  local path=$1 label=$2
+  require_plain_directory "$path" "$label"
+  [[ "$(stat -c '%a' -- "$path")" == 700 ]] ||
+    fail "$label must have mode 0700: $path"
+}
+
+ensure_plain_directory() {
+  local path=$1 label=$2
+  if [[ ! -e "$path" && ! -L "$path" ]]; then
+    mkdir -- "$path"
+  fi
+  require_plain_directory "$path" "$label"
+}
+
+validate_lock() {
+  local lock=$1 profile=$2 expected_version=$3
+  local rows invalid configspace_rows python_rows
+  require_plain_file "$lock" "$profile lock"
+  [[ "$(sed -n '1p' "$lock")" == '# platform: linux-64' &&
+    "$(sed -n '2p' "$lock")" == @EXPLICIT ]] ||
+    fail "$profile lock has an unexpected explicit header"
+  read -r rows invalid < <(
+    sed -n '3,$p' "$lock" | awk '
+      BEGIN { rows = 0; invalid = 0 }
+      {
+        rows += 1
+        if ($0 !~ /^https:\/\/conda\.anaconda\.org\/conda-forge\/(linux-64|noarch)\/[^[:space:]#]+#[0-9a-f]{64}$/)
+          invalid = 1
+      }
+      END { print rows, invalid }
+    '
+  )
+  [[ "$rows" -ge 35 && "$invalid" -eq 0 ]] ||
+    fail "$profile lock has too few artifacts or a malformed row"
+  configspace_rows=$(sed -n '3,$p' "$lock" |
+    grep -Fc "/configspace-${expected_version}-")
+  python_rows=$(sed -n '3,$p' "$lock" |
+    grep -Ec '/python-3[.]10[.]20-')
+  [[ "$configspace_rows" -eq 1 && "$python_rows" -eq 1 ]] ||
+    fail "$profile lock does not contain its exact Python/ConfigSpace pair"
+}
+
+require_plain_file "$MICROMAMBA" "authenticated micromamba"
+[[ -x "$MICROMAMBA" ]] || fail "authenticated micromamba is not executable"
+require_plain_file "$MICROMAMBA_ARCHIVE" "pinned micromamba archive"
+require_plain_file "$PREFIX_RECEIPT" "prefix receipt helper"
+[[ -x "$PREFIX_RECEIPT" ]] || fail "prefix receipt helper is not executable"
+[[ "$(sha256_file "$MICROMAMBA_ARCHIVE")" == \
+  "$MICROMAMBA_ARCHIVE_SHA256" ]] ||
+  fail "micromamba archive differs from its SHA-256 pin"
+micromamba_member_sha256=$(
+  tar -xOjf "$MICROMAMBA_ARCHIVE" bin/micromamba | sha256sum | cut -d ' ' -f 1
+)
+[[ "$(sha256_file "$MICROMAMBA")" == "$micromamba_member_sha256" &&
+  "$("$MICROMAMBA" --version)" == "$MICROMAMBA_VERSION" ]] ||
+  fail "installed micromamba differs from its authenticated archive member"
+
+if [[ "$mode" == provision ]]; then
+  ensure_plain_directory "$ROOT/.local" "local state root"
+  ensure_plain_directory "$TEMP_ROOT" "local temporary root"
+  ensure_plain_directory "$STATE_ROOT" "ConfigSpace state root"
+  ensure_plain_directory "$PREFIX_ROOT" "ConfigSpace prefix root"
+  ensure_plain_directory "$RECEIPT_ROOT" "ConfigSpace receipt root"
+  ensure_plain_directory "$MAMBA_ROOT" "micromamba state root"
+  chmod 0700 -- "$STATE_ROOT" "$PREFIX_ROOT" "$RECEIPT_ROOT"
+else
+  require_plain_directory "$TEMP_ROOT" "local temporary root"
+  require_private_directory "$STATE_ROOT" "ConfigSpace state root"
+  require_private_directory "$PREFIX_ROOT" "ConfigSpace prefix root"
+  require_private_directory "$RECEIPT_ROOT" "ConfigSpace receipt root"
+fi
+
+exec 9< "$STATE_ROOT"
+if [[ "$mode" == verify ]]; then
+  flock -s 9
+else
+  flock -x 9
+fi
+
+write_inventory() {
+  local prefix=$1 output=$2
+  {
+    printf '%s\n' '# platform: linux-64' '@EXPLICIT'
+    "$MICROMAMBA" list --no-rc --prefix "$prefix" --explicit --sha256 |
+      sed -n '3,$p'
+  } > "$output"
+}
+
+same_explicit_artifacts() {
+  local expected=$1 observed=$2
+  [[ "$(sed -n '1p' "$observed")" == '# platform: linux-64' &&
+    "$(sed -n '2p' "$observed")" == @EXPLICIT ]] &&
+    cmp -s \
+      <(sed -n '3,$p' "$expected" | LC_ALL=C sort) \
+      <(sed -n '3,$p' "$observed" | LC_ALL=C sort)
+}
+
+semantic_probe() {
+  local prefix=$1 python_version=$2 configspace_version=$3 numpy_version=$4
+  env -i \
+    "HOME=$TEMP_ROOT" \
+    "PATH=$prefix/bin:/usr/bin:/bin" \
+    "PYTHONDONTWRITEBYTECODE=1" \
+    "OPENBLAS_NUM_THREADS=1" \
+    "OMP_NUM_THREADS=1" \
+    "LC_ALL=C.UTF-8" \
+    "$prefix/bin/python" -I -c \
+    'import ConfigSpace, importlib.metadata, numpy, sys
+expected = tuple(sys.argv[1:])
+observed = (
+    ".".join(map(str, sys.version_info[:3])),
+    importlib.metadata.version("ConfigSpace"),
+    str(numpy.__version__),
+)
+if observed != expected:
+    raise SystemExit("ConfigSpace environment mismatch: %r != %r" % (observed, expected))' \
+    "$python_version" "$configspace_version" "$numpy_version"
+}
+
+write_receipt() {
+  local profile=$1 lock=$2 prefix=$3 manifest=$4 inventory=$5 output=$6
+  local python_version=$7 configspace_version=$8 numpy_version=$9
+  {
+    printf 'format\t1\n'
+    printf 'profile\t%s\n' "$profile"
+    printf 'platform\tlinux-64\n'
+    printf 'prefix_relative\t.local/configspace/prefixes/%s\n' "$profile"
+    printf 'lock_relative\tenvironment/configspace-%s-linux-64.lock\n' "$profile"
+    printf 'lock_sha256\t%s\n' "$(sha256_file "$lock")"
+    printf 'inventory_sha256\t%s\n' "$(sha256_file "$inventory")"
+    printf 'prefix_manifest_sha256\t%s\n' "$(sha256_file "$manifest")"
+    printf 'prefix_receipt_helper_sha256\t%s\n' \
+      "$(sha256_file "$PREFIX_RECEIPT")"
+    printf 'micromamba_version\t%s\n' "$MICROMAMBA_VERSION"
+    printf 'micromamba_archive_sha256\t%s\n' "$MICROMAMBA_ARCHIVE_SHA256"
+    printf 'micromamba_executable_sha256\t%s\n' \
+      "$(sha256_file "$MICROMAMBA")"
+    printf 'python_version\t%s\n' "$python_version"
+    printf 'configspace_version\t%s\n' "$configspace_version"
+    printf 'numpy_version\t%s\n' "$numpy_version"
+  } > "$output"
+}
+
+verify_profile() {
+  local profile=$1 python_version=$2 configspace_version=$3 numpy_version=$4
+  local lock="$ROOT/environment/configspace-${profile}-linux-64.lock"
+  local prefix="$PREFIX_ROOT/$profile"
+  local receipts="$RECEIPT_ROOT/$profile"
+  local inventory="$receipts/installed-explicit.lock"
+  local manifest="$receipts/prefix.manifest.tsv"
+  local receipt="$receipts/receipt.tsv"
+  local seal="$receipts/receipt.sha256"
+  local observed_inventory observed_receipt
+
+  validate_lock "$lock" "$profile" "$configspace_version"
+  require_plain_directory "$prefix" "$profile ConfigSpace prefix"
+  require_plain_directory "$receipts" "$profile ConfigSpace receipt directory"
+  for input in "$inventory" "$manifest" "$receipt" "$seal"; do
+    require_plain_file "$input" "$profile ConfigSpace receipt input"
+  done
+  [[ "$(wc -l < "$seal")" -eq 1 &&
+    "$(<"$seal")" == "$(sha256_file "$receipt")  receipt.tsv" ]] ||
+    fail "$profile ConfigSpace receipt seal is invalid"
+
+  observed_inventory=$(mktemp "$TEMP_ROOT/configspace-${profile}.inventory.XXXXXX")
+  observed_receipt=$(mktemp "$TEMP_ROOT/configspace-${profile}.receipt.XXXXXX")
+  trap 'rm -f -- "$observed_inventory" "$observed_receipt"' EXIT
+  write_inventory "$prefix" "$observed_inventory"
+  same_explicit_artifacts "$lock" "$observed_inventory" ||
+    fail "$profile ConfigSpace prefix differs from its exact package lock"
+  cmp -s "$inventory" "$observed_inventory" ||
+    fail "$profile ConfigSpace installed inventory receipt is stale"
+  "$PREFIX_RECEIPT" verify "$prefix" "$manifest" >/dev/null
+  semantic_probe \
+    "$prefix" "$python_version" "$configspace_version" "$numpy_version"
+  write_receipt \
+    "$profile" "$lock" "$prefix" "$manifest" "$inventory" \
+    "$observed_receipt" "$python_version" "$configspace_version" "$numpy_version"
+  cmp -s "$receipt" "$observed_receipt" ||
+    fail "$profile ConfigSpace metadata receipt is stale"
+  # POSIX symlink mode bits are not access-control bits (and commonly display
+  # as 0777). Only directories and regular files can make the prefix mutable.
+  if find "$prefix" \( -type d -o -type f \) -perm /222 -print -quit |
+      grep -q .; then
+    fail "$profile ConfigSpace prefix contains a writable directory or file"
+  fi
+  rm -f -- "$observed_inventory" "$observed_receipt"
+  trap - EXIT
+  printf 'configspace_profile_verified=%s\n' "$profile"
+}
+
+provision_profile() {
+  local profile=$1 python_version=$2 configspace_version=$3 numpy_version=$4
+  local lock="$ROOT/environment/configspace-${profile}-linux-64.lock"
+  local prefix="$PREFIX_ROOT/$profile"
+  local receipts="$RECEIPT_ROOT/$profile"
+  local receipt_stage inventory manifest receipt seal
+  local -a offline_argument=()
+
+  validate_lock "$lock" "$profile" "$configspace_version"
+  if [[ (-e "$prefix" || -L "$prefix") &&
+    (-e "$receipts" || -L "$receipts") ]]; then
+    verify_profile \
+      "$profile" "$python_version" "$configspace_version" "$numpy_version"
+    return
+  fi
+  if [[ -e "$prefix" || -L "$prefix" || -e "$receipts" || -L "$receipts" ]]; then
+    fail "incomplete $profile state; after review, restore owner write permission only below $prefix, remove only $prefix and $receipts, then rerun this command"
+  fi
+  [[ "$offline" == false ]] || offline_argument=(--offline)
+  "$MICROMAMBA" create --no-rc --yes --always-copy \
+    --root-prefix "$MAMBA_ROOT" --prefix "$prefix" \
+    "${offline_argument[@]}" --file "$lock" ||
+    fail "could not provision $profile; the incomplete prefix was left at $prefix"
+
+  receipt_stage=$(mktemp -d "$TEMP_ROOT/configspace-${profile}.receipts.XXXXXX")
+  trap 'find -H "$receipt_stage" -xdev -depth -delete >/dev/null 2>&1 || :' EXIT
+  inventory="$receipt_stage/installed-explicit.lock"
+  manifest="$receipt_stage/prefix.manifest.tsv"
+  receipt="$receipt_stage/receipt.tsv"
+  seal="$receipt_stage/receipt.sha256"
+  write_inventory "$prefix" "$inventory"
+  same_explicit_artifacts "$lock" "$inventory" ||
+    fail "$profile ConfigSpace provision resolved a package set outside its lock"
+  find "$prefix" -type d -exec chmod 0555 {} +
+  find "$prefix" -type f -perm /111 -exec chmod 0555 {} +
+  find "$prefix" -type f ! -perm /111 -exec chmod 0444 {} +
+  semantic_probe \
+    "$prefix" "$python_version" "$configspace_version" "$numpy_version"
+  "$PREFIX_RECEIPT" create "$prefix" "$manifest" >/dev/null
+  write_receipt \
+    "$profile" "$lock" "$prefix" "$manifest" "$inventory" "$receipt" \
+    "$python_version" "$configspace_version" "$numpy_version"
+  (
+    cd "$receipt_stage"
+    sha256sum receipt.tsv
+  ) > "$seal"
+  chmod 0444 "$inventory" "$manifest" "$receipt" "$seal"
+  mv -- "$receipt_stage" "$receipts"
+  trap - EXIT
+  verify_profile \
+    "$profile" "$python_version" "$configspace_version" "$numpy_version"
+}
+
+if [[ "$mode" == verify ]]; then
+  verify_profile current 3.10.20 1.2.2 2.2.6
+  verify_profile old 3.10.20 0.5.0 1.26.4
+else
+  provision_profile current 3.10.20 1.2.2 2.2.6
+  provision_profile old 3.10.20 0.5.0 1.26.4
+fi
+
+printf 'configspace_current_python=%s\n' "$PREFIX_ROOT/current/bin/python"
+printf 'configspace_old_python=%s\n' "$PREFIX_ROOT/old/bin/python"

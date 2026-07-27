@@ -1055,6 +1055,10 @@ Core authenticated inputs include:
 
 - `environment/toolchain-linux-64.lock`: local development toolchain;
 - `environment/r-packages-linux-64.lock`: exact source-package closure;
+- `environment/configspace-current-linux-64.lock` and
+  `environment/configspace-old-linux-64.lock`: the exact Python 3.10.20
+  environments for the current ConfigSpace 1.2.2 and retained ConfigSpace
+  0.5.0 full-test axes;
 - `environment/runtime-r-3.6.3-linux-64.lock`,
   `environment/runtime-r-4.0.5-linux-64.lock`,
   `environment/runtime-r-4.3.3-linux-64.lock`, and
@@ -1084,6 +1088,29 @@ Bulky state is deliberately ignored below `.local/` and `.cache/`. Bootstrap
 is idempotent and checksum-verifying; reuse valid downloads and installations
 instead of rebuilding them. A lock mismatch fails closed and requires an
 explicit reviewed lock refresh.
+
+`scripts/bootstrap` provisions both ConfigSpace profiles through
+`scripts/bootstrap-configspace`; use `scripts/bootstrap-configspace --verify`
+for a read-only audit. Each profile comes only from its checked-in SHA-256
+`@EXPLICIT` lock with `--always-copy`. The bootstrap then makes prefix
+directories and executable files `0555`, other regular files `0444`, and
+writes authenticated inventory, content/mode/symlink, and metadata receipts.
+Full native tests verify both profiles before and after the run, pass their
+exact interpreters through `PARADOX_CONFIGSPACE_CURRENT_PYTHON` and
+`PARADOX_CONFIGSPACE_OLD_PYTHON`. The `native-release` worker consumes
+`.local/configspace` read-only with no network. Reticulate/uv resolution,
+provisioning, and shared dependency-prefix/cache mutation are not part of that
+gate; disposable per-mode caches remain outside the sealed fixture.
+
+ConfigSpace bootstrap never removes incomplete state. If only one side of a
+profile exists, review it and remove only the exact reported
+`.local/configspace/prefixes/<profile>` and
+`.local/configspace/receipts/<profile>` paths before reprovisioning; never
+generalize that cleanup to a parent directory. Because a sealed prefix's
+directories are `0555`, first restore owner write permission on directories
+below that one exact prefix
+(`find <exact-prefix> -type d -exec chmod u+w '{}' '+'`); only then remove that
+exact prefix and receipt directory.
 
 The R 4.3.3 conda prefix contains data.table 1.17.8 because no matching
 conda-forge R-4.3 build of 1.18.4 exists. `scripts/test-runtime-matrix` copies

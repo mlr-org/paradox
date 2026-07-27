@@ -127,6 +127,9 @@ for managed_directory in \
   "$ROOT/.local/toolchain" \
   "$ROOT/.local/R" \
   "$R_LIBRARY" \
+  "$ROOT/.local/configspace" \
+  "$ROOT/.local/configspace/prefixes" \
+  "$ROOT/.local/configspace/receipts" \
   "$ROOT/.local/checks" \
   "$ROOT/.local/texmf" \
   "$ROOT/.local/texmf/var" \
@@ -369,6 +372,11 @@ trap - EXIT
 # local image store.  This verifies and selects the pinned static Podman/helper
 # bundle without installing anything into HOME or the host system.
 "$ROOT/scripts/bootstrap-podman"
+
+# Full package tests consume two fixed, sealed ConfigSpace environments. Their
+# bootstrap uses the already-authenticated micromamba and never changes the
+# ordinary R/compiler prefix.
+"$ROOT/scripts/bootstrap-configspace"
 
 # Keep all R packages project-local, including packages installed by tools that
 # do not inherit the activated shell.

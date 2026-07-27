@@ -1,16 +1,36 @@
 skip_if_not_installed("callr")
 skip_if_not_installed("reticulate")
+if (!nzchar(Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON", unset = ""))) {
+  Sys.setenv(PARADOX_CONFIGSPACE_OLD_PYTHON = "managed")
+}
 skip_on_cran()
 
 
 test_that("paramset_to_configspace works without defaults with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"))
 
     library(paradox)
     library(testthat)
 
     reticulate::py_require(c("numpy<2", "ConfigSpace<0.6.0"))
+    ConfigSpace = reticulate::import("ConfigSpace")
+    if (identical(
+      Sys.getenv("PARADOX_CONFIGSPACE_FIXTURE", unset = ""),
+      "sealed-v1"
+    )) {
+      expect_false(identical(
+        Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"),
+        "managed"
+      ))
+      metadata = reticulate::import("importlib.metadata")
+      expect_identical(as.character(metadata$version("ConfigSpace")), "0.5.0")
+    }
+    expect_false(any(vapply(
+      c("Float", "Integer", "Categorical"),
+      function(name) reticulate::py_has_attr(ConfigSpace, name),
+      logical(1L)
+    )))
 
     param_set = ps(
       x1 = p_int(lower = 0, upper = 10, default = 1),
@@ -27,7 +47,7 @@ test_that("paramset_to_configspace works without defaults with old ConfigSpace A
 
 test_that("paramset_to_configspace numeric bounds check with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"))
 
     library(paradox)
     library(testthat)
@@ -52,7 +72,7 @@ test_that("paramset_to_configspace numeric bounds check with old ConfigSpace API
 
 test_that("paramset_to_configspace utility parameters check with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"))
 
     library(paradox)
     library(testthat)
@@ -71,7 +91,7 @@ test_that("paramset_to_configspace utility parameters check with old ConfigSpace
 
 test_that("paramset_to_configspace works with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"))
 
     library(paradox)
     library(testthat)
@@ -109,7 +129,7 @@ test_that("paramset_to_configspace works with old ConfigSpace API", {
 
 test_that("paramset_to_configspace dependencies check with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"))
 
     library(paradox)
     library(testthat)
@@ -134,7 +154,7 @@ test_that("paramset_to_configspace dependencies check with old ConfigSpace API",
 
 test_that("multiple dependencies for one child are combined with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"))
 
     library(paradox)
     library(testthat)
@@ -165,7 +185,7 @@ test_that("multiple dependencies for one child are combined with old ConfigSpace
 
 test_that("multiple dependent children can coexist with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"))
 
     library(paradox)
     library(testthat)

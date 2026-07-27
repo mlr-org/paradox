@@ -263,11 +263,38 @@ the scheduler backend; the trusted verifier joins the requested count to the
 retained `light-test` decision and the effective count to every worker row. A
 task-token watchdog removes nested callr/processx descendants if the
 coordinator is interrupted. The two ConfigSpace files share one exclusive
-worker after the ordinary wave so they cannot race reticulate's managed Python
-state. Direct runner invocations default to serial; non-Linux systems,
+worker after the ordinary wave. `scripts/bootstrap-configspace`, normally
+called by `scripts/bootstrap`, provisions exact Python 3.10.20 environments
+for ConfigSpace 1.2.2 and 0.5.0 from the two checked-in SHA-256 `@EXPLICIT`
+locks. It uses copied package files, seals prefix directories and regular
+files against writes, and records authenticated inventory, prefix, and
+metadata receipts. `scripts/native-check --tests full` verifies those receipts
+before and after execution, supplies the exact interpreters through
+`PARADOX_CONFIGSPACE_CURRENT_PYTHON` and
+`PARADOX_CONFIGSPACE_OLD_PYTHON`. The `native-release` worker disables the
+network and mounts `.local/configspace` read-only. No uv/resolver/cache
+provisioning or shared dependency-prefix/cache mutation occurs inside the test
+gate; disposable per-mode caches remain separate. The exclusive lane also
+keeps both prefix-bound reticulate sessions out of the ordinary worker wave.
+Direct runner invocations default to serial; non-Linux systems,
 including Darwin, retain an explicit requested-many/effective-one fallback
 until an equally strong native process-tree primitive is available. Analyzer,
 probe, sanitizer, GCT, and Valgrind scopes remain serial.
+
+Audit the prepared profiles without changing them with:
+
+```sh
+scripts/bootstrap-configspace --verify
+```
+
+An incomplete profile is never deleted automatically. After inspecting the
+reported state, remove only its exact
+`.local/configspace/prefixes/<profile>` and
+`.local/configspace/receipts/<profile>` paths, then provision again. A sealed
+prefix has non-writable directories, so first apply owner write permission
+only below that exact prefix
+(`find <exact-prefix> -type d -exec chmod u+w '{}' '+'`). Never broaden either
+operation to `.local/configspace` or another parent.
 
 Ordinary `R CMD INSTALL` compilation uses a separately retained
 `resource-jobs compile` decision and may be lowered with
@@ -308,8 +335,9 @@ HEAD/diff/status, source archive, compiler versions, replayable command log,
 per-mode library, compiled DLL, analysis output, and result status. R startup,
 temporary directories, caches, target libraries, and Makevars are all set to
 project- or run-local paths. Python bytecode is disabled and redirected below
-the disposable mode cache, so reticulate cannot mutate the shared dependency
-library. Commands do not consult user R startup files. Probe, focused, and
+the disposable mode cache for generic Python isolation; the sealed ConfigSpace
+prefixes are selected by exact path and remain non-writable. Commands do not
+consult user R startup files. Probe, focused, and
 compile-only runs do not authenticate or put TinyTeX on `PATH`; the relatively
 expensive archive/tree authentication is owned only by `--tests full`, whose
 CRAN-style documentation surfaces actually use it.

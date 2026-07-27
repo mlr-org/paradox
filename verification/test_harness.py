@@ -341,6 +341,14 @@ class ManifestTests(unittest.TestCase):
         self.assertIn(
             "harness-native", manifest.tasks["native-release"].dependencies
         )
+        self.assertEqual(
+            manifest.tasks["native-release"].readonly_paths,
+            (".local/configspace",),
+        )
+        self.assertFalse(manifest.tasks["native-release"].network)
+        self.assertIn(
+            "scripts/bootstrap-configspace", manifest.input_groups["harness"]
+        )
         self.assertIn(
             "harness-runtime", manifest.tasks["runtime-supported"].dependencies
         )

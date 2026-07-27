@@ -53,6 +53,7 @@
     "harness": [
       "scripts/activate",
       "scripts/environment/**",
+      "scripts/bootstrap-configspace",
       "scripts/native-check",
       "scripts/check-r-api-compatibility",
       "scripts/test-runtime-matrix",
@@ -815,6 +816,7 @@
         "tests/**",
         "DESCRIPTION",
         "NAMESPACE",
+        "scripts/bootstrap-configspace",
         "scripts/native-check",
         "scripts/environment/run-native*"
       ],
@@ -822,6 +824,9 @@
       "required_parameters": [],
       "writable_paths": [
         ".local/checks"
+      ],
+      "readonly_paths": [
+        ".local/configspace"
       ],
       "isolation": "worker",
       "network": false,

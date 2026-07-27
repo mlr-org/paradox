@@ -224,6 +224,11 @@ if [ "$TEST_SELECTION" != none ] &&
 fi
 NEED_TINY_TEX=false
 [ "$TEST_SELECTION" != full ] || NEED_TINY_TEX=true
+NEED_CONFIGSPACE=false
+[ "$TEST_SELECTION" != full ] || NEED_CONFIGSPACE=true
+CONFIGSPACE_FIXTURE_MODE=
+[ "$NEED_CONFIGSPACE" != true ] ||
+  CONFIGSPACE_FIXTURE_MODE=sealed-v1
 
 SCRIPT_DIRECTORY=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 ROOT=$(CDPATH='' cd -- "$SCRIPT_DIRECTORY/.." && pwd -P)
@@ -238,6 +243,15 @@ MICROMAMBA_VERSION=2.5.0
 MICROMAMBA_ARCHIVE_SHA256=cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6
 MICROMAMBA="$ROOT/.local/bin/micromamba"
 MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-${MICROMAMBA_VERSION}-linux-64.tar.bz2"
+CONFIGSPACE_BOOTSTRAP="$ROOT/scripts/bootstrap-configspace"
+CONFIGSPACE_CURRENT_LOCK="$ROOT/environment/configspace-current-linux-64.lock"
+CONFIGSPACE_OLD_LOCK="$ROOT/environment/configspace-old-linux-64.lock"
+CONFIGSPACE_CURRENT_PYTHON="$ROOT/.local/configspace/prefixes/current/bin/python"
+CONFIGSPACE_OLD_PYTHON="$ROOT/.local/configspace/prefixes/old/bin/python"
+CONFIGSPACE_CURRENT_RECEIPT="$ROOT/.local/configspace/receipts/current/receipt.tsv"
+CONFIGSPACE_CURRENT_SEAL="$ROOT/.local/configspace/receipts/current/receipt.sha256"
+CONFIGSPACE_OLD_RECEIPT="$ROOT/.local/configspace/receipts/old/receipt.tsv"
+CONFIGSPACE_OLD_SEAL="$ROOT/.local/configspace/receipts/old/receipt.sha256"
 TINY_TEX_MANIFEST="$ROOT/environment/tinytex-linux-x86_64.tsv"
 TINY_TEX_ROOT="$ROOT/.local/tinytex"
 TINY_TEX_BIN="$TINY_TEX_ROOT/bin/x86_64-linux"
@@ -288,6 +302,29 @@ micromamba_member_sha256=$(tar -xOjf "$MICROMAMBA_ARCHIVE" bin/micromamba |
   fail "installed micromamba differs from the pinned archive member"
 [ "$("$MICROMAMBA" --version)" = "$MICROMAMBA_VERSION" ] ||
   fail "authenticated micromamba reports an unexpected version"
+if [ "$NEED_CONFIGSPACE" = true ]; then
+  for configspace_input in \
+      "$CONFIGSPACE_BOOTSTRAP" "$CONFIGSPACE_CURRENT_LOCK" \
+      "$CONFIGSPACE_OLD_LOCK" "$CONFIGSPACE_CURRENT_RECEIPT" \
+      "$CONFIGSPACE_CURRENT_SEAL" "$CONFIGSPACE_OLD_RECEIPT" \
+      "$CONFIGSPACE_OLD_SEAL"; do
+    [ -f "$configspace_input" ] && [ ! -L "$configspace_input" ] ||
+      fail "sealed ConfigSpace input is absent or symbolic: $configspace_input"
+  done
+  [ -x "$CONFIGSPACE_BOOTSTRAP" ] ||
+    fail "sealed ConfigSpace helper is not executable"
+  for configspace_python in \
+      "$CONFIGSPACE_CURRENT_PYTHON" "$CONFIGSPACE_OLD_PYTHON"; do
+    [ -x "$configspace_python" ] ||
+      fail "sealed ConfigSpace Python is not executable: $configspace_python"
+    configspace_python_resolved=$(realpath -- "$configspace_python")
+    case "$configspace_python:$configspace_python_resolved" in
+      "$ROOT/.local/configspace/prefixes/current/"*:"$ROOT/.local/configspace/prefixes/current/"*|\
+      "$ROOT/.local/configspace/prefixes/old/"*:"$ROOT/.local/configspace/prefixes/old/"*) ;;
+      *) fail "sealed ConfigSpace Python escapes its selected prefix" ;;
+    esac
+  done
+fi
 [ "$(sed -n '1p' "$TOOLCHAIN_LOCK")" = '# platform: linux-64' ] &&
   [ "$(sed -n '2p' "$TOOLCHAIN_LOCK")" = '@EXPLICIT' ] ||
   fail "toolchain lock has an unexpected explicit header"
@@ -786,6 +823,35 @@ else
     > "$RUN_DIRECTORY/metadata/tinytex-tree.log"
 fi
 
+if [ "$NEED_CONFIGSPACE" = true ]; then
+  run_logged "$RUN_DIRECTORY/metadata/configspace-verify-before.log" \
+    env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "TMPDIR=$ROOT/.local/tmp" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$CONFIGSPACE_BOOTSTRAP" --verify
+  CONFIGSPACE_CURRENT_RECEIPT_SHA256=$(
+    sha256sum "$CONFIGSPACE_CURRENT_RECEIPT" | cut -d ' ' -f 1
+  )
+  CONFIGSPACE_CURRENT_SEAL_SHA256=$(
+    sha256sum "$CONFIGSPACE_CURRENT_SEAL" | cut -d ' ' -f 1
+  )
+  CONFIGSPACE_OLD_RECEIPT_SHA256=$(
+    sha256sum "$CONFIGSPACE_OLD_RECEIPT" | cut -d ' ' -f 1
+  )
+  CONFIGSPACE_OLD_SEAL_SHA256=$(
+    sha256sum "$CONFIGSPACE_OLD_SEAL" | cut -d ' ' -f 1
+  )
+else
+  printf '%s\n' \
+    'ConfigSpace authentication skipped: complete tests were not selected' \
+    > "$RUN_DIRECTORY/metadata/configspace-verify-before.log"
+  CONFIGSPACE_CURRENT_RECEIPT_SHA256=not-used
+  CONFIGSPACE_CURRENT_SEAL_SHA256=not-used
+  CONFIGSPACE_OLD_RECEIPT_SHA256=not-used
+  CONFIGSPACE_OLD_SEAL_SHA256=not-used
+fi
+
 {
   printf 'harness=native-check\n'
   printf 'schema=2\n'
@@ -844,6 +910,34 @@ fi
     printf 'makeindex_sha256=not-used\n'
     printf 'tinytex_tree_receipt_sha256=not-used\n'
   fi
+  printf 'configspace_scope=%s\n' \
+    "$(if [ "$NEED_CONFIGSPACE" = true ]; then printf full; else printf not-used; fi)"
+  printf 'configspace_bootstrap_sha256=%s\n' \
+    "$(if [ "$NEED_CONFIGSPACE" = true ]; then
+      sha256sum "$CONFIGSPACE_BOOTSTRAP" | cut -d ' ' -f 1
+    else
+      printf not-used
+    fi)"
+  printf 'configspace_current_lock_sha256=%s\n' \
+    "$(if [ "$NEED_CONFIGSPACE" = true ]; then
+      sha256sum "$CONFIGSPACE_CURRENT_LOCK" | cut -d ' ' -f 1
+    else
+      printf not-used
+    fi)"
+  printf 'configspace_current_receipt_sha256=%s\n' \
+    "$CONFIGSPACE_CURRENT_RECEIPT_SHA256"
+  printf 'configspace_current_seal_sha256=%s\n' \
+    "$CONFIGSPACE_CURRENT_SEAL_SHA256"
+  printf 'configspace_old_lock_sha256=%s\n' \
+    "$(if [ "$NEED_CONFIGSPACE" = true ]; then
+      sha256sum "$CONFIGSPACE_OLD_LOCK" | cut -d ' ' -f 1
+    else
+      printf not-used
+    fi)"
+  printf 'configspace_old_receipt_sha256=%s\n' \
+    "$CONFIGSPACE_OLD_RECEIPT_SHA256"
+  printf 'configspace_old_seal_sha256=%s\n' \
+    "$CONFIGSPACE_OLD_SEAL_SHA256"
   printf 'R_HOME=%s\n' "$(R RHOME)"
   for configuration in CC CFLAGS CC17 C17FLAGS CPPFLAGS LDFLAGS SHLIB_LD; do
     printf 'R_CMD_config_%s=' "$configuration"
@@ -891,6 +985,18 @@ if [ ! -f "$SOURCE_DIRECTORY/environment/tinytex-linux-x86_64.tsv" ] ||
     ! cmp -s "$TINY_TEX_MANIFEST" \
       "$SOURCE_DIRECTORY/environment/tinytex-linux-x86_64.tsv"; then
   fail "snapshot TinyTeX manifest differs from the validated tool manifest"
+fi
+if [ "$NEED_CONFIGSPACE" = true ]; then
+  for configspace_relative in \
+      scripts/bootstrap-configspace \
+      environment/configspace-current-linux-64.lock \
+      environment/configspace-old-linux-64.lock; do
+    [ -f "$SOURCE_DIRECTORY/$configspace_relative" ] &&
+      [ ! -L "$SOURCE_DIRECTORY/$configspace_relative" ] &&
+      cmp -s "$ROOT/$configspace_relative" \
+        "$SOURCE_DIRECTORY/$configspace_relative" ||
+      fail "snapshot ConfigSpace input differs from the validated input: $configspace_relative"
+  done
 fi
 if [ ! -f "$SOURCE_DIRECTORY/scripts/environment/resource-jobs" ] ||
     [ -L "$SOURCE_DIRECTORY/scripts/environment/resource-jobs" ] ||
@@ -1090,6 +1196,9 @@ run_mode_r_logged() {
     "R_KEEP_PKG_SOURCE=yes" \
     "NOT_CRAN=true" \
     "PARADOX_MBO_CONFIG_ROOT=$MBO_CONFIG_FIXTURE_ROOT" \
+    "PARADOX_CONFIGSPACE_FIXTURE=$CONFIGSPACE_FIXTURE_MODE" \
+    "PARADOX_CONFIGSPACE_CURRENT_PYTHON=$CONFIGSPACE_CURRENT_PYTHON" \
+    "PARADOX_CONFIGSPACE_OLD_PYTHON=$CONFIGSPACE_OLD_PYTHON" \
     "TMPDIR=$MODE_DIRECTORY/tmp" \
     "XDG_CACHE_HOME=$MODE_DIRECTORY/cache" \
     "R_USER_CACHE_DIR=$MODE_DIRECTORY/cache/R" \
@@ -1735,10 +1844,10 @@ else
     > "$RUN_DIRECTORY/metadata/tinytex-verify-after.log"
 fi
 
-# Full tests may ask reticulate/uv to provision an isolated Python. Its cache
-# contains absolute convenience symlinks and architecture-specific build
-# scratch, neither of which is release evidence. Retaining those paths makes a
-# sealed run non-relocatable and correctly fails the tree-receipt policy. Keep
+# Generic Python-capable tests may still populate disposable per-mode caches;
+# the two ConfigSpace tests instead consume fixed read-only prefixes and never
+# resolve or provision here. Absolute cache symlinks and architecture-specific
+# scratch are not release evidence and make a sealed run non-relocatable. Keep
 # the installed package, compiler profiles, artifacts, and complete logs, but
 # remove per-mode caches, temporary directories, and writable TeX state before
 # sealing the modes tree. Record the cleanup in the replay command log.
@@ -1923,6 +2032,35 @@ if [ -n "$MBO_CONFIG_FIXTURE_ROOT" ]; then
   run_logged "$RUN_DIRECTORY/metadata/mbo-config-fixtures-verify.log" \
     "$MBO_CONFIG_FIXTURE_HELPER" verify "$SOURCE_DIRECTORY" \
     "$ROOT/.local/compat/github/mbo_config" "$MBO_CONFIG_BUNDLE"
+fi
+if [ "$NEED_CONFIGSPACE" = true ]; then
+  for configspace_relative in \
+      scripts/bootstrap-configspace \
+      environment/configspace-current-linux-64.lock \
+      environment/configspace-old-linux-64.lock; do
+    cmp -s "$ROOT/$configspace_relative" \
+      "$SOURCE_DIRECTORY/$configspace_relative" ||
+      fail "active ConfigSpace input changed during native verification: $configspace_relative"
+  done
+  run_logged "$RUN_DIRECTORY/metadata/configspace-verify-after.log" \
+    env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "TMPDIR=$ROOT/.local/tmp" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$CONFIGSPACE_BOOTSTRAP" --verify
+  [ "$(sha256sum "$CONFIGSPACE_CURRENT_RECEIPT" | cut -d ' ' -f 1)" = \
+      "$CONFIGSPACE_CURRENT_RECEIPT_SHA256" ] &&
+    [ "$(sha256sum "$CONFIGSPACE_CURRENT_SEAL" | cut -d ' ' -f 1)" = \
+      "$CONFIGSPACE_CURRENT_SEAL_SHA256" ] &&
+    [ "$(sha256sum "$CONFIGSPACE_OLD_RECEIPT" | cut -d ' ' -f 1)" = \
+      "$CONFIGSPACE_OLD_RECEIPT_SHA256" ] &&
+    [ "$(sha256sum "$CONFIGSPACE_OLD_SEAL" | cut -d ' ' -f 1)" = \
+      "$CONFIGSPACE_OLD_SEAL_SHA256" ] ||
+    fail "sealed ConfigSpace receipts changed during native verification"
+else
+  printf '%s\n' \
+    'ConfigSpace authentication skipped: complete tests were not selected' \
+    > "$RUN_DIRECTORY/metadata/configspace-verify-after.log"
 fi
 RETAINED_TREE_RECEIPT_HELPER="$RUN_DIRECTORY/metadata/tree-receipt.R"
 run_logged "$RUN_DIRECTORY/metadata/source-tree-receipt.log" \

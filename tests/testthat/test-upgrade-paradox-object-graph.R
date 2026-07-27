@@ -33,7 +33,9 @@ test_that("direct bytecode traversal never evaluates its expression", {
     env = baseenv()
   )
 
-  expect_silent(discovery = discover_upgrade_candidates(list(bytecode)))
+  expect_silent(
+    discovery <- discover_upgrade_candidates(list(bytecode))
+  )
   expect_identical(discovery$objects, list())
   expect_identical(discovery$paths, character())
 })

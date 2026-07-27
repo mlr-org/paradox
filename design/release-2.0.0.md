@@ -31,13 +31,18 @@ GCC/Clang builds are development evidence only. The final compatibility change
 lowers the supported baseline to R 3.6 and portable C99, adds version-bounded
 R API adapters, and extends the runtime/header harness. It changes native,
 metadata, tests, and validation inputs, so none of the historical R-4.3+
-candidate evidence proves this source. While the remaining
-pre-release items are in flight, use only the focused development policy
-below. This development batch intentionally does not run or claim the complete
-compatibility or release matrix. Freeze one replacement candidate only after
-all package-facing source converges, then run the applicable native, R API,
-runtime, memory, differential, downstream, documentation, benchmark, and
-hosted portability gates once for that exact candidate.
+candidate evidence proves this source. The full current-R native harness now
+uses two sealed, exact Python 3.10.20/ConfigSpace 1.2.2 and 0.5.0 prefixes
+instead of reticulate-managed resolution. Their checked-in SHA-256 locks and
+authenticated receipts are verified before and after networkless tests with
+`.local/configspace` read-only. This is validation infrastructure, not
+completed candidate evidence. While the remaining pre-release items are in
+flight, use only the focused development policy below. This development batch
+intentionally does not run or claim the complete compatibility or release
+matrix. Freeze one replacement candidate only after all package-facing source
+converges, then run the applicable native, R API, runtime, memory,
+differential, downstream, documentation, benchmark, and hosted portability
+gates once for that exact candidate.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -592,6 +597,8 @@ source. The replacement candidate still requires:
   selector isolation self-test and independently regenerated title filter;
 - [ ] an authenticated hosted Windows x86-64 R 3.6.3/Rtools35 source-build,
   PE-DLL load/registration, and focused smoke/check artifact;
+- [ ] the current-R full native lane verifies both sealed ConfigSpace
+  environments before and after its networkless, read-only test execution;
 - [ ] the complete applicable current-R, portability, memory, compatibility,
   documentation, and benchmark gates after source freeze.
 

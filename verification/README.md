@@ -48,6 +48,15 @@ currently shipped local tasks inherit the repository's Linux/x86-64 toolchain
 constraint; native Windows and macOS release evidence remains the hosted
 workflow's responsibility. The planner reports this boundary before execution.
 
+The `native-release` task additionally consumes the prepared
+`.local/configspace` tree read-only and remains networkless. Provisioning is
+an explicit pre-task step owned by `scripts/bootstrap` and
+`scripts/bootstrap-configspace`, not by reticulate, uv, a resolver, or the
+worker. The full native driver authenticates the exact current and old
+Python/ConfigSpace prefixes before and after testing and passes their
+interpreters by exact environment-variable path. A missing or incomplete
+profile fails closed; it is never repaired or deleted by verification.
+
 `verification/worker/Containerfile` is a portable starting point when no
 organization worker image exists. Build it as an explicit preparation step
 from a digest-pinned Debian-compatible base; the resulting image digest—not its
