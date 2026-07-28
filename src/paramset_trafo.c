@@ -41,23 +41,6 @@ typedef struct {
   int is_collection;
 } trafo_snapshot_t;
 
-static int strings_equal(SEXP left, SEXP right) {
-  return left == right || (left != NA_STRING && right != NA_STRING &&
-    paradox_domain_strings_equal(left, right));
-}
-
-static R_xlen_t find_name(SEXP names, SEXP sought,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t count = XLENGTH(names);
-  for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (strings_equal(STRING_ELT(names, index), sought)) {
-      return index;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
-
 typedef enum {
   TRAFO_LIST_INPUT = 0,
   TRAFO_LIST_PLAIN
@@ -91,7 +74,7 @@ static SEXP snapshot_names(SEXP source, R_xlen_t expected,
   }
   SEXP result = PROTECT(Rf_allocVector(STRSXP, expected));
   for (R_xlen_t index = 0; index < expected; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP name = STRING_ELT(source, index);
     if (name == NA_STRING || Rf_getCharCE(name) == CE_BYTES ||
         CHAR(name)[0] == '\0') {
@@ -141,7 +124,7 @@ static SEXP snapshot_list(SEXP source, int require_names,
   SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
   ++protect_count;
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP value = VECTOR_ELT(source, index);
     if (value == R_UnboundValue || value == R_MissingArg ||
         TYPEOF(value) == PROMSXP) {
@@ -194,7 +177,7 @@ static SEXP snapshot_batch(SEXP source,
   const R_xlen_t count = XLENGTH(source);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP row = PROTECT(snapshot_plain_row(
       VECTOR_ELT(source, index),
       work_since_interrupt
@@ -245,7 +228,7 @@ static void validate_trafo_table(trafo_snapshot_t *snapshot,
     Rf_error("Corrupt ParamSet transformation capsule: duplicate IDs");
   }
   for (R_xlen_t index = 0; index < snapshot->trafos.row_count; ++index) {
-    if (find_name(
+    if (paradox_domain_find_string(
         snapshot->params.ids,
         STRING_ELT(snapshot->trafos.ids, index),
         work_since_interrupt
@@ -463,7 +446,7 @@ static SEXP apply_individual_trafos(SEXP row,
     Rf_error("Internal error: invalid transformation match result");
   }
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     R_xlen_t position = 0;
     if (match_type == INTSXP) {
       const int value = INTEGER_ELT(matches, index);
@@ -507,7 +490,7 @@ static SEXP local_input_for_names(SEXP row, SEXP root_names,
   for (R_xlen_t parameter = 0;
       parameter < XLENGTH(root_names);
       ++parameter) {
-    if (find_name(
+    if (paradox_domain_find_string(
         row_names,
         STRING_ELT(root_names, parameter),
         work_since_interrupt
@@ -522,7 +505,7 @@ static SEXP local_input_for_names(SEXP row, SEXP root_names,
   for (R_xlen_t parameter = 0;
       parameter < XLENGTH(root_names);
       ++parameter) {
-    const R_xlen_t input = find_name(
+    const R_xlen_t input = paradox_domain_find_string(
       row_names,
       STRING_ELT(root_names, parameter),
       work_since_interrupt
@@ -665,8 +648,8 @@ static SEXP merge_extra_unit(SEXP row, SEXP update, SEXP owned_names,
   const R_xlen_t update_count = XLENGTH(update);
   R_xlen_t retained = 0;
   for (R_xlen_t index = 0; index < row_count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (find_name(
+    paradox_account_work(work_since_interrupt);
+    if (paradox_domain_find_string(
         owned_names,
         STRING_ELT(row_names, index),
         work_since_interrupt
@@ -681,13 +664,13 @@ static SEXP merge_extra_unit(SEXP row, SEXP update, SEXP owned_names,
   for (R_xlen_t output = 0; output < update_count; ++output) {
     SEXP output_name = STRING_ELT(translated_names, output);
     for (R_xlen_t input = 0; input < row_count; ++input) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SEXP input_name = STRING_ELT(row_names, input);
-      if (find_name(
+      if (paradox_domain_find_string(
           owned_names,
           input_name,
           work_since_interrupt
-        ) == R_XLEN_T_MAX && strings_equal(input_name, output_name)) {
+        ) == R_XLEN_T_MAX && paradox_domain_strings_equal(input_name, output_name)) {
         UNPROTECT(1);
         Rf_error(
           "An extra_trafo output collides with a retained value"
@@ -704,7 +687,7 @@ static SEXP merge_extra_unit(SEXP row, SEXP update, SEXP owned_names,
   SEXP names = PROTECT(Rf_allocVector(STRSXP, retained + update_count));
   R_xlen_t next = 0;
   for (R_xlen_t index = 0; index < row_count; ++index) {
-    if (find_name(
+    if (paradox_domain_find_string(
         owned_names,
         STRING_ELT(row_names, index),
         work_since_interrupt
@@ -760,7 +743,7 @@ static SEXP merge_collection_extra(SEXP row, SEXP update,
     XLENGTH(update)
   ));
   for (R_xlen_t index = 0; index < XLENGTH(update); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SET_STRING_ELT(
       translated_names,
       index,
@@ -789,7 +772,7 @@ static SEXP apply_extra_trafos(SEXP row,
   SEXP current;
   PROTECT_WITH_INDEX(current = row, &current_index);
   for (R_xlen_t index = 0; index < snapshot->extra_count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const extra_trafo_plan_t *plan = &snapshot->extra_plans[index];
     SEXP input = snapshot->is_collection
       ? PROTECT(local_extra_input(
@@ -828,7 +811,7 @@ static SEXP transform_batch(SEXP rows, const trafo_snapshot_t *snapshot,
   const R_xlen_t count = XLENGTH(rows);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     /* `rows` is the operation-owned snapshot; mutate its private row shell
      * directly instead of copying it a second time. */
     SEXP row = PROTECT(VECTOR_ELT(rows, index));
@@ -1156,7 +1139,7 @@ static void load_detached_callback_plan(SEXP plan, int extra_trafo,
   }
 
   for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(ids, row);
     SEXP original_id = STRING_ELT(original_ids, row);
     SEXP prefix = STRING_ELT(prefixes, row);
@@ -1174,7 +1157,7 @@ static void load_detached_callback_plan(SEXP plan, int extra_trafo,
       original_id,
       suffix
     ));
-    const int equal = strings_equal(id, expected);
+    const int equal = paradox_domain_strings_equal(id, expected);
     UNPROTECT(1);
     if (!equal) {
       Rf_error("Corrupt detached ParamSetCollection callback translation");
@@ -1185,7 +1168,7 @@ static void load_detached_callback_plan(SEXP plan, int extra_trafo,
   for (R_xlen_t callback = 0;
       callback < XLENGTH(indices);
       ++callback) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const int unit = INTEGER_ELT(indices, callback);
     if (unit <= previous_unit) {
       Rf_error("Corrupt detached ParamSetCollection callback order");
@@ -1255,7 +1238,7 @@ static void detached_unit_names(const detached_callback_plan_t *plan,
   *prefix = R_NilValue;
   *suffix = R_NilValue;
   for (R_xlen_t row = 0; row < plan->row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (INTEGER_ELT(plan->owners, row) != unit) {
       continue;
     }
@@ -1264,8 +1247,8 @@ static void detached_unit_names(const detached_callback_plan_t *plan,
     if (*prefix == R_NilValue) {
       *prefix = row_prefix;
       *suffix = row_suffix;
-    } else if (!strings_equal(*prefix, row_prefix) ||
-        !strings_equal(*suffix, row_suffix)) {
+    } else if (!paradox_domain_strings_equal(*prefix, row_prefix) ||
+        !paradox_domain_strings_equal(*suffix, row_suffix)) {
       Rf_error("Corrupt detached ParamSetCollection callback affix");
     }
     SET_STRING_ELT(root_names, output, STRING_ELT(plan->ids, row));
@@ -1287,7 +1270,7 @@ static SEXP detached_update_names(SEXP update,
   SEXP input_names = PROTECT(Rf_getAttrib(update, R_NamesSymbol));
   SEXP result = PROTECT(Rf_allocVector(STRSXP, XLENGTH(update)));
   for (R_xlen_t index = 0; index < XLENGTH(update); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SET_STRING_ELT(
       result,
       index,
@@ -1311,7 +1294,7 @@ static SEXP run_detached_extra_trafos(SEXP row,
   for (R_xlen_t callback = 0;
       callback < plan->callback_count;
       ++callback) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const int unit = INTEGER_ELT(plan->indices, callback);
     const R_xlen_t unit_size = detached_unit_size(plan, unit);
     SEXP root_names = PROTECT(Rf_allocVector(STRSXP, unit_size));
@@ -1374,7 +1357,7 @@ static SEXP run_detached_constraints(SEXP row,
   for (R_xlen_t callback = 0;
       callback < plan->callback_count;
       ++callback) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const int unit = INTEGER_ELT(plan->indices, callback);
     const R_xlen_t unit_size = detached_unit_size(plan, unit);
     SEXP root_names = PROTECT(Rf_allocVector(STRSXP, unit_size));
@@ -1531,7 +1514,7 @@ static SEXP collection_active_constraint_row(SEXP row,
   }
   SEXP row_names = Rf_getAttrib(row, R_NamesSymbol);
   for (R_xlen_t value = 0; value < XLENGTH(row); ++value) {
-    const R_xlen_t parameter = find_name(
+    const R_xlen_t parameter = paradox_domain_find_string(
       snapshot->params.ids,
       STRING_ELT(row_names, value),
       work_since_interrupt
@@ -1562,12 +1545,12 @@ static SEXP collection_active_constraint_row(SEXP row,
     for (R_xlen_t dependency = 0;
         dependency < node->dependencies.row_count;
         ++dependency) {
-      const R_xlen_t local_child = find_name(
+      const R_xlen_t local_child = paradox_domain_find_string(
         node->params.ids,
         STRING_ELT(node->dependencies.ids, dependency),
         work_since_interrupt
       );
-      const R_xlen_t local_parent = find_name(
+      const R_xlen_t local_parent = paradox_domain_find_string(
         node->params.ids,
         STRING_ELT(node->dependencies.on, dependency),
         work_since_interrupt
@@ -1623,7 +1606,7 @@ static SEXP collection_active_constraint_row(SEXP row,
 
   R_xlen_t kept = 0;
   for (R_xlen_t value = 0; value < XLENGTH(row); ++value) {
-    const R_xlen_t parameter = find_name(
+    const R_xlen_t parameter = paradox_domain_find_string(
       snapshot->params.ids,
       STRING_ELT(row_names, value),
       work_since_interrupt
@@ -1634,7 +1617,7 @@ static SEXP collection_active_constraint_row(SEXP row,
   SEXP names = PROTECT(Rf_allocVector(STRSXP, kept));
   output = 0;
   for (R_xlen_t value = 0; value < XLENGTH(row); ++value) {
-    const R_xlen_t parameter = find_name(
+    const R_xlen_t parameter = paradox_domain_find_string(
       snapshot->params.ids,
       STRING_ELT(row_names, value),
       work_since_interrupt

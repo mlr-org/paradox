@@ -30,64 +30,6 @@ static char *utf8_error_copy(SEXP string) {
   return copy;
 }
 
-static SEXP character_vector(const char *const *values, R_xlen_t size) {
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
-    SET_STRING_ELT(result, index, Rf_mkCharCE(values[index], CE_UTF8));
-  }
-  UNPROTECT(1);
-  return result;
-}
-
-static SEXP new_plain_table(const char *const *names, const SEXPTYPE *types,
-    R_xlen_t column_count, R_xlen_t row_count) {
-  if (row_count > INT_MAX) {
-    Rf_error("ParamSet state table exceeds the supported row count");
-  }
-  SEXP table = PROTECT(Rf_allocVector(VECSXP, column_count));
-  for (R_xlen_t column = 0; column < column_count; ++column) {
-    SEXP values = PROTECT(Rf_allocVector(types[column], row_count));
-    SET_VECTOR_ELT(table, column, values);
-    UNPROTECT(1);
-  }
-  SEXP table_names = PROTECT(character_vector(names, column_count));
-  static const char *const classes[] = {"data.frame"};
-  SEXP table_class = PROTECT(character_vector(classes, 1));
-  SEXP row_names = PROTECT(Rf_allocVector(
-    INTSXP,
-    row_count == 0 ? 0 : 2
-  ));
-  if (row_count != 0) {
-    SET_INTEGER_ELT(row_names, 0, NA_INTEGER);
-    SET_INTEGER_ELT(row_names, 1, -(int) row_count);
-  }
-  Rf_setAttrib(table, R_NamesSymbol, table_names);
-  Rf_setAttrib(table, R_ClassSymbol, table_class);
-  Rf_setAttrib(table, R_RowNamesSymbol, row_names);
-  UNPROTECT(4);
-  return table;
-}
-
-static int supported_string(SEXP value) {
-  return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES;
-}
-
-static int strings_equal(SEXP left, SEXP right) {
-  return left == right || paradox_domain_strings_equal(left, right);
-}
-
-static R_xlen_t find_id(SEXP ids, SEXP sought,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t size = XLENGTH(ids);
-  for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (strings_equal(STRING_ELT(ids, index), sought)) {
-      return index;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
-
 static int exact_flag(SEXP value, const char *name) {
   if (TYPEOF(value) != LGLSXP || ALTREP(value) || XLENGTH(value) != 1 ||
       !paradox_api_has_no_attributes(value)) {
@@ -105,7 +47,7 @@ static SEXP scalar_string(SEXP value, const char *name) {
     Rf_error("`%s` must be a character scalar", name);
   }
   SEXP result = STRING_ELT(value, 0);
-  if (!supported_string(result)) {
+  if (!paradox_charsxp_is_ordinary(result)) {
     Rf_error("`%s` must be a non-missing, non-bytes string", name);
   }
   return result;
@@ -162,11 +104,9 @@ static SEXP snapshot_condition(SEXP condition,
     R_xlen_t *work_since_interrupt) {
   PROTECT(condition);
   paradox_builtin_condition_kind_t kind;
-  SEXP rhs = R_NilValue;
   SEXP stable_rhs = PROTECT(paradox_builtin_condition_admit(
       condition,
       &kind,
-      &rhs,
       work_since_interrupt
   ));
   if (stable_rhs == R_NilValue) {
@@ -185,11 +125,11 @@ static SEXP snapshot_condition(SEXP condition,
     )
   );
   static const char *const names[] = {"rhs", "condition_format_string"};
-  SEXP result_names = PROTECT(character_vector(names, 2));
+  SEXP result_names = PROTECT(paradox_domain_character_vector(names, 2));
   const char *const *classes = kind == PARADOX_BUILTIN_CONDITION_EQUAL
     ? (const char *const[]) {"CondEqual", "Condition"}
     : (const char *const[]) {"CondAnyOf", "Condition"};
-  SEXP result_class = PROTECT(character_vector(classes, 2));
+  SEXP result_class = PROTECT(paradox_domain_character_vector(classes, 2));
   Rf_setAttrib(result, R_NamesSymbol, result_names);
   Rf_setAttrib(result, R_ClassSymbol, result_class);
   UNPROTECT(5);
@@ -212,7 +152,7 @@ static void require_feasible_rhs(SEXP private_environment, SEXP self,
   (void) unused_kind;
 
   static const SEXPTYPE types[] = {VECSXP};
-  SEXP table = PROTECT(new_plain_table(
+  SEXP table = PROTECT(paradox_domain_new_plain_table(
     (const char *const[]) {"value"},
     types,
     1,
@@ -259,7 +199,7 @@ static SEXP snapshot_dependencies(SEXP input,
   }
   const R_xlen_t column_count = XLENGTH(input);
   if (column_count == 0) {
-    return new_plain_table(dependency_names, types, 3, 0);
+    return paradox_domain_new_plain_table(dependency_names, types, 3, 0);
   }
   R_xlen_t *column_sizes = paradox_temporary_alloc(
     column_count,
@@ -273,7 +213,7 @@ static SEXP snapshot_dependencies(SEXP input,
     }
   }
   if (all_empty) {
-    return new_plain_table(dependency_names, types, 3, 0);
+    return paradox_domain_new_plain_table(dependency_names, types, 3, 0);
   }
   if (column_count != 3) {
     Rf_error("`deps` must be a three-column table or an empty table");
@@ -284,7 +224,7 @@ static SEXP snapshot_dependencies(SEXP input,
     Rf_error("`deps` columns must be named `id`, `on`, and `cond`");
   }
   for (R_xlen_t column = 0; column < 3; ++column) {
-    if (!strings_equal(
+    if (!paradox_domain_strings_equal(
         STRING_ELT(names, column),
         Rf_mkCharCE(dependency_names[column], CE_UTF8)
       )) {
@@ -305,7 +245,7 @@ static SEXP snapshot_dependencies(SEXP input,
     UNPROTECT(4);
     Rf_error("`deps` columns must have equal lengths");
   }
-  SEXP result = PROTECT(new_plain_table(
+  SEXP result = PROTECT(paradox_domain_new_plain_table(
     dependency_names,
     types,
     3,
@@ -315,19 +255,19 @@ static SEXP snapshot_dependencies(SEXP input,
   SEXP result_on = VECTOR_ELT(result, 1);
   SEXP result_conditions = VECTOR_ELT(result, 2);
   for (R_xlen_t row = 0; row < rows; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(ids, row);
     SEXP parent = STRING_ELT(on, row);
-    if (!supported_string(id) || !supported_string(parent)) {
+    if (!paradox_charsxp_is_ordinary(id) || !paradox_charsxp_is_ordinary(parent)) {
       UNPROTECT(5);
       Rf_error("`deps$id` and `deps$on` may not contain missing/bytes strings");
     }
     if (params != NULL &&
-        find_id(params->ids, id, work_since_interrupt) == R_XLEN_T_MAX) {
+        paradox_domain_find_string(params->ids, id, work_since_interrupt) == R_XLEN_T_MAX) {
       UNPROTECT(5);
       Rf_error("Dependency child is not a parameter in this ParamSet");
     }
-    if (params != NULL && strings_equal(id, parent)) {
+    if (params != NULL && paradox_domain_strings_equal(id, parent)) {
       UNPROTECT(5);
       Rf_error("A param cannot depend on itself!");
     }
@@ -451,8 +391,12 @@ SEXP paradox_param_set_get_tags(SEXP private_environment, SEXP self) {
     counts[parameter] = 0;
     offsets[parameter] = 0;
   }
+  R_xlen_t *owners = paradox_temporary_alloc(
+    tags.row_count == 0 ? 1 : tags.row_count,
+    sizeof(*owners)
+  );
   for (R_xlen_t row = 0; row < tags.row_count; ++row) {
-    const R_xlen_t parameter = find_id(
+    const R_xlen_t parameter = paradox_domain_find_string(
       params.ids,
       STRING_ELT(tags.ids, row),
       &work_since_interrupt
@@ -461,6 +405,7 @@ SEXP paradox_param_set_get_tags(SEXP private_environment, SEXP self) {
       UNPROTECT(1);
       Rf_error("Corrupt ParamSet tag ID");
     }
+    owners[row] = parameter;
     ++counts[parameter];
   }
   SEXP result = PROTECT(Rf_allocVector(VECSXP, params.row_count));
@@ -473,11 +418,7 @@ SEXP paradox_param_set_get_tags(SEXP private_environment, SEXP self) {
   }
   Rf_setAttrib(result, R_NamesSymbol, names);
   for (R_xlen_t row = 0; row < tags.row_count; ++row) {
-    const R_xlen_t parameter = find_id(
-      params.ids,
-      STRING_ELT(tags.ids, row),
-      &work_since_interrupt
-    );
+    const R_xlen_t parameter = owners[row];
     SET_STRING_ELT(
       VECTOR_ELT(result, parameter),
       offsets[parameter],
@@ -532,8 +473,8 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
     }
     for (R_xlen_t parameter = 0; parameter < input_count; ++parameter) {
       SEXP id = STRING_ELT(input_names, parameter);
-      const R_xlen_t row = supported_string(id)
-        ? find_id(params.ids, id, &work_since_interrupt)
+      const R_xlen_t row = paradox_charsxp_is_ordinary(id)
+        ? paradox_domain_find_string(params.ids, id, &work_since_interrupt)
         : R_XLEN_T_MAX;
       if (row == R_XLEN_T_MAX || seen[row]) {
         UNPROTECT(4);
@@ -553,9 +494,9 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
       }
       SEXP stable_values = PROTECT(Rf_allocVector(STRSXP, size));
       for (R_xlen_t index = 0; index < size; ++index) {
-        paradox_domain_account_work(&work_since_interrupt);
+        paradox_account_work(&work_since_interrupt);
         SEXP value = STRING_ELT(values, index);
-        if (!supported_string(value)) {
+        if (!paradox_charsxp_is_ordinary(value)) {
           UNPROTECT(5);
           Rf_error("Tag values may not be missing or bytes-encoded");
         }
@@ -568,14 +509,14 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
   }
 
   static const SEXPTYPE types[] = {STRSXP, STRSXP};
-  SEXP table = PROTECT(new_plain_table(tag_names, types, 2, row_count));
+  SEXP table = PROTECT(paradox_domain_new_plain_table(tag_names, types, 2, row_count));
   R_xlen_t output = 0;
   for (R_xlen_t parameter = 0; parameter < input_count; ++parameter) {
     SEXP id = STRING_ELT(stable_names, parameter);
     SEXP values = VECTOR_ELT(stable_tags, parameter);
     const R_xlen_t size = XLENGTH(values);
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       SEXP value = STRING_ELT(values, index);
       SET_STRING_ELT(VECTOR_ELT(table, 0), output, id);
       SET_STRING_ELT(VECTOR_ELT(table, 1), output, value);
@@ -644,12 +585,12 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
         &visible,
         &unused_row,
         &work_since_interrupt
-      ) || find_id(visible.ids, id, &work_since_interrupt) == R_XLEN_T_MAX ||
-        find_id(visible.ids, on, &work_since_interrupt) == R_XLEN_T_MAX) {
+      ) || paradox_domain_find_string(visible.ids, id, &work_since_interrupt) == R_XLEN_T_MAX ||
+        paradox_domain_find_string(visible.ids, on, &work_since_interrupt) == R_XLEN_T_MAX) {
       UNPROTECT(1);
       Rf_error("Shadow dependencies must stay inside the visible schema");
     }
-    if (strings_equal(id, on)) {
+    if (paradox_domain_strings_equal(id, on)) {
       UNPROTECT(1);
       Rf_error("A param cannot depend on itself!");
     }
@@ -700,17 +641,17 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
     allow_dangling,
     "allow_dangling_dependencies"
   );
-  if (find_id(params.ids, id, &work_since_interrupt) == R_XLEN_T_MAX) {
+  if (paradox_domain_find_string(params.ids, id, &work_since_interrupt) == R_XLEN_T_MAX) {
     UNPROTECT(1);
     Rf_error("`id` is not a parameter in this ParamSet");
   }
   const int parent_present =
-    find_id(params.ids, on, &work_since_interrupt) != R_XLEN_T_MAX;
+    paradox_domain_find_string(params.ids, on, &work_since_interrupt) != R_XLEN_T_MAX;
   if (!dangling && !parent_present) {
     UNPROTECT(1);
     Rf_error("`on` is not a parameter in this ParamSet");
   }
-  if (strings_equal(id, on)) {
+  if (paradox_domain_strings_equal(id, on)) {
     UNPROTECT(1);
     Rf_error("A param cannot depend on itself!");
   }
@@ -741,7 +682,7 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
   }
   const R_xlen_t rows = old.row_count + 1;
   static const SEXPTYPE types[] = {STRSXP, STRSXP, VECSXP};
-  SEXP result = PROTECT(new_plain_table(
+  SEXP result = PROTECT(paradox_domain_new_plain_table(
     dependency_names,
     types,
     3,

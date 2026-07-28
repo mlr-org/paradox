@@ -44,7 +44,7 @@ int paradox_builtin_special_values_contain(
   PROTECT(special_values);
   PROTECT(value);
   for (R_xlen_t index = 0; index < XLENGTH(special_values); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP special = VECTOR_ELT(special_values, index);
     const int exact = special == value;
     const int compare_structurally =
@@ -215,7 +215,7 @@ static paradox_builtin_value_result_t check_factor(
     return failure_result(PARADOX_BUILTIN_VALUE_MISSING);
   }
   for (R_xlen_t level = 0; level < XLENGTH(spec->levels); ++level) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (paradox_domain_strings_equal(
         selected,
         STRING_ELT(spec->levels, level)

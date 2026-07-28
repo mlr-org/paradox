@@ -25,7 +25,7 @@ static int condition_rhs_is_plain(SEXP rhs,
     return FALSE;
   }
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if ((type == LGLSXP && LOGICAL_ELT(rhs, index) == NA_LOGICAL) ||
         (type == INTSXP && INTEGER_ELT(rhs, index) == NA_INTEGER) ||
         (type == REALSXP && ISNAN(REAL_ELT(rhs, index))) ||
@@ -219,7 +219,7 @@ int paradox_builtin_condition_element_matches(SEXP values,
 
   const R_xlen_t size = XLENGTH(rhs);
   for (R_xlen_t rhs_index = 0; rhs_index < size; ++rhs_index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if ((rhs_type == LGLSXP &&
          LOGICAL_ELT(rhs, rhs_index) == NA_LOGICAL) ||
         (rhs_type == INTSXP &&
@@ -271,7 +271,7 @@ static SEXP materialize_atomic_vector(SEXP value) {
   SEXP result = PROTECT(Rf_allocVector(type, size));
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     switch (type) {
     case LGLSXP:
       SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
@@ -303,7 +303,7 @@ static void condition_equal_vector(SEXP values, SEXP rhs, SEXP result,
   if (value_type == STRSXP) {
     SEXP target = STRING_ELT(rhs, 0);
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SEXP value = STRING_ELT(values, index);
       const int equal = value != NA_STRING &&
         paradox_domain_strings_equal(value, target);
@@ -324,7 +324,7 @@ static void condition_equal_vector(SEXP values, SEXP rhs, SEXP result,
   }
   if (value_type == REALSXP) {
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       const double value = REAL_ELT(values, index);
       SET_LOGICAL_ELT(
         result,
@@ -334,7 +334,7 @@ static void condition_equal_vector(SEXP values, SEXP rhs, SEXP result,
     }
   } else {
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       const int value = value_type == INTSXP
         ? INTEGER_ELT(values, index)
         : LOGICAL_ELT(values, index);
@@ -352,16 +352,17 @@ static void condition_equal_vector(SEXP values, SEXP rhs, SEXP result,
  * root the selected RHS, and copy each semantic element once.  The strict
  * exact validator above remains the capsule validator and rejects ALTREP. */
 SEXP paradox_builtin_condition_admit(SEXP condition,
-    paradox_builtin_condition_kind_t *kind, SEXP *rhs,
+    paradox_builtin_condition_kind_t *kind,
     R_xlen_t *work_since_interrupt) {
+  SEXP raw_rhs = R_NilValue;
   PROTECT(condition);
   if (!condition_outer_exact(
-      condition, kind, rhs, work_since_interrupt
+      condition, kind, &raw_rhs, work_since_interrupt
     )) {
     UNPROTECT(1);
     return R_NilValue;
   }
-  SEXP candidate_rhs = PROTECT(*rhs);
+  SEXP candidate_rhs = PROTECT(raw_rhs);
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(candidate_rhs);
   if ((type != LGLSXP && type != INTSXP && type != REALSXP &&
        type != STRSXP) || Rf_isObject(candidate_rhs) ||
@@ -376,9 +377,6 @@ SEXP paradox_builtin_condition_admit(SEXP condition,
     *kind,
     work_since_interrupt
   );
-  if (exact) {
-    *rhs = stable_rhs;
-  }
   UNPROTECT(3);
   return exact ? stable_rhs : R_NilValue;
 }
@@ -386,11 +384,10 @@ SEXP paradox_builtin_condition_admit(SEXP condition,
 SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
   static const char *const allowed_attributes[] = {"names"};
   paradox_builtin_condition_kind_t kind;
-  SEXP rhs = R_NilValue;
   R_xlen_t work_since_interrupt = 0;
   PROTECT(condition);
   SEXP stable_rhs = PROTECT(paradox_builtin_condition_admit(
-    condition, &kind, &rhs, &work_since_interrupt
+    condition, &kind, &work_since_interrupt
   ));
   if (stable_rhs == R_NilValue) {
     UNPROTECT(2);
@@ -423,7 +420,7 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
     );
   } else {
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       const int matches = paradox_builtin_condition_element_matches(
         stable, index, stable_rhs, &work_since_interrupt
       );

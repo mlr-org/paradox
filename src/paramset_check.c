@@ -56,26 +56,6 @@ typedef struct {
   SEXP custom_check;
 } value_spec_t;
 
-enum token_domain_column {
-  TOKEN_DOMAIN_ID = 0,
-  TOKEN_DOMAIN_CLS,
-  TOKEN_DOMAIN_GROUPING,
-  TOKEN_DOMAIN_CARGO,
-  TOKEN_DOMAIN_LOWER,
-  TOKEN_DOMAIN_UPPER,
-  TOKEN_DOMAIN_TOLERANCE,
-  TOKEN_DOMAIN_LEVELS,
-  TOKEN_DOMAIN_SPECIAL_VALUES,
-  TOKEN_DOMAIN_DEFAULT,
-  TOKEN_DOMAIN_STORAGE,
-  TOKEN_DOMAIN_TAGS,
-  TOKEN_DOMAIN_TRAFO,
-  TOKEN_DOMAIN_REQUIREMENTS,
-  TOKEN_DOMAIN_INIT_GIVEN,
-  TOKEN_DOMAIN_INIT,
-  TOKEN_DOMAIN_COLUMN_COUNT
-};
-
 static SEXP validate_tune_token(const value_spec_t *spec, SEXP token,
   R_xlen_t *work_since_interrupt, SEXP *receipt_result);
 
@@ -185,14 +165,6 @@ typedef struct {
   int retain_reasons;
   paradox_activity_result_t result;
 } point_activity_t;
-
-static void account_work(R_xlen_t *work_since_interrupt) {
-  ++*work_since_interrupt;
-  if (*work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
-    R_CheckUserInterrupt();
-    *work_since_interrupt = 0;
-  }
-}
 
 #if defined(R_PRINTF_FORMAT)
 # define PARADOX_PRINTF_FORMAT(format_index, first_argument) \
@@ -370,12 +342,6 @@ static int no_attributes(SEXP value) {
   return paradox_api_has_no_attributes(value);
 }
 
-static double numeric_at(SEXP column, R_xlen_t row) {
-  if (TYPEOF(column) == REALSXP) return REAL_ELT(column, row);
-  const int value = INTEGER_ELT(column, row);
-  return value == NA_INTEGER ? NA_REAL : (double) value;
-}
-
 static SEXP named_list_element(SEXP value, const char *target) {
   if (TYPEOF(value) != VECSXP || ALTREP(value)) return R_UnboundValue;
   SEXP names = PROTECT(Rf_getAttrib(value, R_NamesSymbol));
@@ -440,7 +406,7 @@ static void initialize_id_map(SEXP ids, id_map_t *map) {
   const R_xlen_t mask = capacity - 1;
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t row = 0; row < size; ++row) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP id = STRING_ELT(ids, row);
     const uint64_t hash = hash_string(id);
     R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
@@ -468,7 +434,7 @@ static int find_id(const id_map_t *map, SEXP id, R_xlen_t *row,
   const R_xlen_t mask = map->capacity - 1;
   R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
   while (map->slots[slot].row_plus_one != 0) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t present = map->slots[slot].row_plus_one - 1;
     if (map->slots[slot].hash == hash && paradox_domain_strings_equal(
         STRING_ELT(map->ids, present), id
@@ -481,15 +447,15 @@ static int find_id(const id_map_t *map, SEXP id, R_xlen_t *row,
   return FALSE;
 }
 
-static int contains_id(SEXP ids, SEXP id,
+static R_xlen_t local_param_row(const check_node_t *node, SEXP id,
     R_xlen_t *work_since_interrupt) {
-  for (R_xlen_t index = 0; index < XLENGTH(ids); ++index) {
-    account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(STRING_ELT(ids, index), id)) {
-      return TRUE;
-    }
+  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
+    paradox_account_work(work_since_interrupt);
+    if (paradox_domain_strings_equal(
+        STRING_ELT(node->checked_params.ids, row), id
+      )) return row;
   }
-  return FALSE;
+  return R_XLEN_T_MAX;
 }
 
 static SEXP append_node_roots(SEXP *root_plan,
@@ -560,7 +526,7 @@ static int exact_sets(SEXP sets, SEXP *names,
     return FALSE;
   }
   for (R_xlen_t right = 0; right < XLENGTH(sets); ++right) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP right_name = STRING_ELT(observed_names, right);
     if (right_name == NA_STRING || Rf_getCharCE(right_name) == CE_BYTES) {
       UNPROTECT(1);
@@ -608,7 +574,7 @@ static int exact_translation(SEXP translation,
     initialize_id_map(params->ids, &parameter_ids);
   }
   for (R_xlen_t row = 0; valid && row < rows; ++row) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(ids, row);
     SEXP original = STRING_ELT(originals, row);
     SEXP owner_name = STRING_ELT(owner_names, row);
@@ -716,7 +682,7 @@ static int semantic_value_is_ordinary(SEXP value) {
   stack[0] = value;
   R_xlen_t work_since_interrupt = 0;
   while (size != 0) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP current = stack[--size];
     if (ALTREP(current)) return FALSE;
     if (TYPEOF(current) != VECSXP) continue;
@@ -770,14 +736,14 @@ static void validate_node_schema(check_node_t *node,
   SEXP tolerance = VECTOR_ELT(params, PARADOX_DOMAIN_TOLERANCE);
   SEXP storage = VECTOR_ELT(params, PARADOX_DOMAIN_STORAGE_TYPE);
   for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const value_kind_t kind = value_kind(
       STRING_ELT(classes, row), STRING_ELT(storage, row)
     );
     if (kind == VALUE_DBL || kind == VALUE_INT) {
-      const double row_lower = numeric_at(lower, row);
-      const double row_upper = numeric_at(upper, row);
-      const double row_tolerance = numeric_at(tolerance, row);
+      const double row_lower = paradox_numeric_elt(lower, row);
+      const double row_upper = paradox_numeric_elt(upper, row);
+      const double row_tolerance = paradox_numeric_elt(tolerance, row);
       if (ISNAN(row_lower) || ISNAN(row_upper) ||
           ISNAN(row_tolerance) || row_lower > row_upper ||
           !R_FINITE(row_tolerance) || row_tolerance < 0.0 ||
@@ -791,27 +757,19 @@ static void validate_node_schema(check_node_t *node,
   }
 
   for (R_xlen_t row = 0; row < node->checked_tags.row_count; ++row) {
-    if (!contains_id(
-        node->checked_params.ids,
+    if (local_param_row(
+        node,
         STRING_ELT(node->checked_tags.ids, row),
         work_since_interrupt
-      )) {
+      ) == R_XLEN_T_MAX) {
       Rf_error("Corrupt ParamSet state: tag refers to an unknown parameter");
     }
   }
   for (R_xlen_t row = 0; row < node->checked_values.size; ++row) {
     SEXP stored_id = STRING_ELT(node->checked_values.names, row);
-    R_xlen_t parameter_row = R_XLEN_T_MAX;
-    for (R_xlen_t candidate = 0;
-        candidate < node->checked_params.row_count; ++candidate) {
-      account_work(work_since_interrupt);
-      if (paradox_domain_strings_equal(
-          STRING_ELT(node->checked_params.ids, candidate), stored_id
-        )) {
-        parameter_row = candidate;
-        break;
-      }
-    }
+    const R_xlen_t parameter_row = local_param_row(
+      node, stored_id, work_since_interrupt
+    );
     if (parameter_row == R_XLEN_T_MAX) {
       Rf_error("Corrupt ParamSet state: invalid stored parameter value");
     }
@@ -831,11 +789,11 @@ static void validate_node_schema(check_node_t *node,
     }
   }
   for (R_xlen_t row = 0; row < node->checked_trafos.row_count; ++row) {
-    if (!contains_id(
-        node->checked_params.ids,
+    if (local_param_row(
+        node,
         STRING_ELT(node->checked_trafos.ids, row),
         work_since_interrupt
-      )) {
+      ) == R_XLEN_T_MAX) {
       Rf_error("Corrupt ParamSet state: transformation refers to an unknown parameter");
     }
   }
@@ -844,11 +802,11 @@ static void validate_node_schema(check_node_t *node,
   }
   for (R_xlen_t row = 0;
       row < node->checked_dependencies.row_count; ++row) {
-    if (!contains_id(
-        node->checked_params.ids,
+    if (local_param_row(
+        node,
         STRING_ELT(node->checked_dependencies.ids, row),
         work_since_interrupt
-      )) {
+      ) == R_XLEN_T_MAX) {
       Rf_error("Corrupt ParamSet state: dependency target is unknown");
     }
     paradox_builtin_condition_kind_t condition_kind;
@@ -884,7 +842,7 @@ static SEXP child_root_ids(const check_graph_t *graph, R_xlen_t parent_index,
   SEXP result = PROTECT(Rf_allocVector(STRSXP, child_params->row_count));
   for (R_xlen_t child_row = 0;
       child_row < child_params->row_count; ++child_row) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP child_id = STRING_ELT(child_params->ids, child_row);
     R_xlen_t match = R_XLEN_T_MAX;
     for (R_xlen_t row = 0; row < XLENGTH(exposed); ++row) {
@@ -1166,7 +1124,7 @@ static void build_graph(SEXP private_environment, SEXP self,
         Rf_error("Corrupt ParamSet graph: collection child is not a ParamSet shell");
       }
       for (R_xlen_t ancestor = 0; ancestor < depth; ++ancestor) {
-        account_work(&work_since_interrupt);
+        paradox_account_work(&work_since_interrupt);
         if (graph->nodes[graph->path[ancestor]].self == child) {
           UNPROTECT(1);
           Rf_error("ParamSet graph contains a cycle");
@@ -1235,9 +1193,9 @@ static value_spec_t load_spec(SEXP params, R_xlen_t row) {
     STRING_ELT(VECTOR_ELT(params, PARADOX_DOMAIN_CLS), row),
     STRING_ELT(VECTOR_ELT(params, PARADOX_DOMAIN_STORAGE_TYPE), row)
   );
-  spec.lower = numeric_at(VECTOR_ELT(params, PARADOX_DOMAIN_LOWER), row);
-  spec.upper = numeric_at(VECTOR_ELT(params, PARADOX_DOMAIN_UPPER), row);
-  spec.tolerance = numeric_at(
+  spec.lower = paradox_numeric_elt(VECTOR_ELT(params, PARADOX_DOMAIN_LOWER), row);
+  spec.upper = paradox_numeric_elt(VECTOR_ELT(params, PARADOX_DOMAIN_UPPER), row);
+  spec.tolerance = paradox_numeric_elt(
     VECTOR_ELT(params, PARADOX_DOMAIN_TOLERANCE), row
   );
   spec.levels = VECTOR_ELT(VECTOR_ELT(params, PARADOX_DOMAIN_LEVELS), row);
@@ -1250,17 +1208,6 @@ static value_spec_t load_spec(SEXP params, R_xlen_t row) {
       ))
     : R_NilValue;
   return spec;
-}
-
-static R_xlen_t local_param_row(const check_node_t *node, SEXP id,
-    R_xlen_t *work_since_interrupt) {
-  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
-    account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(
-        STRING_ELT(node->checked_params.ids, row), id
-      )) return row;
-  }
-  return R_XLEN_T_MAX;
 }
 
 static void initialize_activity_mapping(check_plan_t *plan) {
@@ -1324,7 +1271,7 @@ static void initialize_activity_mapping(check_plan_t *plan) {
     for (R_xlen_t local_dependency = 0;
         local_dependency < node->checked_dependencies.row_count;
         ++local_dependency) {
-      account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       SEXP id = STRING_ELT(
         node->checked_dependencies.ids,
         local_dependency
@@ -1488,14 +1435,6 @@ static void initialize_token_binding_symbols(void) {
   token_core_symbol = Rf_install(".core");
 }
 
-static SEXP exact_plain_binding(SEXP environment, SEXP symbol) {
-  return paradox_api_optional_plain_binding_snapshot(environment, symbol);
-}
-
-static SEXP exact_plain_binding_scan(SEXP environment, SEXP symbol) {
-  return paradox_api_plain_binding_scan(environment, symbol);
-}
-
 static int exact_base_param_set_shell(SEXP content,
     SEXP *private_environment, SEXP *core_result) {
   static const char *const classes[] = {"ParamSet", "R6"};
@@ -1514,7 +1453,7 @@ static int exact_base_param_set_shell(SEXP content,
   UNPROTECT(1);
   if (!exact_class) return FALSE;
 
-  SEXP enclosure = PROTECT(exact_plain_binding(
+  SEXP enclosure = PROTECT(paradox_api_optional_plain_binding_snapshot(
     content,
     token_enclosure_symbol
   ));
@@ -1523,8 +1462,8 @@ static int exact_base_param_set_shell(SEXP content,
     UNPROTECT(1);
     return FALSE;
   }
-  SEXP owner = PROTECT(exact_plain_binding(enclosure, token_self_symbol));
-  SEXP candidate_private = PROTECT(exact_plain_binding(
+  SEXP owner = PROTECT(paradox_api_optional_plain_binding_snapshot(enclosure, token_self_symbol));
+  SEXP candidate_private = PROTECT(paradox_api_optional_plain_binding_snapshot(
     enclosure, token_private_symbol
   ));
   if (owner != content || TYPEOF(candidate_private) != ENVSXP ||
@@ -1532,7 +1471,7 @@ static int exact_base_param_set_shell(SEXP content,
     UNPROTECT(3);
     return FALSE;
   }
-  SEXP raw_core = PROTECT(exact_plain_binding(
+  SEXP raw_core = PROTECT(paradox_api_optional_plain_binding_snapshot(
     candidate_private,
     token_core_symbol
   ));
@@ -1612,7 +1551,7 @@ static token_param_set_admission_t admit_token_param_set_base(
   int bounded = candidate_plan.parameter_count != 0;
   for (R_xlen_t row = 0;
       row < candidate_plan.parameter_count && bounded; ++row) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const value_spec_t *candidate = &candidate_plan.specs[row];
     bounded = candidate->kind == VALUE_FCT ||
       candidate->kind == VALUE_LGL ||
@@ -1653,12 +1592,12 @@ static int exact_base_receipt_unchanged(SEXP receipt) {
       strcmp(CHAR(STRING_ELT(classes, 1)), "R6") != 0) {
     return FALSE;
   }
-  SEXP enclosure = exact_plain_binding_scan(shell, token_enclosure_symbol);
+  SEXP enclosure = paradox_api_plain_binding_scan(shell, token_enclosure_symbol);
   if (TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure) ||
-      exact_plain_binding_scan(enclosure, token_self_symbol) != shell ||
-      exact_plain_binding_scan(enclosure, token_private_symbol) !=
+      paradox_api_plain_binding_scan(enclosure, token_self_symbol) != shell ||
+      paradox_api_plain_binding_scan(enclosure, token_private_symbol) !=
         expected_private ||
-      exact_plain_binding_scan(expected_private, token_core_symbol) !=
+      paradox_api_plain_binding_scan(expected_private, token_core_symbol) !=
         expected_core) {
     return FALSE;
   }
@@ -1687,7 +1626,7 @@ void paradox_param_set_scan_token_receipts(SEXP receipts) {
  * before a validation callback ran. Reauthentication is deliberately limited
  * to ordinary, non-forcing bindings and pointer identity: it cannot invoke a
  * candidate method or replay candidate admission. */
-void paradox_param_set_verify_token_receipts(SEXP receipts) {
+static void verify_token_receipts(SEXP receipts) {
   if (receipts == R_NilValue) return;
   if (TYPEOF(receipts) != VECSXP || ALTREP(receipts)) {
     Rf_error("Internal error: malformed ObjectTuneToken receipt set");
@@ -1732,7 +1671,7 @@ static SEXP materialize_atomic(SEXP value) {
   SEXP result = PROTECT(Rf_allocVector(type, size));
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t index = 0; index < size; ++index) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     switch (type) {
     case LGLSXP:
       SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
@@ -2058,11 +1997,11 @@ static SEXP snapshot_tune_token_impl(
       }
       SEXP domain_class = VECTOR_ELT(
         stable_content,
-        TOKEN_DOMAIN_CLS
+        PARADOX_DOMAIN_CLS
       );
       SEXP domain_levels = VECTOR_ELT(
         stable_content,
-        TOKEN_DOMAIN_LEVELS
+        PARADOX_DOMAIN_LEVELS
       );
       if (paradox_domain_string_is(
             STRING_ELT(domain_class, 0),
@@ -2319,7 +2258,7 @@ static SEXP select_tune_target_domains(SEXP all_domains, SEXP token_names,
     R_xlen_t found = R_XLEN_T_MAX;
     for (R_xlen_t candidate = 0;
         candidate < XLENGTH(all_domains); ++candidate) {
-      account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       if (paradox_domain_strings_equal(
           requested,
           STRING_ELT(all_names, candidate)
@@ -2340,18 +2279,18 @@ static SEXP select_tune_target_domains(SEXP all_domains, SEXP token_names,
 
 static value_spec_t target_domain_spec(SEXP domain) {
   if (TYPEOF(domain) != VECSXP || XLENGTH(domain) !=
-      TOKEN_DOMAIN_COLUMN_COUNT) {
+      PARADOX_DOMAIN_COLUMN_COUNT) {
     Rf_error("Internal error: malformed admitted target Domain");
   }
-  SEXP id = VECTOR_ELT(domain, TOKEN_DOMAIN_ID);
-  SEXP cls = VECTOR_ELT(domain, TOKEN_DOMAIN_CLS);
-  SEXP storage = VECTOR_ELT(domain, TOKEN_DOMAIN_STORAGE);
-  SEXP lower = VECTOR_ELT(domain, TOKEN_DOMAIN_LOWER);
-  SEXP upper = VECTOR_ELT(domain, TOKEN_DOMAIN_UPPER);
-  SEXP tolerance = VECTOR_ELT(domain, TOKEN_DOMAIN_TOLERANCE);
-  SEXP cargo_column = VECTOR_ELT(domain, TOKEN_DOMAIN_CARGO);
-  SEXP levels_column = VECTOR_ELT(domain, TOKEN_DOMAIN_LEVELS);
-  SEXP specials_column = VECTOR_ELT(domain, TOKEN_DOMAIN_SPECIAL_VALUES);
+  SEXP id = VECTOR_ELT(domain, PARADOX_DOMAIN_ID);
+  SEXP cls = VECTOR_ELT(domain, PARADOX_DOMAIN_CLS);
+  SEXP storage = VECTOR_ELT(domain, PARADOX_DOMAIN_STORAGE_TYPE);
+  SEXP lower = VECTOR_ELT(domain, PARADOX_DOMAIN_LOWER);
+  SEXP upper = VECTOR_ELT(domain, PARADOX_DOMAIN_UPPER);
+  SEXP tolerance = VECTOR_ELT(domain, PARADOX_DOMAIN_TOLERANCE);
+  SEXP cargo_column = VECTOR_ELT(domain, PARADOX_DOMAIN_CARGO);
+  SEXP levels_column = VECTOR_ELT(domain, PARADOX_DOMAIN_LEVELS);
+  SEXP specials_column = VECTOR_ELT(domain, PARADOX_DOMAIN_SPECIAL_VALS);
   if (TYPEOF(id) != STRSXP || TYPEOF(cls) != STRSXP ||
       TYPEOF(storage) != STRSXP || XLENGTH(id) != 1 || XLENGTH(cls) != 1 ||
       XLENGTH(storage) != 1 ||
@@ -2371,9 +2310,9 @@ static value_spec_t target_domain_spec(SEXP domain) {
     STRING_ELT(cls, 0),
     STRING_ELT(storage, 0)
   );
-  result.lower = numeric_at(lower, 0);
-  result.upper = numeric_at(upper, 0);
-  result.tolerance = numeric_at(tolerance, 0);
+  result.lower = paradox_numeric_elt(lower, 0);
+  result.upper = paradox_numeric_elt(upper, 0);
+  result.tolerance = paradox_numeric_elt(tolerance, 0);
   result.levels = VECTOR_ELT(levels_column, 0);
   result.special_values = VECTOR_ELT(specials_column, 0);
   result.custom_check = result.kind == VALUE_UTY
@@ -2805,7 +2744,7 @@ static int has_tag(const check_plan_t *plan, SEXP id, const char *tag,
   SEXP ids = VECTOR_ELT(plan->root_tags, 0);
   SEXP tags = VECTOR_ELT(plan->root_tags, 1);
   for (R_xlen_t row = 0; row < XLENGTH(ids); ++row) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (paradox_domain_strings_equal(STRING_ELT(ids, row), id) &&
         paradox_domain_string_is(STRING_ELT(tags, row), tag)) {
       return TRUE;
@@ -2818,7 +2757,12 @@ static SEXP local_values(const check_node_t *node, const check_plan_t *plan,
     const point_t *point, const unsigned char *active) {
   R_xlen_t size = 0;
   R_xlen_t work_since_interrupt = 0;
-  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
+  const R_xlen_t row_count = node->checked_params.row_count;
+  R_xlen_t *root_rows = paradox_temporary_alloc(
+    row_count == 0 ? 1 : row_count,
+    sizeof(*root_rows)
+  );
+  for (R_xlen_t row = 0; row < row_count; ++row) {
     R_xlen_t root_row = R_XLEN_T_MAX;
     if (!find_id(
         &plan->root_ids, STRING_ELT(node->root_ids, row), &root_row,
@@ -2826,6 +2770,7 @@ static SEXP local_values(const check_node_t *node, const check_plan_t *plan,
       )) {
       Rf_error("Corrupt ParamSet graph: node-to-root identifier is unknown");
     }
+    root_rows[row] = root_row;
     if (point->value_for_param[root_row] != R_XLEN_T_MAX &&
         (active == NULL || active[root_row])) {
       ++size;
@@ -2834,12 +2779,8 @@ static SEXP local_values(const check_node_t *node, const check_plan_t *plan,
   SEXP values = PROTECT(Rf_allocVector(VECSXP, size));
   SEXP names = PROTECT(Rf_allocVector(STRSXP, size));
   R_xlen_t output = 0;
-  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
-    R_xlen_t root_row = R_XLEN_T_MAX;
-    (void) find_id(
-      &plan->root_ids, STRING_ELT(node->root_ids, row), &root_row,
-      &work_since_interrupt
-    );
+  for (R_xlen_t row = 0; row < row_count; ++row) {
+    const R_xlen_t root_row = root_rows[row];
     const R_xlen_t input = point->value_for_param[root_row];
     if (input == R_XLEN_T_MAX || (active != NULL && !active[root_row])) {
       continue;
@@ -3097,7 +3038,7 @@ static SEXP check_dependencies(check_plan_t *plan,
   for (R_xlen_t dependency = 0;
       dependency < plan->dependency_count;
       ++dependency) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     const R_xlen_t child = plan->dependency_child[dependency];
     const R_xlen_t child_value = point->value_for_param[child];
     if (child_value == R_XLEN_T_MAX ||
@@ -3230,7 +3171,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
   int protected_count = 0;
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t index = 0; index < point->size; ++index) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP value = VECTOR_ELT(point->values, index);
     if (!Rf_inherits(value, "TuneToken")) continue;
     const value_spec_t *spec = &plan->specs[point->param_rows[index]];
@@ -3265,7 +3206,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
       UNPROTECT(1);
     }
   }
-  paradox_param_set_verify_token_receipts(receipts);
+  verify_token_receipts(receipts);
 
   SEXP sanitized = R_NilValue;
   if (sanitize) {
@@ -3273,7 +3214,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
     ++protected_count;
   }
   for (R_xlen_t index = 0; index < point->size; ++index) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     const R_xlen_t row = point->param_rows[index];
     const value_spec_t *spec = &plan->specs[row];
     SEXP value = VECTOR_ELT(point->values, index);
@@ -3291,7 +3232,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
     }
     if (failure != R_NilValue) {
       PROTECT(failure);
-      paradox_param_set_verify_token_receipts(receipts);
+      verify_token_receipts(receipts);
       UNPROTECT(1);
       UNPROTECT(protected_count);
       return failure;
@@ -3307,14 +3248,14 @@ static SEXP validate_initialized_point(check_plan_t *plan,
       failure = PROTECT(check_dependencies(plan, point, &activity));
     }
     if (failure != R_NilValue) {
-      paradox_param_set_verify_token_receipts(receipts);
+      verify_token_receipts(receipts);
       UNPROTECT(protected_count + 1);
       return failure;
     }
     UNPROTECT(1);
   }
 
-  paradox_param_set_verify_token_receipts(receipts);
+  verify_token_receipts(receipts);
 
   SEXP result = PROTECT(Rf_allocVector(LGLSXP, 1));
   LOGICAL(result)[0] = TRUE;
@@ -3323,7 +3264,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
    * Recheck once afterward so public check returns and checked assignment
    * receives receipts for the exact generation that survived all callbacks
    * and allocations in this operation. */
-  paradox_param_set_verify_token_receipts(receipts);
+  verify_token_receipts(receipts);
   if (receipts_result != NULL) *receipts_result = receipts;
   UNPROTECT(protected_count + 1);
   return result;

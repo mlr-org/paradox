@@ -432,7 +432,7 @@ void paradox_require_column(SEXP column, SEXPTYPE type, R_xlen_t size,
   );
 }
 
-paradox_numeric_column_t paradox_get_numeric_column(SEXP column,
+void paradox_require_numeric_column(SEXP column,
     R_xlen_t size, const char *corrupt_context, const char *column_name) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
   if (type != REALSXP && type != INTSXP) {
@@ -458,23 +458,6 @@ paradox_numeric_column_t paradox_get_numeric_column(SEXP column,
       (double) size
     );
   }
-
-  paradox_numeric_column_t result = {
-    type,
-    type == REALSXP ? REAL_RO(column) : NULL,
-    type == INTSXP ? INTEGER_RO(column) : NULL
-  };
-  return result;
-}
-
-double paradox_numeric_at(const paradox_numeric_column_t *column,
-    R_xlen_t index) {
-  if (column->type == REALSXP) {
-    return column->real_values[index];
-  }
-
-  const int value = column->integer_values[index];
-  return value == NA_INTEGER ? NA_REAL : (double) value;
 }
 
 double paradox_accepted_lower(double bound, double tolerance) {

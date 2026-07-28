@@ -26,13 +26,13 @@
   x
 }
 
+# checkmate-style "strict" syntactic R name, shared by the scalar and vector
+# registry name validators.
+.paradox_registry_name_pattern = "^(?:[A-Za-z]|\\.[A-Za-z_.])[A-Za-z0-9._]*$"
+
 .paradox_registry_symbol = function(x, argument) {
   x = .paradox_registry_scalar_string(x, argument)
-  if (!grepl(
-    "^(?:[A-Za-z]|\\.[A-Za-z_.])[A-Za-z0-9._]*$",
-    x,
-    perl = TRUE
-  )) {
+  if (!grepl(.paradox_registry_name_pattern, x, perl = TRUE)) {
     .paradox_registry_abort(
       "`%s` must be an ordinary syntactic R name",
       argument
@@ -56,11 +56,7 @@
       qualifier
     )
   }
-  if (length(x) && any(!grepl(
-    "^(?:[A-Za-z]|\\.[A-Za-z_.])[A-Za-z0-9._]*$",
-    x,
-    perl = TRUE
-  ))) {
+  if (length(x) && any(!grepl(.paradox_registry_name_pattern, x, perl = TRUE))) {
     .paradox_registry_abort(
       "Every element of `%s` must be an ordinary syntactic R name",
       argument
@@ -412,6 +408,16 @@ register_paradox_object_upgrader = function(
   entry
 }
 
+.paradox_registry_require_current = function(entry) {
+  registered = .paradox_lookup_object_upgrader(entry$legacy_class)
+  if (is.null(registered) || !identical(registered, entry)) {
+    .paradox_registry_abort(
+      "Object-upgrader metadata is not the currently registered entry"
+    )
+  }
+  invisible(entry)
+}
+
 .paradox_resolve_object_upgrader_function = function(
   entry,
   which
@@ -423,12 +429,7 @@ register_paradox_object_upgrader = function(
       "`which` must be exactly \"inspector\" or \"rebuilder\""
     )
   }
-  registered = .paradox_lookup_object_upgrader(entry$legacy_class)
-  if (is.null(registered) || !identical(registered, entry)) {
-    .paradox_registry_abort(
-      "Object-upgrader metadata is not the currently registered entry"
-    )
-  }
+  .paradox_registry_require_current(entry)
 
   namespace = getNamespace(entry$owner_package)
   name = entry[[which]]
@@ -441,12 +442,7 @@ register_paradox_object_upgrader = function(
   entry
 ) {
   .paradox_validate_object_upgrader_entry(entry)
-  registered = .paradox_lookup_object_upgrader(entry$legacy_class)
-  if (is.null(registered) || !identical(registered, entry)) {
-    .paradox_registry_abort(
-      "Object-upgrader metadata is not the currently registered entry"
-    )
-  }
+  .paradox_registry_require_current(entry)
   inspection_attributes = attributes(inspection)
   inspection_names = attr(inspection, "names", exact = TRUE)
   if (typeof(inspection) != "list" ||
@@ -535,6 +531,8 @@ register_paradox_object_upgrader = function(
 }
 
 # Stable package-internal integration names used by the migration session.
+# They are also the seam the package's own tests rebind to mock registry
+# resolution; keep the names stable even though they merely forward.
 .paradox_object_upgrader_lookup = function(classes) {
   .paradox_lookup_object_upgrader(classes)
 }

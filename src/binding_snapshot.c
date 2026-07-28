@@ -32,10 +32,11 @@ SEXP paradox_plain_binding_snapshot(SEXP environment, SEXP name) {
   }
 
   SEXP symbol = Rf_installChar(label);
-  if (!paradox_api_frame_has_binding(environment, symbol)) {
-    return binding_snapshot_result(FALSE, R_NilValue);
-  }
-  SEXP value = PROTECT(paradox_api_plain_binding_snapshot(
+  /* One absence-tolerant lookup: the optional facade already folds the
+   * frame-existence probe into the version-selected snapshot, so absent and
+   * non-plain bindings both surface as R_UnboundValue without a second
+   * frame walk. */
+  SEXP value = PROTECT(paradox_api_optional_plain_binding_snapshot(
     environment,
     symbol
   ));

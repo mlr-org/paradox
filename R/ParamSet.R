@@ -462,7 +462,7 @@ ParamSet = R6Class("ParamSet",
     #' @param params (named `list()`)\cr
     #'   Ordinary non-ALTREP/non-S4 list of [`Domain`] objects, named with their
     #'   respective ID. Its names/list metadata is interpreted structure.
-    #' @param allow_dangling_dependencies (`character(1)`)\cr
+    #' @param allow_dangling_dependencies (`logical(1)`)\cr
     #'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
     #'   `depends = y == 0` if `y` is not present would usually throw an error, but if dangling
     #'   dependencies are allowed, the dependency is added regardless. This is mainly for internal
@@ -550,8 +550,8 @@ ParamSet = R6Class("ParamSet",
     #' @param any_tags (`character()`). See `$ids()`.
     #' @param type (`character(1)`)\cr
     #'   Return values `"with_token"` (i.e. all values),
-    #    `"without_token"` (all values that are not [`TuneToken`] objects), `"only_token"` (only [`TuneToken`] objects)
-    #    or `"with_internal"` (all values that are no not `InternalTuneToken`)?
+    #'   `"without_token"` (all values that are not [`TuneToken`] objects), `"only_token"` (only [`TuneToken`] objects),
+    #'   or `"with_internal"` (all values that are not `InternalTuneToken`)?
     #' @param check_required (`logical(1)`)\cr
     #'   Check if all active required parameters are set? This check uses the
     #'   dependency-filtered view, even when `remove_dependencies = FALSE`.
@@ -766,9 +766,9 @@ ParamSet = R6Class("ParamSet",
     #' `check_strict` is `FALSE` (but data type and bounds are checked).
     #' This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
     #' Use `presence = "all"` to check that all parameters are present in `xs`, except for parameters with unsatisfied dependencies.
-    #' 'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
-    #' 'presence = "all"' is often useful when configurations are created
-    #' but some algorithm from a search space param set in optimization.
+    #' `presence = "none"` is often useful when you want to check the validity of settings you want to assign when defaults are already present.
+    #' `presence = "all"` is often useful when configurations are created
+    #' by some algorithm from a search space param set in optimization.
     #'
     #' @param xs (named `list()`).
     #'   The outer container must be an ordinary non-ALTREP list. An S3-classed
@@ -780,7 +780,7 @@ ParamSet = R6Class("ParamSet",
     #' @param sanitize (`logical(1)`)\cr
     #'   Whether to move values that are slightly outside bounds to valid values.
     #'   These values are accepted independent of `sanitize` (depending on the
-    #'   `tolerance` arguments of `p_dbl()` and `p_int()`) . If `sanitize`
+    #'   `tolerance` arguments of `p_dbl()` and `p_int()`). If `sanitize`
     #'   is `TRUE`, the additional effect is that, should checks pass, the
     #'   sanitized values of `xs` are added to the result as attribute `"sanitized"`.
     #' @param presence (`character(1)`)\cr
@@ -859,7 +859,7 @@ ParamSet = R6Class("ParamSet",
     #' @param sanitize (`logical(1)`)\cr
     #'   Whether to move values that are slightly outside bounds to valid values.
     #'   These values are accepted independent of `sanitize` (depending on the
-    #'   `tolerance` arguments of `p_dbl()` and `p_int()`) . If `sanitize`
+    #'   `tolerance` arguments of `p_dbl()` and `p_int()`). If `sanitize`
     #'   is `TRUE`, the additional effect is that `xs` is converted to within bounds.
     #' @param presence (`character(1)`)\cr
     #'   If `"none"` (default), no check is performed for the presence of parameters.

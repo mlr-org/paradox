@@ -11,9 +11,9 @@
 #' @rdname Domain
 #' @export
 p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
-  if (!is.null(aggr)) {
-    if (!is.function(aggr)) stop("`aggr` must be a function", call. = FALSE)
-  }
+  # `aggr`/`in_tune_fn`/`disable_in_tune` are validated by the sole native
+  # Domain admission owner, which reports them by argument name for all five
+  # constructors; boundary code must not restate cargo rules.
   trafo = .paradox_strip_srcref(trafo)
   aggr = .paradox_strip_srcref(aggr)
   in_tune_fn = .paradox_strip_srcref(in_tune_fn)

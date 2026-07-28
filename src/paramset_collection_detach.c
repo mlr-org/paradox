@@ -11,16 +11,6 @@
 #include "r_api_compat.h"
 #include "r_utils.h"
 
-enum detach_plan_field {
-  DETACH_PLAN_TRANSLATION = 0,
-  DETACH_PLAN_CONSTRAINT_INDICES,
-  DETACH_PLAN_CONSTRAINT_SETS,
-  DETACH_PLAN_TRAFO_INDICES,
-  DETACH_PLAN_TRAFO_SETS,
-  DETACH_PLAN_POSTFIX,
-  DETACH_PLAN_FIELD_COUNT
-};
-
 enum detach_translation_column {
   DETACH_TRANSLATION_ID = 0,
   DETACH_TRANSLATION_ORIGINAL_ID,
@@ -80,10 +70,6 @@ static int exact_flag(SEXP value) {
     LOGICAL_ELT(value, 0) != NA_LOGICAL;
 }
 
-static int supported_name(SEXP value) {
-  return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES;
-}
-
 static int exact_sets(SEXP sets, SEXP *names, R_xlen_t *count,
     R_xlen_t *work) {
   if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets) ||
@@ -98,8 +84,8 @@ static int exact_sets(SEXP sets, SEXP *names, R_xlen_t *count,
     return FALSE;
   }
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work);
-    if (!supported_name(STRING_ELT(observed_names, index))) {
+    paradox_account_work(work);
+    if (!paradox_charsxp_is_ordinary(STRING_ELT(observed_names, index))) {
       return FALSE;
     }
   }
@@ -140,11 +126,11 @@ static int exact_translation(SEXP table, const detach_node_t *node,
     return FALSE;
   }
   for (R_xlen_t row = 0; row < rows; ++row) {
-    paradox_domain_account_work(work);
+    paradox_account_work(work);
     const int owner = INTEGER_ELT(owners, row);
-    if (!supported_name(STRING_ELT(ids, row)) ||
-        !supported_name(STRING_ELT(original_ids, row)) ||
-        !supported_name(STRING_ELT(owner_names, row)) ||
+    if (!paradox_charsxp_is_ordinary(STRING_ELT(ids, row)) ||
+        !paradox_charsxp_is_ordinary(STRING_ELT(original_ids, row)) ||
+        !paradox_charsxp_is_ordinary(STRING_ELT(owner_names, row)) ||
         owner <= 0 || (R_xlen_t) owner > XLENGTH(node->sets) ||
         !paradox_domain_strings_equal(
           STRING_ELT(owner_names, row),
@@ -431,7 +417,7 @@ static void build_graph(detach_graph_t *graph, SEXP self,
     detach_node_t *node = &graph->nodes[node_index];
     const R_xlen_t child_count = node_child_count(node);
     for (R_xlen_t child = 0; child < child_count; ++child) {
-      paradox_domain_account_work(work);
+      paradox_account_work(work);
       SEXP child_self = VECTOR_ELT(node->sets, child);
       if (TYPEOF(child_self) != ENVSXP) {
         Rf_error("Corrupt ParamSet capsule graph child");
@@ -537,7 +523,7 @@ static SEXP materialize_requested(SEXP requested) {
   SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
   for (R_xlen_t index = 0; index < size; ++index) {
     SEXP id = STRING_ELT(requested, index);
-    if (!supported_name(id)) {
+    if (!paradox_charsxp_is_ordinary(id)) {
       UNPROTECT(1);
       Rf_error("`ids` must not contain missing or bytes-encoded strings");
     }
@@ -547,12 +533,12 @@ static SEXP materialize_requested(SEXP requested) {
   return result;
 }
 
-static int contains_id(SEXP ids, SEXP id) {
-  if (ids == R_NilValue) {
+static int id_selected(SEXP selected_ids, SEXP id) {
+  if (selected_ids == R_NilValue) {
     return TRUE;
   }
-  for (R_xlen_t index = 0; index < XLENGTH(ids); ++index) {
-    if (paradox_domain_strings_equal(STRING_ELT(ids, index), id)) {
+  for (R_xlen_t index = 0; index < XLENGTH(selected_ids); ++index) {
+    if (paradox_domain_strings_equal(STRING_ELT(selected_ids, index), id)) {
       return TRUE;
     }
   }
@@ -805,7 +791,7 @@ static SEXP collection_detach_plan(SEXP private_environment,
     for (R_xlen_t request = 0;
         request < XLENGTH(requested_snapshot);
         ++request) {
-      if (!contains_id(
+      if (!id_selected(
           root->params.ids,
           STRING_ELT(requested_snapshot, request)
         )) {
@@ -817,7 +803,7 @@ static SEXP collection_detach_plan(SEXP private_environment,
 
   R_xlen_t selected_count = 0;
   for (R_xlen_t row = 0; row < root->params.row_count; ++row) {
-    selected_count += contains_id(
+    selected_count += id_selected(
       requested_snapshot,
       STRING_ELT(root->params.ids, row)
     );
@@ -848,7 +834,7 @@ static SEXP collection_detach_plan(SEXP private_environment,
       root_row < root->params.row_count;
       ++root_row) {
     SEXP root_id = STRING_ELT(root->params.ids, root_row);
-    if (!contains_id(requested_snapshot, root_id)) {
+    if (!id_selected(requested_snapshot, root_id)) {
       continue;
     }
     R_xlen_t current = 0;
@@ -964,16 +950,16 @@ static SEXP collection_detach_plan(SEXP private_environment,
     constraint_count += units[unit].constraint != R_NilValue;
     trafo_count += units[unit].trafo != R_NilValue;
   }
-  SEXP plan = PROTECT(Rf_allocVector(VECSXP, DETACH_PLAN_FIELD_COUNT));
+  SEXP plan = PROTECT(Rf_allocVector(VECSXP, PARADOX_COLLECTION_DETACH_FIELD_COUNT));
   SEXP plan_names = PROTECT(Rf_allocVector(
     STRSXP,
-    DETACH_PLAN_FIELD_COUNT
+    PARADOX_COLLECTION_DETACH_FIELD_COUNT
   ));
   static const char *const field_names[] = {
     "translation", "constraint_indices", "constraint_sets",
     "trafo_indices", "trafo_sets", "postfix"
   };
-  for (R_xlen_t field = 0; field < DETACH_PLAN_FIELD_COUNT; ++field) {
+  for (R_xlen_t field = 0; field < PARADOX_COLLECTION_DETACH_FIELD_COUNT; ++field) {
     SET_STRING_ELT(plan_names, field, Rf_mkChar(field_names[field]));
   }
   Rf_setAttrib(plan, R_NamesSymbol, plan_names);
@@ -994,12 +980,12 @@ static SEXP collection_detach_plan(SEXP private_environment,
     TRUE
   ));
   SEXP postfix = PROTECT(Rf_ScalarLogical(root->postfix));
-  SET_VECTOR_ELT(plan, DETACH_PLAN_TRANSLATION, translation);
-  SET_VECTOR_ELT(plan, DETACH_PLAN_CONSTRAINT_INDICES, constraint_indices);
-  SET_VECTOR_ELT(plan, DETACH_PLAN_CONSTRAINT_SETS, constraint_sets);
-  SET_VECTOR_ELT(plan, DETACH_PLAN_TRAFO_INDICES, trafo_indices);
-  SET_VECTOR_ELT(plan, DETACH_PLAN_TRAFO_SETS, trafo_sets);
-  SET_VECTOR_ELT(plan, DETACH_PLAN_POSTFIX, postfix);
+  SET_VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_TRANSLATION, translation);
+  SET_VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_CONSTRAINT_INDICES, constraint_indices);
+  SET_VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_CONSTRAINT_SETS, constraint_sets);
+  SET_VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_TRAFO_INDICES, trafo_indices);
+  SET_VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_TRAFO_SETS, trafo_sets);
+  SET_VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_POSTFIX, postfix);
 
   SEXP output_ids = VECTOR_ELT(translation, DETACH_TRANSLATION_ID);
   SEXP output_original_ids = VECTOR_ELT(

@@ -374,3 +374,65 @@ test_that("internal", {
 
   expect_error(p_dbl(lower = 1, upper = 2, tags = "internal_tuning", "in_tune_fn"))
 })
+
+test_that("cargo constructor arguments receive argument-named diagnostics", {
+  # The sole native admission owner names the documented argument, uniformly
+  # for all five constructors; no constructor restates cargo rules in R.
+  expect_error(p_dbl(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+  expect_error(p_int(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+  expect_error(
+    p_fct(c("a", "b"), aggr = 5),
+    "`aggr` must be a function",
+    fixed = TRUE
+  )
+  expect_error(p_lgl(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+  expect_error(p_uty(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      aggr = function(x) 1,
+      in_tune_fn = 5,
+      disable_in_tune = list()
+    ),
+    "`in_tune_fn` must be a function",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      aggr = function(x) 1,
+      in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = "no"
+    ),
+    "`disable_in_tune` must be a uniquely named list",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = list()
+    ),
+    "require an `aggr` function",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      aggr = function(x) 1,
+      in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = list()
+    ),
+    "require the tag 'internal_tuning'",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      aggr = function(x) 1,
+      in_tune_fn = function(domain, param_vals) domain$upper
+    ),
+    "must both be present",
+    fixed = TRUE
+  )
+})

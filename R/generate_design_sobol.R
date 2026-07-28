@@ -40,5 +40,5 @@ generate_design_sobol = function(param_set, n) {
   }
   colnames(d) = ids
   d = param_set$qunif(d)
-  Design$new(param_set, set_names(d, ids), remove_dupl = FALSE) # Preserve the requested number of points.
+  Design$new(param_set, d, remove_dupl = FALSE) # Preserve the requested number of points.
 }

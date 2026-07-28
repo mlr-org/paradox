@@ -13,6 +13,14 @@
 #' Dependency conditions (`CondEqual`, `CondAnyOf`) are preserved.
 #' Multiple conditions on the same child are combined using `ConfigSpace.AndConjunction`.
 #'
+#' Transformations are *not* represented in the result: `logscale` and other
+#' `trafo` functions are not applied, so the exported bounds are the raw
+#' (pre-transformation) bounds stored in the [ParamSet], and configurations
+#' drawn from the `ConfigurationSpace` live in that pre-transformation space.
+#' Apply the [ParamSet]`$trafo()` to sampled configurations when
+#' transformations matter. A `$constraint` or `$extra_trafo` function is
+#' likewise not exported.
+#'
 #' Defaults are optional. If a parameter has no default, ConfigSpace will auto-assign one
 #' (e.g. midpoint for numeric parameters, first level for categoricals).
 #'

@@ -15,24 +15,9 @@
 #include "r_api_compat.h"
 #include "r_utils.h"
 
-enum param_column {
-  PARAM_ID = 0,
-  PARAM_CLS,
-  PARAM_GROUPING,
-  PARAM_CARGO,
-  PARAM_LOWER,
-  PARAM_UPPER,
-  PARAM_TOLERANCE,
-  PARAM_LEVELS,
-  PARAM_SPECIAL_VALS,
-  PARAM_DEFAULT,
-  PARAM_STORAGE_TYPE,
-  PARAM_COLUMN_COUNT
-};
-
 enum qunif_column_root {
   QUNIF_ROOT_COLUMNS = 0,
-  QUNIF_ROOT_COUNT = PARAM_COLUMN_COUNT
+  QUNIF_ROOT_COUNT = PARADOX_DOMAIN_TAGS
 };
 
 enum qunif_input_root {
@@ -93,67 +78,8 @@ typedef struct {
   SEXP values;
 } qunif_input_t;
 
-static inline void account_work(R_xlen_t *work_since_interrupt) {
-  ++*work_since_interrupt;
-  if (*work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
-    R_CheckUserInterrupt();
-    *work_since_interrupt = 0;
-  }
-}
-
-static int exact_string(SEXP string, const char *expected) {
-  return string != NA_STRING && strcmp(CHAR(string), expected) == 0;
-}
-
-static char *copy_utf8_string(SEXP string) {
-  const size_t size = strlen(Rf_translateCharUTF8(string));
-  if (size >= (size_t) R_XLEN_T_MAX) {
-    Rf_error("Unable to copy a canonical string");
-  }
-  char *copy = paradox_temporary_alloc(
-    (R_xlen_t) size + 1,
-    sizeof(*copy)
-  );
-  memcpy(copy, Rf_translateCharUTF8(string), size + 1U);
-  return copy;
-}
-
-static int strings_equal(SEXP left, SEXP right) {
-  if (left == right) {
-    return TRUE;
-  }
-  if (left == NA_STRING || right == NA_STRING) {
-    return FALSE;
-  }
-
-  const cetype_t left_encoding = Rf_getCharCE(left);
-  const cetype_t right_encoding = Rf_getCharCE(right);
-  if (left_encoding == CE_BYTES || right_encoding == CE_BYTES) {
-    return left_encoding == CE_BYTES && right_encoding == CE_BYTES &&
-      strcmp(CHAR(left), CHAR(right)) == 0;
-  }
-
-  PROTECT(left);
-  PROTECT(right);
-  const void *vmax = vmaxget();
-  const char *left_text = copy_utf8_string(left);
-  const char *right_text = Rf_translateCharUTF8(right);
-  const int equal = strcmp(left_text, right_text) == 0;
-  vmaxset(vmax);
-  UNPROTECT(2);
-  return equal;
-}
-
-static R_xlen_t qunif_column_root(enum param_column column) {
+static R_xlen_t qunif_column_root(enum paradox_domain_column column) {
   return (R_xlen_t) QUNIF_ROOT_COLUMNS + (R_xlen_t) column;
-}
-
-static double numeric_at(SEXP column, R_xlen_t index) {
-  if (TYPEOF(column) == REALSXP) {
-    return REAL_ELT(column, index);
-  }
-  const int value = INTEGER_ELT(column, index);
-  return value == NA_INTEGER ? NA_REAL : (double) value;
 }
 
 static int load_param_columns(SEXP params, param_columns_t *columns,
@@ -172,11 +98,11 @@ static int load_param_columns(SEXP params, param_columns_t *columns,
     return FALSE;
   }
 
-  for (R_xlen_t column = 0; column < PARAM_COLUMN_COUNT; ++column) {
+  for (R_xlen_t column = 0; column < PARADOX_DOMAIN_TAGS; ++column) {
     SEXP value = PROTECT(VECTOR_ELT(params, column));
     SET_VECTOR_ELT(
       roots,
-      qunif_column_root((enum param_column) column),
+      qunif_column_root((enum paradox_domain_column) column),
       value
     );
     UNPROTECT(1);
@@ -184,37 +110,37 @@ static int load_param_columns(SEXP params, param_columns_t *columns,
 
   columns->ids = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_ID)
+    qunif_column_root(PARADOX_DOMAIN_ID)
   );
   columns->size = checked.row_count;
 
   columns->classes = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_CLS)
+    qunif_column_root(PARADOX_DOMAIN_CLS)
   );
   columns->grouping = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_GROUPING)
+    qunif_column_root(PARADOX_DOMAIN_GROUPING)
   );
   columns->lower = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_LOWER)
+    qunif_column_root(PARADOX_DOMAIN_LOWER)
   );
   columns->upper = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_UPPER)
+    qunif_column_root(PARADOX_DOMAIN_UPPER)
   );
   columns->tolerance = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_TOLERANCE)
+    qunif_column_root(PARADOX_DOMAIN_TOLERANCE)
   );
   columns->levels = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_LEVELS)
+    qunif_column_root(PARADOX_DOMAIN_LEVELS)
   );
   columns->storage_types = VECTOR_ELT(
     roots,
-    qunif_column_root(PARAM_STORAGE_TYPE)
+    qunif_column_root(PARADOX_DOMAIN_STORAGE_TYPE)
   );
 
   return TRUE;
@@ -264,22 +190,22 @@ static int initialize_id_map(SEXP ids, id_map_t *map) {
   id_slot_t *slots = paradox_temporary_alloc(capacity, sizeof(*slots));
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t slot = 0; slot < capacity; ++slot) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     slots[slot].hash = 0;
     slots[slot].row_plus_one = 0;
   }
 
   const R_xlen_t mask = capacity - 1;
   for (R_xlen_t row = 0; row < size; ++row) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP id = PROTECT(STRING_ELT(ids, row));
     const uint64_t hash = hash_string(id);
     R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
     while (slots[slot].row_plus_one != 0) {
-      account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       const R_xlen_t present = slots[slot].row_plus_one - 1;
       if (slots[slot].hash == hash &&
-          strings_equal(STRING_ELT(ids, present), id)) {
+          paradox_domain_strings_equal(STRING_ELT(ids, present), id)) {
         UNPROTECT(1);
         return FALSE;
       }
@@ -302,10 +228,10 @@ static int find_id(const id_map_t *map, SEXP id, R_xlen_t *row,
   const R_xlen_t mask = map->capacity - 1;
   R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
   while (map->slots[slot].row_plus_one != 0) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t present = map->slots[slot].row_plus_one - 1;
     if (map->slots[slot].hash == hash &&
-        strings_equal(STRING_ELT(map->ids, present), id)) {
+        paradox_domain_strings_equal(STRING_ELT(map->ids, present), id)) {
       *row = present;
       return TRUE;
     }
@@ -343,7 +269,7 @@ static void snapshot_input_names(SEXP source_names, R_xlen_t columns,
 
   SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, columns));
   for (R_xlen_t column = 0; column < columns; ++column) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP name = STRING_ELT(source_names, column);
     if (name == NA_STRING) {
       UNPROTECT(2);
@@ -428,8 +354,8 @@ static void snapshot_matrix_input(SEXP x, qunif_input_t *info, SEXP roots,
 
   SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
   for (R_xlen_t index = 0; index < size; ++index) {
-    account_work(work_since_interrupt);
-    const double unit = numeric_at(x, index);
+    paradox_account_work(work_since_interrupt);
+    const double unit = paradox_numeric_elt(x, index);
     require_unit_interval(unit);
     SET_REAL_ELT(stable_values, index, unit);
   }
@@ -488,7 +414,7 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
    * from the single input generation selected at entry. */
   SEXP source_columns = PROTECT(Rf_allocVector(VECSXP, info->columns));
   for (R_xlen_t column = 0; column < info->columns; ++column) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP source = PROTECT(VECTOR_ELT(x, column));
     const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
     if ((type != REALSXP && type != INTSXP) || Rf_isObject(source)) {
@@ -511,8 +437,8 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
   for (R_xlen_t column = 0; column < info->columns; ++column) {
     SEXP source = VECTOR_ELT(source_columns, column);
     for (R_xlen_t row = 0; row < info->rows; ++row) {
-      account_work(work_since_interrupt);
-      const double unit = numeric_at(source, row);
+      paradox_account_work(work_since_interrupt);
+      const double unit = paradox_numeric_elt(source, row);
       require_unit_interval(unit);
       SET_REAL_ELT(
         stable_values,
@@ -546,7 +472,7 @@ static SEXP snapshot_factor_levels(SEXP levels,
   const R_xlen_t size = XLENGTH(levels);
   SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
   for (R_xlen_t level = 0; level < size; ++level) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP value = STRING_ELT(levels, level);
     if (value == NA_STRING) {
       UNPROTECT(1);
@@ -567,14 +493,14 @@ static int load_spec(const param_columns_t *columns, R_xlen_t row,
   spec->levels = R_NilValue;
   SEXP source_levels = PROTECT(VECTOR_ELT(columns->levels, row));
 
-  if (exact_string(class_name, "ParamDbl") &&
-      exact_string(storage_type, "numeric")) {
+  if (paradox_domain_string_is(class_name, "ParamDbl") &&
+      paradox_domain_string_is(storage_type, "numeric")) {
     spec->kind = QUNIF_KIND_DBL;
-  } else if (exact_string(class_name, "ParamInt") &&
-      exact_string(storage_type, "integer")) {
+  } else if (paradox_domain_string_is(class_name, "ParamInt") &&
+      paradox_domain_string_is(storage_type, "integer")) {
     spec->kind = QUNIF_KIND_INT;
-  } else if (exact_string(class_name, "ParamFct") &&
-      exact_string(storage_type, "character")) {
+  } else if (paradox_domain_string_is(class_name, "ParamFct") &&
+      paradox_domain_string_is(storage_type, "character")) {
     SEXP stable_levels = PROTECT(snapshot_factor_levels(
       source_levels,
       work_since_interrupt
@@ -588,8 +514,8 @@ static int load_spec(const param_columns_t *columns, R_xlen_t row,
     SET_VECTOR_ELT(roots, root_index, stable_levels);
     UNPROTECT(2);
     return TRUE;
-  } else if (exact_string(class_name, "ParamLgl") &&
-      exact_string(storage_type, "logical") &&
+  } else if (paradox_domain_string_is(class_name, "ParamLgl") &&
+      paradox_domain_string_is(storage_type, "logical") &&
       TYPEOF(source_levels) == LGLSXP && XLENGTH(source_levels) == 2 &&
       LOGICAL_ELT(source_levels, 0) == TRUE &&
       LOGICAL_ELT(source_levels, 1) == FALSE) {
@@ -601,9 +527,9 @@ static int load_spec(const param_columns_t *columns, R_xlen_t row,
     return FALSE;
   }
 
-  spec->lower = numeric_at(columns->lower, row);
-  spec->upper = numeric_at(columns->upper, row);
-  const double tolerance = numeric_at(columns->tolerance, row);
+  spec->lower = paradox_numeric_elt(columns->lower, row);
+  spec->upper = paradox_numeric_elt(columns->upper, row);
+  const double tolerance = paradox_numeric_elt(columns->tolerance, row);
   const int valid = !ISNAN(spec->lower) && !ISNAN(spec->upper) &&
     !ISNAN(tolerance) && R_FINITE(tolerance) && tolerance >= 0.0 &&
     spec->lower <= spec->upper;
@@ -632,7 +558,7 @@ static SEXP copy_column_names(SEXP names,
   const R_xlen_t size = XLENGTH(names);
   SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
   for (R_xlen_t index = 0; index < size; ++index) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SET_STRING_ELT(result, index, STRING_ELT(names, index));
   }
   UNPROTECT(1);
@@ -668,8 +594,8 @@ static int fill_column(SEXP output, SEXP x, R_xlen_t input_offset,
     R_xlen_t rows, const qunif_spec_t *spec,
     int *warn_integer_range, R_xlen_t *work_since_interrupt) {
   for (R_xlen_t row = 0; row < rows; ++row) {
-    account_work(work_since_interrupt);
-    const double unit = numeric_at(x, input_offset + row);
+    paradox_account_work(work_since_interrupt);
+    const double unit = paradox_numeric_elt(x, input_offset + row);
     switch (spec->kind) {
     case QUNIF_KIND_DBL:
       REAL(output)[row] = paradox_qunif_double_value(
@@ -772,12 +698,12 @@ static void load_grid_specs(const param_columns_t *columns,
     unsigned char *selected, SEXP spec_roots,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t row = 0; row < columns->size; ++row) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     selected[row] = 0;
   }
 
   for (R_xlen_t column = 0; column < columns->size; ++column) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const SEXP name = STRING_ELT(resolution_names, column);
     const int count = counts[column];
     R_xlen_t param_row;
@@ -800,7 +726,7 @@ static void load_grid_specs(const param_columns_t *columns,
           column,
           work_since_interrupt
         )) {
-      if (exact_string(
+      if (paradox_domain_string_is(
           STRING_ELT(columns->classes, param_row),
           "ParamUty"
         )) {
@@ -899,11 +825,11 @@ SEXP paradox_param_set_qunif_builtin(SEXP private_environment, SEXP self,
   );
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t row = 0; row < columns.size; ++row) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     selected[row] = 0;
   }
   for (R_xlen_t column = 0; column < input.columns; ++column) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     R_xlen_t param_row;
     if (!find_id(
           &id_map,
@@ -926,7 +852,7 @@ SEXP paradox_param_set_qunif_builtin(SEXP private_environment, SEXP self,
           column,
           &work_since_interrupt
         )) {
-      if (exact_string(
+      if (paradox_domain_string_is(
           STRING_ELT(columns.classes, param_row),
           "ParamUty"
         )) {
@@ -946,7 +872,7 @@ SEXP paradox_param_set_qunif_builtin(SEXP private_environment, SEXP self,
   ));
   int warn_integer_range = FALSE;
   for (R_xlen_t column = 0; column < input.columns; ++column) {
-    account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     if (input.rows != 0 && specs[column].kind == QUNIF_KIND_FCT &&
         XLENGTH(specs[column].levels) == 0) {
       UNPROTECT(6);
@@ -1180,7 +1106,7 @@ static int axis_builder_contains_last(const grid_axis_builder_t *builder,
   case QUNIF_KIND_LGL:
     return previous.integer == value.integer;
   case QUNIF_KIND_FCT:
-    return strings_equal(previous.string, value.string);
+    return paradox_domain_strings_equal(previous.string, value.string);
   case QUNIF_KIND_UNKNOWN:
     break;
   }
@@ -1213,7 +1139,7 @@ static SEXP realized_axis_vector(const grid_axis_builder_t *builder,
   for (R_xlen_t index = 0;
       index < (R_xlen_t) builder->size;
       ++index) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     switch (kind) {
     case QUNIF_KIND_DBL:
       REAL(result)[index] = builder->values[index].real;
@@ -1243,7 +1169,7 @@ static void build_realized_axis(grid_axis_t *axis, int resolution,
   for (R_xlen_t level = 0;
       level < (R_xlen_t) resolution;
       ++level) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const double unit = grid_unit_value((R_xlen_t) level, resolution);
     grid_scalar_t value;
     switch (axis->spec.kind) {
@@ -1351,7 +1277,7 @@ static int map_fixed_values(const grid_state_t *state,
     fixed_by_parameter[parameter] = R_XLEN_T_MAX;
   }
   for (R_xlen_t value = 0; value < state->values_data.size; ++value) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     R_xlen_t parameter;
     if (!find_id(
           id_map,
@@ -1478,7 +1404,7 @@ static SEXP build_empty_grid(const grid_axis_t *axes,
     R_xlen_t *work_since_interrupt) {
   SEXP result = PROTECT(Rf_allocVector(VECSXP, column_count));
   for (R_xlen_t column = 0; column < column_count; ++column) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP values = axes == NULL
       ? R_NilValue
       : axes[column].values;
@@ -1499,7 +1425,7 @@ static SEXP build_independent_grid(const grid_axis_t *axes,
     int upper_limit_supplied, R_xlen_t *work_since_interrupt) {
   R_xlen_t rows = 1;
   for (R_xlen_t column = 0; column < column_count; ++column) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const int count = axes[column].count;
     if (count == 0) {
       rows = 0;
@@ -1528,7 +1454,7 @@ static SEXP build_independent_grid(const grid_axis_t *axes,
 
   SEXP result = PROTECT(Rf_allocVector(VECSXP, column_count));
   for (R_xlen_t column = 0; column < column_count; ++column) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP values = axes[column].values;
     SEXP output = PROTECT(Rf_allocVector(
       (SEXPTYPE) TYPEOF(values),
@@ -1536,7 +1462,7 @@ static SEXP build_independent_grid(const grid_axis_t *axes,
     ));
     const R_xlen_t column_stride = strides[column];
     for (R_xlen_t row = 0; row < rows; ++row) {
-      account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       const R_xlen_t value = (row / column_stride) %
         (R_xlen_t) axes[column].count;
       copy_axis_element(output, row, values, value);
@@ -1571,7 +1497,7 @@ static int grid_parameter_is_active(
   for (R_xlen_t incoming = plan->incoming_start[parameter];
       incoming < plan->incoming_start[parameter + 1];
       ++incoming) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const paradox_dependency_graph_edge_t *edge =
       &plan->edges[plan->incoming_edges[incoming]];
     if (edge->parent == R_XLEN_T_MAX) return FALSE;
@@ -1648,7 +1574,7 @@ static R_xlen_t enumerate_dependent_grid(
   R_xlen_t rows = 0;
   R_xlen_t depth = 0;
   while (TRUE) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (depth == parameter_count) {
       if (rows >= row_capacity) {
         if (choice_matrix != NULL) {
@@ -1661,7 +1587,7 @@ static R_xlen_t enumerate_dependent_grid(
         for (R_xlen_t parameter = 0;
             parameter < parameter_count;
             ++parameter) {
-          account_work(work_since_interrupt);
+          paradox_account_work(work_since_interrupt);
           choice_matrix[parameter * row_capacity + rows] =
             choices[parameter];
         }
@@ -1759,7 +1685,7 @@ static R_xlen_t *stable_grid_row_order(const int *choice_matrix,
       R_xlen_t right = middle;
       R_xlen_t output = start;
       while (left < middle || right < end) {
-        account_work(work_since_interrupt);
+        paradox_account_work(work_since_interrupt);
         if (right == end || (left < middle && compare_grid_rows(
               source[left],
               source[right],
@@ -1911,7 +1837,7 @@ static SEXP build_dependent_grid(
 
   SEXP result = PROTECT(Rf_allocVector(VECSXP, parameter_count));
   for (R_xlen_t column = 0; column < parameter_count; ++column) {
-    account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const grid_axis_t *axis = &axes[column];
     SEXP output = PROTECT(Rf_allocVector(
       (SEXPTYPE) TYPEOF(axis->values),
@@ -1922,7 +1848,7 @@ static SEXP build_dependent_grid(
       list_missing = PROTECT(Rf_ScalarLogical(NA_LOGICAL));
     }
     for (R_xlen_t row = 0; row < row_count; ++row) {
-      account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       const R_xlen_t generated_row = order == NULL ? row : order[row];
       const int choice = choice_matrix[
         axis->param_row * row_count + generated_row

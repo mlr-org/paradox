@@ -59,7 +59,7 @@ List of \code{\link{Sampler1D}} objects that gives a Sampler for each dimension 
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{param_set}}{(\code{\link{ParamSet}})\cr
-The \code{\link{ParamSet}} to associated with this \code{SamplerHierarchical}.}
+The \code{\link{ParamSet}} to associate with this \code{SamplerHierarchical}.}
       \item{\code{samplers}}{(\code{list()})\cr
 List of \code{\link{Sampler1D}} objects that gives a Sampler for each dimension in the \code{param_set}.}
     }

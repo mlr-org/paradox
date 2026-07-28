@@ -26,6 +26,10 @@ hazards that Paradox 2 is intended to remove.
   `base::getOption()`; newer R uses documented `Rf_GetOption1`. Ordinary old-R
   constructors no longer fall back unconditionally to `deparse1()`, while
   unsupported or unstable representations retain that correctness fallback.
+* Invalid `aggr`, `in_tune_fn`, and `disable_in_tune` constructor arguments
+  are diagnosed by argument name, uniformly for all five Domain constructors,
+  including the Paradox-1 internal-tuning pairing messages (tag required,
+  both-present, aggregation function required).
 * Unknown parameter diagnostics again include a native
   `"Did you mean ...?"` hint when a close ID exists. Paradox 1 accidentally
   ranked the numeric position of the unknown entry instead of its name; the

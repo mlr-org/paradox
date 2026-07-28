@@ -13,26 +13,6 @@
 #include "r_api_compat.h"
 #include "r_utils.h"
 
-enum domain_column {
-  DOMAIN_ID = 0,
-  DOMAIN_CLS,
-  DOMAIN_GROUPING,
-  DOMAIN_CARGO,
-  DOMAIN_LOWER,
-  DOMAIN_UPPER,
-  DOMAIN_TOLERANCE,
-  DOMAIN_LEVELS,
-  DOMAIN_SPECIAL_VALS,
-  DOMAIN_DEFAULT,
-  DOMAIN_STORAGE_TYPE,
-  DOMAIN_TAGS,
-  DOMAIN_TRAFO,
-  DOMAIN_REQUIREMENTS,
-  DOMAIN_INIT_GIVEN,
-  DOMAIN_INIT,
-  DOMAIN_COLUMN_COUNT
-};
-
 typedef enum {
   DOMAIN_KIND_UNKNOWN = 0,
   DOMAIN_KIND_DBL,
@@ -50,10 +30,6 @@ typedef enum {
 
 static int plain_scalar_number_value(SEXP value, double *result);
 static int plain_integer_bound(double value);
-
-static int string_is(SEXP value, const char *expected) {
-  return value != NA_STRING && strcmp(CHAR(value), expected) == 0;
-}
 
 static int scalar_string(SEXP value) {
   return TYPEOF(value) == STRSXP && !ALTREP(value) &&
@@ -193,7 +169,7 @@ static SEXP named_element(SEXP values, const char *name) {
   }
 
   for (R_xlen_t index = 0; index < size; ++index) {
-    if (string_is(STRING_ELT(names, index), name)) {
+    if (paradox_domain_string_is(STRING_ELT(names, index), name)) {
       return VECTOR_ELT(values, index);
     }
   }
@@ -288,10 +264,10 @@ static int cargo_names_are_canonical(SEXP cargo) {
   }
   for (R_xlen_t index = 0; index < size; ++index) {
     SEXP name = STRING_ELT(names, index);
-    if (!string_is(name, "logscale") && !string_is(name, "aggr") &&
-        !string_is(name, "in_tune_fn") &&
-        !string_is(name, "disable_in_tune") &&
-        !string_is(name, "custom_check") && !string_is(name, "repr")) {
+    if (!paradox_domain_string_is(name, "logscale") && !paradox_domain_string_is(name, "aggr") &&
+        !paradox_domain_string_is(name, "in_tune_fn") &&
+        !paradox_domain_string_is(name, "disable_in_tune") &&
+        !paradox_domain_string_is(name, "custom_check") && !paradox_domain_string_is(name, "repr")) {
       UNPROTECT(2);
       return FALSE;
     }
@@ -306,19 +282,19 @@ static domain_kind_t domain_kind_from_class(SEXP cls) {
   }
 
   SEXP class_name = STRING_ELT(cls, 0);
-  if (string_is(class_name, "ParamDbl")) {
+  if (paradox_domain_string_is(class_name, "ParamDbl")) {
     return DOMAIN_KIND_DBL;
   }
-  if (string_is(class_name, "ParamInt")) {
+  if (paradox_domain_string_is(class_name, "ParamInt")) {
     return DOMAIN_KIND_INT;
   }
-  if (string_is(class_name, "ParamFct")) {
+  if (paradox_domain_string_is(class_name, "ParamFct")) {
     return DOMAIN_KIND_FCT;
   }
-  if (string_is(class_name, "ParamLgl")) {
+  if (paradox_domain_string_is(class_name, "ParamLgl")) {
     return DOMAIN_KIND_LGL;
   }
-  if (string_is(class_name, "ParamUty")) {
+  if (paradox_domain_string_is(class_name, "ParamUty")) {
     return DOMAIN_KIND_UTY;
   }
   return DOMAIN_KIND_UNKNOWN;
@@ -346,7 +322,7 @@ static domain_kind_t domain_kind(SEXP cls, SEXP storage_type) {
   const domain_kind_t kind = domain_kind_from_class(cls);
   const char *expected_storage = domain_storage_name(kind);
   if (expected_storage == NULL || !scalar_string(storage_type) ||
-      !string_is(STRING_ELT(storage_type, 0), expected_storage)) {
+      !paradox_domain_string_is(STRING_ELT(storage_type, 0), expected_storage)) {
     return DOMAIN_KIND_UNKNOWN;
   }
   return kind;
@@ -380,17 +356,19 @@ static int has_tag(SEXP tags, const char *target) {
         index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
       R_CheckUserInterrupt();
     }
-    if (string_is(STRING_ELT(tags, index), target)) {
+    if (paradox_domain_string_is(STRING_ELT(tags, index), target)) {
       return TRUE;
     }
   }
   return FALSE;
 }
 
-static int cargo_is_canonical_common(SEXP cargo, SEXP tags) {
+static int cargo_is_canonical_common(SEXP cargo, SEXP tags,
+    paradox_domain_field_t *failure) {
   PROTECT(cargo);
   PROTECT(tags);
   if (!cargo_names_are_canonical(cargo)) {
+    *failure = PARADOX_DOMAIN_FIELD_CARGO;
     UNPROTECT(2);
     return FALSE;
   }
@@ -398,23 +376,36 @@ static int cargo_is_canonical_common(SEXP cargo, SEXP tags) {
   SEXP aggr = PROTECT(named_element(cargo, "aggr"));
   SEXP in_tune_fn = PROTECT(named_element(cargo, "in_tune_fn"));
   SEXP disable_in_tune = PROTECT(named_element(cargo, "disable_in_tune"));
-  if (!function_or_null(aggr) || !function_or_null(in_tune_fn) ||
-      !named_unique_list_or_null(disable_in_tune)) {
+  if (!function_or_null(aggr)) {
+    *failure = PARADOX_DOMAIN_FIELD_CARGO_AGGR;
+    UNPROTECT(5);
+    return FALSE;
+  }
+  if (!function_or_null(in_tune_fn)) {
+    *failure = PARADOX_DOMAIN_FIELD_CARGO_IN_TUNE_FN;
+    UNPROTECT(5);
+    return FALSE;
+  }
+  if (!named_unique_list_or_null(disable_in_tune)) {
+    *failure = PARADOX_DOMAIN_FIELD_CARGO_DISABLE_IN_TUNE;
     UNPROTECT(5);
     return FALSE;
   }
 
   const int internal_tuning = has_tag(tags, "internal_tuning");
   if (internal_tuning && aggr == R_NilValue) {
+    *failure = PARADOX_DOMAIN_FIELD_CARGO_TUNING_AGGR;
     UNPROTECT(5);
     return FALSE;
   }
   if ((in_tune_fn != R_NilValue || disable_in_tune != R_NilValue) &&
       !internal_tuning) {
+    *failure = PARADOX_DOMAIN_FIELD_CARGO_TUNING_TAG;
     UNPROTECT(5);
     return FALSE;
   }
   if ((in_tune_fn == R_NilValue) != (disable_in_tune == R_NilValue)) {
+    *failure = PARADOX_DOMAIN_FIELD_CARGO_TUNING_PAIR;
     UNPROTECT(5);
     return FALSE;
   }
@@ -447,9 +438,50 @@ static int cargo_matches_kind(SEXP cargo, domain_kind_t kind) {
   return valid;
 }
 
-static int cargo_is_canonical(SEXP cargo, SEXP tags, domain_kind_t kind) {
-  return cargo_is_canonical_common(cargo, tags) &&
-    cargo_matches_kind(cargo, kind);
+static int cargo_is_canonical(SEXP cargo, SEXP tags, domain_kind_t kind,
+    paradox_domain_field_t *failure) {
+  paradox_domain_field_t observed = PARADOX_DOMAIN_FIELD_CARGO;
+  int valid = cargo_is_canonical_common(cargo, tags, &observed);
+  if (valid && !cargo_matches_kind(cargo, kind)) {
+    observed = PARADOX_DOMAIN_FIELD_CARGO;
+    valid = FALSE;
+  }
+  if (!valid && failure != NULL) {
+    *failure = observed;
+  }
+  return valid;
+}
+
+/* Constructor-boundary diagnostics for the documented cargo arguments. The
+ * admission owner reports the same codes through the shared field-name
+ * template; this direct entry names the argument the caller actually typed. */
+static void cargo_argument_error(paradox_domain_field_t failure) {
+  switch (failure) {
+  case PARADOX_DOMAIN_FIELD_CARGO_AGGR:
+    Rf_error("`aggr` must be a function");
+  case PARADOX_DOMAIN_FIELD_CARGO_IN_TUNE_FN:
+    Rf_error("`in_tune_fn` must be a function");
+  case PARADOX_DOMAIN_FIELD_CARGO_DISABLE_IN_TUNE:
+    Rf_error("`disable_in_tune` must be a uniquely named list");
+  case PARADOX_DOMAIN_FIELD_CARGO_TUNING_AGGR:
+    Rf_error(
+      "Parameters tagged 'internal_tuning' require an `aggr` function"
+    );
+  case PARADOX_DOMAIN_FIELD_CARGO_TUNING_TAG:
+    Rf_error(
+      "Arguments in_tune_fn and disable_in_tune require the tag "
+      "'internal_tuning' to be present."
+    );
+  case PARADOX_DOMAIN_FIELD_CARGO_TUNING_PAIR:
+    Rf_error(
+      "Arguments in_tune_fn and disable_in_tune must both be present"
+    );
+  default:
+    Rf_error(
+      "Invalid built-in Domain state; Paradox 2 supports only canonical "
+      "p_dbl, p_int, p_fct, p_lgl, and p_uty Domains."
+    );
+  }
 }
 
 static paradox_builtin_domain_kind_t public_domain_kind(domain_kind_t kind) {
@@ -557,7 +589,7 @@ SEXP paradox_snapshot_builtin_requirements(SEXP requirements,
   const R_xlen_t size = XLENGTH(requirements);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP requirement = PROTECT(VECTOR_ELT(requirements, index));
     if (TYPEOF(requirement) != VECSXP || ALTREP(requirement) ||
         Rf_isS4(requirement) ||
@@ -591,11 +623,9 @@ SEXP paradox_snapshot_builtin_requirements(SEXP requirements,
     }
 
     paradox_builtin_condition_kind_t condition_kind;
-    SEXP stable_rhs = R_NilValue;
     SEXP admitted_rhs = PROTECT(paradox_builtin_condition_admit(
       VECTOR_ELT(requirement, 1),
       &condition_kind,
-      &stable_rhs,
       work_since_interrupt
     ));
     if (admitted_rhs == R_NilValue) {
@@ -651,7 +681,7 @@ static int canonical_requirements(SEXP requirements,
     return FALSE;
   }
   for (R_xlen_t index = 0; index < XLENGTH(requirements); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP requirement = VECTOR_ELT(requirements, index);
     if (TYPEOF(requirement) != VECSXP || ALTREP(requirement) ||
         Rf_isS4(requirement) ||
@@ -703,6 +733,14 @@ const char *paradox_domain_field_name(paradox_domain_field_t field) {
   case PARADOX_DOMAIN_FIELD_INIT_TRAFO: return "Initial value and trafo";
   case PARADOX_DOMAIN_FIELD_INIT_VALUE: return "initial value";
   case PARADOX_DOMAIN_FIELD_LEVELS_DUPLICATE: return "levels (duplicates)";
+  case PARADOX_DOMAIN_FIELD_CARGO_AGGR: return "cargo (aggr)";
+  case PARADOX_DOMAIN_FIELD_CARGO_IN_TUNE_FN: return "cargo (in_tune_fn)";
+  case PARADOX_DOMAIN_FIELD_CARGO_DISABLE_IN_TUNE:
+    return "cargo (disable_in_tune)";
+  case PARADOX_DOMAIN_FIELD_CARGO_TUNING_TAG:
+  case PARADOX_DOMAIN_FIELD_CARGO_TUNING_PAIR:
+  case PARADOX_DOMAIN_FIELD_CARGO_TUNING_AGGR:
+    return "cargo (internal-tuning pairing)";
   }
   return "unknown";
 }
@@ -764,7 +802,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
   }
   *kind = public_domain_kind(private_kind);
   if (!scalar_string(grouping) ||
-      (private_kind != DOMAIN_KIND_FCT && !string_is(
+      (private_kind != DOMAIN_KIND_FCT && !paradox_domain_string_is(
         STRING_ELT(grouping, 0),
         CHAR(STRING_ELT(cls, 0))
       ))) {
@@ -776,7 +814,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS);
   }
   for (R_xlen_t index = 0; index < XLENGTH(tags); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (STRING_ELT(tags, index) == NA_STRING) {
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS);
     }
@@ -784,8 +822,11 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
   if (Rf_any_duplicated(tags, FALSE) != 0) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS_DUPLICATE);
   }
-  if (!cargo_is_canonical(cargo, tags, private_kind)) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_CARGO);
+  {
+    paradox_domain_field_t cargo_failure = PARADOX_DOMAIN_FIELD_CARGO;
+    if (!cargo_is_canonical(cargo, tags, private_kind, &cargo_failure)) {
+      REJECT_DOMAIN_FIELD(cargo_failure);
+    }
   }
   if (!function_or_null(trafo)) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TRAFO);
@@ -800,7 +841,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
   }
   if (private_kind != DOMAIN_KIND_UTY) {
     for (R_xlen_t index = 0; index < XLENGTH(special_values); ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       if (ALTREP(VECTOR_ELT(special_values, index))) {
         REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
       }
@@ -1032,31 +1073,31 @@ static SEXP build_domain_shell(
   PROTECT(init_given);
   PROTECT(init_value);
   PROTECT(requirements);
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, DOMAIN_COLUMN_COUNT));
-  SET_VECTOR_ELT(result, DOMAIN_ID, id);
-  SET_VECTOR_ELT(result, DOMAIN_CLS, cls);
-  SET_VECTOR_ELT(result, DOMAIN_GROUPING, grouping);
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, PARADOX_DOMAIN_COLUMN_COUNT));
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_ID, id);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_CLS, cls);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_GROUPING, grouping);
   SEXP cargo_column = PROTECT(one_element_list(cargo));
-  SET_VECTOR_ELT(result, DOMAIN_CARGO, cargo_column);
-  SET_VECTOR_ELT(result, DOMAIN_LOWER, lower);
-  SET_VECTOR_ELT(result, DOMAIN_UPPER, upper);
-  SET_VECTOR_ELT(result, DOMAIN_TOLERANCE, tolerance);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_CARGO, cargo_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_LOWER, lower);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_UPPER, upper);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_TOLERANCE, tolerance);
   SEXP levels_column = PROTECT(one_element_list(levels));
-  SET_VECTOR_ELT(result, DOMAIN_LEVELS, levels_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_LEVELS, levels_column);
   SEXP special_column = PROTECT(one_element_list(special_vals));
-  SET_VECTOR_ELT(result, DOMAIN_SPECIAL_VALS, special_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_SPECIAL_VALS, special_column);
   SEXP default_column = PROTECT(one_element_list(default_value));
-  SET_VECTOR_ELT(result, DOMAIN_DEFAULT, default_column);
-  SET_VECTOR_ELT(result, DOMAIN_STORAGE_TYPE, storage_type);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_DEFAULT, default_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_STORAGE_TYPE, storage_type);
   SEXP tags_column = PROTECT(one_element_list(tags));
-  SET_VECTOR_ELT(result, DOMAIN_TAGS, tags_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_TAGS, tags_column);
   SEXP trafo_column = PROTECT(one_element_list(trafo));
-  SET_VECTOR_ELT(result, DOMAIN_TRAFO, trafo_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_TRAFO, trafo_column);
   SEXP requirements_column = PROTECT(one_element_list(requirements));
-  SET_VECTOR_ELT(result, DOMAIN_REQUIREMENTS, requirements_column);
-  SET_VECTOR_ELT(result, DOMAIN_INIT_GIVEN, init_given);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_REQUIREMENTS, requirements_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_INIT_GIVEN, init_given);
   SEXP init_column = PROTECT(one_element_list(init_value));
-  SET_VECTOR_ELT(result, DOMAIN_INIT, init_column);
+  SET_VECTOR_ELT(result, PARADOX_DOMAIN_INIT, init_column);
   SEXP prepared = PROTECT(paradox_domain_prepare_facade(
     result,
     STRING_ELT(cls, 0),
@@ -1273,7 +1314,6 @@ SEXP paradox_domain_construct(
       !paradox_api_has_no_attributes(init_given) ||
       XLENGTH(init_given) != 1 ||
       LOGICAL_ELT(init_given, 0) == NA_LOGICAL ||
-      !cargo_is_canonical(cargo, tags, kind) ||
       named_element(cargo, "logscale") != R_NilValue) {
     UNPROTECT(1);
     Rf_error(
@@ -1281,11 +1321,18 @@ SEXP paradox_domain_construct(
       "p_dbl, p_int, p_fct, p_lgl, and p_uty Domains."
     );
   }
+  {
+    paradox_domain_field_t cargo_failure = PARADOX_DOMAIN_FIELD_CARGO;
+    if (!cargo_is_canonical(cargo, tags, kind, &cargo_failure)) {
+      UNPROTECT(1);
+      cargo_argument_error(cargo_failure);
+    }
+  }
 
   if (source_kind != NUMERIC_SOURCE_NONE) {
     const int integer = source_kind == NUMERIC_SOURCE_INT;
     const char *expected_grouping = integer ? "ParamInt" : "ParamDbl";
-    if (!string_is(STRING_ELT(grouping, 0), expected_grouping)) {
+    if (!paradox_domain_string_is(STRING_ELT(grouping, 0), expected_grouping)) {
       UNPROTECT(1);
       Rf_error("Invalid numeric Domain grouping");
     }
@@ -1384,7 +1431,7 @@ SEXP paradox_domain_construct(
       }
       kind = domain_kind(cls, storage_type);
       if (kind != DOMAIN_KIND_DBL ||
-          !cargo_is_canonical(cargo, tags, kind)) {
+          !cargo_is_canonical(cargo, tags, kind, NULL)) {
         UNPROTECT(1);
         Rf_error("Internal error while constructing logscale Domain state");
       }

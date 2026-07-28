@@ -73,8 +73,11 @@ ps = function(..., .extra_trafo = NULL, .constraint = NULL, .allow_dangling_depe
     list(...),
     allow_dangling_dependencies = .allow_dangling_dependencies
   )
-  param_set$extra_trafo = .extra_trafo
-  param_set$constraint = .constraint
+  # A fresh ParamSet already has NULL callbacks. Entering the native setter
+  # only to store NULL over NULL would validate and swap a replacement capsule
+  # twice on every callback-free ps() call.
+  if (!is.null(.extra_trafo)) param_set$extra_trafo = .extra_trafo
+  if (!is.null(.constraint)) param_set$constraint = .constraint
   param_set
 }
 

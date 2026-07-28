@@ -4,23 +4,6 @@
 
 #include "r_utils.h"
 
-static int dependency_strings_equal(SEXP left, SEXP right) {
-  return left == right || (left != NA_STRING && right != NA_STRING &&
-    paradox_domain_strings_equal(left, right));
-}
-
-static R_xlen_t dependency_find_string(SEXP values, SEXP sought,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t count = XLENGTH(values);
-  for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (dependency_strings_equal(STRING_ELT(values, index), sought)) {
-      return index;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
-
 void paradox_dependency_graph_topological_order(
     const paradox_dependency_graph_plan_t *plan,
     const R_xlen_t *branch_factors, R_xlen_t *result,
@@ -46,7 +29,7 @@ void paradox_dependency_graph_topological_order(
     emitted[parameter] = FALSE;
   }
   for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t child = plan->edges[edge].child;
     const R_xlen_t parent = plan->edges[edge].parent;
     if (child >= parameter_count ||
@@ -64,7 +47,7 @@ void paradox_dependency_graph_topological_order(
   for (R_xlen_t output = 0; output < parameter_count; ++output) {
     R_xlen_t selected = R_XLEN_T_MAX;
     for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       if (emitted[parameter] || indegree[parameter] != 0) {
         continue;
       }
@@ -80,7 +63,7 @@ void paradox_dependency_graph_topological_order(
     emitted[selected] = TRUE;
     result[output] = selected;
     for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       if (plan->edges[edge].parent != selected) {
         continue;
       }
@@ -121,13 +104,13 @@ void paradox_dependency_graph_plan_build(SEXP parameter_ids,
   }
 
   for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
-    paradox_domain_account_work(work_since_interrupt);
-    const R_xlen_t child = dependency_find_string(
+    paradox_account_work(work_since_interrupt);
+    const R_xlen_t child = paradox_domain_find_string(
       parameter_ids,
       STRING_ELT(dependencies->ids, edge),
       work_since_interrupt
     );
-    const R_xlen_t parent = dependency_find_string(
+    const R_xlen_t parent = paradox_domain_find_string(
       parameter_ids,
       STRING_ELT(dependencies->on, edge),
       work_since_interrupt

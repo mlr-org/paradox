@@ -24,13 +24,22 @@ static const char *const core_field_names[PARADOX_CORE_FIELD_COUNT] = {
 };
 
 static SEXP core_tag(paradox_core_kind_t kind) {
+  /* Interned symbols are permanent, so caching them keeps the per-read tag
+   * classification free of repeated symbol-table lookups. Every capsule read
+   * classifies its tag at least once. */
+  static SEXP tags[PARADOX_CORE_SHADOW + 1] = {NULL, NULL, NULL, NULL};
+  if (tags[PARADOX_CORE_BASE] == NULL) {
+    tags[PARADOX_CORE_BASE] = Rf_install("paradox.core.base.v1");
+    tags[PARADOX_CORE_COLLECTION] = Rf_install("paradox.core.collection.v1");
+    tags[PARADOX_CORE_SHADOW] = Rf_install("paradox.core.shadow.v1");
+  }
   switch (kind) {
   case PARADOX_CORE_BASE:
-    return Rf_install("paradox.core.base.v1");
   case PARADOX_CORE_COLLECTION:
-    return Rf_install("paradox.core.collection.v1");
   case PARADOX_CORE_SHADOW:
-    return Rf_install("paradox.core.shadow.v1");
+    return tags[kind];
+  case PARADOX_CORE_NONE:
+    break;
   }
   return R_NilValue;
 }
@@ -45,7 +54,7 @@ static paradox_core_kind_t kind_from_tag(SEXP tag) {
   if (tag == core_tag(PARADOX_CORE_SHADOW)) {
     return PARADOX_CORE_SHADOW;
   }
-  return 0;
+  return PARADOX_CORE_NONE;
 }
 
 static int exact_payload(SEXP payload) {
@@ -76,7 +85,7 @@ static int exact_names(SEXP names) {
   return TRUE;
 }
 
-static int exact_payload_schema(SEXP payload) {
+int paradox_core_state_exact_schema(SEXP payload) {
   if (!exact_payload(payload)) {
     return FALSE;
   }
@@ -128,7 +137,7 @@ int paradox_core_is_valid(SEXP core) {
   return TYPEOF(core) == EXTPTRSXP && !Rf_isS4(core) &&
     R_ExternalPtrAddr(core) == NULL &&
     !Rf_isS4(R_ExternalPtrTag(core)) &&
-    kind_from_tag(R_ExternalPtrTag(core)) != 0 &&
+    kind_from_tag(R_ExternalPtrTag(core)) != PARADOX_CORE_NONE &&
     exact_payload(R_ExternalPtrProtected(core));
 }
 
@@ -136,7 +145,7 @@ int paradox_core_has_exact_schema(SEXP core) {
   if (!paradox_core_is_valid(core)) {
     return FALSE;
   }
-  return exact_payload_schema(R_ExternalPtrProtected(core));
+  return paradox_core_state_exact_schema(R_ExternalPtrProtected(core));
 }
 
 int paradox_core_is_canonical(SEXP core) {
@@ -147,7 +156,7 @@ int paradox_core_is_canonical(SEXP core) {
 paradox_core_kind_t paradox_core_kind(SEXP core) {
   return paradox_core_is_valid(core)
     ? kind_from_tag(R_ExternalPtrTag(core))
-    : 0;
+    : PARADOX_CORE_NONE;
 }
 
 SEXP paradox_core_payload(SEXP core) {
@@ -323,14 +332,6 @@ SEXP paradox_test_core_graph_root_barrier_counts(SEXP reset) {
 }
 #endif
 
-static void account_graph_work(R_xlen_t *work_since_interrupt) {
-  ++*work_since_interrupt;
-  if (*work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
-    R_CheckUserInterrupt();
-    *work_since_interrupt = 0;
-  }
-}
-
 void paradox_core_validate_graph_path(SEXP root) {
   /*
    * R_alloc() owns only the raw frame bytes; R's collector cannot discover
@@ -371,7 +372,7 @@ void paradox_core_validate_graph_path(SEXP root) {
   );
 
   while (depth != 0) {
-    account_graph_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     core_graph_frame_t *frame = &frames[depth - 1];
     if (!frame->entered) {
       SEXP private_environment = PROTECT(private_from_self(frame->self));
@@ -454,7 +455,7 @@ void paradox_core_validate_graph_path(SEXP root) {
       Rf_error("Corrupt ParamSet capsule graph child");
     }
     for (R_xlen_t ancestor = 0; ancestor < depth; ++ancestor) {
-      account_graph_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       if (frames[ancestor].self == child) {
         Rf_error("ParamSet capsule graph contains a cycle");
       }
@@ -510,7 +511,7 @@ static paradox_core_kind_t scalar_kind(SEXP kind) {
 
 SEXP paradox_param_set_core_new(SEXP kind, SEXP state) {
   const paradox_core_kind_t parsed_kind = scalar_kind(kind);
-  if (!exact_payload_schema(state)) {
+  if (!paradox_core_state_exact_schema(state)) {
     Rf_error(
       "`state` must use the exact canonical ten-field ParamSet state schema"
     );
@@ -519,13 +520,6 @@ SEXP paradox_param_set_core_new(SEXP kind, SEXP state) {
   SEXP result = PROTECT(new_core(parsed_kind, payload));
   UNPROTECT(2);
   return result;
-}
-
-static SEXP core_from_owner(SEXP owner) {
-  if (paradox_core_is_canonical(owner)) {
-    return owner;
-  }
-  return paradox_core_from_private_optional(owner);
 }
 
 static SEXP state_from_selected_core(SEXP core) {
@@ -548,15 +542,20 @@ SEXP paradox_param_set_core_state(SEXP owner) {
 }
 
 SEXP paradox_param_set_core_kind(SEXP owner) {
-  if (TYPEOF(owner) == EXTPTRSXP && !paradox_core_is_canonical(owner)) {
-    Rf_error("Corrupt ParamSet state: noncanonical versioned core capsule");
+  SEXP core;
+  if (TYPEOF(owner) == EXTPTRSXP) {
+    if (!paradox_core_is_canonical(owner)) {
+      Rf_error("Corrupt ParamSet state: noncanonical versioned core capsule");
+    }
+    core = owner;
+  } else {
+    /* The optional private lookup already admits only canonical capsules. */
+    core = paradox_core_from_private_optional(owner);
+    if (core == R_UnboundValue) {
+      Rf_error("Corrupt ParamSet state: missing versioned core capsule");
+    }
   }
-  SEXP core = core_from_owner(owner);
-  if (core == R_UnboundValue) {
-    Rf_error("Corrupt ParamSet state: missing versioned core capsule");
-  }
-  const paradox_core_kind_t kind = paradox_core_kind(core);
-  return Rf_ScalarInteger((int) kind);
+  return Rf_ScalarInteger((int) kind_from_tag(R_ExternalPtrTag(core)));
 }
 
 SEXP paradox_param_set_core_replace(SEXP owner, SEXP updates) {

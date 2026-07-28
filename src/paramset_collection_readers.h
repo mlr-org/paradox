@@ -109,6 +109,18 @@ attribute_hidden SEXP paradox_collection_dependencies_from_graph(
   R_xlen_t *work_since_interrupt
 );
 
+/* Field layout of the callback-detachment plan produced below and consumed
+ * by the Shadow adapter builder. */
+enum paradox_collection_detach_field {
+  PARADOX_COLLECTION_DETACH_TRANSLATION = 0,
+  PARADOX_COLLECTION_DETACH_CONSTRAINT_INDICES,
+  PARADOX_COLLECTION_DETACH_CONSTRAINT_SETS,
+  PARADOX_COLLECTION_DETACH_TRAFO_INDICES,
+  PARADOX_COLLECTION_DETACH_TRAFO_SETS,
+  PARADOX_COLLECTION_DETACH_POSTFIX,
+  PARADOX_COLLECTION_DETACH_FIELD_COUNT
+};
+
 /* Construct the callback-detachment plan from the exact admitted graph.
  * In particular, migration preflight can consume offside SHADOW previews
  * without traversing live shells again or committing a nested refresh. */

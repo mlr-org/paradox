@@ -29,7 +29,7 @@ This emulates \code{ParamSetCollection$new(sets)}, which in particular means tha
 from the input \code{sets}, but some \verb{$id}s are changed: If the \code{\link{ParamSet}} is given in \code{sets} with a name, then the \code{\link{Domain}}s will
 have their \verb{<id>} changed to \verb{<name in "sets">.<id>}. This is also reflected in deps.
 
-The \code{c()} operator, applied to \code{\link{ParamSet}}s, is a synony for \code{ps_union()}.
+The \code{c()} operator, applied to \code{\link{ParamSet}}s, is a synonym for \code{ps_union()}.
 The named arguments \code{tag_sets}, \code{tag_params}, and \code{postfix_names} are also available in the \code{c()} operator, but need to be
 used with a preceding dot instead: \code{.tag_sets}, \code{.tag_params}, and \code{.postfix_names}.
 }

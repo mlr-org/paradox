@@ -101,7 +101,7 @@ static SEXP materialize_altrep_value(SEXP value,
   const R_xlen_t size = XLENGTH(value);
   SEXP result = PROTECT(Rf_allocVector(type, size));
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     switch (type) {
     case LGLSXP:
       SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
@@ -156,7 +156,7 @@ static SEXP snapshot_plain_list(SEXP value, SEXP names, R_xlen_t size,
     ++protected_count;
   }
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP element = PROTECT(VECTOR_ELT(value, index));
     SEXP stable_element = PROTECT(ALTREP(element)
       ? materialize_altrep_value(element, work_since_interrupt)
@@ -183,7 +183,7 @@ static int names_are_unique(SEXP names, R_xlen_t size,
     return FALSE;
   }
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (STRING_ELT(names, index) == NA_STRING) {
       return FALSE;
     }
@@ -195,7 +195,7 @@ static R_xlen_t find_name(SEXP names, SEXP sought,
     R_xlen_t *work_since_interrupt) {
   const R_xlen_t size = names == R_NilValue ? 0 : XLENGTH(names);
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (paradox_domain_strings_equal(STRING_ELT(names, index), sought)) {
       return index;
     }
@@ -254,7 +254,7 @@ static void load_base_param_state(SEXP private_environment, SEXP self,
   R_xlen_t unused_row = 0;
   const int valid = state->params != R_UnboundValue &&
     current_values != R_UnboundValue &&
-    paradox_params_supported_table_attributes(state->params, FALSE) &&
+    paradox_params_supported_table_attributes(state->params) &&
     paradox_domain_validate_params(
       state->params,
       R_NilValue,
@@ -302,7 +302,7 @@ static SEXP ordered_values(SEXP ids, SEXP values,
   }
   R_xlen_t output_size = 0;
   for (R_xlen_t row = 0; row < id_size; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (INTEGER_ELT(matches, row) > 0) {
       ++output_size;
     }
@@ -311,7 +311,7 @@ static SEXP ordered_values(SEXP ids, SEXP values,
   SEXP result_names = PROTECT(Rf_allocVector(STRSXP, output_size));
   R_xlen_t output = 0;
   for (R_xlen_t row = 0; row < id_size; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const int matched = INTEGER_ELT(matches, row);
     if (matched > 0) {
       const R_xlen_t source = (R_xlen_t) matched - 1;
@@ -451,7 +451,7 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
     }
     SEXP result_names = PROTECT(Rf_allocVector(STRSXP, update_size));
     for (R_xlen_t index = 0; index < update_size; ++index) {
-      paradox_domain_account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       SET_VECTOR_ELT(
         result,
         index,
@@ -474,7 +474,7 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
   }
   R_xlen_t output_size = 0;
   for (R_xlen_t index = 0; index < current_size; ++index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     const R_xlen_t update = find_name(
       dot_names,
       STRING_ELT(current_names, index),
@@ -494,7 +494,7 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
     }
   }
   for (R_xlen_t update = 0; update < update_size; ++update) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     if (update_value(dots, values, dot_size, update) != R_NilValue &&
         find_name(
           current_names,
@@ -509,7 +509,7 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
   SEXP result_names = PROTECT(Rf_allocVector(STRSXP, output_size));
   R_xlen_t output = 0;
   for (R_xlen_t index = 0; index < current_size; ++index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     R_xlen_t update = find_name(
       dot_names,
       STRING_ELT(current_names, index),
@@ -543,7 +543,7 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
     }
   }
   for (R_xlen_t update = 0; update < update_size; ++update) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP name = update_name(dot_names, value_names, dot_size, update);
     SEXP replacement = update_value(dots, values, dot_size, update);
     if (replacement != R_NilValue && find_name(
@@ -672,7 +672,7 @@ static int exact_translation(SEXP translation, SEXP sets, int postfix,
     return FALSE;
   }
   for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const int owner = INTEGER_ELT(owners, row);
     if (owner == NA_INTEGER || owner < 1 ||
         (R_xlen_t) owner > set_count ||
@@ -725,7 +725,7 @@ static SEXP snapshot_store_translation(SEXP translation, SEXP set_names,
   UNPROTECT(1);
 
   for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(ids, row);
     SEXP original = STRING_ELT(originals, row);
     SEXP owner_name = STRING_ELT(owner_names, row);
@@ -817,7 +817,7 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
   const R_xlen_t child_count = original_child_count;
 
   for (R_xlen_t child = 0; child < child_count; ++child) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP child_set = VECTOR_ELT(sets, child);
     if (TYPEOF(child_set) != ENVSXP ||
         !Rf_inherits(child_set, "ParamSet")) {
@@ -879,7 +879,7 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
     filled[child] = 0;
   }
   for (R_xlen_t index = 0; index < value_count; ++index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     const int matched = INTEGER_ELT(matches, index);
     if (matched > 0) {
       const R_xlen_t row = (R_xlen_t) matched - 1;
@@ -903,7 +903,7 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
   R_xlen_t output = 0;
   for (int touched = TRUE; touched >= FALSE; --touched) {
     for (R_xlen_t child = 0; child < child_count; ++child) {
-      paradox_domain_account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       if ((counts[child] != 0) == touched) {
         if (output >= child_count) {
           UNPROTECT(protected_count);
@@ -932,7 +932,7 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
   }
 
   for (R_xlen_t index = 0; index < value_count; ++index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     const int matched = INTEGER_ELT(matches, index);
     if (matched > 0) {
       const R_xlen_t row = (R_xlen_t) matched - 1;
@@ -1261,7 +1261,7 @@ static SEXP ordered_value_sources(SEXP stored, SEXP input, SEXP sources,
   }
   SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t input_index = find_name(
       input_names,
       STRING_ELT(stored_names, index),
@@ -1320,7 +1320,7 @@ static R_xlen_t collection_source_row(SEXP translation_ids,
     R_xlen_t *work_since_interrupt) {
   const R_xlen_t rows = XLENGTH(translation_ids);
   for (R_xlen_t row = 0; row < rows; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (INTEGER_ELT(owners, row) == (int) (child + 1) &&
         paradox_domain_strings_equal(
           STRING_ELT(original_ids, row),
@@ -1484,7 +1484,7 @@ static SEXP current_node_values(SEXP self, SEXP private_environment,
 static int contains_parameter_id(SEXP ids, SEXP sought,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < XLENGTH(ids); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (paradox_domain_strings_equal(STRING_ELT(ids, index), sought)) {
       return TRUE;
     }

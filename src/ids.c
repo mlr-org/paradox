@@ -6,6 +6,7 @@
 #include <R_ext/Utils.h>
 
 #include "core_state.h"
+#include "paramset_domain_common.h"
 #include "r_utils.h"
 
 typedef struct {
@@ -82,45 +83,6 @@ static uint64_t canonical_string_hash(SEXP string) {
   return hash;
 }
 
-static char *copy_utf8_string(SEXP string) {
-  const size_t size = strlen(Rf_translateCharUTF8(string));
-  if (size >= (size_t) R_XLEN_T_MAX) {
-    Rf_error("Unable to copy a canonical string");
-  }
-  char *copy = paradox_temporary_alloc(
-    (R_xlen_t) size + 1,
-    sizeof(*copy)
-  );
-  memcpy(copy, Rf_translateCharUTF8(string), size + 1U);
-  return copy;
-}
-
-static int canonical_strings_equal(SEXP left, SEXP right) {
-  if (left == right) {
-    return TRUE;
-  }
-  if (left == NA_STRING || right == NA_STRING) {
-    return FALSE;
-  }
-
-  const int left_is_bytes = Rf_getCharCE(left) == CE_BYTES;
-  const int right_is_bytes = Rf_getCharCE(right) == CE_BYTES;
-  if (left_is_bytes || right_is_bytes) {
-    return left_is_bytes && right_is_bytes &&
-      strcmp(CHAR(left), CHAR(right)) == 0;
-  }
-
-  PROTECT(left);
-  PROTECT(right);
-  const void *vmax = vmaxget();
-  const char *left_text = copy_utf8_string(left);
-  const char *right_text = Rf_translateCharUTF8(right);
-  const int equal = strcmp(left_text, right_text) == 0;
-  vmaxset(vmax);
-  UNPROTECT(2);
-  return equal;
-}
-
 static unsigned int string_encoding_bit(SEXP string) {
   if (string == NA_STRING || Rf_getCharCE(string) == CE_BYTES) {
     return 0;
@@ -159,14 +121,6 @@ static uint64_t pointer_hash(SEXP string) {
   uint64_t value = (uint64_t) (uintptr_t) string;
   value = (value >> 3) ^ (value >> 35);
   return value * UINT64_C(11400714819323198485);
-}
-
-static inline void account_match_work(R_xlen_t *work_since_interrupt) {
-  ++*work_since_interrupt;
-  if (*work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
-    R_CheckUserInterrupt();
-    *work_since_interrupt = 0;
-  }
 }
 
 static R_xlen_t match_capacity(R_xlen_t table_size) {
@@ -263,7 +217,7 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
       R_xlen_t matched = 0;
       for (R_xlen_t candidate = 0; candidate < table_size; ++candidate) {
         if (canonical
-            ? canonical_strings_equal(
+            ? paradox_domain_strings_equal(
                 STRING_ELT(table, candidate),
                 STRING_ELT(value, row)
               )
@@ -281,17 +235,17 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
   const R_xlen_t mask = capacity - 1;
   if (canonical) {
     for (R_xlen_t slot = 0; slot < capacity; ++slot) {
-      account_match_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       slots[slot].row_plus_one = 0;
     }
     for (R_xlen_t row = 0; row < table_size; ++row) {
-      account_match_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       const uint64_t hash = canonical_string_hash(STRING_ELT(table, row));
       R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
       while (slots[slot].row_plus_one != 0) {
-        account_match_work(&work_since_interrupt);
+        paradox_account_work(&work_since_interrupt);
         const R_xlen_t present = slots[slot].row_plus_one - 1;
-        if (canonical_strings_equal(
+        if (paradox_domain_strings_equal(
             STRING_ELT(table, present),
             STRING_ELT(table, row)
           )) {
@@ -304,13 +258,13 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
       }
     }
     for (R_xlen_t row = 0; row < value_size; ++row) {
-      account_match_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       const uint64_t hash = canonical_string_hash(STRING_ELT(value, row));
       R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
       while (slots[slot].row_plus_one != 0) {
-        account_match_work(&work_since_interrupt);
+        paradox_account_work(&work_since_interrupt);
         const R_xlen_t present = slots[slot].row_plus_one - 1;
-        if (canonical_strings_equal(
+        if (paradox_domain_strings_equal(
             STRING_ELT(table, present),
             STRING_ELT(value, row)
           )) {
@@ -327,16 +281,16 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
    * part of the cache key. Mixed non-byte encodings took the canonical branch
    * above, so CHARSXP identity is exact for these ordinary operands. */
   for (R_xlen_t slot = 0; slot < capacity; ++slot) {
-    account_match_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     slots[slot].row_plus_one = 0;
   }
   for (R_xlen_t row = 0; row < table_size; ++row) {
-    account_match_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     R_xlen_t slot = (R_xlen_t) (
       pointer_hash(STRING_ELT(table, row)) & (uint64_t) mask
     );
     while (slots[slot].row_plus_one != 0) {
-      account_match_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       const R_xlen_t present = slots[slot].row_plus_one - 1;
       if (STRING_ELT(table, present) == STRING_ELT(table, row)) {
         break;
@@ -349,12 +303,12 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
   }
 
   for (R_xlen_t row = 0; row < value_size; ++row) {
-    account_match_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     R_xlen_t slot = (R_xlen_t) (
       pointer_hash(STRING_ELT(value, row)) & (uint64_t) mask
     );
     while (slots[slot].row_plus_one != 0) {
-      account_match_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       const R_xlen_t present = slots[slot].row_plus_one - 1;
       if (STRING_ELT(table, present) == STRING_ELT(value, row)) {
         break;

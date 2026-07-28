@@ -40,23 +40,6 @@ typedef struct {
   paradox_dependency_graph_plan_t graph;
 } dependency_snapshot_t;
 
-static int strings_equal(SEXP left, SEXP right) {
-  return left == right || (left != NA_STRING && right != NA_STRING &&
-    paradox_domain_strings_equal(left, right));
-}
-
-static R_xlen_t find_string(SEXP values, SEXP sought,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t count = XLENGTH(values);
-  for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (strings_equal(STRING_ELT(values, index), sought)) {
-      return index;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
-
 static SEXP snapshot_string_vector(SEXP source,
     const char *description, R_xlen_t *work_since_interrupt) {
   if (TYPEOF(source) != STRSXP || ALTREP(source) || Rf_isS4(source) ||
@@ -66,7 +49,7 @@ static SEXP snapshot_string_vector(SEXP source,
   const R_xlen_t count = XLENGTH(source);
   SEXP result = PROTECT(Rf_allocVector(STRSXP, count));
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP value = STRING_ELT(source, index);
     if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES) {
       UNPROTECT(1);
@@ -145,7 +128,7 @@ static SEXP snapshot_column(SEXP source,
   const R_xlen_t count = XLENGTH(source);
   SEXP result = PROTECT(Rf_allocVector(type, count));
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     switch (type) {
     case LGLSXP:
       SET_LOGICAL_ELT(result, index, LOGICAL_ELT(source, index));
@@ -307,7 +290,7 @@ static void snapshot_design_data(SEXP data, dependency_snapshot_t *snapshot,
     Rf_error("Design$data has invalid data.frame row names");
   }
   for (R_xlen_t column = 0; column < column_count; ++column) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP source = PROTECT(VECTOR_ELT(data, column));
     SEXP frozen = PROTECT(snapshot_column(source, work_since_interrupt));
     const R_xlen_t rows = XLENGTH(frozen);
@@ -335,7 +318,7 @@ static void snapshot_design_data(SEXP data, dependency_snapshot_t *snapshot,
   for (R_xlen_t parameter = 0;
       parameter < snapshot->parameter_count;
       ++parameter) {
-    R_xlen_t column = find_string(
+    R_xlen_t column = paradox_domain_find_string(
       snapshot->data_names,
       STRING_ELT(snapshot->params_data.ids, parameter),
       work_since_interrupt
@@ -362,8 +345,8 @@ static int rhs_matches_string(SEXP value, SEXP rhs,
   }
   const R_xlen_t count = XLENGTH(rhs);
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (strings_equal(value, STRING_ELT(rhs, index))) {
+    paradox_account_work(work_since_interrupt);
+    if (paradox_domain_strings_equal(value, STRING_ELT(rhs, index))) {
       return TRUE;
     }
   }
@@ -503,7 +486,7 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
     sizeof(*inactive_counts)
   );
   for (R_xlen_t position = 0; position < parameter_count; ++position) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t child = snapshot->graph.topological_order[position];
     inactive_counts[child] = 0;
     if (snapshot->graph.incoming_count[child] == 0) {
@@ -516,7 +499,7 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
        * TuneToken children and dangling parents deliberately short-circuit
        * before any Condition element is observed.
        */
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       int child_inactive = FALSE;
       SEXP child_column = VECTOR_ELT(
         snapshot->columns,
@@ -583,7 +566,7 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
 
   R_xlen_t output = 0;
   for (R_xlen_t position = 0; position < parameter_count; ++position) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t child = snapshot->graph.topological_order[position];
     if (snapshot->graph.incoming_count[child] == 0) {
       continue;
@@ -594,7 +577,7 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
     ));
     R_xlen_t index = 0;
     for (R_xlen_t row = 0; row < row_count; ++row) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       if (mask_get(snapshot, inactive, child, row)) {
         SET_INTEGER_ELT(indices, index, (int) row + 1);
         ++index;

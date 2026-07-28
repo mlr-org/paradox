@@ -35,6 +35,18 @@
 
 #define PARADOX_INTERRUPT_CHECK_INTERVAL ((R_xlen_t) 65536)
 
+/* The one counter-style interrupt-accounting helper. Bounded loops accumulate
+ * work in an operation-local counter and poll R at the fixed interval above.
+ * (The separate modulo-on-index idiom remains appropriate for loops that
+ * already carry a monotone position.) */
+static inline void paradox_account_work(R_xlen_t *work_since_interrupt) {
+  ++*work_since_interrupt;
+  if (*work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
+    R_CheckUserInterrupt();
+    *work_since_interrupt = 0;
+  }
+}
+
 attribute_hidden SEXP paradox_domain_construct(
   SEXP cls,
   SEXP grouping,
@@ -183,6 +195,16 @@ attribute_hidden SEXP paradox_param_set_filter_argument(
   SEXP frame,
   const char *argument_name
 );
+/* Property selector shared by the ParamSet-table and standalone-Domain
+ * property readers; both R wrappers pass these exact codes. */
+typedef enum {
+  PARADOX_PROPERTY_NLEVELS = 0,
+  PARADOX_PROPERTY_IS_NUMBER,
+  PARADOX_PROPERTY_IS_CATEG,
+  PARADOX_PROPERTY_IS_BOUNDED,
+  PARADOX_PROPERTY_COUNT
+} paradox_property_t;
+
 attribute_hidden SEXP paradox_param_set_property(SEXP params, SEXP property);
 attribute_hidden SEXP paradox_domain_check_builtin(
   SEXP param,
@@ -243,7 +265,6 @@ attribute_hidden SEXP paradox_param_set_check_builtin_with_receipts(
   int enforce_dependencies,
   SEXP *receipts_result
 );
-attribute_hidden void paradox_param_set_verify_token_receipts(SEXP receipts);
 /* Final allocation/callback-free pointer scan used immediately before the
  * atomic capsule binding wave. */
 attribute_hidden void paradox_param_set_scan_token_receipts(SEXP receipts);

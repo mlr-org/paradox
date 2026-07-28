@@ -5,43 +5,7 @@
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 
-static SEXP set_plain_dependencies_attributes(SEXP result,
-    R_xlen_t row_count) {
-  SEXP names = PROTECT(Rf_allocVector(STRSXP, 3));
-  SET_STRING_ELT(names, 0, Rf_mkChar("id"));
-  SET_STRING_ELT(names, 1, Rf_mkChar("on"));
-  SET_STRING_ELT(names, 2, Rf_mkChar("cond"));
-  Rf_setAttrib(result, R_NamesSymbol, names);
-
-  SEXP classes = PROTECT(Rf_allocVector(STRSXP, 1));
-  SET_STRING_ELT(classes, 0, Rf_mkChar("data.frame"));
-  Rf_setAttrib(result, R_ClassSymbol, classes);
-
-  SEXP row_names = PROTECT(Rf_allocVector(
-    INTSXP,
-    row_count == 0 ? 0 : 2
-  ));
-  if (row_count != 0) {
-    SET_INTEGER_ELT(row_names, 0, NA_INTEGER);
-    SET_INTEGER_ELT(row_names, 1, -(int) row_count);
-  }
-  Rf_setAttrib(result, R_RowNamesSymbol, row_names);
-  UNPROTECT(3);
-  return result;
-}
-
-static R_xlen_t find_id(SEXP ids, SEXP sought,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t count = XLENGTH(ids);
-  for (R_xlen_t row = 0; row < count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
-    SEXP candidate = STRING_ELT(ids, row);
-    if (candidate == sought || paradox_domain_strings_equal(candidate, sought)) {
-      return row;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
+static const char *const dependency_column_names[] = {"id", "on", "cond"};
 
 static SEXP translate_dependency_id(
     const paradox_collection_graph_t *graph,
@@ -53,7 +17,7 @@ static SEXP translate_dependency_id(
     const paradox_collection_graph_node_t *node = &graph->nodes[node_index];
     const paradox_collection_graph_node_t *parent =
       &graph->nodes[node->parent];
-    const R_xlen_t row = find_id(
+    const R_xlen_t row = paradox_domain_find_string(
       node->params.ids,
       current,
       work_since_interrupt
@@ -94,7 +58,7 @@ SEXP paradox_collection_dependencies_from_graph(
     const R_xlen_t node_index = graph->postorder[order];
     const paradox_collection_graph_node_t *node = &graph->nodes[node_index];
     for (R_xlen_t row = 0; row < node->dependencies.row_count; ++row) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       if (output >= row_count) {
         UNPROTECT(4);
         Rf_error("Internal error: dependency output exceeded its snapshot");
@@ -131,7 +95,7 @@ SEXP paradox_collection_dependencies_from_graph(
     UNPROTECT(4);
     Rf_error("Internal error: incomplete dependency output snapshot");
   }
-  set_plain_dependencies_attributes(result, row_count);
+  paradox_domain_finish_plain_table(result, dependency_column_names, 3, row_count);
   UNPROTECT(4);
   return result;
 }

@@ -5,11 +5,12 @@
 
 #include "paradox.h"
 
-typedef struct {
-  SEXPTYPE type;
-  const double *real_values;
-  const int *integer_values;
-} paradox_numeric_column_t;
+/* Ordinary CHARSXP predicate shared by structural-string admission: rejects
+ * the missing string and bytes-encoded storage, the two representations no
+ * interpreted identifier or name position supports. */
+static inline int paradox_charsxp_is_ordinary(SEXP value) {
+  return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES;
+}
 
 typedef enum {
   PARADOX_UTF8_PIECE_ASCII = 1,
@@ -57,18 +58,22 @@ attribute_hidden void paradox_require_column_checked(
   const char *corrupt_context,
   const char *column_name
 );
-/* Numeric views reject ALTREP.  Their owner must remain independently rooted
- * for the complete lifetime of either retained read-only pointer. */
-attribute_hidden paradox_numeric_column_t paradox_get_numeric_column(
+/* Canonical numeric capsule columns are ordinary REALSXP/INTSXP vectors. */
+attribute_hidden void paradox_require_numeric_column(
   SEXP column,
   R_xlen_t size,
   const char *corrupt_context,
   const char *column_name
 );
-attribute_hidden double paradox_numeric_at(
-  const paradox_numeric_column_t *column,
-  R_xlen_t index
-);
+
+/* NA-aware element read of an already validated numeric column. */
+static inline double paradox_numeric_elt(SEXP column, R_xlen_t index) {
+  if (TYPEOF(column) == REALSXP) {
+    return REAL_ELT(column, index);
+  }
+  const int value = INTEGER_ELT(column, index);
+  return value == NA_INTEGER ? NA_REAL : (double) value;
+}
 attribute_hidden double paradox_accepted_lower(
   double bound,
   double tolerance

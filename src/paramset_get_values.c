@@ -53,19 +53,6 @@ enum get_values_root_slot {
   GET_VALUES_ROOT_COUNT
 };
 
-static int strings_equal(SEXP left, SEXP right) {
-  if (left == right) {
-    return TRUE;
-  }
-  if (left == NA_STRING || right == NA_STRING) {
-    return FALSE;
-  }
-  if (Rf_getCharCE(left) == Rf_getCharCE(right)) {
-    return strcmp(CHAR(left), CHAR(right)) == 0;
-  }
-  return paradox_domain_strings_equal(left, right);
-}
-
 static R_xlen_t id_index_slot(SEXP id, R_xlen_t capacity) {
   uintptr_t value = (uintptr_t) id;
   value ^= value >> 4;
@@ -96,7 +83,7 @@ static get_values_id_index_t build_id_index(SEXP ids,
     slots[slot] = 0;
   }
   for (R_xlen_t row = 0; row < count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(ids, row);
     R_xlen_t slot = id_index_slot(id, capacity);
     while (slots[slot] != 0) {
@@ -112,7 +99,7 @@ static R_xlen_t id_index_find(const get_values_id_index_t *index, SEXP sought,
   if (index->capacity != 0) {
     R_xlen_t slot = id_index_slot(sought, index->capacity);
     while (index->slots[slot] != 0) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       const R_xlen_t row = index->slots[slot] - 1;
       if (STRING_ELT(index->ids, row) == sought) {
         return row;
@@ -127,8 +114,8 @@ static R_xlen_t id_index_find(const get_values_id_index_t *index, SEXP sought,
    * existing encoding-aware comparison as the uncommon fallback. */
   const R_xlen_t count = XLENGTH(index->ids);
   for (R_xlen_t row = 0; row < count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (strings_equal(STRING_ELT(index->ids, row), sought)) {
+    paradox_account_work(work_since_interrupt);
+    if (paradox_domain_strings_equal(STRING_ELT(index->ids, row), sought)) {
       return row;
     }
   }
@@ -225,7 +212,7 @@ static int map_values_to_parameters(get_values_snapshot_t *snapshot,
   R_xlen_t previous_parameter = 0;
   int have_previous = FALSE;
   for (R_xlen_t value = 0; value < snapshot->values_data.size; ++value) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP name = STRING_ELT(snapshot->values_data.names, value);
     const R_xlen_t parameter = id_index_find(
       &snapshot->parameter_ids,
@@ -260,7 +247,7 @@ static int map_tags_and_required(get_values_snapshot_t *snapshot,
   snapshot->required_count = 0;
 
   for (R_xlen_t row = 0; row < snapshot->tags_data.row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t owner = id_index_find(
       &snapshot->parameter_ids,
       STRING_ELT(snapshot->tags_data.ids, row),
@@ -270,7 +257,7 @@ static int map_tags_and_required(get_values_snapshot_t *snapshot,
       return FALSE;
     }
     if (!snapshot->required_by_parameter[owner] &&
-        strings_equal(
+        paradox_domain_strings_equal(
           STRING_ELT(snapshot->tags_data.values, row),
           required_tag
         )) {
@@ -291,7 +278,7 @@ static void admit_values(SEXP values, paradox_domain_values_t *validated,
     Rf_error("Corrupt ParamSet capsule: invalid `.values` field");
   }
   for (R_xlen_t index = 0; index < validated->size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP element = VECTOR_ELT(validated->values, index);
     if (element == R_UnboundValue || element == R_MissingArg ||
         TYPEOF(element) == PROMSXP) {
@@ -445,7 +432,7 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     sizeof(*snapshot->dependency_on_parameter)
   );
   for (R_xlen_t row = 0; row < dependency_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t dependent = id_index_find(
       &snapshot->parameter_ids,
       STRING_ELT(snapshot->dependencies_data.ids, row),
@@ -492,7 +479,7 @@ static void apply_dependencies(const get_values_snapshot_t *snapshot,
   for (R_xlen_t parameter = 0;
       parameter < snapshot->params_data.row_count;
       ++parameter) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t value = snapshot->value_by_parameter[parameter];
     if (value != R_XLEN_T_MAX && !active[parameter]) {
       kept[value] = FALSE;
@@ -507,7 +494,7 @@ static void apply_type_filter(const get_values_snapshot_t *snapshot,
     return;
   }
   for (R_xlen_t index = 0; index < snapshot->values_data.size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (!kept[index]) {
       continue;
     }
@@ -537,7 +524,7 @@ static void check_required(const get_values_snapshot_t *snapshot,
   for (R_xlen_t parameter = 0;
       parameter < snapshot->params_data.row_count;
       ++parameter) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (!snapshot->required_by_parameter[parameter]) {
       continue;
     }
@@ -572,7 +559,7 @@ static void check_required(const get_values_snapshot_t *snapshot,
   for (R_xlen_t parameter = 0;
       parameter < snapshot->params_data.row_count;
       ++parameter) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (!snapshot->required_by_parameter[parameter]) {
       continue;
     }
@@ -614,8 +601,8 @@ static SEXP build_result(const get_values_snapshot_t *snapshot,
   for (R_xlen_t parameter = 0;
       parameter < snapshot->params_data.row_count && selected < selected_count;
       ++parameter) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (!strings_equal(
+    paradox_account_work(work_since_interrupt);
+    if (!paradox_domain_strings_equal(
         STRING_ELT(snapshot->params_data.ids, parameter),
         STRING_ELT(selected_ids, selected)
       )) {
@@ -636,8 +623,8 @@ static SEXP build_result(const get_values_snapshot_t *snapshot,
   for (R_xlen_t parameter = 0;
       parameter < snapshot->params_data.row_count && selected < selected_count;
       ++parameter) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (!strings_equal(
+    paradox_account_work(work_since_interrupt);
+    if (!paradox_domain_strings_equal(
         STRING_ELT(snapshot->params_data.ids, parameter),
         STRING_ELT(selected_ids, selected)
       )) {
@@ -709,7 +696,7 @@ SEXP paradox_param_set_get_values(SEXP private_environment, SEXP self,
     sizeof(*kept)
   );
   for (R_xlen_t index = 0; index < snapshot.values_data.size; ++index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     kept[index] = TRUE;
   }
   paradox_activity_result_t activity = {NULL, NULL};

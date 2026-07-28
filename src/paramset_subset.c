@@ -5,6 +5,7 @@
 
 #include "builtin_condition.h"
 #include "core_state.h"
+#include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
@@ -17,10 +18,6 @@
  * R6 closures, classes, or private-table layouts.
  */
 
-static const char *const params_columns[PARADOX_DOMAIN_TAGS] = {
-  "id", "cls", "grouping", "cargo", "lower", "upper", "tolerance",
-  "levels", "special_vals", "default", "storage_type"
-};
 static const char *const tags_columns[] = {"id", "tag"};
 static const char *const trafos_columns[] = {"id", "trafo"};
 static const char *const deps_columns[] = {"id", "on", "cond"};
@@ -350,28 +347,37 @@ static void load_source(SEXP private_environment, SEXP self, SEXP roots,
   SET_VECTOR_ELT(roots, SOURCE_TRAFOS, VECTOR_ELT(state, PARADOX_CORE_TRAFOS));
 
   if (kind == PARADOX_CORE_COLLECTION) {
-    SEXP facade = PROTECT(paradox_param_set_collection_deps(
+    /* Values and dependencies are two projections of the same live graph.
+     * Admit that graph once so shared Shadows refresh once and both
+     * projections retain exactly the same capsule generations; the dependency
+     * emitter already returns the canonical internal plain data.frame. */
+    R_xlen_t work_since_interrupt = 0;
+    PROTECT_INDEX graph_roots_index;
+    SEXP graph_roots;
+    PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+    paradox_collection_graph_t graph;
+    paradox_collection_graph_build(
       private_environment,
-      self
-    ));
-    SEXP plain = PROTECT(paradox_domain_plain_table_snapshot(
-      facade,
-      deps_columns,
-      3
-    ));
-    if (plain == R_NilValue) {
-      UNPROTECT(2);
-      Rf_error("Corrupt ParamSetCollection dependency snapshot");
-    }
-    SET_VECTOR_ELT(roots, SOURCE_DEPS, plain);
-    UNPROTECT(2);
-
-    SEXP values = PROTECT(paradox_param_set_collection_values(
-      private_environment,
-      self
+      self,
+      &graph,
+      &graph_roots,
+      graph_roots_index,
+      &work_since_interrupt
+    );
+    SEXP values = PROTECT(paradox_collection_values_from_graph(
+      &graph,
+      &work_since_interrupt
     ));
     SET_VECTOR_ELT(roots, SOURCE_VALUES, values);
     UNPROTECT(1);
+    SEXP dependencies = PROTECT(paradox_collection_dependencies_from_graph(
+      &graph,
+      &work_since_interrupt
+    ));
+    SET_VECTOR_ELT(roots, SOURCE_DEPS, dependencies);
+    /* `roots` now owns both projections; release the temporary result and
+     * the graph capsule-root chain together. */
+    UNPROTECT(2);
   } else {
     SET_VECTOR_ELT(roots, SOURCE_DEPS, VECTOR_ELT(state, PARADOX_CORE_DEPS));
     SET_VECTOR_ELT(roots, SOURCE_VALUES, VECTOR_ELT(state, PARADOX_CORE_VALUES));
@@ -385,29 +391,6 @@ static void load_source(SEXP private_environment, SEXP self, SEXP roots,
     VECTOR_ELT(roots, SOURCE_VALUES),
     source
   );
-}
-
-static void set_plain_table_attributes(SEXP table,
-    const char *const *column_names, R_xlen_t column_count,
-    R_xlen_t row_count) {
-  SEXP names = PROTECT(Rf_allocVector(STRSXP, column_count));
-  for (R_xlen_t column = 0; column < column_count; ++column) {
-    SET_STRING_ELT(names, column, Rf_mkChar(column_names[column]));
-  }
-  Rf_setAttrib(table, R_NamesSymbol, names);
-  SEXP classes = PROTECT(Rf_allocVector(STRSXP, 1));
-  SET_STRING_ELT(classes, 0, Rf_mkChar("data.frame"));
-  Rf_setAttrib(table, R_ClassSymbol, classes);
-  SEXP row_names = PROTECT(Rf_allocVector(
-    INTSXP,
-    row_count == 0 ? 0 : 2
-  ));
-  if (row_count != 0) {
-    SET_INTEGER_ELT(row_names, 0, NA_INTEGER);
-    SET_INTEGER_ELT(row_names, 1, -(int) row_count);
-  }
-  Rf_setAttrib(table, R_RowNamesSymbol, row_names);
-  UNPROTECT(3);
 }
 
 static SEXP subset_column(SEXP source, const R_xlen_t *rows,
@@ -463,7 +446,12 @@ static SEXP subset_table(SEXP source, const R_xlen_t *rows,
     SET_VECTOR_ELT(result, column, selected);
     UNPROTECT(1);
   }
-  set_plain_table_attributes(result, column_names, column_count, row_count);
+  (void) paradox_domain_finish_plain_table(
+    result,
+    column_names,
+    column_count,
+    row_count
+  );
   UNPROTECT(1);
   return result;
 }
@@ -601,8 +589,8 @@ static SEXP build_token(const subset_source_t *source,
     source->params_table,
     parameters,
     parameter_count,
-    params_columns,
-    PARADOX_DOMAIN_TAGS
+    paradox_domain_column_names,
+    PARADOX_DOMAIN_PERMANENT_COLUMNS
   ));
   SEXP tags = PROTECT(subset_table(
     source->tags_table,

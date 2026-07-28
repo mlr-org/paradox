@@ -75,7 +75,7 @@ domain_nlevels = function(param) {
 #' @keywords internal
 #' @export
 domain_is_bounded = function(param) {
-  .Call(C_domain_property_builtin, param, 1L)
+  .Call(C_domain_property_builtin, param, 3L)
 }
 
 #' @title Whether a Given Domain is Numeric
@@ -88,7 +88,7 @@ domain_is_bounded = function(param) {
 #' @keywords internal
 #' @export
 domain_is_number = function(param) {
-  .Call(C_domain_property_builtin, param, 2L)
+  .Call(C_domain_property_builtin, param, 1L)
 }
 
 #' @title Whether a Given Domain is Categorical
@@ -101,7 +101,7 @@ domain_is_number = function(param) {
 #' @keywords internal
 #' @export
 domain_is_categ = function(param) {
-  .Call(C_domain_property_builtin, param, 3L)
+  .Call(C_domain_property_builtin, param, 2L)
 }
 
 #' @title Transform a Numeric Value to a Sample

@@ -265,7 +265,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         )$disable_in_tune
         prefix = full_prefix(self, id_)
         if (prefix == "") return(xs)
-        set_names(xs, private$.add_name_prefix(full_prefix(self, id_), names(xs)))
+        set_names(xs, private$.add_name_prefix(prefix, names(xs)))
       })) %??% named_list()
       self$set_values(.values = pvs)
     },

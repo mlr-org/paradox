@@ -293,7 +293,7 @@ Named with param IDs.}
       \item{\code{params}}{(named \code{list()})\cr
 Ordinary non-ALTREP/non-S4 list of \code{\link{Domain}} objects, named with their
 respective ID. Its names/list metadata is interpreted structure.}
-      \item{\code{allow_dangling_dependencies}}{(\code{character(1)})\cr
+      \item{\code{allow_dangling_dependencies}}{(\code{logical(1)})\cr
 Whether dependencies depending on parameters that are not present should be allowed. A parameter \code{x} having
 \code{depends = y == 0} if \code{y} is not present would usually throw an error, but if dangling
 dependencies are allowed, the dependency is added regardless. This is mainly for internal
@@ -362,7 +362,9 @@ make them active.
       \item{\code{tags}}{(\code{character()}). See \verb{$ids()}.}
       \item{\code{any_tags}}{(\code{character()}). See \verb{$ids()}.}
       \item{\code{type}}{(\code{character(1)})\cr
-Return values \code{"with_token"} (i.e. all values),}
+Return values \code{"with_token"} (i.e. all values),
+\code{"without_token"} (all values that are not \code{\link{TuneToken}} objects), \code{"only_token"} (only \code{\link{TuneToken}} objects),
+or \code{"with_internal"} (all values that are not \code{InternalTuneToken})?}
       \item{\code{check_required}}{(\code{logical(1)})\cr
 Check if all active required parameters are set? This check uses the
 dependency-filtered view, even when \code{remove_dependencies = FALSE}.}
@@ -603,9 +605,9 @@ Param dependencies and \verb{$constraint} are not checked when
 \code{check_strict} is \code{FALSE} (but data type and bounds are checked).
 This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
 Use \code{presence = "all"} to check that all parameters are present in \code{xs}, except for parameters with unsatisfied dependencies.
-'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
-'presence = "all"' is often useful when configurations are created
-but some algorithm from a search space param set in optimization.
+\code{presence = "none"} is often useful when you want to check the validity of settings you want to assign when defaults are already present.
+\code{presence = "all"} is often useful when configurations are created
+by some algorithm from a search space param set in optimization.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$check(
@@ -630,7 +632,7 @@ Whether to check that constraints and dependencies are satisfied.}
       \item{\code{sanitize}}{(\code{logical(1)})\cr
 Whether to move values that are slightly outside bounds to valid values.
 These values are accepted independent of \code{sanitize} (depending on the
-\code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
+\code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}). If \code{sanitize}
 is \code{TRUE}, the additional effect is that, should checks pass, the
 sanitized values of \code{xs} are added to the result as attribute \code{"sanitized"}.}
       \item{\code{presence}}{(\code{character(1)})\cr
@@ -753,7 +755,7 @@ Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
       \item{\code{sanitize}}{(\code{logical(1)})\cr
 Whether to move values that are slightly outside bounds to valid values.
 These values are accepted independent of \code{sanitize} (depending on the
-\code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
+\code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}). If \code{sanitize}
 is \code{TRUE}, the additional effect is that \code{xs} is converted to within bounds.}
       \item{\code{allow_token}}{(\code{logical(1)})\cr
 Whether to allow \code{TuneToken}s to be present in \code{xs}.

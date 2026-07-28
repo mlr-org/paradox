@@ -875,7 +875,10 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   `src/paramset_domain_common.[ch]`: closed Domain construction, the sole shared
   built-in row-admission owner, canonical capsule table/kind validation, and
   the exact dependency validator that can expose admitted RHS pointers to its
-  rooted caller;
+  rooted caller. `paramset_domain_common` also owns the cross-unit helper
+  vocabulary — the canonical 16-column schema enum and name table, encoding-
+  aware string equality and linear identifier search, plain-table construction
+  and metadata stamping — so per-file copies of these facts do not drift;
 - `src/builtin_condition.[ch]`: closed Condition admission/evaluation and
   one-pass exact raw-attribute capture;
 - `src/paramset_construct.c`, `src/paramset_collection_construct.c`: BASE and

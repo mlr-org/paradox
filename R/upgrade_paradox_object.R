@@ -1668,6 +1668,16 @@
 # Build every replacement before touching a serialized shell. The session map
 # is deliberately shared by all roots returned by the native host-graph
 # crawler, so aliases and collection/shadow edges are rebuilt exactly once.
+# Identity lookup over the session node list. Both the preparation and the
+# commit phase resolve dependency edges through this one helper; a zero result
+# is an internal traversal failure the caller must guard.
+.upgrade_paradox_match_node = function(nodes, node) {
+  for (index in seq_along(nodes)) {
+    if (identical(nodes[[index]], node)) return(index)
+  }
+  0L
+}
+
 .upgrade_paradox_prepare_session = function(candidates, paths) {
   if (!is.list(candidates) || !is.character(paths) ||
       length(candidates) != length(paths)) {
@@ -1681,12 +1691,7 @@
   prepared = list()
   commit_order = integer()
 
-  find_node = function(node) {
-    for (index in seq_along(nodes)) {
-      if (identical(nodes[[index]], node)) return(index)
-    }
-    0L
-  }
+  find_node = function(node) .upgrade_paradox_match_node(nodes, node)
   add_node = function(node, path) {
     index = find_node(node)
     if (index) return(index)
@@ -2239,11 +2244,14 @@
     info = session$infos[[index]]
     dependencies = .upgrade_paradox_info_dependencies(info)
     dependency_indices = vapply(dependencies, function(dependency) {
-      for (candidate in seq_along(session$nodes)) {
-        if (identical(session$nodes[[candidate]], dependency)) return(candidate)
-      }
-      0L
+      .upgrade_paradox_match_node(session$nodes, dependency)
     }, integer(1L))
+    if (any(!dependency_indices)) {
+      .upgrade_paradox_abort(
+        session$paths[[index]],
+        "internal graph traversal failure"
+      )
+    }
     originals = session$nodes[dependency_indices]
     names(originals) = names(dependencies)
     .upgrade_paradox_rebase_prepared(

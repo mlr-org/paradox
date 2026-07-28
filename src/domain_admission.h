@@ -23,7 +23,16 @@ typedef enum {
   PARADOX_DOMAIN_FIELD_INIT,
   PARADOX_DOMAIN_FIELD_INIT_TRAFO,
   PARADOX_DOMAIN_FIELD_INIT_VALUE,
-  PARADOX_DOMAIN_FIELD_LEVELS_DUPLICATE
+  PARADOX_DOMAIN_FIELD_LEVELS_DUPLICATE,
+  /* Cargo failures are reported per documented constructor argument so the
+   * shared owner can name `aggr`/`in_tune_fn`/`disable_in_tune` instead of
+   * the internal `cargo` container. */
+  PARADOX_DOMAIN_FIELD_CARGO_AGGR,
+  PARADOX_DOMAIN_FIELD_CARGO_IN_TUNE_FN,
+  PARADOX_DOMAIN_FIELD_CARGO_DISABLE_IN_TUNE,
+  PARADOX_DOMAIN_FIELD_CARGO_TUNING_TAG,
+  PARADOX_DOMAIN_FIELD_CARGO_TUNING_PAIR,
+  PARADOX_DOMAIN_FIELD_CARGO_TUNING_AGGR
 } paradox_domain_field_t;
 
 /* Sole canonical semantic admission for one built-in Domain row. Opaque

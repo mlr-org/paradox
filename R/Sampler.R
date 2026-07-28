@@ -23,7 +23,7 @@ Sampler = R6Class("Sampler",
     #' Note that this object is typically constructed via derived classes,
     #' e.g., [Sampler1D].
     #' @param param_set ([`ParamSet`])\cr
-    #'   The [`ParamSet`] to associated with this `Sampler`.
+    #'   The [`ParamSet`] to associate with this `Sampler`.
     initialize = function(param_set) {
       assert_param_set(param_set, no_untyped = TRUE)
       self$param_set = param_set$clone(deep = TRUE)

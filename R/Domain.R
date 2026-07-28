@@ -74,7 +74,7 @@
 #'   (see examples).\cr
 #'   `p_int()` with `logscale = TRUE` results in a continuous parameter similar to `p_dbl()`, not an integer-valued parameter, with bounds `log(max(lower, 0.5))` ...
 #'   `log(upper + 1)` and a trafo similar to "`as.integer(exp(x))`" (with additional bounds correction). The lower bound
-#'   is lifted to `0.5` if `lower` 0 to handle the `lower == 0` case. The upper bound is increased to `log(upper + 1)`
+#'   is lifted to `0.5` if `lower` is 0 to handle the `lower == 0` case. The upper bound is increased to `log(upper + 1)`
 #'   because the trafo would otherwise almost never generate a value of `upper`.\cr
 #'   When `logscale` is `TRUE`, then upper bounds may be infinite, but lower bounds should be greater than 0 for `p_dbl()`
 #'   or greater or equal 0 for `p_int()`.\cr
@@ -102,7 +102,7 @@
 #'   Source-reference attributes are removed from the stored callback unless
 #'   `options(paradox.strip_srcrefs = FALSE)` is set before construction.
 #' @param in_tune_fn (`function(domain, param_vals)`)\cr
-#'   Function that converters a `Domain` object into a parameter value.
+#'   Function that converts a `Domain` object into a parameter value.
 #'   Can only be given for parameters tagged with `"internal_tuning"`.
 #'   This function should also assert that the parameters required to enable internal tuning for the given `domain` are
 #'   set in `param_vals` (such as `early_stopping_rounds` for `XGBoost`).
@@ -195,12 +195,10 @@
 #' @name Domain
 NULL
 
-# Construct the actual `Domain` object. The two dot-prefixed numeric arguments
-# are a package-private hand-off from p_dbl()/p_int() to the single native
+# Construct the actual `Domain` object: the shared back end of the five p_*()
+# short-form constructors. The two dot-prefixed numeric arguments are a
+# package-private hand-off from p_dbl()/p_int() to the single native
 # constructor; they are deliberately not part of the documented public API.
-# @param Constructor: The ParamXxx to call `$new()` for.
-# @param constargs: arguments of constructor
-# @param constargs_override: replace these in `constargs`, but don't represent this in printer
 Domain = function(cls, grouping,
   cargo = NULL,
   lower = NA_real_, upper = NA_real_, tolerance = NA_real_, levels = NULL,

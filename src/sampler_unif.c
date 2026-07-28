@@ -37,35 +37,8 @@ typedef struct {
 
 static unsigned char sampler_unif_handoff_identity;
 
-static const char *const core_field_names[PARADOX_CORE_FIELD_COUNT] = {
-  ".params", ".values", ".tags", ".deps", ".trafos", ".extra_trafo",
-  ".constraint", ".sets", ".translation", ".postfix"
-};
-
 static SEXP sampler_unif_handoff_tag(void) {
   return Rf_install("paradox.sampler.unif.subspace.v1");
-}
-
-static int exact_core_state(SEXP state) {
-  static const char *const allowed_attributes[] = {"names"};
-  if (TYPEOF(state) != VECSXP || ALTREP(state) ||
-      XLENGTH(state) != PARADOX_CORE_FIELD_COUNT ||
-      !paradox_api_has_only_attributes(state, allowed_attributes, 1)) {
-    return FALSE;
-  }
-  SEXP names = PROTECT(Rf_getAttrib(state, R_NamesSymbol));
-  int valid = TYPEOF(names) == STRSXP && !ALTREP(names) &&
-    paradox_api_has_no_attributes(names) &&
-    XLENGTH(names) == PARADOX_CORE_FIELD_COUNT;
-  for (R_xlen_t field = 0;
-      valid && field < PARADOX_CORE_FIELD_COUNT;
-      ++field) {
-    SEXP name = STRING_ELT(names, field);
-    valid = name != NA_STRING &&
-      strcmp(CHAR(name), core_field_names[field]) == 0;
-  }
-  UNPROTECT(1);
-  return valid;
 }
 
 static R_xlen_t parse_row_count(SEXP input) {
@@ -98,14 +71,6 @@ static R_xlen_t parse_row_count(SEXP input) {
   return (R_xlen_t) value;
 }
 
-static double numeric_at(SEXP column, R_xlen_t row) {
-  if (TYPEOF(column) == REALSXP) {
-    return REAL_ELT(column, row);
-  }
-  const int value = INTEGER_ELT(column, row);
-  return value == NA_INTEGER ? NA_REAL : (double) value;
-}
-
 static sampler_kind_t row_kind(SEXP classes, R_xlen_t row) {
   SEXP cls = STRING_ELT(classes, row);
   if (paradox_domain_string_is(cls, "ParamDbl")) {
@@ -132,12 +97,12 @@ static void capture_specs(const paradox_domain_params_t *params,
   SEXP levels = VECTOR_ELT(params->table, PARADOX_DOMAIN_LEVELS);
 
   for (R_xlen_t row = 0; row < params->row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     sampler_spec_t *spec = &specs[row];
     spec->kind = row_kind(params->classes, row);
     spec->id = STRING_ELT(params->ids, row);
-    spec->lower = numeric_at(lower, row);
-    spec->upper = numeric_at(upper, row);
+    spec->lower = paradox_numeric_elt(lower, row);
+    spec->upper = paradox_numeric_elt(upper, row);
     spec->levels = VECTOR_ELT(levels, row);
 
     switch (spec->kind) {
@@ -418,7 +383,8 @@ SEXP paradox_sampler_unif_sample_builtin(SEXP param_set, SEXP n) {
       Rf_error("Corrupt ParamSet sampling state: unknown core kind");
     }
     SEXP state = PROTECT(paradox_core_payload(core));
-    if (!exact_core_state(state) || !paradox_domain_validate_params(
+    if (!paradox_core_state_exact_schema(state) ||
+      !paradox_domain_validate_params(
         VECTOR_ELT(state, PARADOX_CORE_PARAMS),
         R_NilValue,
         TRUE,

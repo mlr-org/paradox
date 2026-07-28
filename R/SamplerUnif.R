@@ -23,7 +23,7 @@ SamplerUnif = R6Class("SamplerUnif", inherit = SamplerHierarchical,
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #' @param param_set ([`ParamSet`])\cr
-    #'   The [`ParamSet`] to associated with this `SamplerUnif`.
+    #'   The [`ParamSet`] to associate with this `SamplerUnif`.
     initialize = function(param_set) {
       assert_param_set(param_set, must_bounded = TRUE, no_deps = FALSE, no_untyped = TRUE)
       # The native issuer constructs fresh singleton subset states and wraps

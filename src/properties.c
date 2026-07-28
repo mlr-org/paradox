@@ -15,14 +15,6 @@ typedef enum {
   PARAM_CLASS_UTY
 } param_class_t;
 
-typedef enum {
-  PROPERTY_NLEVELS = 0,
-  PROPERTY_IS_NUMBER,
-  PROPERTY_IS_CATEG,
-  PROPERTY_IS_BOUNDED,
-  PROPERTY_COUNT
-} property_t;
-
 enum property_root_slot {
   PROPERTY_ROOT_IDS = 0,
   PROPERTY_ROOT_CLASSES,
@@ -105,14 +97,6 @@ static int param_is_bounded(param_class_t cls, double lower, double upper) {
   return FALSE;
 }
 
-static double numeric_at(SEXP column, R_xlen_t row) {
-  if (TYPEOF(column) == REALSXP) {
-    return REAL_ELT(column, row);
-  }
-  const int value = INTEGER_ELT(column, row);
-  return value == NA_INTEGER ? NA_REAL : (double) value;
-}
-
 SEXP paradox_param_set_property(SEXP params, SEXP property) {
   if (TYPEOF(params) != VECSXP) {
     Rf_error("Corrupt ParamSet storage: `.params` must be a list");
@@ -121,12 +105,12 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
       XLENGTH(property) != 1 ||
       INTEGER_ELT(property, 0) == NA_INTEGER ||
       INTEGER_ELT(property, 0) < 0 ||
-      INTEGER_ELT(property, 0) >= PROPERTY_COUNT) {
+      INTEGER_ELT(property, 0) >= PARADOX_PROPERTY_COUNT) {
     Rf_error("Internal error: invalid ParamSet property selector");
   }
 
   const int selector = INTEGER_ELT(property, 0);
-  const property_t selected = (property_t) selector;
+  const paradox_property_t selected = (paradox_property_t) selector;
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, PROPERTY_ROOT_COUNT));
   SEXP ids = paradox_get_named_column(params, ".params", "id");
   SET_VECTOR_ELT(roots, PROPERTY_ROOT_IDS, ids);
@@ -159,20 +143,20 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
   paradox_require_column(classes, STRSXP, size, "cls");
   paradox_require_column(levels, VECSXP, size, "levels");
 
-  const SEXPTYPE value_type = selected == PROPERTY_NLEVELS
+  const SEXPTYPE value_type = selected == PARADOX_PROPERTY_NLEVELS
     ? (size == 0 ? INTSXP : REALSXP)
     : LGLSXP;
   SEXP value = PROTECT(Rf_allocVector(value_type, size));
   /* Reuse the shared canonical-column diagnostics, but deliberately discard
    * their temporary raw views. Element APIs below keep no vector pointer live
    * across an interrupt poll. */
-  (void) paradox_get_numeric_column(
+  paradox_require_numeric_column(
     lower,
     size,
     "ParamSet storage",
     "lower"
   );
-  (void) paradox_get_numeric_column(
+  paradox_require_numeric_column(
     upper,
     size,
     "ParamSet storage",
@@ -191,10 +175,10 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
         (double) (row + 1)
       );
     }
-    const double row_lower = numeric_at(lower, row);
-    const double row_upper = numeric_at(upper, row);
+    const double row_lower = paradox_numeric_elt(lower, row);
+    const double row_upper = paradox_numeric_elt(upper, row);
     SEXP row_levels = PROTECT(VECTOR_ELT(levels, row));
-    if (selected == PROPERTY_NLEVELS && cls == PARAM_CLASS_FCT) {
+    if (selected == PARADOX_PROPERTY_NLEVELS && cls == PARAM_CLASS_FCT) {
       if (TYPEOF(row_levels) != STRSXP) {
         UNPROTECT(1);
         Rf_error(
@@ -208,15 +192,15 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
       }
     }
 
-    if (selected == PROPERTY_NLEVELS) {
+    if (selected == PARADOX_PROPERTY_NLEVELS) {
       SET_REAL_ELT(
         value,
         row,
         param_nlevels(cls, row_lower, row_upper, row_levels)
       );
-    } else if (selected == PROPERTY_IS_NUMBER) {
+    } else if (selected == PARADOX_PROPERTY_IS_NUMBER) {
       SET_LOGICAL_ELT(value, row, param_is_number(cls));
-    } else if (selected == PROPERTY_IS_CATEG) {
+    } else if (selected == PARADOX_PROPERTY_IS_CATEG) {
       SET_LOGICAL_ELT(value, row, param_is_categ(cls));
     } else {
       SET_LOGICAL_ELT(
@@ -228,6 +212,11 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
     UNPROTECT(1);
   }
 
+  /* The capsule `id` column doubles as the result's names, exactly like the
+   * R-side `set_names(<column>, id)` property bindings. Base `names<-`
+   * semantics copy before mutating, so this shares only immutable state;
+   * by-reference attribute surgery on accessor results is unsupported
+   * everywhere. */
   Rf_setAttrib(value, R_NamesSymbol, ids);
   UNPROTECT(2);
   return value;

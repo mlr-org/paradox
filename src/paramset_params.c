@@ -27,7 +27,6 @@ enum params_state_root_slot {
   PARAMS_ROOT_TRAFOS_SOURCE,
   PARAMS_ROOT_DEPENDENCIES_SOURCE,
   PARAMS_ROOT_VALUES_SOURCE,
-  PARAMS_ROOT_SOURCE_INDEX,
   PARAMS_ROOT_PARAM_COLUMNS,
   PARAMS_ROOT_TAG_IDS = PARAMS_ROOT_PARAM_COLUMNS + PARADOX_DOMAIN_TAGS,
   PARAMS_ROOT_TAG_VALUES,
@@ -41,19 +40,12 @@ enum params_state_root_slot {
   PARAMS_ROOT_COUNT
 };
 
-static const char *const params_column_names[PARADOX_DOMAIN_COLUMN_COUNT] = {
-  "id", "cls", "grouping", "cargo", "lower", "upper", "tolerance",
-  "levels", "special_vals", "default", "storage_type", ".tags",
-  ".trafo", ".requirements", ".init_given", ".init"
-};
-
-int paradox_params_supported_table_attributes(SEXP table, int allow_sorted) {
+int paradox_params_supported_table_attributes(SEXP table) {
   static const char *const supported[] = {"names", "class", "row.names"};
-  (void) allow_sorted;
   return paradox_api_has_only_attributes(table, supported, 3);
 }
 
-static int exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
+int paradox_params_exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
     R_xlen_t *work_since_interrupt) {
   SEXP row_names = PROTECT(Rf_getAttrib(table, R_RowNamesSymbol));
   /* The public getter intentionally expands data-frame compact row names
@@ -75,7 +67,7 @@ static int exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
     return FALSE;
   }
   for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (INTEGER_ELT(row_names, row) != (int) row + 1) {
       UNPROTECT(1);
       return FALSE;
@@ -114,11 +106,11 @@ static int group_rows_strict(const params_match_vector_t *owners,
     R_xlen_t input_size, R_xlen_t output_size, R_xlen_t *offsets,
     R_xlen_t *order, R_xlen_t *work_since_interrupt) {
   for (R_xlen_t row = 0; row <= output_size; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     offsets[row] = 0;
   }
   for (R_xlen_t input = 0; input < input_size; ++input) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t owner = match_at(owners, input);
     if (owner == 0 || owner > output_size ||
         offsets[owner] == R_XLEN_T_MAX) {
@@ -127,7 +119,7 @@ static int group_rows_strict(const params_match_vector_t *owners,
     ++offsets[owner];
   }
   for (R_xlen_t row = 1; row <= output_size; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (offsets[row] > R_XLEN_T_MAX - offsets[row - 1]) {
       return FALSE;
     }
@@ -139,11 +131,11 @@ static int group_rows_strict(const params_match_vector_t *owners,
     sizeof(*cursor)
   );
   for (R_xlen_t row = 0; row < output_size; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     cursor[row] = offsets[row];
   }
   for (R_xlen_t input = 0; input < input_size; ++input) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t owner = match_at(owners, input);
     order[cursor[owner - 1]] = input;
     ++cursor[owner - 1];
@@ -155,11 +147,11 @@ static int index_unique_rows_strict(const params_match_vector_t *owners,
     R_xlen_t input_size, R_xlen_t output_size, R_xlen_t *index,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t row = 0; row < output_size; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     index[row] = 0;
   }
   for (R_xlen_t input = 0; input < input_size; ++input) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t owner = match_at(owners, input);
     if (owner == 0 || owner > output_size || index[owner - 1] != 0) {
       return FALSE;
@@ -173,11 +165,11 @@ static int index_last_rows_permissive(const params_match_vector_t *owners,
     R_xlen_t input_size, R_xlen_t output_size, R_xlen_t *index,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t row = 0; row < output_size; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     index[row] = 0;
   }
   for (R_xlen_t input = 0; input < input_size; ++input) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t owner = match_at(owners, input);
     /* data.table's update join ignores dependency rows whose `id` is absent
      * from x.  Dangling rows are legal, and collection callbacks can expose
@@ -203,25 +195,25 @@ static SEXP copy_vector(SEXP source,
   switch (TYPEOF(source)) {
   case STRSXP:
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SET_STRING_ELT(result, index, STRING_ELT(source, index));
     }
     break;
   case VECSXP:
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SET_VECTOR_ELT(result, index, VECTOR_ELT(source, index));
     }
     break;
   case REALSXP:
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SET_REAL_ELT(result, index, REAL_ELT(source, index));
     }
     break;
   case INTSXP:
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SET_INTEGER_ELT(result, index, INTEGER_ELT(source, index));
     }
     break;
@@ -233,9 +225,8 @@ static SEXP copy_vector(SEXP source,
   return result;
 }
 
-static SEXP set_params_attributes(SEXP result, SEXP source_index,
+static SEXP set_params_attributes(SEXP result,
     R_xlen_t row_count, R_xlen_t *work_since_interrupt) {
-  PROTECT(source_index);
   SEXP names = PROTECT(Rf_allocVector(
     STRSXP,
     PARADOX_DOMAIN_COLUMN_COUNT
@@ -243,8 +234,8 @@ static SEXP set_params_attributes(SEXP result, SEXP source_index,
   for (R_xlen_t column = 0;
       column < PARADOX_DOMAIN_COLUMN_COUNT;
       ++column) {
-    paradox_domain_account_work(work_since_interrupt);
-    SET_STRING_ELT(names, column, Rf_mkChar(params_column_names[column]));
+    paradox_account_work(work_since_interrupt);
+    SET_STRING_ELT(names, column, Rf_mkChar(paradox_domain_column_names[column]));
   }
   Rf_setAttrib(result, R_NamesSymbol, names);
 
@@ -260,13 +251,7 @@ static SEXP set_params_attributes(SEXP result, SEXP source_index,
   }
   Rf_setAttrib(result, R_RowNamesSymbol, row_names);
 
-  int protected_count = 4;
-  if (source_index != R_NilValue) {
-    SEXP index = PROTECT(Rf_duplicate(source_index));
-    ++protected_count;
-    Rf_setAttrib(result, Rf_install("index"), index);
-  }
-
+  int protected_count = 3;
   SEXP prepared = PROTECT(paradox_prepare_data_table(result, TRUE));
   ++protected_count;
   /* `data.table` also ties the self-reference tag to this exact names vector.
@@ -289,7 +274,7 @@ static int validate_dynamic_state(
   if (TYPEOF(roots) != VECSXP || XLENGTH(roots) < PARAMS_ROOT_COUNT) {
     Rf_error("Internal error: invalid ParamSet dynamic root plan");
   }
-  if (!paradox_params_supported_table_attributes(dependencies_sexp, TRUE) ||
+  if (!paradox_params_supported_table_attributes(dependencies_sexp) ||
       !paradox_params_names_are_only_attribute(values_sexp) ||
       !paradox_domain_validate_dependencies(
         dependencies_sexp,
@@ -397,24 +382,11 @@ static int load_core_state(SEXP core,
     state->values_sexp
   );
   if (
-      !paradox_params_supported_table_attributes(state->params_sexp, FALSE) ||
-      !paradox_params_supported_table_attributes(state->tags_sexp, TRUE) ||
-      !paradox_params_supported_table_attributes(state->trafos_sexp, TRUE)) {
+      !paradox_params_supported_table_attributes(state->params_sexp) ||
+      !paradox_params_supported_table_attributes(state->tags_sexp) ||
+      !paradox_params_supported_table_attributes(state->trafos_sexp)) {
     goto done;
   }
-
-  state->source_index = Rf_getAttrib(
-    state->params_sexp,
-    Rf_install("index")
-  );
-  if (ALTREP(state->source_index)) {
-    goto done;
-  }
-  SET_VECTOR_ELT(
-    state_roots,
-    PARAMS_ROOT_SOURCE_INDEX,
-    state->source_index
-  );
 
   if (!paradox_domain_validate_params(
         state->params_sexp,
@@ -439,7 +411,7 @@ static int load_core_state(SEXP core,
   }
   state->params.ids = state->params_columns[PARADOX_DOMAIN_ID];
   state->params.classes = state->params_columns[PARADOX_DOMAIN_CLS];
-  if (!exact_data_frame_row_names(
+  if (!paradox_params_exact_data_frame_row_names(
       state->params_sexp,
       state->params.row_count,
       work_since_interrupt
@@ -548,20 +520,6 @@ done:
   return valid;
 }
 
-int paradox_params_load_private_state(SEXP private_environment,
-    paradox_params_state_t *state, R_xlen_t *work_since_interrupt) {
-  SEXP core = PROTECT(paradox_core_from_private(private_environment));
-  const int valid = load_core_state(
-    core,
-    state,
-    R_NilValue,
-    0,
-    work_since_interrupt
-  );
-  UNPROTECT(1);
-  return valid;
-}
-
 int paradox_params_load_private_state_rooted(SEXP private_environment,
     paradox_params_state_t *state, SEXP roots, R_xlen_t roots_offset,
     R_xlen_t *work_since_interrupt) {
@@ -607,12 +565,12 @@ SEXP paradox_params_build_static(const paradox_params_state_t *state,
 
   SEXP tags_column = PROTECT(Rf_allocVector(VECSXP, params->row_count));
   for (R_xlen_t row = 0; row < params->row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t first = state->tag_offsets[row];
     const R_xlen_t count = state->tag_offsets[row + 1] - first;
     SEXP selected = PROTECT(Rf_allocVector(STRSXP, count));
     for (R_xlen_t index = 0; index < count; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SET_STRING_ELT(
         selected,
         index,
@@ -627,7 +585,7 @@ SEXP paradox_params_build_static(const paradox_params_state_t *state,
 
   SEXP trafo_column = PROTECT(Rf_allocVector(VECSXP, params->row_count));
   for (R_xlen_t row = 0; row < params->row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t selected = state->trafo_index[row];
     if (selected != 0) {
       SET_VECTOR_ELT(
@@ -642,7 +600,6 @@ SEXP paradox_params_build_static(const paradox_params_state_t *state,
 
   SEXP prepared = PROTECT(set_params_attributes(
     result,
-    state->source_index,
     params->row_count,
     work_since_interrupt
   ));
@@ -694,7 +651,7 @@ int paradox_params_finish_dynamic(SEXP result,
 
   SEXP requirements_column = PROTECT(Rf_allocVector(VECSXP, params->row_count));
   for (R_xlen_t row = 0; row < params->row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t selected = dependency_index[row];
     if (selected == 0) {
       continue;
@@ -721,7 +678,7 @@ int paradox_params_finish_dynamic(SEXP result,
   ));
   SEXP init_column = PROTECT(Rf_allocVector(VECSXP, params->row_count));
   for (R_xlen_t row = 0; row < params->row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const R_xlen_t selected = value_index[row];
     SET_LOGICAL_ELT(init_given_column, row, selected != 0);
     if (selected != 0) {

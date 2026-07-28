@@ -14,7 +14,6 @@ typedef struct {
   SEXP trafos_sexp;
   SEXP dependencies_sexp;
   SEXP values_sexp;
-  SEXP source_index;
   paradox_domain_params_t params;
   /* Permanent columns are an admitted snapshot, not later table lookups.
    * The rooted loader anchors every entry before any subsequent allocation. */
@@ -28,16 +27,16 @@ typedef struct {
   R_xlen_t *trafo_index;
 } paradox_params_state_t;
 
-attribute_hidden int paradox_params_supported_table_attributes(
+attribute_hidden int paradox_params_supported_table_attributes(SEXP table);
+/* Canonical capsule row names: an attribute-free INTSXP that is either the
+ * public-boundary base ALTREP expansion (accepted without observation) or an
+ * ordinary exact 1..n vector. */
+attribute_hidden int paradox_params_exact_data_frame_row_names(
   SEXP table,
-  int allow_sorted
-);
-attribute_hidden int paradox_params_names_are_only_attribute(SEXP value);
-attribute_hidden int paradox_params_load_private_state(
-  SEXP private_environment,
-  paradox_params_state_t *state,
+  R_xlen_t row_count,
   R_xlen_t *work_since_interrupt
 );
+attribute_hidden int paradox_params_names_are_only_attribute(SEXP value);
 attribute_hidden int paradox_params_load_private_state_rooted(
   SEXP private_environment,
   paradox_params_state_t *state,

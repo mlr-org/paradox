@@ -22,13 +22,13 @@ attribute_hidden int paradox_builtin_condition_exact(
 attribute_hidden SEXP paradox_builtin_condition_admit(
   SEXP condition,
   paradox_builtin_condition_kind_t *kind,
-  SEXP *rhs,
   R_xlen_t *work_since_interrupt
 );
 
-/* Scalar admission and element comparison are shared by ParamSet$get_values()
- * and the Design dependency planner. Mixed non-byte string encodings are
- * compared through the same native translating equality. */
+/* Scalar admission and element comparison are shared by the ParamSet
+ * activity kernel (paramset_activity.c), the quantile/grid planner, and the
+ * Design dependency planner. Mixed non-byte string encodings are compared
+ * through the same native translating equality. */
 attribute_hidden int paradox_builtin_condition_scalar_supported(
   SEXP value,
   SEXP rhs

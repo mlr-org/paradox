@@ -76,7 +76,7 @@ static void require_owned_id_matches(const domain_match_t *matches,
     R_xlen_t size, R_xlen_t owner_count, const char *field,
     R_xlen_t *work) {
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work);
+    paradox_account_work(work);
     const R_xlen_t owner = domain_match_at(matches, index);
     if (owner == 0 || owner > owner_count) {
       Rf_error("Corrupt ParamSet capsule: unknown parameter id in %s", field);
@@ -91,7 +91,7 @@ static void group_matches(const domain_match_t *matches, R_xlen_t input_size,
     offsets[output] = 0;
   }
   for (R_xlen_t input = 0; input < input_size; ++input) {
-    paradox_domain_account_work(work);
+    paradox_account_work(work);
     const R_xlen_t owner = domain_match_at(matches, input);
     if (owner == 0 || owner > output_size) {
       Rf_error("Corrupt ParamSet capsule: invalid Domain owner");
@@ -117,7 +117,7 @@ static void group_matches(const domain_match_t *matches, R_xlen_t input_size,
     cursor[output] = offsets[output];
   }
   for (R_xlen_t input = 0; input < input_size; ++input) {
-    paradox_domain_account_work(work);
+    paradox_account_work(work);
     const R_xlen_t owner = domain_match_at(matches, input) - 1;
     order[cursor[owner]] = input;
     ++cursor[owner];
@@ -131,7 +131,7 @@ static void index_unique_matches(const domain_match_t *matches,
     indices[output] = 0;
   }
   for (R_xlen_t input = 0; input < input_size; ++input) {
-    paradox_domain_account_work(work);
+    paradox_account_work(work);
     const R_xlen_t owner = domain_match_at(matches, input);
     if (owner == 0 || owner > output_size) {
       Rf_error("Corrupt ParamSet capsule: invalid %s owner", field);
@@ -434,7 +434,7 @@ static SEXP build_all_domains(const domain_snapshot_t *snapshot,
   SEXP names = PROTECT(copy_names(snapshot->params.ids));
   Rf_setAttrib(result, R_NamesSymbol, names);
   for (R_xlen_t row = 0; row < parameter_count; ++row) {
-    paradox_domain_account_work(work);
+    paradox_account_work(work);
     const R_xlen_t first_tag = tag_offsets[row];
     const R_xlen_t tag_count = tag_offsets[row + 1] - first_tag;
     const R_xlen_t first_dependency = dependency_offsets[row];
@@ -475,7 +475,7 @@ static SEXP build_one_domain(const domain_snapshot_t *snapshot, SEXP id,
     R_xlen_t *work) {
   R_xlen_t parameter_row = R_XLEN_T_MAX;
   for (R_xlen_t row = 0; row < snapshot->params.row_count; ++row) {
-    paradox_domain_account_work(work);
+    paradox_account_work(work);
     if (paradox_domain_strings_equal(
         STRING_ELT(snapshot->params.ids, row),
         STRING_ELT(id, 0)
@@ -598,4 +598,13 @@ SEXP paradox_param_set_domains(SEXP private_environment, SEXP self) {
     self,
     R_NilValue
   );
+}
+
+/* `$domains` and `$get_domain()` deliberately share one capsule snapshot
+ * engine.  Keeping this registered entry point as a tiny forwarder beside the
+ * shared selector preserves the public/native symbol while avoiding a second
+ * implementation. */
+SEXP paradox_param_set_get_domain(SEXP private_environment, SEXP self,
+    SEXP id) {
+  return paradox_param_set_domains_select(private_environment, self, id);
 }

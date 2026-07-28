@@ -43,11 +43,6 @@ typedef struct {
   R_xlen_t trafo_count;
 } constructor_child_t;
 
-static const char *const params_names[PARADOX_DOMAIN_TAGS] = {
-  "id", "cls", "grouping", "cargo", "lower", "upper", "tolerance",
-  "levels", "special_vals", "default", "storage_type"
-};
-
 static const SEXPTYPE params_types[PARADOX_DOMAIN_TAGS] = {
   STRSXP, STRSXP, STRSXP, VECSXP, REALSXP, REALSXP, REALSXP, VECSXP,
   VECSXP, VECSXP, STRSXP
@@ -127,7 +122,7 @@ static SEXP checked_set_names(SEXP sets,
     Rf_error("`sets` names must have the same length as `sets`");
   }
   for (R_xlen_t right = 0; right < name_count; ++right) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP right_name = STRING_ELT(observed_names, right);
     if (right_name == NA_STRING) {
       UNPROTECT(1);
@@ -141,7 +136,7 @@ static SEXP checked_set_names(SEXP sets,
       continue;
     }
     for (R_xlen_t left = 0; left < right; ++left) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SEXP left_name = STRING_ELT(observed_names, left);
       if (CHAR(left_name)[0] != '\0' &&
           strcmp(CHAR(left_name), CHAR(right_name)) == 0) {
@@ -152,39 +147,6 @@ static SEXP checked_set_names(SEXP sets,
   }
   UNPROTECT(1);
   return observed_names;
-}
-
-static int exact_row_names(SEXP table, R_xlen_t row_count,
-    R_xlen_t *work_since_interrupt) {
-  SEXP row_names = PROTECT(Rf_getAttrib(table, R_RowNamesSymbol));
-  if (row_count > INT_MAX || TYPEOF(row_names) != INTSXP ||
-      !has_no_attributes(row_names)) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  /* R expands canonical compact data-frame row names to a base ALTREP object
-   * at this public API boundary.  No public C API distinguishes that base
-   * representation from a third-party integer ALTREP without dispatching its
-   * methods.  Row count is already fixed by the exact ordinary columns and
-   * row names are never consumed or exported by this fast path, so accept an
-   * attribute-free integer ALTREP without observing Length or Elt. */
-  if (ALTREP(row_names)) {
-    UNPROTECT(1);
-    return TRUE;
-  }
-  if (XLENGTH(row_names) != row_count) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (INTEGER_ELT(row_names, row) != (int) row + 1) {
-      UNPROTECT(1);
-      return FALSE;
-    }
-  }
-  UNPROTECT(1);
-  return TRUE;
 }
 
 static int checked_add(R_xlen_t *total, R_xlen_t increment) {
@@ -207,7 +169,7 @@ static int contains_id(SEXP ids, SEXP sought) {
 static int validate_related_ids(SEXP params_ids, SEXP related_ids,
     int require_unique, R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < XLENGTH(related_ids); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(related_ids, index);
     if (!supported_ascii(id) || !contains_id(params_ids, id)) {
       return FALSE;
@@ -335,7 +297,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_PARAMS, params);
   paradox_domain_params_t checked_params;
   R_xlen_t unused_row = 0;
-  if (!paradox_params_supported_table_attributes(params, FALSE) ||
+  if (!paradox_params_supported_table_attributes(params) ||
       !paradox_domain_validate_params(
         params,
         R_NilValue,
@@ -358,7 +320,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
       value
     );
   }
-  if (!exact_row_names(
+  if (!paradox_params_exact_data_frame_row_names(
       params,
       child->param_count,
       work_since_interrupt
@@ -367,7 +329,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
   }
   SEXP params_ids = child->params_columns[PARADOX_DOMAIN_ID];
   for (R_xlen_t row = 0; row < child->param_count; ++row) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(params_ids, row);
     if (!supported_ascii(id) ||
         (CHAR(owner)[0] != '\0' && !combined_sizes_supported(owner, id)) ||
@@ -385,7 +347,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
   }
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_TAGS, tags);
   paradox_domain_tags_t checked_tags;
-  if (!paradox_params_supported_table_attributes(tags, TRUE) ||
+  if (!paradox_params_supported_table_attributes(tags) ||
       !paradox_domain_validate_tags(
         tags,
         &checked_tags,
@@ -421,7 +383,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
   }
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_TRAFOS, trafos);
   paradox_domain_trafos_t checked_trafos;
-  if (!paradox_params_supported_table_attributes(trafos, TRUE) ||
+  if (!paradox_params_supported_table_attributes(trafos) ||
       !paradox_domain_validate_trafos(
         trafos,
         &checked_trafos,
@@ -451,61 +413,6 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
     return FALSE;
   }
   return TRUE;
-}
-
-static SEXP character_vector(const char *const *values, R_xlen_t size) {
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
-    SET_STRING_ELT(result, index, Rf_mkChar(values[index]));
-  }
-  UNPROTECT(1);
-  return result;
-}
-
-static SEXP set_table_attributes(SEXP table,
-    const char *const *column_names, R_xlen_t column_count,
-    R_xlen_t row_count) {
-  SEXP names = PROTECT(character_vector(column_names, column_count));
-  static const char *const class_values[] = {"data.frame"};
-  SEXP classes = PROTECT(character_vector(class_values, 1));
-  Rf_setAttrib(table, R_NamesSymbol, names);
-  Rf_setAttrib(table, R_ClassSymbol, classes);
-  SEXP row_names = PROTECT(Rf_allocVector(
-    INTSXP,
-    row_count == 0 ? 0 : 2
-  ));
-  if (row_count != 0) {
-    SET_INTEGER_ELT(row_names, 0, NA_INTEGER);
-    SET_INTEGER_ELT(row_names, 1, -(int) row_count);
-  }
-  Rf_setAttrib(table, R_RowNamesSymbol, row_names);
-  UNPROTECT(3);
-  return table;
-}
-
-static SEXP allocate_columns(const SEXPTYPE *types, R_xlen_t column_count,
-    R_xlen_t row_count) {
-  SEXP table = PROTECT(Rf_allocVector(VECSXP, column_count));
-  for (R_xlen_t column = 0; column < column_count; ++column) {
-    SEXP values = PROTECT(Rf_allocVector(types[column], row_count));
-    SET_VECTOR_ELT(table, column, values);
-    UNPROTECT(1);
-  }
-  UNPROTECT(1);
-  return table;
-}
-
-static SEXP new_table(const char *const *column_names,
-    const SEXPTYPE *types, R_xlen_t column_count, R_xlen_t row_count) {
-  SEXP table = PROTECT(allocate_columns(types, column_count, row_count));
-  SEXP result = PROTECT(set_table_attributes(
-    table,
-    column_names,
-    column_count,
-    row_count
-  ));
-  UNPROTECT(2);
-  return result;
 }
 
 static void copy_at(SEXP destination, R_xlen_t destination_row,
@@ -608,7 +515,7 @@ static void stable_id_order(SEXP ids, R_xlen_t *order,
     R_xlen_t *workspace, R_xlen_t size,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     order[index] = index;
   }
   for (R_xlen_t width = 1; width < size;) {
@@ -620,7 +527,7 @@ static void stable_id_order(SEXP ids, R_xlen_t *order,
       R_xlen_t right = middle;
       R_xlen_t output = begin;
       while (left < middle && right < end) {
-        paradox_domain_account_work(work_since_interrupt);
+        paradox_account_work(work_since_interrupt);
         workspace[output++] = id_precedes(ids, order[left], order[right])
           ? order[left++]
           : order[right++];
@@ -637,7 +544,7 @@ static void stable_id_order(SEXP ids, R_xlen_t *order,
       begin = end;
     }
     for (R_xlen_t index = 0; index < size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       order[index] = workspace[index];
     }
     if (width > size / 2) {
@@ -654,7 +561,7 @@ static void reorder_table(SEXP destination, SEXP source,
     SEXP output = VECTOR_ELT(destination, column);
     SEXP input = VECTOR_ELT(source, column);
     for (R_xlen_t row = 0; row < row_count; ++row) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       copy_at(output, row, input, order[row]);
     }
   }
@@ -663,7 +570,7 @@ static void reorder_table(SEXP destination, SEXP source,
 static SEXP sorted_table(SEXP source, const char *const *column_names,
     const SEXPTYPE *types, R_xlen_t column_count, R_xlen_t row_count,
     R_xlen_t *work_since_interrupt) {
-  SEXP result = PROTECT(new_table(
+  SEXP result = PROTECT(paradox_domain_new_plain_table(
     column_names,
     types,
     column_count,
@@ -692,6 +599,20 @@ static SEXP sorted_table(SEXP source, const char *const *column_names,
   }
   UNPROTECT(1);
   return result;
+}
+
+
+/* Bare typed columns for a table whose metadata is installed separately. */
+static SEXP allocate_columns(const SEXPTYPE *types, R_xlen_t column_count,
+    R_xlen_t row_count) {
+  SEXP table = PROTECT(Rf_allocVector(VECSXP, column_count));
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    SEXP values = PROTECT(Rf_allocVector(types[column], row_count));
+    SET_VECTOR_ELT(table, column, values);
+    UNPROTECT(1);
+  }
+  UNPROTECT(1);
+  return table;
 }
 
 static SEXP build_collection_static_state(SEXP sets, int tag_sets,
@@ -770,8 +691,8 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
     Rf_error("ParamSetCollection metadata exceeds the supported row count");
   }
 
-  SEXP params = PROTECT(new_table(
-    params_names,
+  SEXP params = PROTECT(paradox_domain_new_plain_table(
+    paradox_domain_column_names,
     params_types,
     PARADOX_DOMAIN_TAGS,
     total_params
@@ -787,7 +708,7 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
       ++child_index) {
     const constructor_child_t *child = &children[child_index];
     for (R_xlen_t row = 0; row < child->param_count; ++row) {
-      paradox_domain_account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       if (param_output >= total_params) {
         UNPROTECT(4);
         Rf_error("Internal error: collection params exceeded capacity");
@@ -982,7 +903,7 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
   SET_VECTOR_ELT(state, 1, tags);
   SET_VECTOR_ELT(state, 2, trafos);
   SET_VECTOR_ELT(state, 3, translation);
-  SEXP state_names = PROTECT(character_vector(
+  SEXP state_names = PROTECT(paradox_domain_character_vector(
     (const char *const[]) {"params", "tags", "trafos", "translation"},
     4
   ));
@@ -1077,7 +998,7 @@ static void reserve_add_snapshot(add_graph_snapshot_t *snapshot,
 static R_xlen_t snapshot_shell_index(const add_graph_snapshot_t *snapshot,
     SEXP shell, R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < snapshot->count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (snapshot->shells[index] == shell) {
       return index;
     }
@@ -1118,7 +1039,7 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
   };
 
   while (depth != 0) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     add_graph_frame_t *frame = &frames[depth - 1];
     if (!frame->entered) {
       if (forbidden != R_NilValue && frame->self == forbidden) {
@@ -1215,7 +1136,7 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
       Rf_error("Adding ParamSet would create a cycle in the capsule graph");
     }
     for (R_xlen_t ancestor = 0; ancestor < depth; ++ancestor) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       if (frames[ancestor].self == child) {
         Rf_error("ParamSet capsule graph contains a cycle");
       }
@@ -1251,7 +1172,7 @@ static int add_graph_snapshot_is_current(
     const add_graph_snapshot_t *snapshot,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < snapshot->count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (paradox_core_from_private(snapshot->private_environments[index]) !=
         snapshot->cores[index]) {
       return FALSE;
@@ -1264,7 +1185,7 @@ static int collection_graph_snapshot_is_current(
     const paradox_collection_graph_t *graph,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < graph->count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     const paradox_collection_graph_node_t *node = &graph->nodes[index];
     if (paradox_core_from_private(node->private_environment) != node->core) {
       return FALSE;
@@ -1281,7 +1202,7 @@ static void copy_table_rows(SEXP destination, R_xlen_t destination_offset,
   }
   for (R_xlen_t column = 0; column < XLENGTH(destination); ++column) {
     for (R_xlen_t row = 0; row < row_count; ++row) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       copy_at(
         VECTOR_ELT(destination, column),
         destination_offset + row,
@@ -1300,7 +1221,7 @@ static SEXP append_collection_table(SEXP left, R_xlen_t left_rows,
   if (!checked_add(&total_rows, right_rows) || total_rows > INT_MAX) {
     Rf_error("ParamSetCollection add result exceeds data.frame row limits");
   }
-  SEXP result = PROTECT(new_table(
+  SEXP result = PROTECT(paradox_domain_new_plain_table(
     column_names,
     types,
     column_count,
@@ -1357,7 +1278,7 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
   }
   if (CHAR(owner)[0] != '\0') {
     for (R_xlen_t index = 0; index < old_child_count; ++index) {
-      paradox_domain_account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       SEXP existing = STRING_ELT(old_set_names, index);
       if (CHAR(existing)[0] != '\0' &&
           strcmp(CHAR(existing), CHAR(owner)) == 0) {
@@ -1480,7 +1401,7 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
   const R_xlen_t child_trafo_count = XLENGTH(VECTOR_ELT(child_trafos, 0));
 
   for (R_xlen_t row = 0; row < child_param_count; ++row) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP id = STRING_ELT(VECTOR_ELT(child_params, 0), row);
     if (contains_id(VECTOR_ELT(old_params, 0), id)) {
       Rf_error(
@@ -1495,7 +1416,7 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
     current_child.param_count,
     child_params,
     child_param_count,
-    params_names,
+    paradox_domain_column_names,
     params_types,
     PARADOX_DOMAIN_TAGS,
     &work_since_interrupt

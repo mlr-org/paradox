@@ -9,7 +9,7 @@
 #' from the input `sets`, but some `$id`s are changed: If the [`ParamSet`] is given in `sets` with a name, then the [`Domain`]s will
 #' have their `<id>` changed to `<name in "sets">.<id>`. This is also reflected in deps.
 #'
-#' The `c()` operator, applied to [`ParamSet`]s, is a synony for `ps_union()`.
+#' The `c()` operator, applied to [`ParamSet`]s, is a synonym for `ps_union()`.
 #' The named arguments `tag_sets`, `tag_params`, and `postfix_names` are also available in the `c()` operator, but need to be
 #' used with a preceding dot instead: `.tag_sets`, `.tag_params`, and `.postfix_names`.
 #' @param sets (`list` of [`ParamSet`])\cr

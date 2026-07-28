@@ -279,7 +279,7 @@ tunetoken_full_to_ps = function(tt, param, ...) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
   if (isTRUE(tt$content$logscale)) {
-    if (!domain_is_number(param)) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
+    if (!domain_is_number(param)) stopf("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
     tunetoken_range_to_ps(list(
       content = list(lower = NULL, upper = NULL, logscale = tt$content$logscale),
       call = tt$call
@@ -331,9 +331,10 @@ tunetoken_range_to_ps = function(tt, param, ...) {
     stopf("%s range must be bounded, but is [%s, %s]", param$id, bound_lower, bound_upper)
   }
 
-  # create p_int / p_dbl object. Doesn't work if there is a numeric param class that we don't know about :-/
+  # create p_int / p_dbl object. `domain_is_number()` above already restricts
+  # the closed kinds to these two; the default branch is defensive only.
   constructor = switch(param$cls, ParamInt = p_int, ParamDbl = p_dbl,
-    stopf("%s: logscale for parameter %s of class %s not supported", tt$call, param$id, param$class))
+    stopf("%s: range for parameter %s of class %s not supported", tt$call, param$id, param$cls))
   content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale, ...)
   pslike_to_ps(content, tt$call, param)
 }

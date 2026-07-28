@@ -1,5 +1,3 @@
-#include <string.h>
-
 #include "paradox.h"
 
 #include "paramset_domain_common.h"
@@ -22,7 +20,7 @@ static SEXP snapshot_strings(SEXP source, const char *description,
   const R_xlen_t count = XLENGTH(source);
   SEXP result = PROTECT(Rf_allocVector(STRSXP, count));
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP value = STRING_ELT(source, index);
     if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES ||
         CHAR(value)[0] == '\0') {
@@ -98,7 +96,7 @@ static SEXP snapshot_column(SEXP source,
   const R_xlen_t count = XLENGTH(source);
   SEXP result = PROTECT(Rf_allocVector(type, count));
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     switch (type) {
     case LGLSXP:
       SET_LOGICAL_ELT(result, index, LOGICAL_ELT(source, index));
@@ -252,7 +250,7 @@ SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
   SEXP columns = PROTECT(Rf_allocVector(VECSXP, column_count));
   R_xlen_t row_count = table_input ? table_rows : 0;
   for (R_xlen_t column = 0; column < column_count; ++column) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP source = PROTECT(VECTOR_ELT(data, column));
     SEXP frozen = PROTECT(snapshot_column(source, &work_since_interrupt));
     const R_xlen_t rows = XLENGTH(frozen);
@@ -271,12 +269,12 @@ SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
 
   SEXP result = PROTECT(Rf_allocVector(VECSXP, row_count));
   for (R_xlen_t row_index = 0; row_index < row_count; ++row_index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     SEXP row = PROTECT(Rf_allocVector(VECSXP, column_count));
     SEXP row_names = PROTECT(Rf_allocVector(STRSXP, column_count));
     R_xlen_t target = 0;
     for (R_xlen_t column = 0; column < column_count; ++column) {
-      paradox_domain_account_work(&work_since_interrupt);
+      paradox_account_work(&work_since_interrupt);
       SEXP value = PROTECT(scalar_from_column(
         VECTOR_ELT(columns, column),
         row_index

@@ -160,7 +160,7 @@ and uses \code{exp} transformation on these. Therefore, the given bounds represe
 (see examples).\cr
 \code{p_int()} with \code{logscale = TRUE} results in a continuous parameter similar to \code{p_dbl()}, not an integer-valued parameter, with bounds \code{log(max(lower, 0.5))} ...
 \code{log(upper + 1)} and a trafo similar to "\code{as.integer(exp(x))}" (with additional bounds correction). The lower bound
-is lifted to \code{0.5} if \code{lower} 0 to handle the \code{lower == 0} case. The upper bound is increased to \code{log(upper + 1)}
+is lifted to \code{0.5} if \code{lower} is 0 to handle the \code{lower == 0} case. The upper bound is increased to \code{log(upper + 1)}
 because the trafo would otherwise almost never generate a value of \code{upper}.\cr
 When \code{logscale} is \code{TRUE}, then upper bounds may be infinite, but lower bounds should be greater than 0 for \code{p_dbl()}
 or greater or equal 0 for \code{p_int()}.\cr
@@ -185,7 +185,7 @@ Source-reference attributes are removed from the stored callback unless
 \code{options(paradox.strip_srcrefs = FALSE)} is set before construction.}
 
 \item{in_tune_fn}{(\verb{function(domain, param_vals)})\cr
-Function that converters a \code{Domain} object into a parameter value.
+Function that converts a \code{Domain} object into a parameter value.
 Can only be given for parameters tagged with \code{"internal_tuning"}.
 This function should also assert that the parameters required to enable internal tuning for the given \code{domain} are
 set in \code{param_vals} (such as \code{early_stopping_rounds} for \code{XGBoost}).

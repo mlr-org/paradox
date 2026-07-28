@@ -25,16 +25,6 @@ enum shadow_constraint_plan_field {
   SHADOW_CONSTRAINT_PLAN_FIELD_COUNT
 };
 
-enum collection_detach_field {
-  COLLECTION_DETACH_TRANSLATION = 0,
-  COLLECTION_DETACH_CONSTRAINT_INDICES,
-  COLLECTION_DETACH_CONSTRAINT_SETS,
-  COLLECTION_DETACH_TRAFO_INDICES,
-  COLLECTION_DETACH_TRAFO_SETS,
-  COLLECTION_DETACH_POSTFIX,
-  COLLECTION_DETACH_FIELD_COUNT
-};
-
 static SEXP shadow_metadata_symbol(void) {
   return Rf_install(".paradox.shadow.snapshot.v1");
 }
@@ -161,7 +151,7 @@ SEXP paradox_param_set_shadow_constraint(SEXP plan, SEXP visible_values) {
 
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(&work_since_interrupt);
+    paradox_account_work(&work_since_interrupt);
     const int hidden = index < hidden_count;
     const R_xlen_t source_index = hidden ? index : index - hidden_count;
     SEXP source_values = hidden ? hidden_values : visible_values;
@@ -201,20 +191,6 @@ SEXP paradox_param_set_shadow_constraint(SEXP plan, SEXP visible_values) {
   return result;
 }
 
-static int string_in(SEXP ids, SEXP sought,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t count = XLENGTH(ids);
-  for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    SEXP candidate = STRING_ELT(ids, index);
-    if (candidate == sought ||
-        paradox_domain_strings_equal(candidate, sought)) {
-      return TRUE;
-    }
-  }
-  return FALSE;
-}
-
 typedef struct {
   SEXP parameter_ids;
   SEXP *slots;
@@ -250,7 +226,7 @@ static shadow_id_index_t build_shadow_id_index(SEXP parameter_ids,
     slots[slot] = NULL;
   }
   for (R_xlen_t index = 0; index < count; ++index) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     SEXP id = STRING_ELT(parameter_ids, index);
     R_xlen_t slot = shadow_id_slot(id, capacity);
     while (slots[slot] != NULL) {
@@ -268,7 +244,7 @@ static int shadow_id_is_known(const shadow_id_index_t *index, SEXP sought,
   }
   R_xlen_t slot = shadow_id_slot(sought, index->capacity);
   while (index->slots[slot] != NULL) {
-    paradox_domain_account_work(work_since_interrupt);
+    paradox_account_work(work_since_interrupt);
     if (index->slots[slot] == sought) {
       return TRUE;
     }
@@ -278,7 +254,7 @@ static int shadow_id_is_known(const shadow_id_index_t *index, SEXP sought,
    * authoritative on the ordinary path. Preserve exact cross-encoding string
    * equality for safely forged-but-structural states without paying for UTF-8
    * translation or text hashing on every maintained Shadow read. */
-  return string_in(index->parameter_ids, sought, work_since_interrupt);
+  return paradox_domain_string_in(index->parameter_ids, sought, work_since_interrupt);
 }
 
 static int related_ids_are_known(const shadow_id_index_t *parameter_ids,
@@ -598,7 +574,7 @@ static SEXP split_values(const paradox_domain_values_t *source,
     SEXP visible_ids, R_xlen_t *work_since_interrupt) {
   R_xlen_t visible_count = 0;
   for (R_xlen_t visible = 0; visible < XLENGTH(visible_ids); ++visible) {
-    visible_count += string_in(
+    visible_count += paradox_domain_string_in(
       source->names,
       STRING_ELT(visible_ids, visible),
       work_since_interrupt
@@ -606,7 +582,7 @@ static SEXP split_values(const paradox_domain_values_t *source,
   }
   R_xlen_t hidden_count = 0;
   for (R_xlen_t index = 0; index < source->size; ++index) {
-    hidden_count += !string_in(
+    hidden_count += !paradox_domain_string_in(
       visible_ids,
       STRING_ELT(source->names, index),
       work_since_interrupt
@@ -627,7 +603,7 @@ static SEXP split_values(const paradox_domain_values_t *source,
   for (R_xlen_t visible = 0; visible < XLENGTH(visible_ids); ++visible) {
     SEXP id = STRING_ELT(visible_ids, visible);
     for (R_xlen_t index = 0; index < source->size; ++index) {
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       SEXP candidate = STRING_ELT(source->names, index);
       if (candidate == id || paradox_domain_strings_equal(candidate, id)) {
         SET_VECTOR_ELT(
@@ -644,7 +620,7 @@ static SEXP split_values(const paradox_domain_values_t *source,
   R_xlen_t hidden_output = 0;
   for (R_xlen_t index = 0; index < source->size; ++index) {
     SEXP id = STRING_ELT(source->names, index);
-    if (!string_in(visible_ids, id, work_since_interrupt)) {
+    if (!paradox_domain_string_in(visible_ids, id, work_since_interrupt)) {
       SET_VECTOR_ELT(hidden_values, hidden_output, VECTOR_ELT(
         source->values,
         index
@@ -661,42 +637,17 @@ static SEXP split_values(const paradox_domain_values_t *source,
   return result;
 }
 
-static void set_plain_table_attributes(SEXP table,
-    const char *const *column_names, R_xlen_t column_count,
-    R_xlen_t row_count) {
-  if (row_count > INT_MAX) {
-    Rf_error("ParamSetShadow table exceeds data.frame limits");
-  }
-  SEXP names = PROTECT(Rf_allocVector(STRSXP, column_count));
-  for (R_xlen_t column = 0; column < column_count; ++column) {
-    SET_STRING_ELT(names, column, Rf_mkChar(column_names[column]));
-  }
-  Rf_setAttrib(table, R_NamesSymbol, names);
-  SEXP classes = PROTECT(Rf_mkString("data.frame"));
-  Rf_setAttrib(table, R_ClassSymbol, classes);
-  SEXP row_names = PROTECT(Rf_allocVector(
-    INTSXP,
-    row_count == 0 ? 0 : 2
-  ));
-  if (row_count != 0) {
-    SET_INTEGER_ELT(row_names, 0, NA_INTEGER);
-    SET_INTEGER_ELT(row_names, 1, -(int) row_count);
-  }
-  Rf_setAttrib(table, R_RowNamesSymbol, row_names);
-  UNPROTECT(3);
-}
-
 static SEXP filter_dependencies(
     const paradox_domain_dependencies_t *source,
     SEXP visible_ids, R_xlen_t *work_since_interrupt) {
   R_xlen_t count = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    const int id_visible = string_in(
+    const int id_visible = paradox_domain_string_in(
       visible_ids,
       STRING_ELT(source->ids, row),
       work_since_interrupt
     );
-    const int on_visible = string_in(
+    const int on_visible = paradox_domain_string_in(
       visible_ids,
       STRING_ELT(source->on, row),
       work_since_interrupt
@@ -719,7 +670,7 @@ static SEXP filter_dependencies(
   SET_VECTOR_ELT(result, 2, conditions);
   R_xlen_t output = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    if (!string_in(
+    if (!paradox_domain_string_in(
         visible_ids,
         STRING_ELT(source->ids, row),
         work_since_interrupt
@@ -740,7 +691,7 @@ static SEXP filter_dependencies(
     Rf_error("Internal error: incomplete ParamSetShadow dependencies");
   }
   static const char *const names[] = {"id", "on", "cond"};
-  set_plain_table_attributes(result, names, 3, count);
+  (void) paradox_domain_finish_plain_table(result, names, 3, count);
   UNPROTECT(4);
   return result;
 }
@@ -749,7 +700,7 @@ static SEXP filter_trafos(const paradox_domain_trafos_t *source,
     SEXP visible_ids, R_xlen_t *work_since_interrupt) {
   R_xlen_t count = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    count += string_in(
+    count += paradox_domain_string_in(
       visible_ids,
       STRING_ELT(source->ids, row),
       work_since_interrupt
@@ -762,7 +713,7 @@ static SEXP filter_trafos(const paradox_domain_trafos_t *source,
   SET_VECTOR_ELT(result, 1, callbacks);
   R_xlen_t output = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    if (!string_in(
+    if (!paradox_domain_string_in(
         visible_ids,
         STRING_ELT(source->ids, row),
         work_since_interrupt
@@ -778,7 +729,7 @@ static SEXP filter_trafos(const paradox_domain_trafos_t *source,
     Rf_error("Internal error: incomplete ParamSetShadow transformations");
   }
   static const char *const names[] = {"id", "trafo"};
-  set_plain_table_attributes(result, names, 2, count);
+  (void) paradox_domain_finish_plain_table(result, names, 2, count);
   UNPROTECT(3);
   return result;
 }
@@ -787,7 +738,7 @@ static SEXP filter_tags(const paradox_domain_tags_t *source,
     SEXP visible_ids, R_xlen_t *work_since_interrupt) {
   R_xlen_t count = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    count += string_in(
+    count += paradox_domain_string_in(
       visible_ids,
       STRING_ELT(source->ids, row),
       work_since_interrupt
@@ -800,7 +751,7 @@ static SEXP filter_tags(const paradox_domain_tags_t *source,
   SET_VECTOR_ELT(result, 1, tags);
   R_xlen_t output = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    if (!string_in(
+    if (!paradox_domain_string_in(
         visible_ids,
         STRING_ELT(source->ids, row),
         work_since_interrupt
@@ -816,7 +767,7 @@ static SEXP filter_tags(const paradox_domain_tags_t *source,
     Rf_error("Internal error: incomplete ParamSetShadow tags");
   }
   static const char *const names[] = {"id", "tag"};
-  set_plain_table_attributes(result, names, 2, count);
+  (void) paradox_domain_finish_plain_table(result, names, 2, count);
   UNPROTECT(3);
   return result;
 }
@@ -852,13 +803,13 @@ static SEXP visible_parameter_table(const paradox_domain_params_t *source,
   for (R_xlen_t index = 0; index < XLENGTH(shadowed); ++index) {
     SEXP id = STRING_ELT(shadowed, index);
     if (id == NA_STRING || Rf_getCharCE(id) == CE_BYTES ||
-        !string_in(source->ids, id, work_since_interrupt)) {
+        !paradox_domain_string_in(source->ids, id, work_since_interrupt)) {
       Rf_error("`shadowed` contains an unknown or unsupported parameter ID");
     }
   }
   R_xlen_t visible_count = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    visible_count += !string_in(
+    visible_count += !paradox_domain_string_in(
       shadowed,
       STRING_ELT(source->ids, row),
       work_since_interrupt
@@ -876,7 +827,7 @@ static SEXP visible_parameter_table(const paradox_domain_params_t *source,
   }
   R_xlen_t output = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
-    if (string_in(
+    if (paradox_domain_string_in(
         shadowed,
         STRING_ELT(source->ids, row),
         work_since_interrupt
@@ -897,14 +848,10 @@ static SEXP visible_parameter_table(const paradox_domain_params_t *source,
     UNPROTECT(1);
     Rf_error("Internal error: incomplete ParamSetShadow schema");
   }
-  static const char *const names[PARADOX_DOMAIN_TAGS] = {
-    "id", "cls", "grouping", "cargo", "lower", "upper", "tolerance",
-    "levels", "special_vals", "default", "storage_type"
-  };
-  set_plain_table_attributes(
+  (void) paradox_domain_finish_plain_table(
     result,
-    names,
-    PARADOX_DOMAIN_TAGS,
+    paradox_domain_column_names,
+    PARADOX_DOMAIN_PERMANENT_COLUMNS,
     visible_count
   );
   UNPROTECT(1);
@@ -956,17 +903,6 @@ static SEXP evaluate_factory3(SEXP factory, SEXP first, SEXP second,
   return result;
 }
 
-static R_xlen_t shadow_parameter_row(SEXP ids, SEXP sought,
-    R_xlen_t *work_since_interrupt) {
-  for (R_xlen_t row = 0; row < XLENGTH(ids); ++row) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(STRING_ELT(ids, row), sought)) {
-      return row;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
-
 /*
  * A Shadow constraint carrier intentionally remains the exact two-field
  * {callback, hidden_values} ABI. Dependencies may not cross the visible /
@@ -996,7 +932,7 @@ static SEXP active_hidden_values(
     value_by_parameter[parameter] = R_XLEN_T_MAX;
   }
   for (R_xlen_t value = 0; value < values->size; ++value) {
-    const R_xlen_t parameter = shadow_parameter_row(
+    const R_xlen_t parameter = paradox_domain_find_string(
       params->ids,
       STRING_ELT(values->names, value),
       work_since_interrupt
@@ -1023,12 +959,12 @@ static SEXP active_hidden_values(
   for (R_xlen_t dependency = 0;
       dependency < dependency_count;
       ++dependency) {
-    dependency_child[dependency] = shadow_parameter_row(
+    dependency_child[dependency] = paradox_domain_find_string(
       params->ids,
       STRING_ELT(dependencies->ids, dependency),
       work_since_interrupt
     );
-    dependency_parent[dependency] = shadow_parameter_row(
+    dependency_parent[dependency] = paradox_domain_find_string(
       params->ids,
       STRING_ELT(dependencies->on, dependency),
       work_since_interrupt
@@ -1073,7 +1009,7 @@ static SEXP active_hidden_values(
   SEXP hidden_names = Rf_getAttrib(hidden_values, R_NamesSymbol);
   R_xlen_t kept = 0;
   for (R_xlen_t index = 0; index < XLENGTH(hidden_values); ++index) {
-    const R_xlen_t parameter = shadow_parameter_row(
+    const R_xlen_t parameter = paradox_domain_find_string(
       params->ids,
       STRING_ELT(hidden_names, index),
       work_since_interrupt
@@ -1087,7 +1023,7 @@ static SEXP active_hidden_values(
   SEXP names = PROTECT(Rf_allocVector(STRSXP, kept));
   R_xlen_t output = 0;
   for (R_xlen_t index = 0; index < XLENGTH(hidden_values); ++index) {
-    const R_xlen_t parameter = shadow_parameter_row(
+    const R_xlen_t parameter = paradox_domain_find_string(
       params->ids,
       STRING_ELT(hidden_names, index),
       work_since_interrupt
@@ -1237,14 +1173,14 @@ static SEXP build_from_base(SEXP template_state, SEXP origin_core,
 
 static SEXP collection_constraint_from_plan(SEXP plan, SEXP factories) {
   if (TYPEOF(plan) != VECSXP || ALTREP(plan) ||
-      XLENGTH(plan) != COLLECTION_DETACH_FIELD_COUNT) {
+      XLENGTH(plan) != PARADOX_COLLECTION_DETACH_FIELD_COUNT) {
     Rf_error("Corrupt ParamSetCollection callback detachment plan");
   }
   SEXP result = evaluate_factory3(
     VECTOR_ELT(factories, SHADOW_FACTORY_COLLECTION_CONSTRAINT),
-    VECTOR_ELT(plan, COLLECTION_DETACH_TRANSLATION),
-    VECTOR_ELT(plan, COLLECTION_DETACH_CONSTRAINT_INDICES),
-    VECTOR_ELT(plan, COLLECTION_DETACH_CONSTRAINT_SETS)
+    VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_TRANSLATION),
+    VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_CONSTRAINT_INDICES),
+    VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_CONSTRAINT_SETS)
   );
   if (result != R_NilValue && !Rf_isFunction(result)) {
     Rf_error("ParamSetCollection constraint factory returned invalid state");
@@ -1255,9 +1191,9 @@ static SEXP collection_constraint_from_plan(SEXP plan, SEXP factories) {
 static SEXP collection_extra_trafo_from_plan(SEXP plan, SEXP factories) {
   SEXP result = evaluate_factory3(
     VECTOR_ELT(factories, SHADOW_FACTORY_COLLECTION_EXTRA_TRAFO),
-    VECTOR_ELT(plan, COLLECTION_DETACH_TRANSLATION),
-    VECTOR_ELT(plan, COLLECTION_DETACH_TRAFO_INDICES),
-    VECTOR_ELT(plan, COLLECTION_DETACH_TRAFO_SETS)
+    VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_TRANSLATION),
+    VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_TRAFO_INDICES),
+    VECTOR_ELT(plan, PARADOX_COLLECTION_DETACH_TRAFO_SETS)
   );
   if (result != R_NilValue && !Rf_isFunction(result)) {
     Rf_error("ParamSetCollection extra_trafo factory returned invalid state");
@@ -1386,8 +1322,6 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
       &values,
       &work_since_interrupt
     );
-    (void) dependencies;
-    (void) values;
     paradox_domain_tags_t tags;
     if (!paradox_domain_validate_tags(
         VECTOR_ELT(state, PARADOX_CORE_TAGS),

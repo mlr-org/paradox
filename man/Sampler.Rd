@@ -57,7 +57,7 @@ e.g., \link{Sampler1D}.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{param_set}}{(\code{\link{ParamSet}})\cr
-The \code{\link{ParamSet}} to associated with this \code{Sampler}.}
+The \code{\link{ParamSet}} to associate with this \code{Sampler}.}
     }
     \if{html}{\out{</div>}}
   }

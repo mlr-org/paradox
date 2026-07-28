@@ -40,7 +40,7 @@ condition_as_string = function(cond, lhs_chr = "x") {
   sprintf(.subset2(cond, 2L), lhs_chr, str_collapse(.subset2(cond, 1L)))
 }
 
-condition_kind = function(cond, testable = FALSE) {
+condition_kind = function(cond) {
   if (isS4(cond)) {
     stop(
       "Unsupported Condition class; supported classes are 'CondEqual' and 'CondAnyOf'.",
@@ -54,7 +54,9 @@ condition_kind = function(cond, testable = FALSE) {
   if (identical(classes, c("CondAnyOf", "Condition"))) {
     return("any_of")
   }
-  if (!testable && identical(classes, "Condition")) {
+  if (identical(classes, "Condition")) {
+    # The plain Condition class remains printable/constructible for
+    # compatibility even though it is not testable by the closed engine.
     return("condition")
   }
   stop(

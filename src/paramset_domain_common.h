@@ -23,6 +23,14 @@ enum paradox_domain_column {
   PARADOX_DOMAIN_COLUMN_COUNT
 };
 
+/* The canonical 16-column Domain-table schema. `.tags` and later columns are
+ * projection-only; the leading columns through `storage_type` are the
+ * permanent columns shared by every parameter-table representation, so the
+ * permanent name list is this array's prefix. */
+#define PARADOX_DOMAIN_PERMANENT_COLUMNS ((R_xlen_t) PARADOX_DOMAIN_TAGS)
+attribute_hidden extern const char *const
+  paradox_domain_column_names[PARADOX_DOMAIN_COLUMN_COUNT];
+
 typedef struct {
   SEXP table;
   SEXP ids;
@@ -69,14 +77,44 @@ typedef struct {
   SEXP init_value;
 } paradox_domain_row_t;
 
-attribute_hidden void paradox_domain_account_work(
-  R_xlen_t *work_since_interrupt
+/* Fresh ordinary character vector from constant ASCII labels. */
+attribute_hidden SEXP paradox_domain_character_vector(
+  const char *const *values,
+  R_xlen_t size
+);
+/* Install canonical plain-data.frame metadata (names, "data.frame" class,
+ * compact row.names) on a fresh package-owned column shell and return it. */
+attribute_hidden SEXP paradox_domain_finish_plain_table(
+  SEXP table,
+  const char *const *column_names,
+  R_xlen_t column_count,
+  R_xlen_t row_count
+);
+/* Allocate a fresh canonical plain data.frame with the given column types. */
+attribute_hidden SEXP paradox_domain_new_plain_table(
+  const char *const *column_names,
+  const SEXPTYPE *column_types,
+  R_xlen_t column_count,
+  R_xlen_t row_count
 );
 attribute_hidden int paradox_domain_string_is(
   SEXP string,
   const char *expected
 );
 attribute_hidden int paradox_domain_strings_equal(SEXP left, SEXP right);
+/* Linear identifier search over an already admitted character vector, with
+ * the pointer-identity fast path first. Returns the first matching index or
+ * R_XLEN_T_MAX when absent. */
+attribute_hidden R_xlen_t paradox_domain_find_string(
+  SEXP strings,
+  SEXP sought,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden int paradox_domain_string_in(
+  SEXP strings,
+  SEXP sought,
+  R_xlen_t *work_since_interrupt
+);
 attribute_hidden int paradox_domain_exact_string_vector(
   SEXP value,
   const char *const *expected,

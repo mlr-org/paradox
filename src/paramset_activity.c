@@ -138,7 +138,7 @@ void paradox_activity_evaluate(const paradox_activity_plan_t *plan,
         continue;
       }
 
-      paradox_domain_account_work(work_since_interrupt);
+      paradox_account_work(work_since_interrupt);
       const R_xlen_t parent = plan->dependency_parent[dependency];
       if (parent != R_XLEN_T_MAX && parent >= parameter_count) {
         Rf_error("Internal error: invalid ParamSet dependency parent");

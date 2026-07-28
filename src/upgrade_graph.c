@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "core_state.h"
@@ -127,11 +126,7 @@ static size_t checked_double_capacity(size_t capacity) {
 }
 
 static void account_work(paradox_upgrade_walker_t *walker) {
-  ++walker->work_since_interrupt;
-  if (walker->work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
-    R_CheckUserInterrupt();
-    walker->work_since_interrupt = 0;
-  }
+  paradox_account_work(&walker->work_since_interrupt);
 }
 
 static paradox_upgrade_path_t *new_path(
@@ -255,7 +250,7 @@ static paradox_upgrade_path_t *named_path(
 
 static SEXP render_path(const paradox_upgrade_path_t *path) {
   if (path == NULL) {
-    Rf_error("Object graph path is too large to report");
+    Rf_error("Internal error: malformed object graph path");
     return R_NilValue;
   }
   if (path->total_size > (size_t) R_XLEN_T_MAX) {
@@ -444,8 +439,7 @@ static int scalar_string_equal(SEXP string, const char *expected) {
   return string != NA_STRING && strcmp(CHAR(string), expected) == 0;
 }
 
-static int candidate_kind(
-    SEXP environment) {
+static int is_candidate_shell(SEXP environment) {
   SEXP classes = paradox_api_raw_attribute(environment, R_ClassSymbol);
   if (TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes)) {
     return FALSE;
@@ -458,7 +452,7 @@ static int candidate_kind(
     has_param_set |= scalar_string_equal(label, "ParamSet");
     has_r6 |= scalar_string_equal(label, "R6");
   }
-  return has_param_set && has_r6 && count != 0;
+  return has_param_set && has_r6;
 }
 
 static void grow_boundaries(paradox_upgrade_boundaries_t *boundaries) {
@@ -831,7 +825,7 @@ static void schedule_environment(
    * check here would otherwise let a semantically corrupt current capsule hide
    * inside a mixed graph and violate the all-roots-before-commit guarantee.
    */
-  if (candidate_kind(environment)) {
+  if (is_candidate_shell(environment)) {
     append_candidate(
       &walker->candidates,
       environment,

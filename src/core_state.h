@@ -4,6 +4,7 @@
 #include "paradox.h"
 
 typedef enum {
+  PARADOX_CORE_NONE = 0,
   PARADOX_CORE_BASE = 1,
   PARADOX_CORE_COLLECTION = 2,
   PARADOX_CORE_SHADOW = 3
@@ -28,6 +29,10 @@ typedef enum {
  * kind. No finalizer or unmanaged allocation is involved. */
 attribute_hidden int paradox_core_is_valid(SEXP core);
 attribute_hidden int paradox_core_has_exact_schema(SEXP core);
+/* Payload-level twin of the check above: the exact ordinary ten-field
+ * `.params`..`.postfix` capsule state schema. The single validator shared by
+ * every unit that inspects a detached payload directly. */
+attribute_hidden int paradox_core_state_exact_schema(SEXP state);
 /* A canonical installed capsule additionally has the one exact carrier
  * attribute shape allowed for its node kind. SHADOW metadata contents are
  * authenticated separately because temporary clone templates intentionally

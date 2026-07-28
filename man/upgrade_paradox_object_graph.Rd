@@ -39,7 +39,7 @@ outside a binding or \code{...} cell as opaque. It does not enter
 namespace-imports environments, attached search-path environments, or
 base/empty environments. A namespace-imports boundary is recognized only
 when the raw \code{name} attribute is an ordinary, attribute-free character scalar
-beginning \code{imports:} and the direct parent is the base namespace; a merely
+beginning \verb{imports:} and the direct parent is the base namespace; a merely
 spoofed display name remains traversable. Arbitrary external-pointer and
 weak-reference internals are opaque. The protected ordinary-R payload of an
 authenticated current Paradox capsule is traversed so a legacy object stored

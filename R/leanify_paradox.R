@@ -11,16 +11,8 @@
   sprintf(".__%s__%s", classname, member)
 }
 
-.paradox_leanify_member = function(generator, member, namespace) {
-  container = NULL
-  method = NULL
-  for (candidate in c("public_methods", "private_methods", "active")) {
-    method = generator[[candidate]][[member]]
-    if (!is.null(method)) {
-      container = candidate
-      break
-    }
-  }
+.paradox_leanify_member = function(generator, container, member, namespace) {
+  method = generator[[container]][[member]]
   if (is.null(method)) {
     stop(
       sprintf(
@@ -68,7 +60,7 @@
   targets = character()
   for (container in c("public_methods", "private_methods", "active")) {
     for (member in names(generator[[container]])) {
-      target = .paradox_leanify_member(generator, member, namespace)
+      target = .paradox_leanify_member(generator, container, member, namespace)
       targets[[.paradox_old_target_name(generator$classname, member)]] = target
     }
   }

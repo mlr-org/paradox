@@ -20,7 +20,7 @@ SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
     #' @param param_set ([`ParamSet`])\cr
-    #'   The [`ParamSet`] to associated with this `SamplerHierarchical`.
+    #'   The [`ParamSet`] to associate with this `SamplerHierarchical`.
     #' @param samplers (`list()`)\cr
     #'   List of [`Sampler1D`] objects that gives a Sampler for each dimension in the `param_set`.
     initialize = function(param_set, samplers) {
@@ -29,7 +29,7 @@ SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
       ids1 = param_set$ids()
       ids2 = map_chr(samplers, function(s) s$param$ids())
       if (!setequal(ids1, ids2)) {
-        stop("IDs of params in samplers to not correspond to IDs of params in set!")
+        stop("IDs of params in samplers do not correspond to IDs of params in set!")
       }
       super$initialize(param_set)
       self$samplers = samplers
