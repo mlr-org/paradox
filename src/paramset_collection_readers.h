@@ -122,8 +122,11 @@ enum paradox_collection_detach_field {
 };
 
 /* Construct the callback-detachment plan from the exact admitted graph.
- * In particular, migration preflight can consume offside SHADOW previews
- * without traversing live shells again or committing a nested refresh. */
+ * This is the sole plan constructor: the registered live entry point routes
+ * through the canonical graph build above and then enters here, so detachment
+ * has no separate admission mode. In particular, migration preflight can
+ * consume offside SHADOW previews without traversing live shells again or
+ * committing a nested refresh. */
 attribute_hidden SEXP paradox_param_set_collection_detach_plan_from_graph(
   const paradox_collection_graph_t *graph,
   SEXP requested

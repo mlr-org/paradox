@@ -64,122 +64,6 @@ static void append_root(SEXP *roots, PROTECT_INDEX roots_index, SEXP value) {
   UNPROTECT(2);
 }
 
-static int exact_flag(SEXP value) {
-  return TYPEOF(value) == LGLSXP && !ALTREP(value) &&
-    XLENGTH(value) == 1 && paradox_api_has_no_attributes(value) &&
-    LOGICAL_ELT(value, 0) != NA_LOGICAL;
-}
-
-static int exact_sets(SEXP sets, SEXP *names, R_xlen_t *count,
-    R_xlen_t *work) {
-  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets) ||
-      !paradox_api_has_single_attribute(sets, "names")) {
-    return FALSE;
-  }
-  SEXP observed_names = Rf_getAttrib(sets, R_NamesSymbol);
-  const R_xlen_t size = XLENGTH(sets);
-  if (TYPEOF(observed_names) != STRSXP || ALTREP(observed_names) ||
-      !paradox_api_has_no_attributes(observed_names) ||
-      XLENGTH(observed_names) != size) {
-    return FALSE;
-  }
-  for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_account_work(work);
-    if (!paradox_charsxp_is_ordinary(STRING_ELT(observed_names, index))) {
-      return FALSE;
-    }
-  }
-  *names = observed_names;
-  *count = size;
-  return TRUE;
-}
-
-static int exact_translation(SEXP table, const detach_node_t *node,
-    detach_node_t *output, R_xlen_t *work) {
-  static const char *const column_names[] = {
-    "id", "original_id", "owner_ps_index", "owner_name"
-  };
-  R_xlen_t rows = 0;
-  if (!paradox_domain_exact_plain_table(
-      table,
-      column_names,
-      4,
-      &rows,
-      work
-    )) {
-    return FALSE;
-  }
-  SEXP ids = VECTOR_ELT(table, 0);
-  SEXP original_ids = VECTOR_ELT(table, 1);
-  SEXP owners = VECTOR_ELT(table, 2);
-  SEXP owner_names = VECTOR_ELT(table, 3);
-  if (TYPEOF(ids) != STRSXP || ALTREP(ids) ||
-      !paradox_api_has_no_attributes(ids) ||
-      TYPEOF(original_ids) != STRSXP || ALTREP(original_ids) ||
-      !paradox_api_has_no_attributes(original_ids) ||
-      TYPEOF(owners) != INTSXP || ALTREP(owners) ||
-      !paradox_api_has_no_attributes(owners) ||
-      TYPEOF(owner_names) != STRSXP || ALTREP(owner_names) ||
-      !paradox_api_has_no_attributes(owner_names) ||
-      XLENGTH(original_ids) != rows || XLENGTH(owners) != rows ||
-      XLENGTH(owner_names) != rows || rows != node->params.row_count) {
-    return FALSE;
-  }
-  for (R_xlen_t row = 0; row < rows; ++row) {
-    paradox_account_work(work);
-    const int owner = INTEGER_ELT(owners, row);
-    if (!paradox_charsxp_is_ordinary(STRING_ELT(ids, row)) ||
-        !paradox_charsxp_is_ordinary(STRING_ELT(original_ids, row)) ||
-        !paradox_charsxp_is_ordinary(STRING_ELT(owner_names, row)) ||
-        owner <= 0 || (R_xlen_t) owner > XLENGTH(node->sets) ||
-        !paradox_domain_strings_equal(
-          STRING_ELT(owner_names, row),
-          STRING_ELT(node->set_names, (R_xlen_t) owner - 1)
-        )) {
-      return FALSE;
-    }
-  }
-  if (Rf_any_duplicated(ids, FALSE) != 0) {
-    return FALSE;
-  }
-  for (R_xlen_t row = 0; row < node->params.row_count; ++row) {
-    int found = FALSE;
-    for (R_xlen_t translated = 0; translated < rows; ++translated) {
-      if (paradox_domain_strings_equal(
-          STRING_ELT(node->params.ids, row),
-          STRING_ELT(ids, translated)
-        )) {
-        found = TRUE;
-        break;
-      }
-    }
-    if (!found) {
-      return FALSE;
-    }
-  }
-  output->translation = table;
-  output->translation_ids = ids;
-  output->translation_original_ids = original_ids;
-  output->translation_owners = owners;
-  output->translation_owner_names = owner_names;
-  output->translation_rows = rows;
-  return TRUE;
-}
-
-static void reserve_node(detach_graph_t *graph) {
-  if (graph->count < graph->capacity) {
-    return;
-  }
-  if (graph->capacity > R_XLEN_T_MAX / 2) {
-    Rf_error("ParamSet capsule graph is too large");
-  }
-  const R_xlen_t capacity = graph->capacity * 2;
-  detach_node_t *nodes = paradox_temporary_alloc(capacity, sizeof(*nodes));
-  memcpy(nodes, graph->nodes, (size_t) graph->count * sizeof(*nodes));
-  graph->nodes = nodes;
-  graph->capacity = capacity;
-}
-
 static R_xlen_t find_node(const detach_graph_t *graph, SEXP self) {
   for (R_xlen_t index = 0; index < graph->count; ++index) {
     if (graph->nodes[index].self == self) {
@@ -263,252 +147,6 @@ static void import_admitted_graph(detach_graph_t *graph,
       .translation_rows = selected->translation.row_count,
       .postfix = selected->postfix
     };
-  }
-}
-
-static R_xlen_t add_node(detach_graph_t *graph, SEXP self,
-    SEXP expected_private, SEXP *roots, PROTECT_INDEX roots_index,
-    R_xlen_t *work) {
-  const R_xlen_t existing = find_node(graph, self);
-  if (existing != R_XLEN_T_MAX) {
-    if (expected_private != R_NilValue &&
-        graph->nodes[existing].private_environment != expected_private) {
-      Rf_error("Corrupt ParamSet shell ownership");
-    }
-    return existing;
-  }
-  SEXP private_environment = PROTECT(paradox_domain_private_environment(self));
-  if (private_environment == R_UnboundValue ||
-      (expected_private != R_NilValue &&
-       private_environment != expected_private)) {
-    UNPROTECT(1);
-    Rf_error("Corrupt ParamSet shell ownership");
-  }
-  SEXP core = paradox_core_from_private(private_environment);
-  if (core == R_UnboundValue) {
-    UNPROTECT(1);
-    Rf_error("Corrupt ParamSet state: missing versioned core capsule");
-  }
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
-  }
-  const paradox_core_kind_t kind = paradox_core_kind(core);
-  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
-      kind != PARADOX_CORE_SHADOW) {
-    UNPROTECT(1);
-    Rf_error("Corrupt ParamSet state: unknown capsule kind");
-  }
-  SEXP payload = paradox_core_payload(core);
-  if (payload == R_UnboundValue) {
-    UNPROTECT(1);
-    Rf_error("Corrupt ParamSet state capsule");
-  }
-  append_root(roots, roots_index, self);
-  append_root(roots, roots_index, private_environment);
-  append_root(roots, roots_index, core);
-
-  reserve_node(graph);
-  const R_xlen_t index = graph->count++;
-  detach_node_t *node = &graph->nodes[index];
-  *node = (detach_node_t) {
-    self,
-    private_environment,
-    core,
-    payload,
-    kind,
-    {R_NilValue, R_NilValue, R_NilValue, 0},
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    0,
-    FALSE
-  };
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
-      VECTOR_ELT(payload, PARADOX_CORE_PARAMS),
-      R_NilValue,
-      TRUE,
-      &node->params,
-      &unused_row,
-      work
-    )) {
-    UNPROTECT(1);
-    Rf_error("Corrupt ParamSet parameter capsule");
-  }
-
-  SEXP constraint = VECTOR_ELT(payload, PARADOX_CORE_CONSTRAINT);
-  SEXP trafo = VECTOR_ELT(payload, PARADOX_CORE_EXTRA_TRAFO);
-  if ((constraint != R_NilValue && !Rf_isFunction(constraint)) ||
-      (trafo != R_NilValue && !Rf_isFunction(trafo))) {
-    UNPROTECT(1);
-    Rf_error("Corrupt ParamSet callback capsule");
-  }
-
-  if (kind == PARADOX_CORE_COLLECTION) {
-    R_xlen_t set_count = 0;
-    node->sets = VECTOR_ELT(payload, PARADOX_CORE_SETS);
-    if (!exact_sets(node->sets, &node->set_names, &set_count, work) ||
-        !exact_flag(VECTOR_ELT(payload, PARADOX_CORE_POSTFIX)) ||
-        constraint != R_NilValue || trafo != R_NilValue) {
-      UNPROTECT(1);
-      Rf_error("Corrupt ParamSetCollection graph capsule");
-    }
-    (void) set_count;
-    node->postfix = LOGICAL_ELT(
-      VECTOR_ELT(payload, PARADOX_CORE_POSTFIX),
-      0
-    );
-    if (!exact_translation(
-        VECTOR_ELT(payload, PARADOX_CORE_TRANSLATION),
-        node,
-        node,
-        work
-      )) {
-      UNPROTECT(1);
-      Rf_error("Corrupt ParamSetCollection translation capsule");
-    }
-  } else if (kind == PARADOX_CORE_SHADOW) {
-    node->sets = VECTOR_ELT(payload, PARADOX_CORE_SETS);
-    if (TYPEOF(node->sets) != VECSXP || ALTREP(node->sets) ||
-        XLENGTH(node->sets) != 1 ||
-        VECTOR_ELT(payload, PARADOX_CORE_TRANSLATION) != R_NilValue ||
-        !exact_flag(VECTOR_ELT(payload, PARADOX_CORE_POSTFIX)) ||
-        LOGICAL_ELT(VECTOR_ELT(payload, PARADOX_CORE_POSTFIX), 0)) {
-      UNPROTECT(1);
-      Rf_error("Corrupt ParamSetShadow origin capsule");
-    }
-  } else if (VECTOR_ELT(payload, PARADOX_CORE_SETS) != R_NilValue ||
-      VECTOR_ELT(payload, PARADOX_CORE_TRANSLATION) != R_NilValue ||
-      !exact_flag(VECTOR_ELT(payload, PARADOX_CORE_POSTFIX)) ||
-      LOGICAL_ELT(VECTOR_ELT(payload, PARADOX_CORE_POSTFIX), 0)) {
-    UNPROTECT(1);
-    Rf_error("Corrupt base ParamSet graph capsule");
-  }
-  UNPROTECT(1);
-  return index;
-}
-
-static R_xlen_t node_child_count(const detach_node_t *node) {
-  return node->kind == PARADOX_CORE_BASE ? 0 : XLENGTH(node->sets);
-}
-
-static void build_graph(detach_graph_t *graph, SEXP self,
-    SEXP private_environment, SEXP *roots, PROTECT_INDEX roots_index,
-    R_xlen_t *work) {
-  graph->capacity = 16;
-  graph->nodes = paradox_temporary_alloc(
-    graph->capacity,
-    sizeof(*graph->nodes)
-  );
-  graph->count = 0;
-  add_node(
-    graph,
-    self,
-    private_environment,
-    roots,
-    roots_index,
-    work
-  );
-  for (R_xlen_t node_index = 0; node_index < graph->count; ++node_index) {
-    detach_node_t *node = &graph->nodes[node_index];
-    const R_xlen_t child_count = node_child_count(node);
-    for (R_xlen_t child = 0; child < child_count; ++child) {
-      paradox_account_work(work);
-      SEXP child_self = VECTOR_ELT(node->sets, child);
-      if (TYPEOF(child_self) != ENVSXP) {
-        Rf_error("Corrupt ParamSet capsule graph child");
-      }
-      add_node(
-        graph,
-        child_self,
-        R_NilValue,
-        roots,
-        roots_index,
-        work
-      );
-    }
-  }
-
-  int *colors = paradox_temporary_alloc(graph->count, sizeof(*colors));
-  R_xlen_t *stack_nodes = paradox_temporary_alloc(
-    graph->count,
-    sizeof(*stack_nodes)
-  );
-  R_xlen_t *stack_children = paradox_temporary_alloc(
-    graph->count,
-    sizeof(*stack_children)
-  );
-  for (R_xlen_t index = 0; index < graph->count; ++index) {
-    colors[index] = 0;
-  }
-  R_xlen_t depth = 1;
-  stack_nodes[0] = 0;
-  stack_children[0] = 0;
-  colors[0] = 1;
-  while (depth != 0) {
-    const R_xlen_t node_index = stack_nodes[depth - 1];
-    const detach_node_t *node = &graph->nodes[node_index];
-    const R_xlen_t child_count = node_child_count(node);
-    if (stack_children[depth - 1] == child_count) {
-      colors[node_index] = 2;
-      --depth;
-      continue;
-    }
-    SEXP child_self = VECTOR_ELT(
-      node->sets,
-      stack_children[depth - 1]++
-    );
-    const R_xlen_t child = find_node(graph, child_self);
-    if (child == R_XLEN_T_MAX) {
-      Rf_error("Corrupt ParamSet capsule graph plan");
-    }
-    if (colors[child] == 1) {
-      Rf_error("ParamSet capsule graph contains a cycle");
-    }
-    if (colors[child] == 0) {
-      colors[child] = 1;
-      stack_nodes[depth] = child;
-      stack_children[depth] = 0;
-      ++depth;
-    }
-  }
-
-  for (R_xlen_t node_index = 0; node_index < graph->count; ++node_index) {
-    const detach_node_t *node = &graph->nodes[node_index];
-    if (node->kind != PARADOX_CORE_COLLECTION) {
-      continue;
-    }
-    for (R_xlen_t row = 0; row < node->translation_rows; ++row) {
-      const R_xlen_t owner =
-        (R_xlen_t) INTEGER_ELT(node->translation_owners, row) - 1;
-      const R_xlen_t child = find_node(
-        graph,
-        VECTOR_ELT(node->sets, owner)
-      );
-      if (child == R_XLEN_T_MAX) {
-        Rf_error("Corrupt ParamSetCollection child plan");
-      }
-      const detach_node_t *child_node = &graph->nodes[child];
-      int found = FALSE;
-      for (R_xlen_t child_row = 0;
-          child_row < child_node->params.row_count;
-          ++child_row) {
-        if (paradox_domain_strings_equal(
-            STRING_ELT(node->translation_original_ids, row),
-            STRING_ELT(child_node->params.ids, child_row)
-          )) {
-          found = TRUE;
-          break;
-        }
-      }
-      if (!found) {
-        Rf_error("Corrupt ParamSetCollection translation target");
-      }
-    }
   }
 }
 
@@ -755,33 +393,20 @@ static SEXP allocate_carriers(R_xlen_t size, const char *field,
   return result;
 }
 
-static SEXP collection_detach_plan(SEXP private_environment,
-    SEXP self, SEXP requested,
+static SEXP collection_detach_plan(SEXP requested,
     const paradox_collection_graph_t *admitted_graph) {
-  R_xlen_t work = 0;
   PROTECT_INDEX roots_index;
   SEXP roots;
   PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
   SEXP requested_snapshot = PROTECT(materialize_requested(requested));
 
   detach_graph_t graph;
-  if (admitted_graph == NULL) {
-    build_graph(
-      &graph,
-      self,
-      private_environment,
-      &roots,
-      roots_index,
-      &work
-    );
-  } else {
-    import_admitted_graph(
-      &graph,
-      admitted_graph,
-      &roots,
-      roots_index
-    );
-  }
+  import_admitted_graph(
+    &graph,
+    admitted_graph,
+    &roots,
+    roots_index
+  );
   if (graph.nodes[0].kind != PARADOX_CORE_COLLECTION) {
     UNPROTECT(2);
     Rf_error("Detachment requires a ParamSetCollection capsule");
@@ -1054,20 +679,28 @@ static SEXP collection_detach_plan(SEXP private_environment,
 
 SEXP paradox_param_set_collection_detach_plan(SEXP private_environment,
     SEXP self, SEXP requested) {
-  return collection_detach_plan(
+  /* The live entry performs the same complete canonical graph admission as
+   * every other collection operation; the plan constructor consumes only
+   * admitted graphs. The former detach-only parallel admission is gone. */
+  R_xlen_t work_since_interrupt = 0;
+  PROTECT_INDEX graph_roots_index;
+  SEXP graph_roots;
+  PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+  paradox_collection_graph_t graph;
+  paradox_collection_graph_build(
     private_environment,
     self,
-    requested,
-    NULL
+    &graph,
+    &graph_roots,
+    graph_roots_index,
+    &work_since_interrupt
   );
+  SEXP plan = collection_detach_plan(requested, &graph);
+  UNPROTECT(1);
+  return plan;
 }
 
 SEXP paradox_param_set_collection_detach_plan_from_graph(
     const paradox_collection_graph_t *graph, SEXP requested) {
-  return collection_detach_plan(
-    R_NilValue,
-    R_NilValue,
-    requested,
-    graph
-  );
+  return collection_detach_plan(requested, graph);
 }
