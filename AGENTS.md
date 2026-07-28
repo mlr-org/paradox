@@ -2002,8 +2002,12 @@ Under aggregate containment, task allocations are scheduler reservations
 rather than individual cgroup limits. Admission uses the smaller of aggregate
 headroom and global available memory outside the protected reserve, without
 subtracting that reserve twice. `verify-task-entry` and `resource-jobs` must
-cap nested work directly by the assigned CPU/RAM envelope; their independent
-live-resource gate may still lower the result. Any aggregate memory/PID
+cap nested work by the assigned CPU/RAM envelope; aggregate-contained consumer
+rows translate assigned memory with a measured 4-GiB cooperative weight while
+their independent live/direct resource gate retains the conservative 8-GiB
+estimate. A finite `operator_max_jobs` is a valid lowering-only external
+ceiling and must never exceed the independently recomputed raw ceiling. Any
+aggregate memory/PID
 event-counter increase or
 cgroup/systemd/path/limit change is a fatal infrastructure failure that
 terminates every sibling. A real payload proves worker inheritance at startup;
@@ -2122,7 +2126,11 @@ each serial documentation/focused branch. Their phase total is 24 GiB of RAM,
 branches to run together beneath the hard systemd aggregate and protected-disk
 budgets. These values are admission weights, not measured peaks; no retained
 evidence supported the old 26--51-GiB weights. Keep the direct
-`resource-jobs consumer` reserve unchanged. An aggregate memory/PID event or
+`resource-jobs consumer` reserve unchanged. The completed `4c4cb53`
+diagnostic run empirically peaked at 10,670 MiB and had zero memory/PID events;
+its one-row corpus waves exposed the assigned-envelope 8-GiB divisor as a
+throughput bottleneck, so aggregate-contained assignments now use 4 GiB per
+ordinary consumer row. An aggregate memory/PID event or
 protected-disk pressure invalidates only the verification unit and calls for a
 replacement run with the offending reservation raised.
 
@@ -2299,13 +2307,42 @@ Prepared compatibility attempt
 worker-only harness failures and did not start a real compatibility gate.
 Bullseye procps-ng parsed an unseparated negative process-group operand as a
 signal option and killed group zero; all reverse group operands now use `--`.
-The other fixture declared UTF-8 despite being ASCII-only, making R 4.6 request
-an unavailable `en_US.UTF-8` locale in the minimal worker; that irrelevant
-declaration is gone, while real downstream WARNING rejection is unchanged.
+The initial workaround removed the UTF-8 declaration from the ASCII-only
+fixture. The subsequent real `4c4cb53` source checks proved that diagnosis
+incomplete: production `env -i` rows had discarded the worker's `C.UTF-8`
+locale, so every ordinary UTF-8 downstream package made R 4.6 request the
+unavailable `en_US.UTF-8`. The final correction restores the fixture's common
+UTF-8 boundary and pins `LC_ALL`, `LANG`, `LANGUAGE`, and `TZ` in both fixture
+and production rows; real downstream WARNING rejection remains unchanged.
 Keep the failed coordinator and its already-published overlay immutable. After
 committing these package-excluded repairs, prepare a fresh candidate-run-owned
 overlay and a new coordinator rather than resuming, overwriting, or relabeling
 the old evidence.
+
+The immutable replacement diagnostic coordinator
+`release-candidate-dbbdcc1-prepared-compat-4c4cb53-r1` ran all unblocked work
+for 13,810.8 seconds. All six harness rows, the downstream overlay, and the
+17-workload documentation gate passed. Its focused five-package source checks
+all built and returned check status zero but were strictly rejected solely for
+the common locale WARNING above. Reverse preflight was rejected before package
+execution solely because its valid coordinator-assigned finite
+`operator_max_jobs` met an obsolete reverse-only prohibition. The complete
+28-repository corpus retained 17 passes and 11 honest failures over 28 one-row
+waves: only `mlr3tuning` and `mlr3pipelines` expose new dormant-value
+expectation drift; the other nine are the previously scoped optional-system,
+upstream-fixture, dependency, or timeout classes. Completion, rows, manifest,
+and seal SHA-256 values are respectively
+`7e4cb24e4e5141c5ae2dcfa36f67c406972ac75b60a98d5b14d17a7fa5a12fd0`,
+`9c7cbcecb8faa7419551a0d84d9f6dd138c2564c719f951ceaba093ebea0cee0`,
+`efb8f8a3cfa801c52ce17f9fa78ef2c2a7b462d05f9c091efaf0dd88a89b8d26`,
+and
+`97cc58b471812e74bd89206004677dd31be05017d478fff7d7592062884a4785`.
+The narrow correction passed shell syntax, the direct resource scheduler
+fixture (including aggregate two-row and conservative direct one-row cases),
+the complete reverse reserved-output/self-test, downstream bridge/profile
+fixtures with a real UTF-8 `R CMD build`/`check`, all 66 controller unit tests,
+and the verification-economy contract test. No broad compatibility task was
+repeated before downstream heads and manifests were refreshed.
 
 The final repair passed shell syntax checks, R parsing of both snapshot
 helpers, and the complete activated validation-hardening suite in about 226

@@ -382,7 +382,9 @@ processed by repository-local `R CMD build`; the retained build log and package
 tarball hash are authenticated before that tarball, rather than the raw source
 directory, is passed to `R CMD check`. Besides matching CRAN's source-package
 boundary, this ensures that `Authors@R`-only metadata is expanded before R 4.6
-validates the package.
+validates the package. The deliberately empty `env -i` boundary explicitly
+restores `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, `LANGUAGE=C`, and `TZ=UTC`; it must
+not depend on `en_US.UTF-8` being installed in a minimal worker.
 
 The P1 run uses an exact Paradox-1 Git ref with the unchanged candidate
 installer, so its normal receipt still binds source, archive, installed bytes,
@@ -471,8 +473,13 @@ wave, `scripts/environment/resource-jobs consumer --report` recomputes the
 live CPU-affinity, cgroup, and available-memory ceiling; its exact report is
 retained with that wave. The automatic ceiling is at most four heavyweight
 consumers and fails closed if even one would invade the memory reserve.
-`PARADOX_REVERSE_JOBS=N` may only lower the current automatic and retained
-limits. Every child has a separate process, install library, home, work tree,
+The historical `operator_max_jobs` report field may contain a lowering-only
+coordinator-assigned envelope; it may never exceed the independently
+recomputed CPU/memory/profile ceiling. Evidence fields named
+`automatic_ceiling` retain the helper's resulting effective ceiling.
+`PARADOX_REVERSE_JOBS=N` is a separate, explicitly recorded operator choice
+that may only lower that current effective and retained limit. Every child has
+a separate process, install library, home, work tree,
 and caches. Nested make/CMake, testthat, `parallel`/`future`, OpenMP, BLAS, and
 related thread pools are normally fixed at one and recorded in command
 evidence and the install-cache key. The `mlr3` R CMD check child alone exposes

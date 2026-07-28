@@ -1233,9 +1233,9 @@ resource_report_fixture <- data.frame(
     "operator_max_jobs", "jobs"
   ),
   value = c(
-    "1", "consumer", "Linux", "4", "4", "1", "1", "0", "2", "1",
-    "proc_memavailable", "24576", "unlimited", "16384", "8192", "1",
-    "4", "none", "1"
+    "1", "consumer", "Linux", "6", "6", "5", "5", "1", "2", "2",
+    "proc_memavailable", "32768", "unlimited", "16384", "8192", "2",
+    "4", "1", "1"
   ),
   stringsAsFactors = FALSE
 )
@@ -1248,6 +1248,35 @@ expect_error(
   rr_validate_resource_report(raised_resource_report, "consumer"),
   "internally inconsistent"
 )
+uncapped_resource_report <- resource_report_fixture
+uncapped_resource_report$value[
+  uncapped_resource_report$field == "operator_max_jobs"
+] <- "none"
+uncapped_resource_report$value[
+  uncapped_resource_report$field == "jobs"
+] <- "2"
+invisible(rr_validate_resource_report(uncapped_resource_report, "consumer"))
+oversized_cap_resource_report <- resource_report_fixture
+oversized_cap_resource_report$value[
+  oversized_cap_resource_report$field == "operator_max_jobs"
+] <- "3"
+oversized_cap_resource_report$value[
+  oversized_cap_resource_report$field == "jobs"
+] <- "2"
+expect_error(
+  rr_validate_resource_report(oversized_cap_resource_report, "consumer"),
+  "internally inconsistent"
+)
+for (malformed_cap in c("0", "01")) {
+  malformed_cap_resource_report <- resource_report_fixture
+  malformed_cap_resource_report$value[
+    malformed_cap_resource_report$field == "operator_max_jobs"
+  ] <- malformed_cap
+  expect_error(
+    rr_validate_resource_report(malformed_cap_resource_report, "consumer"),
+    "canonical positive integer"
+  )
+}
 rr_write_tsv(
   resource_report_fixture,
   file.path(verification_metadata, "resource-jobs-initial.tsv")

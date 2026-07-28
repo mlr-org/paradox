@@ -72,7 +72,14 @@ The conservative profiles are: `compile`, one CPU and 1024 MiB per job with a
 16-job cap; `api-compile`, one CPU and 768 MiB per job; `light-test`, one CPU
 and 2048 MiB per job with a 16-job cap; and `consumer`, two CPUs and 8192 MiB
 per job with a four-job cap and 16384 MiB minimum reserve. These are admission
-budgets, not measured peaks. The serial `rchk` profile admits one analyzer only
+budgets, not measured peaks. Direct and individually contained consumer runs
+use that full 8192-MiB estimate for both live and assigned-envelope admission.
+Only under the authenticated aggregate systemd ceiling does an assigned
+consumer envelope use the measured 4096-MiB cooperative row weight. The
+retained report still records the conservative 8192-MiB live estimate; a
+finite historical `operator_max_jobs` records any lowering imposed by the
+coordinator assignment, and `--verify-report` accepts and replays that
+lowering-only cap. The serial `rchk` profile admits one analyzer only
 with a 20480 MiB address-space budget and at least 16384 MiB retained for the
 host; the analyzer also receives an independent hard `RLIMIT_AS`.
 `run-compiler-batch` executes isolated compiler admissions under that ceiling,

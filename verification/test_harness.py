@@ -926,6 +926,7 @@ class EngineTests(unittest.TestCase):
             self.assertIn("--cgroups=disabled", command)
             self.assertIn("--cgroupns=host", command)
             self.assertIn("--oom-score-adj=1000", command)
+            self.assertIn("PARADOX_VERIFY_AGGREGATE_SYSTEMD=1", command)
             self.assertIn("--read-only", command)
             self.assertIn("--security-opt=no-new-privileges", joined)
             self.assertEqual(

@@ -1848,9 +1848,7 @@ reverse_resource_report <- function() {
       conditionMessage(condition), call. = FALSE
     )
   )
-  validated <- rr_validate_resource_report(
-    report, "consumer", require_no_operator = TRUE
-  )
+  validated <- rr_validate_resource_report(report, "consumer")
   list(report = report, jobs = validated$jobs)
 }
 
@@ -2893,9 +2891,7 @@ reverse_read_worker_task <- function(index, package_directory) {
   expected_report_prefix <- file.path("metadata", "resource-jobs-waves")
   report_path <- file.path(run_directory, report_relative)
   report <- rr_read_tsv(report_path, c("field", "value"))
-  report_validation <- rr_validate_resource_report(
-    report, "consumer", require_no_operator = TRUE
-  )
+  report_validation <- rr_validate_resource_report(report, "consumer")
   expected_task <- list(
     index = index, plan_row = plan[index, , drop = FALSE],
     package_directory = package_directory,

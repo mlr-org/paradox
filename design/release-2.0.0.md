@@ -104,12 +104,34 @@ rows; no real compatibility task started. It is immutable diagnostic evidence,
 not a candidate failure. The reverse fixture exposed a procps-ng 3.3.17
 parsing hazard: an unseparated negative process-group operand can become
 another signal option and target process group zero. The wrapper now uses `--`
-before every negative group operand. The downstream fixture unnecessarily
-declared UTF-8 for an ASCII-only `Authors@R` package, causing R 4.6 to warn when
-the minimal worker lacked `en_US.UTF-8`; the declaration is removed while the
-strict real-check status classifier remains unchanged. A fresh candidate-owned
-overlay and coordinator are required under the corrected clean tooling commit;
-the published earlier overlay is never overwritten or relabeled.
+before every negative group operand. Removing the UTF-8 declaration from the
+ASCII-only `Authors@R` fixture let that cheap lane proceed, but the subsequent
+real checks proved the root cause was production `env -i` discarding
+`C.UTF-8`. The final correction restores the representative UTF-8 declaration
+and explicitly pins `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, `LANGUAGE=C`, and
+`TZ=UTC` in fixture and production build/check rows. The strict real-check
+status classifier remains unchanged. Every published overlay and failed stage
+remains immutable; corrected tooling always uses a fresh owner/coordinator.
+
+The immutable `4c4cb53` replacement coordinator completed all unblocked work.
+Its six harness rows, overlay, and 17-workload documentation gate passed. The
+focused five-package lane built and checked every package with process status
+zero, then correctly rejected the shared locale WARNING. Reverse preflight
+stopped before package work because its valid coordinator-assigned finite
+`operator_max_jobs` met a stale reverse-only prohibition. The broad corpus
+completed 28 one-row waves: 17 pass, the new `mlr3tuning` and
+`mlr3pipelines` failures are dormant-value expectation drift, and the other
+nine remain scoped optional-system, dependency, upstream-fixture, or timeout
+failures. Its completion/rows/manifest/seal SHA-256 values are
+`7e4cb24e4e5141c5ae2dcfa36f67c406972ac75b60a98d5b14d17a7fa5a12fd0` /
+`9c7cbcecb8faa7419551a0d84d9f6dd138c2564c719f951ceaba093ebea0cee0` /
+`efb8f8a3cfa801c52ce17f9fa78ef2c2a7b462d05f9c091efaf0dd88a89b8d26` /
+`97cc58b471812e74bd89206004677dd31be05017d478fff7d7592062884a4785`.
+The finite-cap/locale/aggregate-weight correction then passed the direct
+resource scheduler fixture, complete reverse self-test, downstream
+bridge/profile fixture, all 66 controller tests, and the verification-economy
+contract. Broad gates remain deliberately pending until the downstream
+dormant-value heads and exact manifests are refreshed.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and

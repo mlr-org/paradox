@@ -27,8 +27,9 @@ Profiles:
 The default output is one positive integer.  --report writes the complete
 CPU/RAM decision as a two-column TSV.  --max-jobs may only lower the detected
 limit and is intended for an explicit conservative operator override.
---verify-report PATH validates one retained, no-override report against the
-selected profile without observing current CPU or memory state.
+--verify-report PATH validates one retained report, including a lowering-only
+external ceiling, against the selected profile without observing current CPU
+or memory state.
 EOF
 }
 
@@ -259,6 +260,17 @@ case "$PROFILE" in
     ;;
   *) fail "unknown profile '$PROFILE' (see --help)" ;;
 esac
+
+# Direct and independently contained admission retain the deliberately
+# conservative live-memory estimate. Under the authenticated aggregate
+# systemd ceiling, consumer rows use a measured cooperative weight that permits
+# two ordinary checks in an 8-GiB assignment. A heavier pair may fail the
+# contained verification unit, but cannot invade the host reserve.
+ASSIGNED_MEMORY_MIB_PER_JOB=$MEMORY_MIB_PER_JOB
+if [[ "$PROFILE" == consumer &&
+    "${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1 ]]; then
+  ASSIGNED_MEMORY_MIB_PER_JOB=4096
+fi
 
 validate_report() {
   local path=$1 size
@@ -542,7 +554,7 @@ if [[ -n "$ASSIGNED_CPUS" || -n "$ASSIGNED_MEMORY_MIB" ]]; then
   positive_integer "$ASSIGNED_MEMORY_MIB" ||
     fail "assigned memory envelope is malformed"
   ASSIGNED_CPU_JOBS=$((ASSIGNED_CPU_WHOLE / CPU_PER_JOB))
-  ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / MEMORY_MIB_PER_JOB))
+  ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / ASSIGNED_MEMORY_MIB_PER_JOB))
   ((ASSIGNED_CPU_JOBS > 0)) ||
     fail "assigned CPU envelope cannot fit one $PROFILE job"
   ((ASSIGNED_MEMORY_JOBS > 0)) ||

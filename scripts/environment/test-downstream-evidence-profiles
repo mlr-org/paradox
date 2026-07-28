@@ -205,15 +205,25 @@ if grep -Fq '"$R" CMD check --no-manual --no-build-vignettes "$row/source"' \
     "$full_check_harness"; then
   fail "full-check harness still checks a raw source directory"
 fi
+row_environment_source=$(sed -n '/^  row_environment=(/,/^  )/p' \
+  "$full_check_harness")
+[[ -n $row_environment_source ]] ||
+  fail "full-check row environment is absent"
+for binding in LC_ALL=C.UTF-8 LANG=C.UTF-8 LANGUAGE=C TZ=UTC; do
+  [[ $row_environment_source == *"$binding"* ]] ||
+    fail "full-check row environment omits $binding"
+  binding_remainder=${row_environment_source#*"$binding"}
+  [[ $binding_remainder != *"$binding"* ]] ||
+    fail "full-check row environment duplicates $binding"
+done
 
 authors_package=$fixture/authorsonlyfixture
 authors_build=$fixture/authors-build
 authors_check=$fixture/authors-check
 mkdir -p "$authors_package/R" "$authors_package/man" "$authors_build" \
   "$authors_check" "$fixture/authors-home" "$fixture/authors-tmp"
-# This fixture exercises Authors@R expansion only and is entirely ASCII.
-# Declaring UTF-8 would make R 4.6 probe en_US.UTF-8 during its syntax check,
-# which is not installed in every otherwise-valid minimal worker.
+# Exercise the common UTF-8 Authors@R source-package boundary under the exact
+# locale that the production env -i build and check rows must preserve.
 printf '%s\n' \
   'Package: authorsonlyfixture' \
   'Type: Package' \
@@ -221,7 +231,11 @@ printf '%s\n' \
   'Version: 0.0.1' \
   'Authors@R: person("Ada", "Lovelace", email = "ada@example.org", role = c("aut", "cre"))' \
   'Description: Verifies that full downstream checks consume a package tarball built from an Authors at R only source.' \
-  'License: GPL-3' >"$authors_package/DESCRIPTION"
+  'License: GPL-3' \
+  'Encoding: UTF-8' >"$authors_package/DESCRIPTION"
+awk '$0 == "Encoding: UTF-8" { count++ } END { exit count != 1 }' \
+  "$authors_package/DESCRIPTION" ||
+  fail "Authors@R fixture does not declare UTF-8 exactly once"
 printf '%s\n' 'export(answer)' >"$authors_package/NAMESPACE"
 printf '%s\n' 'answer <- function() 42L' >"$authors_package/R/answer.R"
 printf '%s\n' \
@@ -237,6 +251,7 @@ authors_environment=(
   R_ENVIRON_USER=/dev/null R_PROFILE=/dev/null R_PROFILE_USER=/dev/null
   R_TESTS= NOT_CRAN=true _R_CHECK_FORCE_SUGGESTS_=false
   _R_CHECK_CRAN_INCOMING_=false TMPDIR="$fixture/authors-tmp" MAKEFLAGS=-j1
+  LC_ALL=C.UTF-8 LANG=C.UTF-8 LANGUAGE=C TZ=UTC
 )
 (
   cd "$authors_build"

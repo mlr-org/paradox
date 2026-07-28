@@ -196,9 +196,12 @@ allocations are scheduler reservations inside one hard envelope, not separate
 hard task limits. This permits multiple independent checks to run in parallel
 without pretending cgroup v1 can isolate them individually. The worker entry
 point and nested `resource-jobs` calls cooperatively cap Make/test waves by the
-assigned CPU and RAM. The assigned-envelope cap is applied directly; the
-nested planner's ordinary live-resource check remains an independent
-fail-closed guard. An increase in a
+assigned CPU and RAM. Consumer rows use a 4-GiB cooperative weight only in
+this authenticated aggregate mode, while their ordinary live/direct admission
+retains the conservative 8-GiB estimate. Thus an 8-GiB coarse allocation can
+run two ordinary rows when CPU permits without weakening the aggregate hard
+ceiling. The nested planner's ordinary live-resource check remains an
+independent fail-closed guard. An increase in a
 memory/PID event counter, a changed limit or cgroup path, or loss of the
 authenticated unit contract aborts the whole run and terminates every sibling.
 Successful artifacts from completed siblings remain available for an exact
@@ -464,7 +467,11 @@ when peers leave capacity. These figures are scheduler reservations, not claims
 about measured peaks; the aggregate cgroup and live disk-reserve monitor remain
 the hard safety boundaries, and any memory/PID event or protected-disk pressure
 invalidates the run. The global `resource-jobs consumer` profile retains its
-more conservative direct-run policy.
+more conservative direct-run policy. The completed `4c4cb53` diagnostic run
+used one row per wave because its 9,699-MiB corpus allocation was divided by
+the former 8-GiB assigned-envelope weight; the measured aggregate peak was
+10,670 MiB with zero OOM, memory-failure, or PID-limit events. The aggregate-
+only 4-GiB weight corrects that observed throughput bottleneck.
 
 Run the complete prepared compatibility DAG unattended with:
 

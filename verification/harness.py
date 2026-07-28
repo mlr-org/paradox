@@ -4618,6 +4618,8 @@ def container_command(
             f"PARADOX_VERIFY_TASK_ATTEMPT={attempt}",
         ]
     )
+    if probe.limit_mode == "aggregate":
+        command.extend(["--env", "PARADOX_VERIFY_AGGREGATE_SYSTEMD=1"])
     command.extend(
         [
             item.image,

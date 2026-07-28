@@ -442,6 +442,14 @@ grep -Fq 'DYNAMIC_RESERVE_MIB=$((MEMORY_AVAILABLE_MIB / 4))' \
   fail "resource scheduler no longer reserves one quarter of live memory"
 grep -Fq 'RESERVE_MIB=$MINIMUM_RESERVE_MIB' "$RESOURCE_JOBS" ||
   fail "resource scheduler no longer enforces its absolute memory reserve"
+for contract in \
+    'ASSIGNED_MEMORY_MIB_PER_JOB=$MEMORY_MIB_PER_JOB' \
+    '"${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1' \
+    'ASSIGNED_MEMORY_MIB_PER_JOB=4096' \
+    'ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / ASSIGNED_MEMORY_MIB_PER_JOB))'; do
+  grep -Fq "$contract" "$RESOURCE_JOBS" ||
+    fail "resource scheduler lost aggregate consumer-weight contract: $contract"
+done
 
 # Parallel API admission must keep exit status as data; a declaration typo
 # here previously discarded an otherwise complete result.  GCC and Clang use

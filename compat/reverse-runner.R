@@ -381,8 +381,7 @@ rr_reverse_check_environment <- function(environment, package) {
   environment
 }
 
-rr_validate_resource_report <- function(report, profile = "consumer",
-                                        require_no_operator = TRUE) {
+rr_validate_resource_report <- function(report, profile = "consumer") {
   fields <- c(
     "schema", "profile", "platform", "online_cpus", "affinity_cpus",
     "cgroup_cpu_limit", "cpu_limit", "cpu_reserve", "cpu_per_job",
@@ -452,20 +451,22 @@ rr_validate_resource_report <- function(report, profile = "consumer",
   expected_memory_jobs <- as.integer(
     (memory_available - expected_memory_reserve) %/% memory_per_job
   )
+  unconstrained_jobs <- as.integer(min(
+    cpu_jobs, memory_jobs, profile_max
+  ))
+  expected_jobs <- as.integer(min(unconstrained_jobs, operator_max))
   if (is.finite(cgroup_memory) && memory_available > cgroup_memory) {
     rr_fail("resource scheduler memory ceiling exceeds its cgroup headroom")
   }
   if (!identical(cpu_per_job, 2L) || !identical(memory_per_job, 8192L) ||
       !identical(profile_max, 4L) ||
-      (isTRUE(require_no_operator) && is.finite(operator_max)) ||
       !identical(cpu_limit, as.integer(expected_cpu_limit)) ||
       !identical(cpu_reserve, expected_cpu_reserve) ||
       !identical(cpu_jobs, expected_cpu_jobs) ||
       !identical(memory_reserve, expected_memory_reserve) ||
       expected_memory_jobs < 1L || !identical(memory_jobs, expected_memory_jobs) ||
-      !identical(jobs, as.integer(min(
-        cpu_jobs, memory_jobs, profile_max, operator_max
-      )))) {
+      (is.finite(operator_max) && operator_max > unconstrained_jobs) ||
+      !identical(jobs, expected_jobs)) {
     rr_fail("resource scheduler report is internally inconsistent")
   }
   list(values = values, jobs = jobs)

@@ -74,9 +74,7 @@ if (!identical(rr_sha256(retained_runner), run[["runner_library_sha256"]]) ||
   rr_fail("retained runner, worker, verifier, or scheduler differs from run metadata")
 }
 resource_report_table <- rr_read_tsv(resource_report_path, c("field", "value"))
-resource_report <- rr_validate_resource_report(
-  resource_report_table, "consumer", require_no_operator = TRUE
-)
+resource_report <- rr_validate_resource_report(resource_report_table, "consumer")
 if (!identical(as.character(resource_report$jobs),
     run[["scheduler_initial_ceiling"]])) {
   rr_fail("initial resource scheduler report disagrees with run metadata")
@@ -161,8 +159,7 @@ if (length(wave_report_files) &&
 invisible(rr_validate_reverse_wave_report_inventory(wave_report_files, waves))
 for (report_file in wave_report_files) {
   invisible(rr_validate_resource_report(
-    rr_read_tsv(report_file, c("field", "value")), "consumer",
-    require_no_operator = TRUE
+    rr_read_tsv(report_file, c("field", "value")), "consumer"
   ))
 }
 pending_for_wave <- seq_len(nrow(plan))
@@ -178,8 +175,7 @@ for (index in seq_len(nrow(waves))) {
     rr_fail("reverse wave resource scheduler report changed")
   }
   report <- rr_validate_resource_report(
-    rr_read_tsv(report_file, c("field", "value")), "consumer",
-    require_no_operator = TRUE
+    rr_read_tsv(report_file, c("field", "value")), "consumer"
   )
   if (!identical(as.character(report$jobs),
       waves$automatic_ceiling[[index]])) {

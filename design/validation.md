@@ -167,11 +167,12 @@ hosted macOS and Windows matrix.
 Worker self-tests must not assume the host's procps-ng option parsing or locale
 inventory. Negative process-group operands passed to external `kill` are
 always separated from options with `--`; otherwise some procps-ng releases
-interpret the operand as a signal option and target process group zero. An
-ASCII-only package fixture does not declare an encoding merely to exercise
-`Authors@R` expansion: doing so makes current R request `en_US.UTF-8`, which a
-valid minimal worker need not install. These fixture constraints do not relax
-the production check-status rule: every real ERROR or WARNING remains fatal.
+interpret the operand as a signal option and target process group zero. The
+source-package fixture deliberately declares UTF-8 and exercises `Authors@R`
+expansion under the same explicit `C.UTF-8` locale as production `env -i`
+rows. A minimal worker need not install `en_US.UTF-8`. This environment
+contract does not relax the check-status rule: every real ERROR or WARNING
+remains fatal.
 
 ## Evidence classes
 
@@ -281,9 +282,13 @@ conservative direct/non-aggregate `resource-jobs` policy.
 
 Nested drivers must treat `PARADOX_VERIFY_ASSIGNED_CPUS` and
 `PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` as upper bounds on their worker counts.
-Those values are already inside the outer safe budget, so inner admission must
-apply the assigned-envelope cap directly; the retained inner live-resource
-check may still lower it.
+Those values are already inside the outer safe budget. Under authenticated
+aggregate systemd containment, a consumer uses a measured 4-GiB cooperative
+row weight when translating the assigned memory envelope; direct and
+individually contained admission retain the conservative 8-GiB consumer
+estimate. The retained inner live-resource check may still lower either
+result. A finite `operator_max_jobs` is valid evidence only when it lowers the
+independently recomputed CPU/memory/profile ceiling.
 
 Without either proof, normal runs fail closed. `--best-effort` is an explicit
 serial development fallback using `RLIMIT_AS`, an RSS watchdog, and the host

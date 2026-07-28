@@ -299,12 +299,14 @@ Order of work:
   `self$assert(rhs)` before writing and stays strict; resolved by its v2
   migration branch to paradox's `ParamSetShadow`. No paradox action; note
   it in the handoff.
-- The two mlr3tuning dependency tests
-  (`test_TuningInstanceBatchSingleCrit.R:219`,
-  `test_TuningInstanceBatchMultiCrit.R:82`) must pass after the change:
-  they rely on bbotk's explicit point-assert and a parent (`xx`) with **no
-  recorded default**. If they fail, the store-blind or NoDefault rule was
-  implemented wrong.
+- The exact replacement-candidate corpus corrected an error in this plan:
+  `TEST_MAKE_PS2()` actually recorded `default = "a"` for `xx`. Its two
+  explicit point assertions therefore correctly became default-aware and
+  failed their old error expectations. The small mlr3tuning adaptation removes
+  that accidental helper default, restoring the tests as useful store-blind
+  `NoDefault` regressions on both Paradox versions. A separate TuneToken-child
+  expectation is version-gated because Paradox 2 deliberately skips the
+  incoming edge and permits later dormant storage.
 
 ## 6. Test matrix
 
@@ -382,8 +384,11 @@ paradox's own suite otherwise has essentially no such expectations (all
 
 Downstream verification (after local gates): re-run at least mlr3, bbotk,
 mlr3tuning, mlr3pipelines, miesmuschel, mlr3mbo, mlr3learners, mlr3fselect
-waves from `.local/compat/github-release-refresh-20260720/`; expected
-result 0 new failures (Appendix A3 tally was 0 breaking expectations).
+waves from `.local/compat/github-release-refresh-20260720/`. The first exact
+replacement run intentionally exposed four obsolete expectations—three in
+mlr3tuning and one inactive spline degree in mlr3pipelines. After the small
+dual-version adaptations recorded in `compat/downstream-pr-handoff.md`, expect
+zero remaining dormant-contract failures.
 
 ## 7. Benchmarks
 
@@ -448,8 +453,9 @@ Focused development evidence (not release-candidate evidence), 2026-07-26:
 3. Memory gates (GCT/Valgrind/rchk) clean for the new candidate.
 4. Differential run: only the reviewed 3.5 rows differ from v1.
 5. Benchmark: all rows within tier, including the two new dep workloads.
-6. Downstream waves: no new failures vs the current ledger baseline; the
-   two mlr3tuning dependency tests pass unmodified.
+6. Downstream waves: no unexplained failures vs the current ledger baseline;
+   the mlr3tuning, mlr3pipelines, and miesmuschel dual-version adaptations
+   exercise the intended dormant contract.
 7. Docs/NEWS/contract updated; new candidate frozen and recorded.
 
 ## Appendix: verified baseline (2026-07-25/26, candidate 8797f11 + corpus release-refresh-20260720)
@@ -485,16 +491,19 @@ A2. Paradox test suite: all "can only be set" expectations go through
 `test-native-paramset-value-mutation.R:344-351`); no assignment-time
 dependency-error expectations found.
 
-A3. Downstream corpus scan (28 repos): **0 breaking test expectations.**
-Key file:line evidence: mlr3tuning disables assignment validation in the
-tuning loop (`ObjectiveTuning.R:66` `assert_values = FALSE`) and
-reset+replaces per evaluation (`mlr3/R/worker.R:490-491`,
-`ObjectiveTuningAsync.R:26-30`); the only dep-error test expectations
-(`mlr3tuning/tests/testthat/test_TuningInstanceBatchSingleCrit.R:219`,
-`...MultiCrit.R:82`) are driven by bbotk's explicit point assert
-(`bbotk/R/Objective.R:158`) with a no-default parent; AutoTuner refit
-assigns checked (`mlr3tuning/R/AutoTuner.R:422`) and can hard-error today
-on hierarchical spaces (class of crashes removed by this change); raw
+A3. The initial downstream source scan incorrectly predicted **0 breaking test
+expectations**. Exact candidate execution found four expectation-only changes:
+three mlr3tuning assertions (including the two explicit point checks whose
+helper parent actually had `default = "a"`) and mlr3pipelines' inactive
+splines `degree` constructor assertion. No runtime implementation failed.
+Small dual-version test adaptations preserve strict NoDefault point checking,
+the TuneToken-child rule, and raw-versus-filtered dormant storage. The broader
+evidence still holds: mlr3tuning disables assignment validation in the tuning
+loop (`ObjectiveTuning.R:66` `assert_values = FALSE`) and reset+replaces per
+evaluation (`mlr3/R/worker.R:490-491`,
+`ObjectiveTuningAsync.R:26-30`); AutoTuner refit assigns checked
+(`mlr3tuning/R/AutoTuner.R:422`) and can hard-error today on hierarchical
+spaces (class of crashes removed by this change); raw
 `$values` feeds hashes (`mlr3/R/Learner.R:844`, `HotstartStack.R:235-240`,
 `mlr3pipelines/R/PipeOp.R:414` → `Graph.R:494` → `GraphLearner.R:373`,
 `mlr3torch/R/LearnerTorch.R:418`); learners consume filtered values

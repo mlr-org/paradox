@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 set -euo pipefail
+unset PARADOX_VERIFY_AGGREGATE_SYSTEMD
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 HELPER="$ROOT/scripts/environment/resource-jobs"
@@ -88,6 +89,80 @@ env \
 [[ "$(run_fixture "$V2/proc" "$V2/cgroup" api-compile \
   --verify-report "$ASSIGNED_REPORT")" == \
   resource_report_verified=api-compile ]]
+
+# A consumer keeps its conservative 8-GiB direct estimate, while a worker
+# under the hard aggregate systemd ceiling may use the measured 4-GiB
+# cooperative row weight when translating its assigned envelope.
+CONSUMER="$SCRATCH/consumer"
+cp -a "$V2" "$CONSUMER"
+write_file "$CONSUMER/cgroup/team/job/memory.max" '68719476736'
+write_file "$CONSUMER/cgroup/team/memory.max" '60129542144'
+write_file "$CONSUMER/cgroup/team/job/cpu.max" '1200000 100000'
+write_file "$CONSUMER/cgroup/team/cpu.max" '1000000 100000'
+CONSUMER_ONE_REPORT="$SCRATCH/consumer-assigned-one.tsv"
+env \
+  PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+  PARADOX_VERIFY_ASSIGNED_CPUS=2.0 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" consumer --report > "$CONSUMER_ONE_REPORT"
+[[ "$(field memory_mib_per_job "$CONSUMER_ONE_REPORT")" == 8192 ]]
+[[ "$(field operator_max_jobs "$CONSUMER_ONE_REPORT")" == 1 ]]
+[[ "$(field jobs "$CONSUMER_ONE_REPORT")" == 1 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_ONE_REPORT")" == \
+  resource_report_verified=consumer ]]
+CONSUMER_TWO_REPORT="$SCRATCH/consumer-assigned-two.tsv"
+env \
+  PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+  PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" consumer --report > "$CONSUMER_TWO_REPORT"
+[[ "$(field operator_max_jobs "$CONSUMER_TWO_REPORT")" == 2 ]]
+[[ "$(field jobs "$CONSUMER_TWO_REPORT")" == 2 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_TWO_REPORT")" == \
+  resource_report_verified=consumer ]]
+CONSUMER_DIRECT_REPORT="$SCRATCH/consumer-assigned-direct.tsv"
+env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" consumer --report > "$CONSUMER_DIRECT_REPORT"
+[[ "$(field operator_max_jobs "$CONSUMER_DIRECT_REPORT")" == 1 ]]
+[[ "$(field jobs "$CONSUMER_DIRECT_REPORT")" == 1 ]]
+if env \
+    PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+    PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=4095 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" consumer > "$SCRATCH/consumer-small.out" \
+      2> "$SCRATCH/consumer-small.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: undersized aggregate consumer assignment was accepted' \
+    >&2
+  exit 1
+fi
+grep -q 'assigned memory envelope cannot fit one consumer job' \
+  "$SCRATCH/consumer-small.err"
+
 if env \
     PARADOX_VERIFY_ASSIGNED_CPUS=3 \
     PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=767 \
