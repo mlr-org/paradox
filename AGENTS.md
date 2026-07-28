@@ -1856,19 +1856,27 @@ Remote writes by an agentic process are forbidden. Agents may edit, test, and
 commit in local downstream worktrees, but the user must push branches and open
 or submit PRs manually.
 
-The bbotk and miesmuschel heads below were the committed post-migration handoff
-before dormant values reopened Paradox source; the remaining heads retain their
-previously reviewed bridge changes. They are starting points, not final
-replacement-candidate evidence. In particular, miesmuschel needs the focused
-dual-version dormant-assignment expectation recorded in
-`compat/downstream-pr-handoff.md`, followed by affected-row validation. Only
-after that refresh does the user-performed remote publication handoff remain:
+The heads below are the current local PR handoff, including the final
+dormant-value adaptations. The new mlr3tuning and mlr3pipelines branches were
+rebuilt on the exact current upstream target heads so their proposed PRs remain
+small; the earlier tested commits remain preserved by hash. Dual-version
+validation is complete at the intended development scope: complete suites and
+source checks for miesmuschel, complete suites for mlr3tuning, and focused
+clone/spline contracts for mlr3pipelines. Fresh candidate-owned profile
+authentication and compatibility execution are still required before these
+heads become release evidence. The user must perform every remote publication
+action:
 
 - bbotk `codex/public-paramsetcollection-sets` at `29f1806`: public collection
   state and rooted detached native search-space snapshots remain, with the
   authenticated exact-class additive `Codomain` inspector/rebuilder
   registration without restoring private ParamSet state access;
-- miesmuschel `codex/paradox-paramsetshadow-bridge` at `2734db0`: extends the
+- mlr3tuning `codex/paradox2-dormant-values-current` at `15a972a`: removes an
+  accidental test-helper default so strict store-blind checks remain useful,
+  and version-gates only the TuneToken-child expectation. Complete suites pass
+  on both Paradox majors: 189 tests and 4,764/4,761 expectations, with zero
+  failures, errors, or warnings and the same 16 Redis-dependent skips;
+- miesmuschel `codex/paradox-paramsetshadow-bridge` at `ecd7c69`: extends the
   dual-version official `ParamSetShadow` bridge, public-state tests, and
   dual-major documentation link with the exact-class replacement
   inspector/rebuilder registration for serialized Paradox-1 Shadows and any
@@ -1879,7 +1887,8 @@ after that refresh does the user-performed remote publication handoff remain:
   boundary, not ordinary built-in value admission. Separately, the legacy
   Paradox-1 Shadow's explicit pre-write assert remains strict, while the
   official Paradox-2 Shadow must test dormant storage and filtered
-  reactivation. The unavoidable load-time
+  reactivation; that regression now passes focused/full tests and source
+  checks on both majors. The unavoidable load-time
   namespace rebinding is restricted to the exported generator and eleven
   historical package-owned leanification targets; relocking is registered
   before the first unlock, and this bridge exception is not a public API;
@@ -1887,9 +1896,11 @@ after that refresh does the user-performed remote publication handoff remain:
   transformation-free subset construction on Paradox 2 plus release notes;
 - celecx `codex/paradox2-diagnostics` at `6da5102`: only the independent
   cycle/dependency bridge and compatible mlr3mbo requirement remain;
-- mlr3pipelines `codex/paradox-diagnostic-compat` at `c85b2f4`: only the
-  GraphLearner deep-clone ownership fix and mutation-isolation regression
-  remain;
+- mlr3pipelines `codex/paradox-diagnostic-compat-current` at `13610d3`: on
+  current upstream, only the GraphLearner deep-clone ownership fix,
+  mutation-isolation regression, and dual-version dormant spline test remain;
+  those focused files and the related PICVPlus diagnostic contracts pass on
+  both majors;
 - mlr3fda `paradox2-snapshots` at `c1cdad5`: the Paradox-1 snapshot stays
   byte-identical while the four Paradox-2 headers name the current versioned
   `.__paradox2_ParamSet__values()` gateway; diagnostic bodies are unchanged;

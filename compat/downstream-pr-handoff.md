@@ -1,26 +1,24 @@
 # Downstream Paradox 2 pull-request handoff
 
 Agentic processes must not push these branches, update remote pull requests, or
-close them. Six repository-local branches remain useful migrations. The mlr3
+close them. Seven repository-local branches remain useful migrations. The mlr3
 and mlr3fselect diagnostic-only PRs are now wholly redundant and should be
 closed without replacement.
 
-## Pre-dormant handoff heads and manual state
+## Current handoff heads and manual state
 
 No remote write was made while preparing this handoff. The exact local heads
-below are the reviewed pre-dormant starting points, not final replacement-
-candidate evidence. In particular, the miesmuschel branch needs the focused
-dual-version dormant-assignment expectation described below. Record any new
-local head and rerun the affected rows before the user pushes it. The previous
-remote state and eventual human actions are:
+below include the reviewed dormant-value adaptations. They remain local until
+the user performs the listed manual actions:
 
 | Repository | Exact head | Current remote state | Remaining manual action |
 |---|---|---|---|
 | bbotk | `29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0` | local branch is two commits ahead of `origin/codex/public-paramsetcollection-sets` | push, then create or update the PR |
-| miesmuschel | `2734db0d896745926dbe0c14c2ede272affa9495` | local branch is four commits ahead of `origin/codex/paradox-paramsetshadow-bridge` | push, then create or update the PR |
+| mlr3tuning | `15a972a3582fea955b80bb0200ddab58793451e1` | new local `codex/paradox2-dormant-values-current` branch from current upstream `b65a409` | push, then create the PR |
+| miesmuschel | `ecd7c69e22b5fd73670393155781bdcd638445fd` | local branch is five commits ahead of `origin/codex/paradox-paramsetshadow-bridge` | push, then create or update the PR |
 | mlr3mbo | `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` | exact head is already at `origin/codex/paradox2-transformless-subset` | no push is needed; create or update the PR and release manually |
 | celecx | `6da5102ca948b8182aae13575c48a932812b05c6` | local branch is one commit ahead of `origin/codex/paradox2-diagnostics` | push after the mlr3mbo bridge is available, then create or update the PR |
-| mlr3pipelines | `c85b2f4165e056934f892c5db37391869cd40e38` | local branch is one commit ahead of `origin/codex/paradox-diagnostic-compat` | push, then create or update the PR |
+| mlr3pipelines | `13610d39e06639ce96f0b76862f76acd794c0dc8` | new current-upstream branch `codex/paradox-diagnostic-compat-current`; the old remote migration branch remains untouched | push and create a replacement PR; close or supersede any old-branch PR |
 | mlr3fda | `c1cdad5a78913c9a47fec1003de8d4309275c80c` | local branch is two commits ahead of `origin/paradox2-snapshots` | push, then create or update the PR |
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
@@ -30,22 +28,22 @@ Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
 The active `paradox2` compatibility axis now pins
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
-`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. The branch heads above remain
-the reviewed migration inputs, but the retained Paradox-2 runs below predate
-the dormant-values, grid, source-reference, performance, R 3.6, and graph-root
-changes. Build one fresh candidate-owned `release-refresh-20260720`/`paradox2`
-overlay and rerun the prepared compatibility gates before the user publishes
-the branches.
+`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. The branch heads above are the
+current reviewed migration inputs. Historical Paradox-2 runs below predate
+some or all of the dormant-values, grid, source-reference, performance, R 3.6,
+and graph-root changes; the final candidate-owned
+`release-refresh-20260720`/`paradox2` overlay and prepared compatibility gates
+must bind these exact heads before the user publishes them.
 
 ## Historical retained evidence to refresh
 
-The dormant-value/default-aware dependency change reopens package-facing
+The dormant-value/default-aware dependency change reopened package-facing
 Paradox source after candidate `8797f11`. The exact runs below remain useful
 baselines for the recorded downstream heads, but they are not release evidence
-for the replacement candidate. After implementation and focused package tests
-converge, rebuild the Paradox-2 bridge overlay and rerun the affected
-dependency/value rows before the normal broad downstream wave. Do not relabel
-the historical hashes or pass counts.
+for the replacement candidate. Implementation and focused package tests have
+converged; the remaining action is to build a fresh Paradox-2 bridge overlay,
+rerun the affected dependency/value rows, and then run the normal broad
+downstream wave. Do not relabel the historical hashes or pass counts.
 
 ### Exact Paradox 1 owner conclusion
 
@@ -169,6 +167,9 @@ evidence transfers to candidate `8797f11`.
 - The checked assignment in `mlr3tuning::AutoTuner` refit no longer fails merely
   because a tuned child became inactive in the selected branch. No downstream
   workaround should disable Domain validation to solve that failure class.
+  The `15a972a` test-only branch removes an accidental helper default so two
+  strict store-blind assertions remain meaningful on both majors, and
+  version-gates only the TuneToken-child expectation whose semantics changed.
 - `lrn(...)` and `$configure()` may now retain a dependency-inactive setting
   instead of erroring. Default-aware activity also fixes common cases such as
   an SVM option depending on the learner type's satisfying default. Downstream
@@ -177,13 +178,16 @@ evidence transfers to candidate `8797f11`.
 - A cross-child dependency owned by `ParamSetCollection` filters the
   collection-level read only. Direct child/PipeOp reads still apply the child's
   own dependency rows. This is the intended boundary for the planned
-  mlr3pipelines automatic branch dependencies.
+  mlr3pipelines automatic branch dependencies. The `13610d3` test records the
+  simpler existing spline contract: Paradox 2 stores inactive `degree`, filters
+  it from the default read, and reveals it when `type` becomes polynomial,
+  while Paradox 1 retains its historical assignment error.
 - The Paradox-1 miesmuschel Shadow explicitly asserts the complete candidate
   before writing and therefore remains strict. The Paradox-2 branch must use
   `paradox::ParamSetShadow`, whose native assignment stores dormant values and
   whose filtered reads reactivate them. Dual-version tests should assert the
   version-appropriate assignment result rather than recreating a second Shadow
-  activity implementation.
+  activity implementation. Head `ecd7c69` now carries that exact regression.
 
 Publish and merge the dual-version bridge PRs before Paradox 2. Land and
 release mlr3mbo as 1.1.2 before celecx, whose DESCRIPTION intentionally
@@ -231,7 +235,7 @@ gh pr create --web --repo mlr-org/bbotk --base main --head codex/public-paramset
 ## miesmuschel
 
 - base: `7aaca22d2fc61d8d86291b681a8ecbde21f649c5`
-- head: `2734db0d896745926dbe0c14c2ede272affa9495`
+- head: `ecd7c69e22b5fd73670393155781bdcd638445fd`
 - branch: `codex/paradox-paramsetshadow-bridge`
 - target branch: `master`
 - proposed title: `Use Paradox's ParamSetShadow on Paradox 2`
@@ -330,6 +334,32 @@ git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/cel
 gh pr create --web --repo mlr-org/celecx --base master --head codex/paradox2-diagnostics --title 'Use the Paradox 2 mlr3mbo bridge'
 ```
 
+## mlr3tuning
+
+- base: `b65a40959fe9f2e806edd6f4697a7061977f1a1a`
+- head: `15a972a3582fea955b80bb0200ddab58793451e1`
+- branch: `codex/paradox2-dormant-values-current`
+- target branch: `main`
+- proposed title: `Test Paradox 2 dormant dependency values`
+
+Proposed body:
+
+> Preserve the two strict point-validation tests as genuine store-blind,
+> no-default checks by removing the accidental default from their test helper.
+> Version-gate only the TuneToken-child case whose documented behavior differs:
+> Paradox 1 retains its historical assertion error, while Paradox 2 skips the
+> incoming dependency edge and accepts later domain-valid dormant values.
+>
+> This is a test-only compatibility adaptation. Complete mlr3tuning suites pass
+> against both Paradox 1 and 2, and no runtime validation is disabled.
+
+Publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3tuning push --set-upstream origin codex/paradox2-dormant-values-current
+gh pr create --web --repo mlr-org/mlr3tuning --base main --head codex/paradox2-dormant-values-current --title 'Test Paradox 2 dormant dependency values'
+```
+
 ## Redundant diagnostic-only PRs
 
 Close the mlr3 branch `codex/paradox2-diagnostics` at `35e30a9` and the
@@ -341,11 +371,11 @@ replacement PR to create.
 
 ## mlr3pipelines
 
-- base: `daebff3cc15257cdecde898fd3f0ceff5f320c53`
-- head: `c85b2f4165e056934f892c5db37391869cd40e38`
-- branch: `codex/paradox-diagnostic-compat`
+- base: `bef040ae5c886bf5b09863b956d341eb3cbd772c`
+- head: `13610d39e06639ce96f0b76862f76acd794c0dc8`
+- branch: `codex/paradox-diagnostic-compat-current`
 - target branch: `master`
-- proposed title: `Fix GraphLearner state deep cloning across Paradox versions`
+- proposed title: `Fix GraphLearner cloning and test dormant spline values`
 
 Proposed body:
 
@@ -356,12 +386,17 @@ Proposed body:
 > Paradox 2's detached capsule layout exposed the existing ownership bug. Add
 > an explicit identity and mutation-isolation regression that catches it under
 > both Paradox versions.
+>
+> Also make the existing spline dependency assertion dual-version: Paradox 1
+> keeps its historical inactive-assignment error, while Paradox 2 retains the
+> dormant degree in raw values, filters it for a natural spline, and reveals it
+> when the type becomes polynomial.
 
 Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3pipelines push --set-upstream origin codex/paradox-diagnostic-compat
-gh pr create --web --repo mlr-org/mlr3pipelines --base master --head codex/paradox-diagnostic-compat --title 'Fix GraphLearner state deep cloning across Paradox versions'
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3pipelines push --set-upstream origin codex/paradox-diagnostic-compat-current
+gh pr create --web --repo mlr-org/mlr3pipelines --base master --head codex/paradox-diagnostic-compat-current --title 'Fix GraphLearner cloning and test dormant spline values'
 ```
 
 ## mlr3fda

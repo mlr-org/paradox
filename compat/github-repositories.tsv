@@ -5,7 +5,7 @@ miesmuschel	https://github.com/mlr-org/miesmuschel.git	Depends	0	clone	Exact loc
 celecx	https://github.com/mlr-org/celecx.git	Depends	1	clone	Exact local test-only bridge for Paradox-2 native diagnostics; active GitHub-only consumer.
 smashy	https://github.com/mlr-org/smashy.git	Depends	3	clone	Experimental consumer pinned to an obsolete paradox development branch; retained as source characterization only.
 mlr3	https://github.com/mlr-org/mlr3.git	Imports	0	clone	Exact local test-only bridge for Paradox-2 numeric diagnostics; core framework gate.
-mlr3pipelines	https://github.com/mlr-org/mlr3pipelines.git	Imports	0	clone	Exact local bridge decoupling a legacy diagnostic and fixing GraphLearner deep-clone ownership; broad ParamSet and collection use.
+mlr3pipelines	https://github.com/mlr-org/mlr3pipelines.git	Imports	0	clone	Exact local bridge fixing GraphLearner deep-clone ownership and recording the dual-version dormant spline contract; broad ParamSet and collection use.
 mlr3learners	https://github.com/mlr-org/mlr3learners.git	Imports	0	clone	Broad learner integration gate.
 mlr3fselect	https://github.com/mlr-org/mlr3fselect.git	Imports	0	clone	Exact local test-only bridge for the Paradox-2 feature-fraction diagnostic; core feature-selection gate.
 mlr3hyperband	https://github.com/mlr-org/mlr3hyperband.git	Imports	0	clone	Core tuning extension gate.

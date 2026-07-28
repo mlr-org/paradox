@@ -596,28 +596,35 @@ remaining convergence and acceptance steps are:
   `params_unid`/`set_id` behavior, and any required owner-local cold gateways;
   both receive focused explicit/first-use migration tests on both Paradox axes;
 - [x] the tested post-migration bridge trees are committed as bbotk `29f1806`
-  and miesmuschel `2734db0`; the latter keeps its unavoidable dual-version
+  and miesmuschel `ecd7c69`; the latter keeps its unavoidable dual-version
   namespace rebinding allowlisted and registers relocking before the first
-  historical target is changed;
-- [x] mlr3mbo `1a1c0ab`, celecx `6da5102`, mlr3pipelines `c85b2f4`, and
-  mlr3fda `c1cdad5` are prepared on their recorded branches; the mlr3
+  historical target is changed, and its dormant-value bridge regression passes
+  both Paradox majors;
+- [x] mlr3tuning `15a972a`, mlr3mbo `1a1c0ab`, celecx `6da5102`,
+  mlr3pipelines `13610d3`, and mlr3fda `c1cdad5` are prepared on their
+  recorded branches; tuning and pipelines are based on the current upstream
+  target heads so their dormant-value PR diffs remain small; complete
+  mlr3tuning suites and focused mlr3pipelines contracts pass against both
+  Paradox majors; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
   closure without replacement;
-- [x] all eight profile heads were authenticated against the last sealed
-  candidate;
-  the complete priority-zero/one Paradox-2 repository corpus ran once with
-  `jobs = 2` in 14 admitted waves, the five final Paradox-2 source-package
-  checks are green, and the Paradox-1 five-package conclusion is explicitly
-  composed from three exact final-head rows, the reviewed Paradox-1-neutral
-  mlr3fda snapshot-only delta, and the final miesmuschel rerun;
+- [x] the superseded pre-dormant profile heads were authenticated against their
+  recorded candidate; the complete priority-zero/one Paradox-2 repository
+  corpus and five-package source-check conclusions remain historical evidence
+  only;
+- [ ] authenticate the refreshed snapshot/provenance manifests and exact
+  `ecd7c69`/`13610d3` bridge heads in a fresh candidate-owned overlay,
+  authenticate corpus-only mlr3tuning `15a972a` in the repository checkout,
+  then rerun the prepared compatibility DAG;
 - [x] diagnostic-only downstream changes remain pruned and the current
   committed bbotk/miesmuschel owner bridges pass focused tests plus authentic
   default/opt-in migration fixtures against the then-reopened Paradox-2
   development payload;
-- [x] the scoped priority consumer corpus and active documentation are rerun
-  against the exact frozen payload and reviewed bridge heads: 20 of 28 exact
-  repositories are green, eight are reviewed non-Paradox/environmental
-  exclusions, and all mandatory documentation rows pass;
+- [x] the historical `8797f11` scoped consumer corpus and active
+  documentation ran against their then-exact frozen payload and bridge heads:
+  20 of 28 repositories were green, eight were reviewed
+  non-Paradox/environmental exclusions, and all mandatory documentation rows
+  passed; those counts are not active-candidate evidence;
 - [ ] user has manually pushed branches and opened the required PRs (agents
   have no remote-write authorization).
 
@@ -899,35 +906,39 @@ and is not a replacement for the complete release matrix:
 ## Current local downstream branches
 
 These are the exact final local handoff heads after the object-graph migration,
-owner-registry bridges, informative native diagnostics, and pruning of
-redundant downstream adaptations. Their focused tests and retained active
-profile checks are complete. Repository policy still requires the user to push
-the retained branches and create, update, or close PRs manually. The obsolete
-mlr3 and mlr3fselect branches are evidence only and must not be published as
-replacements.
+owner-registry bridges, informative native diagnostics, dormant-value
+adaptations, and pruning of redundant downstream changes. Their intended
+dual-version development tests are complete; fresh active-profile
+authentication and compatibility checks remain pending. Repository policy
+still requires the user to push the retained branches and create, update, or
+close PRs manually. The obsolete mlr3 and mlr3fselect branches are evidence
+only and must not be published as replacements.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
-| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `2734db0d896745926dbe0c14c2ede272affa9495` | Official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, dual-major Rd links, exact replacement registration, retired `params_unid`/`set_id` contract, and the bounded owner-local cold gateways needed by historical overrides. Its separate official-Shadow graph-boundary diagnostic remains intentional. |
+| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `ecd7c69e22b5fd73670393155781bdcd638445fd` | Official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, dual-major Rd links, exact replacement registration, retired `params_unid`/`set_id` contract, bounded owner-local cold gateways, and a dual-version dormant raw/filter/reactivation regression. |
 | bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | head `29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0` | Public `.sets` migration, detached-snapshot rooting, and exact additive legacy-Codomain inspector/rebuilder registration without private state access. |
+| mlr3tuning | `.local/compat/github-release-refresh-20260720/mlr3tuning` | `codex/paradox2-dormant-values-current` | head `15a972a3582fea955b80bb0200ddab58793451e1` (base `b65a40959fe9f2e806edd6f4697a7061977f1a1a`) | Test-only adaptation preserving strict NoDefault point checks and version-gating the changed TuneToken-child dormant contract. |
 | mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
 | celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `6da5102ca948b8182aae13575c48a932812b05c6` | Retain only the independent cycle/dependency adaptation and compatible mlr3mbo bridge requirement. |
 | mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | obsolete head `35e30a9` | Close without replacement; removing its numeric-diagnostic gates leaves an empty effective diff. |
 | mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | obsolete head `ae8e1d1` | Close without replacement; removing its feature-fraction diagnostic gate leaves an empty effective diff. |
-| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | head `c85b2f4165e056934f892c5db37391869cd40e38` | Retain only the GraphLearner deep-clone ownership fix and mutation-isolation regression. |
-| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `c1cdad5a78913c9a47fec1003de8d4309275c80c` (base `8f5a3dfa297ad236812cda57fab02de75fec375a`) | Preserve byte-identical Paradox-1 messages; the four Paradox-2 headers now name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
+| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat-current` | head `13610d39e06639ce96f0b76862f76acd794c0dc8` (base `bef040ae5c886bf5b09863b956d341eb3cbd772c`) | Retain only the GraphLearner deep-clone ownership fix, mutation-isolation regression, and dual-version dormant spline contract. |
+| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `c1cdad5a78913c9a47fec1003de8d4309275c80c` (upstream base `5e6204d0d3a3c21325a71eda4402c30b31209eef`; previous bridge head `8f5a3dfa297ad236812cda57fab02de75fec375a`) | Preserve byte-identical Paradox-1 messages; the four Paradox-2 headers now name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
 
-The final Paradox-2 source-package stage builds and checks bbotk, miesmuschel,
-mlr3mbo, celecx, and mlr3fda from their exact Git archives; all five rows and
-all five retained final statuses are green. The Paradox-1 source-package
-conclusion is an explicit composition. The r2 stage passed the exact final
-bbotk, mlr3mbo, and celecx heads plus mlr3fda base `8f5a3df`; final mlr3fda
-`c1cdad5` changes only four call headers in
+The last pre-dormant Paradox-2 source-package stage built and checked bbotk,
+miesmuschel, mlr3mbo, celecx, and mlr3fda from its then-exact Git archives;
+all five rows and retained statuses were green. It does not authenticate the
+current `ecd7c69` miesmuschel head. Its Paradox-1 source-package conclusion was
+an explicit composition. The r2 stage passed the exact then-final bbotk,
+mlr3mbo, and celecx heads plus mlr3fda base `8f5a3df`; final mlr3fda `c1cdad5`
+changes only four call headers in
 `tests/testthat/_snaps/paradox-2/PipeOpFDAWavelets.md`, so its Paradox-1
 selected tests and runtime source are unchanged. The final miesmuschel row
-passed in r3. The r2 stage's obsolete miesmuschel row failed, so neither that
-whole stage nor the final mlr3fda head is described as an exact five-head
-Paradox-1 check.
+for that historical profile passed in r3. The r2 stage's obsolete miesmuschel
+row failed, so neither that whole stage nor the final mlr3fda head is described
+as an exact five-head Paradox-1 check. A fresh stage must bind the current
+manifest before release.
 
 The handoff in `compat/downstream-pr-handoff.md` records the final retained
 heads, manual push/PR text, and the two redundant PRs to close. For historical
@@ -997,10 +1008,34 @@ R/compiler/instrumentation profile; compatible evidence families may share
 that exact authenticated installation, and a sealed identical-payload ref may
 inherit the donor conclusion, never development component objects.
 
-## Last sealed candidate freeze record
+## Active sealed candidate freeze record
 
-The last sealed immutable package candidate, now historical after the
-2026-07-25 cleanup reopened package-facing source, is:
+The active immutable package-facing candidate is:
+
+| Field | Value |
+|---|---|
+| Full candidate ref | `refs/paradox-release/candidate-20260727T152133Z` |
+| Commit | `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea` |
+| Tree | `b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d` |
+| Detached source | `.local/compat/candidate-snapshots/dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea` |
+| Candidate content SHA-256 | `08d646219c044a70225ca35bffacf7bb6213853e0d10536c0e45e65bf4219979` |
+| Version | 2.0.0 |
+| Release-core coordinator | `release-candidate-dbbdcc1`; all eight rows passed |
+| Replayable native source donor | `release-candidate-dbbdcc1-native-replay-r2-native-release-a001` |
+| Combined memory gate | `release-candidate-dbbdcc1-memory-r3`; GCT, Valgrind, and reviewed rchk policy passed |
+| Portability companion | pending fresh direct child; candidate tag `paradox-2.0.0-ci-dbbdcc1` |
+
+All commits after this candidate are validation tooling, evidence ledgers, or
+downstream manifests under package-excluded roots. Before transferring a
+source-bound conclusion, prove that the exact candidate-to-tooling diff changes
+no package-facing path. Do not call generated archives byte-identical without
+a separate sealed payload proof. The refreshed compatibility overlay,
+benchmark, and hosted portability evidence remain pending.
+
+## Historical pre-cleanup candidate freeze record (superseded payload)
+
+The sealed immutable package candidate below became historical when the
+2026-07-25 cleanup reopened package-facing source:
 
 | Field | Value |
 |---|---|
@@ -1204,11 +1239,12 @@ memory donor and the first memory attempt stopped at harness provenance
 preflight, but the repaired
 `release-candidate-dbbdcc1-native-replay-r2-native-release-a001` source proof
 is green and independently replayable. It supplied a successful reviewed rchk
-discovery and regenerated policy. One static/focused donor under that policy
-and the combined-memory gate remain mandatory, followed by the applicable
-documentation, downstream, source-package, benchmark, and hosted Windows
-x86-64/macOS ARM64 gates. User publication of prepared downstream branches/PRs,
-the release tag, and workflow also remains required.
+discovery and regenerated policy. The replacement combined-memory run
+`release-candidate-dbbdcc1-memory-r3` passed GCT, Valgrind, and that reviewed
+rchk policy. The refreshed exact downstream overlay and prepared compatibility
+DAG, sealed benchmark, and hosted Windows x86-64/macOS ARM64 gates remain
+mandatory. User publication of prepared downstream branches/PRs, the release
+tag, and workflow also remains required.
 
 ## Historical rejected or superseded refs
 
