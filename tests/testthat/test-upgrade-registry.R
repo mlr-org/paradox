@@ -102,7 +102,9 @@ test_that("registry input is narrow and deterministic", {
     envir = asNamespace("paradox"),
     inherits = FALSE
   )
-  legacy_class = c("RegistryReplacementParamSet", "ParamSet", "R6")
+  # The one satisfiable replacement class vector; any other owner label is
+  # refused for "replacement" below.
+  legacy_class = c("ParamSetShadow", "ParamSet", "R6")
 
   if (is.null(paradox:::.paradox_lookup_object_upgrader(legacy_class))) {
     expect_invisible(registry_call_from(
@@ -120,6 +122,35 @@ test_that("registry input is narrow and deterministic", {
   expect_identical(
     entry$retired_bindings,
     c("a_retired", "z_retired")
+  )
+
+  expect_error(
+    registry_call_from(
+      asNamespace("base"),
+      register,
+      "base",
+      c("RegistryReplacementParamSet", "ParamSet", "R6"),
+      "replacement",
+      "identity",
+      "identity",
+      character()
+    ),
+    "A replacement upgrader can only be registered for the legacy class",
+    fixed = TRUE
+  )
+  expect_error(
+    registry_call_from(
+      asNamespace("stats"),
+      register,
+      "stats",
+      c("ParamSetShadow", "ParamSet", "R6"),
+      "additive",
+      "model.frame",
+      "model.matrix",
+      character()
+    ),
+    "An additive upgrader cannot be registered for the legacy class",
+    fixed = TRUE
   )
 
   expect_error(
@@ -223,7 +254,7 @@ test_that("owner inspection has a migration-specific inert envelope", {
     c("RegistryProbeParamSet", "ParamSet", "R6")
   )
   replacement_entry = paradox:::.paradox_lookup_object_upgrader(
-    c("RegistryReplacementParamSet", "ParamSet", "R6")
+    c("ParamSetShadow", "ParamSet", "R6")
   )
   dependency = new.env(parent = emptyenv())
   attr(dependency, "class") = c("ParamSet", "R6")

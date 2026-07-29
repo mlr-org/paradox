@@ -129,16 +129,17 @@
   invisible(NULL)
 }
 
-.upgrade_paradox_validate_current_roots = function(roots) {
+.upgrade_paradox_validate_current_roots = function(
+    roots,
+    failure = "Cannot commit Paradox migration"
+) {
   result = tryCatch(
     .Call(C_param_set_validate_current_roots, roots),
     error = function(error) {
       stop(
         sprintf(
-          paste0(
-            "Cannot commit Paradox migration: prepared/current roots failed ",
-            "joint validation (%s)"
-          ),
+          "%s: prepared/current roots failed joint validation (%s)",
+          failure,
           conditionMessage(error)
         ),
         call. = FALSE
@@ -147,7 +148,7 @@
   )
   if (!identical(result, TRUE)) {
     stop(
-      "Cannot commit Paradox migration: joint current-root validation failed",
+      sprintf("%s: joint current-root validation failed", failure),
       call. = FALSE
     )
   }
@@ -958,6 +959,17 @@
   } else {
     NULL
   }
+  # Recognition here must agree exactly with the rebuild predicate in
+  # .upgrade_paradox_strip_legacy_extra_trafo(): a wrapper counts as a carrier
+  # crate only when the strip helper has already rebuilt it with a fresh
+  # environment. Counting a wrapper the strip helper refused would make the
+  # later carrier rebind write the prepared children into the serialized
+  # object's own closure environment.
+  if (!is.null(extra_bindings) &&
+      (typeof(extra_bindings$sets_with_trafos) != "list" ||
+        !is.function(extra_bindings$psc_extra_trafo))) {
+    extra_bindings = NULL
+  }
   constraint_bindings = if (is.function(constraint)) {
     .upgrade_paradox_crate_bindings(
       constraint,
@@ -969,6 +981,11 @@
     )
   } else {
     NULL
+  }
+  if (!is.null(constraint_bindings) &&
+      (typeof(constraint_bindings$sets_with_constraints) != "list" ||
+        !is.function(constraint_bindings$psc_constraint))) {
+    constraint_bindings = NULL
   }
   list(
     extra_trafo = if (is.null(extra_bindings)) {
@@ -1092,7 +1109,14 @@
     .upgrade_paradox_abort(path, "legacy values have invalid parameter names")
   }
   values = .upgrade_paradox_copy_list(values)
-  values[match(ids, names(values), nomatch = 0L)]
+  # Only a zero-length unnamed list reaches this point with `names()` NULL --
+  # every longer unnamed list fails the nzchar check above. Paradox 1 stored
+  # `named_list()` even when empty, but the current capsule requires the names
+  # attribute outright: installed verbatim, an unnamed empty `.values` is
+  # admitted at build time and rejected by every later graph validation.
+  # Install the validated names unconditionally to keep the copy canonical.
+  names(values) = value_names
+  values[match(ids, value_names, nomatch = 0L)]
 }
 
 .upgrade_paradox_base_info = function(x, shell, path, authenticate = TRUE) {
@@ -1609,6 +1633,15 @@
 
 .upgrade_paradox_graph = function(x) {
   session = .upgrade_paradox_prepare_session(list(x), "x")
+  # The recursive API proves every prepared root jointly before the first
+  # original shell changes. The non-mutating API hands its prepared graph to
+  # the caller instead of a transplant, so it needs the same barrier: without
+  # it a preparation defect fails closed over there and fails open here, as a
+  # returned object whose first native admission reports a corrupt capsule.
+  .upgrade_paradox_validate_current_roots(
+    session$prepared,
+    "Cannot upgrade Paradox object at x"
+  )
   session$prepared[[1L]]
 }
 
@@ -1735,6 +1768,17 @@
         "replacement owner must return a current ParamSetShadow shell"
       )
     }
+    # This capsule-kind requirement composes with the class-vector check
+    # above and with the graph validation below: the validator accepts the
+    # shell only when its class kind equals its capsule kind, and a
+    # registered class `c(<owner>, "ParamSet", "R6")` classes as SHADOW only
+    # when <owner> is exactly "ParamSetShadow". A replacement bridge for any
+    # other owner label therefore cannot ever satisfy both checks and fails
+    # closed below; symmetrically, an additive bridge for the
+    # "ParamSetShadow" label always fails the validation after its `.core`
+    # is replaced with the BASE capsule. register_paradox_object_upgrader()
+    # refuses both doomed combinations up front; these checks remain the
+    # backstop for entries injected past registration.
   }
   result$assert_values = info$assert_values
   .upgrade_paradox_validate_current_graph(result, path)

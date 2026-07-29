@@ -197,6 +197,46 @@
   }
 }
 
+# Only serialized shells resolve the unversioned `.__Design__transpose`
+# target: current Designs are leanified to the versioned name. The Design
+# shell itself is layout-compatible with Paradox 1, but `transpose()` hands
+# `self$param_set` to a native entry directly, so without this gateway a
+# legacy ParamSet inside a serialized Design surfaced as a capsule-corruption
+# error instead of the actionable first-use flow, and
+# `paradox.legacy_object_action = "upgrade"` was never consulted. A
+# graph-healed Design keeps calling this name forever -- its serialized stubs
+# are never rewritten -- so the current-shell forward below is load-bearing,
+# exactly as in the ParamSet-family gateways. The check deliberately gates
+# every `transpose()` call, including `trafo = FALSE` whose data-only path
+# used to work on an unupgraded shell: first use of a serialized legacy
+# object triggers the flow, matching the ParamSet-family contract.
+.paradox_make_design_transpose_gateway = function(
+    old_name,
+    current_name,
+    namespace) {
+  force(old_name)
+  force(current_name)
+  force(namespace)
+  function(self, private, super, ...) {
+    param_set = if (is.environment(self)) self$param_set
+    if (!.paradox_gateway_current_core(param_set)) {
+      if (!identical(.paradox_legacy_action(), "upgrade")) {
+        .paradox_legacy_use_error(old_name)
+      }
+      upgrade_paradox_object_graph(self)
+      param_set = if (is.environment(self)) self$param_set
+      if (!.paradox_gateway_current_core(param_set)) {
+        stop(
+          "Legacy Paradox first-use migration did not produce a current ParamSet shell.",
+          call. = FALSE
+        )
+      }
+    }
+    target = get(current_name, envir = namespace, inherits = FALSE)
+    target(self = self, private = private, super = super, ...)
+  }
+}
+
 .paradox_install_paramset_gateways = function(
     classname,
     members,
@@ -242,11 +282,32 @@
     ".__ParamSetCollection__",
     ".__ParamSetShadow__"
   )
+  design_transpose_old_name = .paradox_old_target_name("Design", "transpose")
   for (old_name in names(targets)) {
     if (!any(startsWith(old_name, family_old_prefixes))) {
+      if (identical(old_name, design_transpose_old_name)) {
+        # Design$transpose() is the one non-ParamSet-family method that hands
+        # its embedded `param_set` to a native entry directly, so its old
+        # name gets a dedicated first-use gateway instead of the plain alias.
+        assign(
+          old_name,
+          .paradox_make_design_transpose_gateway(
+            old_name,
+            targets[[old_name]],
+            namespace
+          ),
+          envir = namespace
+        )
+        next
+      }
       # Other Paradox R6 schemas did not undergo the ParamSet capsule
       # migration.  Their old stubs can call the current implementation
-      # directly, without entering a migration gateway.
+      # directly, without entering a migration gateway: the public field
+      # layout of Design and the Sampler family is unchanged since Paradox 1,
+      # so today's method bodies read a serialized Paradox 1 shell correctly,
+      # and the legacy `param_set` such a shell carries trips the ParamSet
+      # gateways above as soon as a method touches it through an R6 accessor
+      # (every Sampler path does).
       assign(
         old_name,
         get(targets[[old_name]], envir = namespace, inherits = FALSE),

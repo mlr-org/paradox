@@ -985,3 +985,105 @@ test_that("legacy first use errors by default and can auto-upgrade", {
     expect_true(identical(check, TRUE) || is.character(check))
   }
 })
+
+test_that("current Design stubs bypass the transpose gateway", {
+  design = Design$new(
+    ps(x = p_dbl(0, 1)),
+    data.table::data.table(x = 0.5),
+    remove_dupl = FALSE
+  )
+  stub = paste(deparse(body(design$transpose)), collapse = "\n")
+  expect_match(stub, ".__paradox2_Design__transpose", fixed = TRUE)
+  expect_false(grepl(".__Design__transpose", stub, fixed = TRUE))
+
+  namespace = asNamespace("paradox")
+  gateway = get(".__Design__transpose", envir = namespace, inherits = FALSE)
+  expect_false(identical(
+    gateway,
+    get(".__paradox2_Design__transpose", envir = namespace, inherits = FALSE)
+  ))
+  expect_match(
+    paste(deparse(body(gateway)), collapse = "\n"),
+    "upgrade_paradox_object_graph",
+    fixed = TRUE
+  )
+})
+
+test_that("serialized Design transpose gets the first-use gateway", {
+  skip_if_no_active_binding_inspection()
+
+  as_legacy_table = function(x) {
+    data.table::as.data.table(lapply(x, identity))
+  }
+  copy_legacy_private_environment = function(x, omit = character()) {
+    enclosing = x$.__enclos_env__
+    source = mlr3misc::get_private(x)
+    result = new.env(parent = parent.env(source))
+    names = setdiff(ls(source, all.names = TRUE), omit)
+    for (name in names) {
+      assign(name, get(name, envir = source, inherits = FALSE), envir = result)
+    }
+    enclosing$private = result
+    result
+  }
+  transplantable_legacy_base = function(current) {
+    state = paradox:::param_set_core_state(mlr3misc::get_private(current))
+    result = current$clone(deep = TRUE)
+    private = copy_legacy_private_environment(result, omit = ".core")
+    private$.params = as_legacy_table(state$.params)
+    private$.values = state$.values
+    private$.tags = as_legacy_table(state$.tags)
+    private$.deps = as_legacy_table(state$.deps)
+    private$.trafos = as_legacy_table(state$.trafos)
+    private$.extra_trafo = state$.extra_trafo
+    private$.constraint = state$.constraint
+    result
+  }
+
+  # A serialized Paradox 1 Design is layout-compatible with today's method
+  # bodies; what its stub resolves is the unversioned namespace target, and
+  # the `param_set` it carries is still a legacy shell.
+  legacy_ps = transplantable_legacy_base(ps(x = p_dbl(0, 1)))
+  design = new.env(parent = emptyenv())
+  class(design) = c("Design", "R6")
+  design$param_set = legacy_ps
+  design$data = data.table::data.table(x = c(0.25, 0.75))
+
+  gateway = get(
+    ".__Design__transpose",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  old = options(paradox.legacy_object_action = "error")
+  on.exit(options(old), add = TRUE)
+
+  expect_error(
+    gateway(self = design, private = NULL, super = NULL, trafo = TRUE),
+    "A serialized Paradox 1 object tried to call `.__Design__transpose`",
+    fixed = TRUE
+  )
+  # The data-only path used to silently succeed on an unupgraded shell; first
+  # use of a serialized legacy object now triggers the flow either way.
+  expect_error(
+    gateway(self = design, private = NULL, super = NULL, trafo = FALSE),
+    "upgrade_paradox_object_graph",
+    fixed = TRUE
+  )
+  expect_false(exists(
+    ".core",
+    envir = mlr3misc::get_private(legacy_ps),
+    inherits = FALSE
+  ))
+
+  options(paradox.legacy_object_action = "upgrade")
+  rows = gateway(self = design, private = NULL, super = NULL, trafo = TRUE)
+  expect_identical(rows, list(list(x = 0.25), list(x = 0.75)))
+  expect_identical(design$param_set, legacy_ps)
+  expect_true(paradox:::.paradox_gateway_current_core(design$param_set))
+
+  # A healed Design keeps calling the unversioned name forever; the gateway's
+  # current-shell fast path forwards without consulting the option.
+  options(paradox.legacy_object_action = "error")
+  rows = gateway(self = design, private = NULL, super = NULL, trafo = FALSE)
+  expect_identical(rows, list(list(x = 0.25), list(x = 0.75)))
+})

@@ -1701,3 +1701,162 @@ test_that("upgraded collections keep generating the tags Paradox 1 recorded", {
   expect_setequal(upgraded$tags$a.x, c("set_a", "param_x", "kept"))
   expect_setequal(upgraded$tags$b.z, c("set_b", "param_z"))
 })
+
+test_that("a zero-length unnamed legacy values list upgrades to the canonical named list", {
+  skip_if_no_active_binding_inspection()
+  canonical = structure(list(), names = character())
+
+  legacy = legacy_base_from_current(ps(x = p_dbl(0, 1)))
+  private = mlr3misc::get_private(legacy)
+  # Paradox 1 canonicalized `$values` to `named_list()` before storing, so a
+  # genuine serialization always carries the names attribute; only a
+  # hand-built fixture reaches the upgrader without it. Installed verbatim,
+  # the unnamed empty list used to poison the prepared capsule: `$check()`,
+  # `$get_values()`, and `$subset()` all reported a corrupt capsule while
+  # `$values` and `$clone()` kept working.
+  private$.values = list()
+
+  upgraded = upgrade_paradox_object(legacy)
+  state = paradox:::param_set_core_state(mlr3misc::get_private(upgraded))
+  expect_identical(state$.values, canonical)
+  expect_identical(upgraded$values, canonical)
+  expect_true(upgraded$check(list(x = 0.5)))
+  expect_identical(upgraded$get_values(), canonical)
+
+  transplantable = transplantable_legacy_base_from_current(ps(x = p_dbl(0, 1)))
+  transplantable_private = mlr3misc::get_private(transplantable)
+  transplantable_private$.values = list()
+  upgrade_paradox_object_graph(transplantable)
+  # The transplant swaps in a fresh enclosure; re-fetch the live private.
+  expect_true(exists(
+    ".core",
+    envir = mlr3misc::get_private(transplantable),
+    inherits = FALSE
+  ))
+  expect_identical(transplantable$values, canonical)
+  expect_true(transplantable$check(list(x = 0.5)))
+})
+
+test_that("carrier recognition agrees with the strip rebuild decision", {
+  skip_if_no_active_binding_inspection()
+  broken_crate_fixture = function(make_legacy) {
+    child = make_legacy(ps(y = p_int()))
+    legacy = make_legacy(ps(x = p_int()))
+    private = mlr3misc::get_private(legacy)
+    extra_environment = list2env(
+      list(
+        children_with_trafos = 1L,
+        sets_with_trafos = list(child = child),
+        translation = NULL,
+        # Template-shaped wrapper whose `psc_extra_trafo` is not a function:
+        # the strip helper refuses to rebuild it, so the carrier scan must
+        # not count it either. Counting it used to rebind the prepared child
+        # into this environment -- the serialized object's own state.
+        psc_extra_trafo = "not a function",
+        postfix = FALSE
+      ),
+      parent = asNamespace("paradox")
+    )
+    private$.extra_trafo = eval(
+      parse(text = paste(
+        "function(x) psc_extra_trafo(",
+        "  x, children_with_trafos, sets_with_trafos, translation, postfix",
+        ")",
+        sep = "\n"
+      ), keep.source = TRUE)[[1L]],
+      envir = extra_environment
+    )
+    constraint_environment = list2env(
+      list(
+        children_with_constraints = 1L,
+        sets_with_constraints = list(child = child),
+        translation = NULL,
+        psc_constraint = "not a function"
+      ),
+      parent = asNamespace("paradox")
+    )
+    private$.constraint = eval(
+      parse(text = paste(
+        "function(x) psc_constraint(",
+        "  x, children_with_constraints, sets_with_constraints, translation",
+        ")",
+        sep = "\n"
+      ), keep.source = TRUE)[[1L]],
+      envir = constraint_environment
+    )
+    list(
+      legacy = legacy,
+      child = child,
+      extra_environment = extra_environment,
+      constraint_environment = constraint_environment
+    )
+  }
+
+  fixture = broken_crate_fixture(legacy_base_from_current)
+  legacy_bytes = serialize(fixture$legacy, NULL)
+  upgraded = upgrade_paradox_object(fixture$legacy)
+  expect_identical(serialize(fixture$legacy, NULL), legacy_bytes)
+  expect_identical(
+    fixture$extra_environment$sets_with_trafos[[1L]],
+    fixture$child
+  )
+  expect_identical(
+    fixture$constraint_environment$sets_with_constraints[[1L]],
+    fixture$child
+  )
+  expect_false(exists(
+    ".core",
+    envir = mlr3misc::get_private(fixture$child),
+    inherits = FALSE
+  ))
+  # The unrecognized wrapper is carried like any other opaque callback.
+  expect_identical(
+    environment(upgraded$extra_trafo),
+    fixture$extra_environment
+  )
+
+  # The recursive API reaches the captured children through native closure
+  # discovery instead and upgrades them in place.
+  graph_fixture = broken_crate_fixture(transplantable_legacy_base_from_current)
+  upgrade_paradox_object_graph(graph_fixture$legacy)
+  expect_identical(
+    graph_fixture$extra_environment$sets_with_trafos[[1L]],
+    graph_fixture$child
+  )
+  expect_true(exists(
+    ".core",
+    envir = mlr3misc::get_private(graph_fixture$child),
+    inherits = FALSE
+  ))
+  expect_identical(graph_fixture$legacy$ids(), "x")
+})
+
+test_that("the single-object API refuses to return an invalid prepared graph", {
+  skip_if_no_active_binding_inspection()
+  legacy = legacy_base_from_current(ps(x = p_dbl(0, 1)))
+  legacy_bytes = serialize(legacy, NULL)
+
+  # Surgically reintroduce a preparation defect: an unnamed empty `.values`
+  # installed verbatim yields a capsule every later admission rejects. The
+  # returned-graph barrier must fail closed exactly like the commit barrier
+  # of the recursive API instead of handing the poisoned graph to the caller.
+  namespace = asNamespace("paradox")
+  values_name = ".upgrade_paradox_values"
+  old_values = get(values_name, envir = namespace, inherits = FALSE)
+  values_was_locked = bindingIsLocked(values_name, namespace)
+  if (values_was_locked) unlockBinding(values_name, namespace)
+  on.exit({
+    if (bindingIsLocked(values_name, namespace)) {
+      unlockBinding(values_name, namespace)
+    }
+    assign(values_name, old_values, envir = namespace)
+    if (values_was_locked) lockBinding(values_name, namespace)
+  }, add = TRUE)
+  assign(values_name, function(values, ids, path) list(), envir = namespace)
+
+  expect_error(
+    upgrade_paradox_object(legacy),
+    "Cannot upgrade Paradox object at x: prepared/current roots failed joint validation"
+  )
+  expect_identical(serialize(legacy, NULL), legacy_bytes)
+})

@@ -552,7 +552,12 @@ hazards that Paradox 2 is intended to remove.
   including explicit errors for its retired `params_unid` and `set_id`
   bindings. Additive inspectors declare no owner dependencies; authenticated
   BASE callback-carrier dependencies are composed internally. Replacements
-  have exactly one `origin` and must produce a current Shadow. Owner classes with R6
+  have exactly one `origin` and must produce a current Shadow. Because the
+  rebuilt shell must carry the exact registered class and admission requires
+  its class kind to equal its capsule kind, registration refuses the two
+  unsatisfiable combinations up front: a replacement bridge is accepted only
+  for the exact `c("ParamSetShadow", "ParamSet", "R6")` vector, and an
+  additive bridge never for it. Owner classes with R6
   finalizers are rejected because their registrations cannot be transplanted
   safely. Unknown subclasses still fail closed. Legacy method provenance is
   authenticated by exact loaded namespace identity rather than spoofable

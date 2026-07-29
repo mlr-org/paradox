@@ -1313,6 +1313,13 @@ Legacy third-party ParamSet subclasses are admitted only through
   namespace and records only the owner name, exact class, `"additive"` or
   `"replacement"` migration kind, namespace-local inspector/rebuilder names,
   and replacement-only retired public bindings;
+- the migration kind and the owner label must agree: `"replacement"` is
+  accepted only for the exact vector `c("ParamSetShadow", "ParamSet", "R6")`
+  and `"additive"` never for it — every other combination is provably
+  unsatisfiable (the rebuilt shell must carry the registered class, admission
+  requires its class kind to equal its capsule kind, and only the
+  `"ParamSetShadow"` label classes as a Shadow), so registration refuses it
+  up front;
 - hooks are resolved anew from that authenticated namespace. Paradox never
   stores or executes an inspector/rebuilder function recovered from serialized
   bytes;

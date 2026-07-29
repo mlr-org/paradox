@@ -49,6 +49,15 @@ or partial match. Registration must be called by code whose lexical
 environment belongs to \code{owner_package}, and both hook names must resolve to
 functions directly in that package's currently loaded namespace.
 
+The migration kind and the owner label must agree: a \code{"replacement"}
+upgrader can be registered only for the exact vector
+\code{c("ParamSetShadow", "ParamSet", "R6")}, and an \code{"additive"} upgrader never
+for it. Every other combination is provably unsatisfiable -- the rebuilt
+shell must carry the registered class, admission requires its class kind to
+equal its capsule kind, and only the \code{"ParamSetShadow"} label classes as a
+Shadow -- so registration refuses it up front instead of failing per object
+at migration time.
+
 The inspector is called as \code{inspector(x)}. Paradox authenticates the common
 R6 shell and package provenance; the inspector must authenticate any
 owner-specific state it reads without calling a serialized method, active

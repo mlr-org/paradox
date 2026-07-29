@@ -230,6 +230,15 @@
 #' environment belongs to `owner_package`, and both hook names must resolve to
 #' functions directly in that package's currently loaded namespace.
 #'
+#' The migration kind and the owner label must agree: a `"replacement"`
+#' upgrader can be registered only for the exact vector
+#' `c("ParamSetShadow", "ParamSet", "R6")`, and an `"additive"` upgrader never
+#' for it. Every other combination is provably unsatisfiable -- the rebuilt
+#' shell must carry the registered class, admission requires its class kind to
+#' equal its capsule kind, and only the `"ParamSetShadow"` label classes as a
+#' Shadow -- so registration refuses it up front instead of failing per object
+#' at migration time.
+#'
 #' The inspector is called as `inspector(x)`. Paradox authenticates the common
 #' R6 shell and package provenance; the inspector must authenticate any
 #' owner-specific state it reads without calling a serialized method, active
@@ -305,6 +314,36 @@ register_paradox_object_upgrader = function(
   if (!migration_kind %in% c("additive", "replacement")) {
     .paradox_registry_abort(
       "`migration_kind` must be exactly \"additive\" or \"replacement\""
+    )
+  }
+  # The owner migration composes three checks no registration can escape: the
+  # rebuilt shell must carry the exact registered class, graph admission
+  # accepts a shell only when its class kind equals its capsule kind, and
+  # `c(<owner>, "ParamSet", "R6")` classes as a Shadow exactly when <owner> is
+  # "ParamSetShadow". A replacement result must carry a Shadow capsule and an
+  # additive result receives the prepared BASE capsule, so each migration kind
+  # is satisfiable for exactly one side of that label test. Refuse the two
+  # provably dead registrations here instead of letting every migrated object
+  # fail later with a capsule-corruption error.
+  shadow_label = identical(legacy_class[[1L]], "ParamSetShadow")
+  if (identical(migration_kind, "replacement") && !shadow_label) {
+    .paradox_registry_abort(
+      paste0(
+        "A replacement upgrader can only be registered for the legacy class ",
+        "vector c(\"ParamSetShadow\", \"ParamSet\", \"R6\"): any other ",
+        "registered class classes as a plain ParamSet shell, while a ",
+        "replacement result must carry a current ParamSetShadow capsule"
+      )
+    )
+  }
+  if (identical(migration_kind, "additive") && shadow_label) {
+    .paradox_registry_abort(
+      paste0(
+        "An additive upgrader cannot be registered for the legacy class ",
+        "vector c(\"ParamSetShadow\", \"ParamSet\", \"R6\"): the rebuilt ",
+        "shell classes as a ParamSetShadow, while an additive migration ",
+        "installs the prepared base ParamSet capsule"
+      )
     )
   }
   inspector = .paradox_registry_symbol(inspector, "inspector")
