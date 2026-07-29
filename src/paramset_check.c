@@ -463,6 +463,32 @@ static R_xlen_t local_param_row(const check_node_t *node, SEXP id,
   return R_XLEN_T_MAX;
 }
 
+/* A dependency parent that names nothing in its own node is resolved outward
+ * through the enclosing namespaces, then looked up in the root's exposed
+ * table. This is the same walk the dependency getter performs
+ * (`paradox_collection_translate_dependency_id`), expressed on the check
+ * graph's precomputed root spellings; the two must agree, because a collection
+ * that answers `$deps` with a resolved parent has to enforce it as well. A name
+ * no ancestor knows stays verbatim and is left to the root lookup, so a
+ * dangling parent that a later sibling supplies starts being enforced at the
+ * next read. */
+static SEXP outward_dependency_parent(const check_graph_t *graph,
+    R_xlen_t node_index, SEXP on, R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t ancestor = graph->nodes[node_index].parent;
+      ancestor != R_XLEN_T_MAX;
+      ancestor = graph->nodes[ancestor].parent) {
+    const R_xlen_t row = local_param_row(
+      &graph->nodes[ancestor],
+      on,
+      work_since_interrupt
+    );
+    if (row != R_XLEN_T_MAX) {
+      return STRING_ELT(graph->nodes[ancestor].root_ids, row);
+    }
+  }
+  return on;
+}
+
 static SEXP append_node_roots(SEXP *root_plan,
     PROTECT_INDEX root_plan_index, SEXP self, SEXP private_environment) {
   PROTECT(self);
@@ -1411,6 +1437,22 @@ static void initialize_activity_mapping(check_plan_t *plan) {
           )) {
           Rf_error("Corrupt ParamSet graph: dependency parent is not exposed");
         }
+      } else if (node->parent != R_XLEN_T_MAX) {
+        /* Only a parent this node does not know pays for the outward walk. A
+         * name that no enclosing namespace supplies either stays unresolved
+         * and its edge remains never-satisfiable, exactly as before. */
+        exposed_on = outward_dependency_parent(
+          &plan->graph,
+          node_index,
+          on,
+          &work_since_interrupt
+        );
+        (void) find_id(
+          &plan->root_ids,
+          exposed_on,
+          &parent,
+          &work_since_interrupt
+        );
       }
 
       SEXP condition = VECTOR_ELT(

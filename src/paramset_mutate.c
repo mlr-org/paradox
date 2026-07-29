@@ -7,6 +7,7 @@
 #include "builtin_condition.h"
 #include "core_state.h"
 #include "paramset_domain_common.h"
+#include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 
@@ -622,6 +623,43 @@ SEXP paradox_param_set_set_dependencies(SEXP private_environment, SEXP self,
   return dependencies;
 }
 
+/* The origin's complete current ID universe. A view refresh has already
+ * brought the origin current, so selecting it again observes that same
+ * generation; reading the origin's own canonical schema also keeps the answer
+ * independent of whether it is a BASE set or a collection flatten. */
+static SEXP shadow_origin_ids(SEXP origin, SEXP origin_private,
+    R_xlen_t *work_since_interrupt) {
+  PROTECT_INDEX core_index;
+  SEXP core;
+  PROTECT_WITH_INDEX(
+    core = paradox_core_from_private(origin_private),
+    &core_index
+  );
+  if (core == R_UnboundValue) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSetShadow origin state");
+  }
+  if (!paradox_core_is_verified(core)) {
+    REPROTECT(core = paradox_core_refresh(origin, origin_private), core_index);
+  }
+  paradox_domain_params_t params;
+  R_xlen_t unused_row = 0;
+  if (!paradox_core_has_exact_schema(core) ||
+      !paradox_domain_validate_params(
+        VECTOR_ELT(paradox_core_payload(core), PARADOX_CORE_PARAMS),
+        R_NilValue,
+        TRUE,
+        &params,
+        &unused_row,
+        work_since_interrupt
+      )) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSetShadow origin state");
+  }
+  UNPROTECT(1);
+  return params.ids;
+}
+
 SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
     SEXP id_sexp, SEXP on_sexp, SEXP condition, SEXP allow_dangling) {
   R_xlen_t work_since_interrupt = 0;
@@ -644,7 +682,7 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
     ));
     SEXP id = scalar_string(id_sexp, "id");
     SEXP on = scalar_string(on_sexp, "on");
-    (void) exact_flag(
+    const int dangling = exact_flag(
       allow_dangling,
       "allow_dangling_dependencies"
     );
@@ -658,12 +696,21 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
         &visible,
         &unused_row,
         &work_since_interrupt
-      ) || paradox_domain_find_string(visible.ids, id, &work_since_interrupt) == R_XLEN_T_MAX ||
-        paradox_domain_find_string(visible.ids, on, &work_since_interrupt) == R_XLEN_T_MAX) {
+      )) {
       UNPROTECT(1);
-      Rf_error("Shadow dependencies must stay inside the visible schema");
+      Rf_error("Corrupt ParamSetShadow visible schema");
     }
-    if (paradox_domain_strings_equal(id, on)) {
+    const int id_visible = paradox_domain_find_string(
+      visible.ids,
+      id,
+      &work_since_interrupt
+    ) != R_XLEN_T_MAX;
+    const int on_visible = paradox_domain_find_string(
+      visible.ids,
+      on,
+      &work_since_interrupt
+    ) != R_XLEN_T_MAX;
+    if (id_visible && paradox_domain_strings_equal(id, on)) {
       UNPROTECT(1);
       Rf_error("A param cannot depend on itself!");
     }
@@ -679,20 +726,69 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
       UNPROTECT(3);
       Rf_error("Corrupt ParamSetShadow origin shell");
     }
+    /* An endpoint this view does not show is either one it hides or one the
+     * origin does not have at all. Only the origin's own ID universe tells
+     * the two apart, and only that difference decides between refusing an
+     * edge across the boundary and planting an ordinary dangling dependency
+     * -- the state a view now shows and enforces like any other set. */
+    if (!id_visible || !on_visible) {
+      SEXP origin_ids = PROTECT(shadow_origin_ids(
+        origin,
+        origin_private,
+        &work_since_interrupt
+      ));
+      const int id_known = paradox_domain_string_in(
+        origin_ids,
+        id,
+        &work_since_interrupt
+      );
+      const int on_known = paradox_domain_string_in(
+        origin_ids,
+        on,
+        &work_since_interrupt
+      );
+      if (!id_visible) {
+        char *shown = utf8_error_copy(id);
+        UNPROTECT(4);
+        if (id_known) {
+          Rf_error("'%s' is hidden by this ParamSetShadow", shown);
+        }
+        Rf_error("`id` is not a parameter in this ParamSet");
+      }
+      if (on_known) {
+        char *shown_id = utf8_error_copy(id);
+        char *shown_on = utf8_error_copy(on);
+        UNPROTECT(4);
+        Rf_error(
+          PARADOX_SHADOW_CROSSING_MESSAGE,
+          "visible",
+          shown_id,
+          "hidden",
+          shown_on
+        );
+      }
+      if (!dangling) {
+        UNPROTECT(4);
+        Rf_error("`on` is not a parameter in this ParamSet");
+      }
+      UNPROTECT(1);
+    }
     SEXP stable_id = PROTECT(Rf_ScalarString(id));
     SEXP stable_on = PROTECT(Rf_ScalarString(on));
     SEXP stable_condition = PROTECT(snapshot_condition(
       condition,
       &work_since_interrupt
     ));
-    SEXP no_dangling = PROTECT(Rf_ScalarLogical(FALSE));
+    /* The origin decides again, from its own current schema: a parent this
+     * view could not see is dangling only if the origin agrees it is. */
+    SEXP delegated_dangling = PROTECT(Rf_ScalarLogical(!on_visible));
     SEXP result = PROTECT(paradox_param_set_add_dependency(
       origin_private,
       origin,
       stable_id,
       stable_on,
       stable_condition,
-      no_dangling
+      delegated_dangling
     ));
     (void) result;
     UNPROTECT(8);

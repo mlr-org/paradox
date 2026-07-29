@@ -173,8 +173,10 @@ hazards that Paradox 2 is intended to remove.
   snapshot and preserves predicates made partially or wholly infeasible by
   parent-Domain narrowing. `$add_dep()` remains the stricter authoring API: RHS
   feasibility uses the shared check kernel, callback reentry is
-  generation-checked, and Shadow append routes to the origin only when both
-  endpoints remain visible. Design masking and grid generation consistently
+  generation-checked, and Shadow append routes to the origin with the
+  dependent parameter visible and the parent either visible or absent from the
+  origin; `allow_dangling_dependencies` decides the absent case exactly as it
+  does on a plain set. Design masking and grid generation consistently
   treat an infeasible predicate or dangling parent as unsatisfied, so its child
   is inactive instead of failing in a later vectorized comparison.
 * `$has_deps` is now a native scalar read. BASE and live SHADOW nodes validate
@@ -392,6 +394,22 @@ hazards that Paradox 2 is intended to remove.
 * Existing BASE dependency mutation admission is unchanged and can construct a
   cycle. Every activity consumer now fails safely and deterministically on that
   cycle rather than looping, overflowing, or returning a partial active set.
+* A dangling dependency -- one whose `on` names no existing parameter -- is
+  resolved in one scope by every consumer. Inside a `ParamSetCollection` the
+  parent is translated outward through the enclosing namespaces, exactly as
+  `$deps` displays it, and then looked up in the reading set's own flat
+  schema; a name no namespace supplies stays never-satisfiable. `$deps`,
+  `$check()`, `$get_values()`, a child constraint's active slice, designs, and
+  samplers therefore give one answer about one edge, and the Paradox-1 pattern
+  in which a child declares a dependency on a sibling that is added later --
+  the edge starting to be enforced once the union is complete -- keeps
+  working.
+* A dangling dependency produces `NA` for its child in generated designs and
+  samples, where Paradox 1 failed with a raw internal assertion, and a checked
+  `$values <-` stores that child as a dormant value where Paradox 1 refused
+  the assignment. `$search_space()` still drops a dependency whose parent is
+  not itself tuned, as in Paradox 1; `paramset_to_configspace()` now refuses
+  such a set by name instead of failing with `subscript out of bounds`.
 
 ## Public model and migration
 
@@ -420,10 +438,16 @@ hazards that Paradox 2 is intended to remove.
   responsibility; downstream fidelity tests should project documented public
   state instead of recursively comparing Paradox private environments.
 * `ParamSetShadow$new(set, shadowed)` is now provided by Paradox. It exposes a
-  fixed visible schema with live origin values, dependencies, constraints, and
+  fixed hidden set -- the visible schema is "origin minus hidden", computed
+  live -- with live origin values, dependencies, constraints, and
   transformations. Visible assignments write through while preserving hidden
-  values, and dependencies crossing the shadow boundary are rejected. A direct
-  Shadow origin is rejected; combine hidden IDs over its BASE/COLLECTION origin.
+  values. A dependency that spans the visible/hidden boundary is rejected in
+  either direction, naming both ends; a dependency on a parameter the origin
+  does not have is not such a crossing and is shown and enforced exactly as
+  the origin does, so a view over a set with a dangling dependency is an
+  ordinary view and picks the parent up automatically once the origin gains
+  it. A direct Shadow origin is rejected; combine hidden IDs over its
+  BASE/COLLECTION origin.
   Construction enters C directly and keeps no duplicate visible/hidden schema
   in R6 private fields.
 * Third-party subclasses of the ParamSet family may call `super$initialize()`

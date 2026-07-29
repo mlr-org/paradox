@@ -7,7 +7,7 @@
 
 static const char *const dependency_column_names[] = {"id", "on", "cond"};
 
-static SEXP translate_dependency_id(
+SEXP paradox_collection_translate_dependency_id(
     const paradox_collection_graph_t *graph,
     R_xlen_t node_index,
     SEXP input,
@@ -66,7 +66,7 @@ SEXP paradox_collection_dependencies_from_graph(
       SET_STRING_ELT(
         ids,
         output,
-        translate_dependency_id(
+        paradox_collection_translate_dependency_id(
           graph,
           node_index,
           STRING_ELT(node->dependencies.ids, row),
@@ -76,7 +76,7 @@ SEXP paradox_collection_dependencies_from_graph(
       SET_STRING_ELT(
         on,
         output,
-        translate_dependency_id(
+        paradox_collection_translate_dependency_id(
           graph,
           node_index,
           STRING_ELT(node->dependencies.on, row),

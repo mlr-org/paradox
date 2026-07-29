@@ -1072,6 +1072,12 @@ ParamSet = R6Class("ParamSet",
     #'   though the representation is not an API. Every name must be an ID of
     #'   this `ParamSet`, whether or not the entry it names is a [`TuneToken`];
     #'   an unknown name is an error rather than a silently ignored entry.
+    #'
+    #'   The resulting set carries only dependencies among the tuned
+    #'   parameters, so a dependency on a parameter that is not itself tuned --
+    #'   including a dangling one -- is dropped rather than reported. A
+    #'   dependency that becomes dangling *within* the tuning space is an
+    #'   error.
     search_space = function(values = self$values) {
       pars = private$get_tune_ps(values)
       on = NULL  # pacify static code check

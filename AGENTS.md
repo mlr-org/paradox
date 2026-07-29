@@ -1798,8 +1798,14 @@ The package suite must directly cover, before downstream packages are used:
   while leaving the sets alone, and an ID it did not name stays derived; a
   value commit
   changes no containing flatten's generation; a serialized graph revalidates
-  rather than re-flattens on load; and the whole battery runs under
-  `gctorture()`;
+  rather than re-flattens on load; a dangling dependency stays a first-class
+  row through every re-derivation -- a shadow over an origin that has one is
+  constructible and usable, an existing view survives an origin that gains
+  one, the row survives subset/flatten/clone/serialization, and it starts
+  being enforced with no explicit refresh once the parent arrives, while a
+  dependency spanning a view's visible/hidden boundary stays refused in both
+  directions and one between hidden parameters stays invisible; and the whole
+  battery runs under `gctorture()`;
 - additive subclasses and deterministic rejection/non-support of core
   overrides or private replacement;
 - all five Domain kinds, two Condition kinds, and unknown-kind rejection; the
@@ -1854,7 +1860,13 @@ The package suite must directly cover, before downstream packages are used:
   default-aware recursive activity, store-blind point semantics, and safe cycle
   errors for cycles admitted by the unchanged BASE mutation boundary. Check
   and presence modes remain point-strict: every supplied entry must be active,
-  and a satisfying default can make an absent required child newly required;
+  and a satisfying default can make an absent required child newly required.
+  One dangling parent gets one answer from every consumer of a collection --
+  `$deps`, `$check`, `$get_values()`, a child constraint's active slice, and
+  designs all resolve it through the same outward walk and the reading root's
+  flat schema -- so `co$check(co$get_values())` cannot be false while the same
+  subset accepts the same list, and a name no namespace supplies stays
+  never-satisfiable in every one of them;
 - scalar/table constraint-only checking uses the native graph/point/constraint
   kernels, validates all table rows before callbacks, calls once per row from
   one callback snapshot, passes only the active subset of each point, and

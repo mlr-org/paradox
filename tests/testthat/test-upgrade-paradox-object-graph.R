@@ -750,6 +750,22 @@ test_that("current graph preflight does not refresh stale Shadows", {
   }
 })
 
+test_that("graph preflight admits a Shadow over a dangling-dependency origin", {
+  origin = ps(hidden = p_int(), visible = p_dbl())
+  origin$add_dep("visible", "future", CondEqual(1L),
+    allow_dangling_dependencies = TRUE)
+  shadow = ParamSetShadow$new(origin, "hidden")
+  private = mlr3misc::get_private(shadow)
+  # Make the view stale, so preflight has to preview the origin rather than
+  # read the projection it already holds.
+  origin$values = list(hidden = 1L)
+  before = serialize(private$.core, NULL)
+
+  expect_identical(upgrade_paradox_object_graph(shadow), shadow)
+  expect_identical(serialize(private$.core, NULL), before)
+  expect_identical(shadow$deps$on, "future")
+})
+
 test_that("recursive graph upgrade is an identity-preserving no-op for current graphs", {
   parameter_set = ps(x = p_dbl(0, 1))
   host = new.env(parent = emptyenv())

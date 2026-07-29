@@ -234,6 +234,18 @@ Public collection results preserve the established translated IDs, nested
 order, explicit named `NULL`, named empty results, and shallow sharing of
 opaque leaves while returning independently owned mutable shells.
 
+A dependency endpoint is translated out of the namespace that declared it by
+one walk shared by every consumer: it is renamed at the first enclosing
+namespace that knows it, then carried outward to the reading root, and passed
+on verbatim while no namespace knows it. `$deps` displays exactly that
+spelling, and the check plan, the collection constraint adapter, `$get_values()`,
+designs, and samplers all resolve it against the reading root's own flat
+schema; a name none of them supplies is a dangling parent, which the activity
+rule above treats as absent and unsatisfied. One object therefore cannot
+report a configuration through `$get_values()` that its own `$check()` rejects,
+and a dependency on a sibling that is added later starts being enforced as
+soon as that sibling exists.
+
 Collection callback behavior has one native implementation. Live
 `$extra_trafo`/`$constraint` access and detached subset/flatten callbacks use
 package-owned thin closures that retain only an exact validated owner/mapping
@@ -259,11 +271,11 @@ third-party subclass that reconstructs ParamSet private tables. Its public
 constructor remains `ParamSetShadow$new(set, shadowed)`, and its class and
 constructor source API remain available to miesmuschel.
 
-A `SHADOW` node owns exactly one origin edge and the fixed construction-time
-visible parameter schema in capsule `.params`. `shadowed` is constructor input,
-not retained authority. Current origin IDs outside that fixed visible schema
-form the hidden complement; no parallel visible-ID or hidden-ID field is
-stored. In particular:
+A `SHADOW` node owns exactly one origin edge and the hidden ID set `shadowed`
+retained in `.edges`. The visible parameter schema in capsule `.params` is the
+projection "origin minus hidden", derived from the origin's current schema like
+every other derived schema; no parallel visible-ID field is stored. In
+particular:
 
 - `$origin` is read-only and returns the exact origin object.
 - Visible `$values` reads are derived from the current origin values. Assigning
@@ -281,16 +293,27 @@ stored. In particular:
   the adapter does not own another activity engine. COLLECTION-origin adapters
   use the shared native collection evaluator family and the same upstream
   filtering rule where applicable.
-- A dependency crossing the visible/hidden boundary is rejected. This is
-  checked at construction and again when a live dependency snapshot is used,
-  so later origin mutation cannot create ambiguous shadow semantics.
+- A dependency crossing the visible/hidden boundary is rejected in either
+  direction, naming both ends and which of them is hidden. This is checked at
+  construction and again when a live dependency snapshot is used, so later
+  origin mutation cannot create ambiguous shadow semantics. A dependency whose
+  parent is not an origin ID at all does not cross that boundary: the view
+  keeps such a row, shows it verbatim, and enforces it as never satisfiable,
+  exactly as the origin does. Absence is decided against the origin's current
+  IDs rather than against the hidden set, so a name that exists nowhere cannot
+  raise a crossing error. Because the hidden set is fixed at construction and
+  IDs are unique, a parent the origin gains later is always visible; a dangling
+  row can therefore only ever resolve inside the view. A dependency between two
+  hidden parameters, dangling or not, stays the origin's own business and is
+  dropped from the projection.
 - The visible parameter schema—including ID order, type, storage, bounds,
   levels, tolerance, grouping, tags, defaults, and other structural metadata—is
-  fixed at shadow construction. Later origin schema changes do not silently
-  alter the view; callers construct a new shadow when they want a new
-  structural view. A current origin that no longer supplies a compatible
-  visible ID is corrupt/unsupported and produces a deterministic error; newly
-  added collection IDs simply remain outside the fixed visible schema.
+  derived from the origin on every read, so a parameter the origin gains, or
+  structural metadata it changes, is reflected without reconstructing the view.
+  What construction fixes is the hidden set, not the visible schema. An origin
+  that no longer supplies a retained hidden ID still yields a usable view
+  rather than an unreadable object; `$tags<-` on the view is the one derived
+  field it owns outright.
 - Clone and serialization preserve the documented origin/view relationship.
   Deep cloning duplicates the graph according to ordinary Paradox deep-clone
   semantics while preserving shared-node identity within the cloned graph.
@@ -853,9 +876,12 @@ means that its child is always inactive. `$add_dep()` is deliberately stricter:
 the shared check kernel verifies RHS feasibility and, if that validation
 callback changes the target capsule, the nested mutation wins and the outer
 append errors without overwriting it. `SHADOW$add_dep()` routes to this strict
-native append only after proving both endpoints remain in the fixed visible
-schema. These operations have no R/checkmate/data.table mutation planner and no
-shared feasibility/fallback mode.
+native append only after proving that the dependent parameter is visible and
+that the parent is either visible or absent from the origin; an `on` the view
+hides is the boundary error above, and an absent one obeys
+`allow_dangling_dependencies` exactly as on a BASE set. These operations have no
+R/checkmate/data.table mutation planner and no shared feasibility/fallback
+mode.
 
 `$has_deps` is a registered scalar reader, not an alias for
 `nrow(self$deps)`. A BASE validates its canonical dependency table directly. A

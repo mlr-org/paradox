@@ -96,8 +96,15 @@ paramset_to_configspace = function(param_set, name = NULL) {
 
   # add dependencies
   if (nrow(param_set$deps)) {
-    deps_grouped = split(param_set$deps, by = "id")
     parent_classes = param_set$class
+    # A dangling dependency has no parent hyperparameter to condition on, so
+    # ConfigSpace cannot represent it at all. Say which one before the
+    # right-hand side is spelled from a parent class that does not exist.
+    dangling = setdiff(param_set$deps$on, names(parent_classes))
+    if (length(dangling)) {
+      stopf("Cannot export dangling dependencies. No such parameter: %s", str_collapse(dangling))
+    }
+    deps_grouped = split(param_set$deps, by = "id")
 
     walk(deps_grouped, function(deps) {
       conditions = pmap(deps, function(id, on, cond) {

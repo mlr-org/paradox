@@ -114,24 +114,33 @@ test_that("ParamSetShadow dependencies are live and cannot cross bounds", {
   expect_identical(origin$deps$id, c("x", "flag"))
   expect_error(
     shadow$add_dep("x", "hidden", condition),
-    "Shadow dependencies must stay inside the visible schema"
+    "Dependency of visible 'x' on hidden 'hidden' crosses the ParamSetShadow boundary",
+    fixed = TRUE
+  )
+  expect_error(
+    shadow$add_dep("hidden", "x", condition),
+    "'hidden' is hidden by this ParamSetShadow",
+    fixed = TRUE
   )
 
   crossing = ps(hidden = p_lgl(), x = p_int(), flag = p_lgl())
   crossing$add_dep("x", "hidden", condition)
   expect_error(
     ParamSetShadow$new(crossing, "hidden"),
-    "Params x have dependencies that reach across shadow bounds"
+    "Dependency of visible 'x' on hidden 'hidden' crosses the ParamSetShadow boundary",
+    fixed = TRUE
   )
 
   origin$add_dep("hidden", "flag", condition)
   expect_error(
     shadow$deps,
-    "Params hidden have dependencies that reach across shadow bounds"
+    "Dependency of hidden 'hidden' on visible 'flag' crosses the ParamSetShadow boundary",
+    fixed = TRUE
   )
   expect_error(
     shadow$check(list(x = 1L, flag = TRUE)),
-    "Params hidden have dependencies that reach across shadow bounds"
+    "Dependency of hidden 'hidden' on visible 'flag' crosses the ParamSetShadow boundary",
+    fixed = TRUE
   )
 })
 

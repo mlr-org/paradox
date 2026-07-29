@@ -435,7 +435,7 @@ test_that("callback setters are native and keep established formal admission", {
   expect_null(set$extra_trafo)
 })
 
-test_that("Shadow add_dep routes natively and stays inside its visible schema", {
+test_that("Shadow add_dep routes natively and never crosses its bounds", {
   origin = ps(hidden = p_int(), parent = p_int(0L, 2L), child = p_lgl())
   shadow = ParamSetShadow$new(origin, "hidden")
   condition = CondEqual(1L)
@@ -444,11 +444,15 @@ test_that("Shadow add_dep routes natively and stays inside its visible schema", 
   expect_identical(origin$deps$cond[[1L]]$rhs, 1L)
   expect_identical(shadow$deps$cond[[1L]]$rhs, 1L)
 
+  # A hidden parent is refused whatever the dangling flag says: the flag is
+  # about a parent that does not exist, not about one this view cannot see.
   expect_error(
     shadow$add_dep(
       "child", "hidden", CondEqual(1L),
       allow_dangling_dependencies = TRUE
     ),
-    "visible schema"
+    "crosses the ParamSetShadow boundary",
+    fixed = TRUE
   )
+  expect_identical(nrow(origin$deps), 1L)
 })

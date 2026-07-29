@@ -363,6 +363,11 @@ static int validate_related_state(
     params->ids,
     work_since_interrupt
   );
+  /* Deliberately absent: a `dependencies->on` conjunct. A dangling dependency
+   * is a first-class state of an ordinary ParamSet, so an origin carrying one
+   * is not corrupt, and a Shadow that shows the row is not corrupt either.
+   * Every reader resolves `on` with a found-check and treats a miss as
+   * never-satisfiable. */
   return related_ids_are_known(
       &parameter_ids,
       tags->ids,
@@ -370,10 +375,6 @@ static int validate_related_state(
     ) && related_ids_are_known(
       &parameter_ids,
       dependencies->ids,
-      work_since_interrupt
-    ) && related_ids_are_known(
-      &parameter_ids,
-      dependencies->on,
       work_since_interrupt
     ) && related_ids_are_known(
       &parameter_ids,
@@ -650,9 +651,28 @@ static SEXP split_values(const paradox_domain_values_t *source,
   return result;
 }
 
+/*
+ * Which origin dependency rows a view shows, given the visible IDs and the
+ * origin's complete current ID universe:
+ *
+ *   id visible, `on` visible          keep
+ *   id visible, `on` hidden           error: the edge crosses the boundary
+ *   id visible, `on` absent           keep -- a dangling row, shown verbatim
+ *   id hidden,  `on` visible          error: the edge crosses the boundary
+ *   id hidden,  `on` hidden           drop: the origin's own business
+ *   id hidden,  `on` absent           drop: likewise
+ *
+ * Absent is tested as "not an origin ID", never as "not hidden": the origin
+ * decides what exists, and a name that exists nowhere cannot cross anything.
+ * The extra membership test therefore only runs for a row that already leaves
+ * the visible schema. Keeping the dangling row is what makes the view "origin
+ * minus hidden" even before the parent arrives; because hidden IDs are fixed
+ * at construction and IDs are unique, a parent the origin gains later is
+ * always visible, so such a row can only ever resolve inside the view.
+ */
 static SEXP filter_dependencies(
     const paradox_domain_dependencies_t *source,
-    SEXP visible_ids, R_xlen_t *work_since_interrupt) {
+    SEXP visible_ids, SEXP origin_ids, R_xlen_t *work_since_interrupt) {
   R_xlen_t count = 0;
   for (R_xlen_t row = 0; row < source->row_count; ++row) {
     const int id_visible = paradox_domain_string_in(
@@ -665,13 +685,20 @@ static SEXP filter_dependencies(
       STRING_ELT(source->on, row),
       work_since_interrupt
     );
-    if (id_visible != on_visible) {
+    if (id_visible != on_visible && paradox_domain_string_in(
+        origin_ids,
+        STRING_ELT(source->on, row),
+        work_since_interrupt
+      )) {
       Rf_error(
-        "Params %s have dependencies that reach across shadow bounds",
-        CHAR(STRING_ELT(source->ids, row))
+        PARADOX_SHADOW_CROSSING_MESSAGE,
+        id_visible ? "visible" : "hidden",
+        CHAR(STRING_ELT(source->ids, row)),
+        id_visible ? "hidden" : "visible",
+        CHAR(STRING_ELT(source->on, row))
       );
     }
-    count += id_visible && on_visible;
+    count += id_visible;
   }
 
   SEXP result = PROTECT(Rf_allocVector(VECSXP, 3));
@@ -1120,6 +1147,7 @@ static SEXP assemble_shadow_core(SEXP template_state, SEXP factories,
   SEXP dependencies = PROTECT(filter_dependencies(
     source_dependencies,
     visible_ids,
+    source_params->ids,
     work_since_interrupt
   ));
   /* Reusing the previous projection when the origin's schema slice is

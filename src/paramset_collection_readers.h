@@ -103,6 +103,21 @@ attribute_hidden void paradox_collection_validate_single_node(
   R_xlen_t *work_since_interrupt
 );
 
+/* Resolve one dependency endpoint spelled in `node_index`'s own namespace into
+ * the spelling the root of this graph exposes: the name is translated outward
+ * at the first enclosing namespace that knows it, and passed on verbatim while
+ * none does. A dangling endpoint that no ancestor knows is therefore returned
+ * unchanged, which is what makes an unresolved parent reachable again once the
+ * sibling that supplies it arrives. Every reader that resolves a dependency
+ * parent -- the emitter below, the check plan, and the collection constraint
+ * adapter -- has to agree on this one walk. */
+attribute_hidden SEXP paradox_collection_translate_dependency_id(
+  const paradox_collection_graph_t *graph,
+  R_xlen_t node_index,
+  SEXP input,
+  R_xlen_t *work_since_interrupt
+);
+
 /* Both emitters consume only the frozen graph. The dependency result is a
  * canonical plain data.frame for internal composition; the public wrapper
  * installs the detached data.table facade exactly once at the boundary. */

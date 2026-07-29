@@ -498,6 +498,11 @@ remaining convergence and acceptance steps are:
 - [x] fixed eleven-field BASE/COLLECTION/SHADOW schema;
 - [x] lazily refreshed derived schema: a collection flatten and a shadow
       projection follow the sets they are derived from;
+- [x] one dangling-dependency resolution scope: `$deps`, checks, value reads,
+      child constraints, designs, and samplers translate an unresolved parent
+      outward through the same walk, and a shadow shows and enforces such a row
+      exactly as its origin does while still refusing an edge across its
+      visible/hidden boundary;
 - [x] canonical plain internal table constructors/validators;
 - [x] package-owned exported ParamSetShadow shell and initial bridge contract;
 - [x] closed Domain and Condition public dispatch;

@@ -1060,7 +1060,13 @@ metadata-extended tokens are not supported. Exact creator provenance is
 not authenticated, so an indistinguishable manual copy may pass even
 though the representation is not an API. Every name must be an ID of
 this \code{ParamSet}, whether or not the entry it names is a \code{\link{TuneToken}};
-an unknown name is an error rather than a silently ignored entry.}
+an unknown name is an error rather than a silently ignored entry.
+
+The resulting set carries only dependencies among the tuned
+parameters, so a dependency on a parameter that is not itself tuned --
+including a dangling one -- is dropped rather than reported. A
+dependency that becomes dangling \emph{within} the tuning space is an
+error.}
     }
     \if{html}{\out{</div>}}
   }

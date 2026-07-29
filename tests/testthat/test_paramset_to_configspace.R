@@ -95,6 +95,20 @@ test_that("paramset_to_configspace dependencies check", {
   expect_names(cs$get_hyperparameter_names(), permutation.of = c("x1", "x2", "x3"))
 })
 
+test_that("a dangling dependency is refused by name", {
+  param_set = ps(
+    x1 = p_int(lower = 0, upper = 10, default = 1),
+    x2 = p_fct(levels = c("a", "b", "c"), default = "a")
+  )
+  param_set$add_dep("x1", "later", CondEqual("a"), allow_dangling_dependencies = TRUE)
+
+  expect_error(
+    paramset_to_configspace(param_set),
+    "Cannot export dangling dependencies. No such parameter: later",
+    fixed = TRUE
+  )
+})
+
 test_that("multiple dependencies for one child are combined", {
   param_set = ps(
     a = p_fct(levels = c("x", "y"), default = "x"),

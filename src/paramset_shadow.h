@@ -3,6 +3,15 @@
 
 #include "paradox.h"
 
+/* One policy, one sentence: a dependency may not span a view's visible/hidden
+ * boundary, in either direction, no matter whether the origin already carries
+ * the row or the caller is declaring it through the view. The two `%s` pairs
+ * are the role and the ID of each end, so both messages name the direction.
+ * A dependency on a parameter that does not exist at all is not a crossing;
+ * see `filter_dependencies()`. */
+#define PARADOX_SHADOW_CROSSING_MESSAGE \
+  "Dependency of %s '%s' on %s '%s' crosses the ParamSetShadow boundary"
+
 /* Build a complete SHADOW capsule from a static SHADOW template and the exact
  * BASE or COLLECTION origin edge. Fixed callback-carrier factories are
  * resolved from the locked package namespace only when a snapshot is built. */

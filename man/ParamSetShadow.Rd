@@ -16,14 +16,20 @@ What the shadow fixes is the \emph{hidden} set, not the visible schema: the view
 is "origin minus hidden", computed live. A parameter the origin gains later
 is therefore visible, and changed structural metadata -- tags, for
 instance -- is reflected. Dependencies may change too, but a dependency
-crossing the visible/hidden boundary is always an error.
+crossing the visible/hidden boundary is always an error. A dependency on a
+parameter that does not exist in the origin at all does not cross anything:
+it is shown verbatim and enforced as never satisfiable, exactly as in the
+origin, and becomes an ordinary dependency as soon as the origin gains that
+parameter. Because the hidden set is fixed at construction and IDs are
+unique, such a parent always arrives visible.
 
 Mutations through the view reach the origin: \verb{$values<-}, \verb{$add_dep()}, and
 \verb{$extra_trafo<-} write through, while \verb{$constraint<-} and \verb{$deps<-} are
-refused (change them on the origin). \verb{$add_dep()} requires both endpoints
-to be visible parameters; a dangling dependency cannot be declared through
-a view, so \code{allow_dangling_dependencies} has no effect here. \verb{$tags<-} is
-the one exception to write-through: it is this view's own answer for the
+refused (change them on the origin). \verb{$add_dep()} needs \code{id} to be a visible
+parameter, and \code{on} either visible or absent from the origin -- an \code{on} this
+view hides is refused, while an absent one follows
+\code{allow_dangling_dependencies} as it does on a plain \code{\link{ParamSet}}. \verb{$tags<-}
+is the one exception to write-through: it is this view's own answer for the
 IDs it names and leaves the origin's tags untouched.
 
 Checked assignment validates every supplied visible value, including a
@@ -142,7 +148,9 @@ IDs to hide. Must be a subset of \code{set$ids()}.}
 \if{html}{\out{<a id="method-ParamSetShadow-add_dep"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetShadow-add_dep}{}}}
 \subsection{\code{ParamSetShadow$add_dep()}}{
-  Adds a dependency between two visible parameters to the origin.
+  Adds a dependency to the origin. \code{id} must be visible; \code{on} must be
+visible or absent from the origin, because a parameter this view hides
+cannot be depended on across its boundary.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSetShadow$add_dep(id, on, cond, allow_dangling_dependencies = FALSE)}
@@ -154,9 +162,9 @@ IDs to hide. Must be a subset of \code{set$ids()}.}
       \item{\code{id}}{(\code{character(1)}) Dependent parameter ID.}
       \item{\code{on}}{(\code{character(1)}) Parent parameter ID.}
       \item{\code{cond}}{(\code{\link{Condition}}) Dependency condition.}
-      \item{\code{allow_dangling_dependencies}}{(\code{logical(1)}) Retained for API
-compatibility. A shadow cannot admit a dangling parent because it
-would cross its fixed visible boundary.}
+      \item{\code{allow_dangling_dependencies}}{(\code{logical(1)}) Whether to allow a
+parent the origin does not have. Refusing a hidden \code{on} does not
+depend on this flag.}
     }
     \if{html}{\out{</div>}}
   }

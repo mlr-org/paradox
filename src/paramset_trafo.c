@@ -1559,9 +1559,26 @@ static SEXP collection_active_constraint_row(SEXP row,
       }
       dependency_child[output] =
         snapshot->root_parameter_by_local[node_index][local_child];
-      dependency_parent[output] = local_parent == R_XLEN_T_MAX
-        ? R_XLEN_T_MAX
-        : snapshot->root_parameter_by_local[node_index][local_parent];
+      if (local_parent != R_XLEN_T_MAX) {
+        dependency_parent[output] =
+          snapshot->root_parameter_by_local[node_index][local_parent];
+      } else {
+        /* Which values reach a child's constraint has to agree with which
+         * values the same graph's check calls active, so a parent this node
+         * does not know is resolved through the one outward walk the
+         * dependency getter and the check plan use. Only such a parent pays
+         * for it. */
+        dependency_parent[output] = paradox_domain_find_string(
+          snapshot->params.ids,
+          paradox_collection_translate_dependency_id(
+            &snapshot->graph,
+            node_index,
+            STRING_ELT(node->dependencies.on, dependency),
+            work_since_interrupt
+          ),
+          work_since_interrupt
+        );
+      }
       paradox_builtin_condition_kind_t kind;
       SEXP rhs = R_NilValue;
       if (!paradox_builtin_condition_exact(

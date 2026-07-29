@@ -1594,7 +1594,8 @@ test_that("corrupt current roots abort graph preflight before legacy mutation", 
   origin$add_dep("hidden", "flag", CondEqual(TRUE))
   expect_error(
     upgrade_paradox_object_graph(list(legacy = legacy, shadow = shadow)),
-    "reach across shadow bounds"
+    "crosses the ParamSetShadow boundary",
+    fixed = TRUE
   )
   expect_identical(serialize(legacy, NULL), before)
   expect_identical(legacy$.__enclos_env__, old_enclosure)

@@ -433,15 +433,18 @@ retained input is rejected.
 
 ### SHADOW
 
-A SHADOW owns exactly one origin object reference plus a construction-time
-snapshot of its fixed visible schema in capsule `.params`. `shadowed` is
-constructor input rather than retained state; current origin IDs outside the
-fixed schema are the hidden complement. Origin values,
+A SHADOW owns exactly one origin object reference plus the hidden ID set
+`shadowed` retained in `.edges`. Its visible schema in capsule `.params` is the
+derived projection "origin minus hidden" and is refreshed like every other
+derived schema. Origin values,
 dependencies, constraints, individual transformations, and extra
 transformation are synchronized at operation entry. Visible value assignment
 writes through while preserving every hidden value. A dependency crossing the
-fixed boundary is checked both at construction and at every live dependency
-snapshot.
+visible/hidden boundary is checked both at construction and at every live
+dependency snapshot, in either direction. A dependency on a parameter the
+origin does not have crosses nothing: the projection keeps such a row when its
+child is visible, drops it when its child is hidden, and never mistakes an
+absent parent for a hidden one.
 
 Direct origins are BASE or COLLECTION nodes. A SHADOW does not wrap another
 SHADOW directly; the caller expresses the combined hidden-ID partition against
@@ -713,8 +716,10 @@ predicates even when a narrowed parent Domain makes some or all of them
 infeasible. Dependency append is the separate authoring operation: it invokes
 the shared check kernel for RHS feasibility and then verifies that callback
 reentry did not replace the target generation. SHADOW dependency append first
-proves both IDs remain visible and routes to the origin through that strict
-native entry. Constraint and extra-transformation setters admit their callback
+proves that the dependent ID is visible and that the parent is visible or
+absent from the origin -- reading the origin's own ID universe to tell a hidden
+parent from an absent one -- and then routes to the origin through that strict
+native entry, forwarding `allow_dangling_dependencies` for the absent case. Constraint and extra-transformation setters admit their callback
 shape and atomically replace the selected BASE field. R wrappers do not plan
 these mutations.
 
@@ -742,6 +747,16 @@ activity state is stored in the capsule. Existing BASE dependency mutation can
 admit a cycle and is unchanged here; the kernel tracks the active path and
 raises a deterministic cycle error rather than looping or returning a partial
 mask.
+
+A dependency endpoint declared inside a collection child is resolved by one
+walk, exported from `src/paramset_collection_deps.c`: rename it at the first
+enclosing namespace that knows it, carry it outward to the reading root, and
+pass it on verbatim while no namespace knows it. The dependency getter, the
+check plan builder in `src/paramset_check.c`, and the collection constraint
+adapter in `src/paramset_trafo.c` all use it, the latter two only for an
+endpoint their own node does not know, so an ordinary local parent costs
+nothing. A name the root's flat schema does not contain is a dangling parent
+and enters the kernel as an absent one.
 
 Scalar checks, each admitted table row, `check_dependencies()`, stored-value
 filtering, and authoritative constraint check/assignment sites call this one
