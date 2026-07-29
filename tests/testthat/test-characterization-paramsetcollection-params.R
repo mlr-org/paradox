@@ -82,7 +82,9 @@ test_that("params combine fixed schema with live child semantics", {
 
   current = collection$params
   expect_identical(current$id, fixed$id)
-  expect_identical(current$.tags, fixed$.tags)
+  # A contained set's tags reach the flatten: `$tags<-` is a schema change and
+  # every ancestor re-derives from it.
+  expect_identical(current$.tags, list("changed", "changed", "changed"))
   expect_identical(current$.trafo[[2L]], exp)
   expect_identical(current$.init_given, c(TRUE, TRUE, FALSE))
   expect_identical(current$.init, list("slow", 1, NULL))

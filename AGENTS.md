@@ -207,8 +207,13 @@ not rerun those slice A/B experiments during minor cleanup. Do not run the
 full compatibility, memory, portability, or release matrices until source
 converges and the final release gate begins. Operation-local indexes and
 one-use package-private ownership handoffs are allowed optimizations;
-persistent validation caches, trusted caller metadata, skipped graph checks,
-and weakened generation reauthentication remain prohibited.
+trusted caller metadata, skipped graph checks, and weakened generation
+reauthentication remain prohibited. The capsule verification stamp is not an
+exception and must not become one: it records that no capsule was installed
+anywhere since a node was proven consistent with its children, which is
+exactly the condition under which revalidation can only repeat its previous
+answer. It never records that a caller may be trusted, and it never survives
+a change it did not observe.
 
 The final compatibility batch is governed by
 [`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).
@@ -308,17 +313,47 @@ operator action.
 - `ParamSet`, `ParamSetCollection`, and `ParamSetShadow` are serializable R6
   shells over one package-owned `.core` capsule. Public R6 names and ordinary
   behavior remain; private layout is not an API.
-- `.core` is a NULL-address external pointer with no allocation or finalizer.
-  Its tag is `paradox.core.base.v1`, `paradox.core.collection.v1`, or
+- `.core` is an external pointer with no allocation or finalizer. Its tag is
+  `paradox.core.base.v1`, `paradox.core.collection.v1`, or
   `paradox.core.shadow.v1`; its protected slot is the complete ordinary-R
-  capsule/model state. The sole stateful R-shell policy outside it is the
+  capsule/model state; its address slot holds only the session-local
+  verification stamp described below, never a pointer, so the capsule still
+  owns no native resource and R restores the slot as `NULL` on unserialize.
+  The sole stateful R-shell policy outside it is the
   documented public `assert_values` flag, which selects checked versus
   unchecked native value assignment. It is serialized/cloned with the R6 shell
   and compared by `all.equal()`, but is not graph/schema/value authority and
-  does not change the ten-field ABI.
-- The v1 payload is the fixed ten-field list `.params`, `.values`, `.tags`,
+  does not change the eleven-field ABI.
+- The v1 payload is the fixed eleven-field list `.params`, `.values`, `.tags`,
   `.deps`, `.trafos`, `.extra_trafo`, `.constraint`, `.sets`, `.translation`,
-  and `.postfix`. It is one internal schema shared by all three node kinds.
+  `.postfix`, and `.edges`. It is one internal schema shared by all three node
+  kinds. `.edges` is the derivation record of a node whose schema is derived
+  rather than owned: `NULL` for BASE; for COLLECTION the exact child
+  generation each flattened edge was built from plus that edge's `tag_sets`
+  and `tag_params` flags, which no flat table can recover; for SHADOW the
+  origin schema slice the visible tables were projected from plus the retained
+  hidden ID set. It is a cache, so a mismatched or absent record makes the
+  node stale rather than corrupt.
+- A COLLECTION's flattened schema and a SHADOW's projection are derived state
+  and are kept current lazily, never by parent back-references. Every semantic
+  entry point passes one gate that walks the graph below it in post-order,
+  re-flattens a COLLECTION whose child's `.params`/`.tags`/`.trafos` slice has
+  moved, and refreshes a SHADOW; the result is what a node freshly constructed
+  from its current children would be. Each installed generation is
+  individually consistent, so an interrupt or a deferred name collision leaves
+  a partially healed graph whose healed nodes are correct and whose remainder
+  heals at the next entry. A refresh is not a semantic change: it installs the
+  state the node already denoted.
+  Two session-global epochs make "nothing changed anywhere" a single
+  comparison: capsule installation that changes derived-schema inputs advances
+  the schema epoch, any other semantic installation advances the state epoch,
+  and a cache refresh advances neither. A capsule records the epoch at which
+  its own subtree was proven to agree, mixed with its own address so a
+  duplicated capsule is unverified, in the address slot. This is a proof that
+  nothing has been installed, not a trusted-caller or trusted-node cache: it
+  authorizes skipping only work whose inputs provably did not change, and a
+  SHADOW still reauthenticates its refresh signature on every entry because an
+  ordinary R attribute assignment can rewrite that carrier in place.
 - A SHADOW `.core` has exactly one package-private derived-cache attribute,
   `.paradox.shadow.snapshot.v1`. Its value is an ordinary, attribute-free list
   alternating every origin-graph shell with the exact capsule generation used
@@ -360,8 +395,9 @@ operator action.
   existing or proposed cycle (including a SHADOW origin path), checks every
   admitted generation again, and only then installs a replacement generation.
   Corruption, name collision, reentry, or allocation leaves the old collection
-  unchanged. `SHADOW` owns one origin edge and a
-  fixed visible schema while reading/writing dynamic origin semantics live.
+  unchanged. `SHADOW` owns one origin edge and a retained hidden ID set, and
+  computes its visible schema as "origin minus hidden" while reading/writing
+  dynamic origin semantics live.
   Shared DAG nodes are valid; a repeated node on one active path is a cycle.
   The graph-path validator's raw native frames are scratch, never GC roots.
   One indexed VECSXP carrier owns both every active shell and the exact selected
@@ -380,9 +416,12 @@ operator action.
   origin edge is the only origin authority; do not add a parallel private
   origin field. A direct SHADOW-to-SHADOW origin is rejected; construct the
   combined view over the ultimate BASE or COLLECTION origin instead. The R6
-  private environment must not cache a second `.visible`/`.shadowed` schema;
-  constructor `shadowed` input is not retained authority. The fixed capsule
-  `.params` plus current origin IDs define the visible/hidden partition.
+  private environment must not cache a second `.visible`/`.shadowed` schema.
+  The hidden ID set retained in `.edges` plus the origin's current parameters
+  define the visible/hidden partition; the visible tables themselves are a
+  projection and are recomputed whenever the origin's schema slice moves. A
+  projection that did not change keeps its exact field objects, so value churn
+  behind a Shadow never looks like a schema change to a collection above it.
 - A BASE-origin Shadow constraint adapter has one exact two-field
   `{callback, hidden_values}` plan and a thin native evaluator. The evaluator
   validates and snapshots both inputs, merges the already activity-filtered
@@ -1745,6 +1784,22 @@ The package suite must directly cover, before downstream packages are used:
   pending finalizers, and requires the exact generation to survive;
 - collection add rejects existing/proposed cycles and corruption before commit
   and generation-checks both admitted graphs without rejecting shared DAGs;
+- derived schema stays live: after a contained set gains a parameter or is
+  given tags, every containing collection and every shadow over it re-derives
+  on every read surface (ids, params, tags, the raw table actives,
+  `as.data.table`, check, values read and write, qunif, subset, design, and
+  sampler entry points), through nested, shared, diamond, and post-clone
+  topologies, with the per-edge `tag_sets`/`tag_params` flags preserved -- an
+  edge added while its child was empty included. A refreshed node equals one
+  freshly constructed from the same sets; a name collision created below is
+  reported at the next read of the affected node and names both the changed
+  set and the colliding ID; a `$tags<-` assignment on a collection or shadow
+  is that node's own answer for the IDs it named and survives re-derivation
+  while leaving the sets alone, and an ID it did not name stays derived; a
+  value commit
+  changes no containing flatten's generation; a serialized graph revalidates
+  rather than re-flattens on load; and the whole battery runs under
+  `gctorture()`;
 - additive subclasses and deterministic rejection/non-support of core
   overrides or private replacement;
 - all five Domain kinds, two Condition kinds, and unknown-kind rejection; the

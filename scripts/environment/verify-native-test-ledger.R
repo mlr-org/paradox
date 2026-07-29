@@ -165,9 +165,11 @@ analyzer_required_skips <- data.frame(
     "test-native-domain-kernels.R",
     "test-native-gctorture.R",
     "test-native-paramset-qunif.R",
+    "test-native-paramset-qunif.R",
     "test-native-paramset-trafo-gctorture.R",
     "test-native-paramset-trafo-gctorture.R",
     "test-native-paramset-trafo-gctorture.R",
+    "test-native-paramset-value-mutation.R",
     "test-native-paramsetcollection-construction.R"
   ),
   test = c(
@@ -175,12 +177,14 @@ analyzer_required_skips <- data.frame(
     "translated ParamUty diagnostics survive forced collection",
     "every allocating native entry point survives forced collection",
     "bulk qunif remains rooted under adversarial collection",
+    "frame input names and columns come from one generation",
     "authoritative ParamSet trafo survives forced collection",
     "batched nested collection name translation releases transient state",
     "live and detached mixed-encoding trafo names survive forced collection",
+    "ObjectTuneToken receipts stay rooted across later validation work",
     "collection construction remains rooted under forced collection"
   ),
-  skip_reason = rep("Reason: On CRAN", 8L),
+  skip_reason = rep("Reason: On CRAN", 10L),
   stringsAsFactors = FALSE
 )
 allowed_skips <- if (selection == "analyzer") {

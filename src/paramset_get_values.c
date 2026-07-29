@@ -298,8 +298,8 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
   }
   const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&

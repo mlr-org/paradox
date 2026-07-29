@@ -506,3 +506,40 @@ test_that("bulk qunif accumulates work across many short columns", {
   expect_identical(unname(lengths(result)), rep.int(1L, size))
   expect_true(all(vapply(result, identical, logical(1L), FALSE)))
 })
+
+test_that("frame input names and columns come from one generation", {
+  skip_on_cran()
+  namespace = asNamespace("paradox")
+  skip_if_not(
+    exists("C_test_stateful_altrep_row_names_rearm", namespace, inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  # The row-name Length method is the first observation of `x` that can reenter
+  # R. If the column names were captured before it and the column data after,
+  # every value would be mapped through another parameter's Domain.
+  param_set = ps(a = p_dbl(0, 10), b = p_dbl(0, 1))
+  state = new.env(parent = emptyenv())
+  row_names = native_stateful_altrep(
+    c("r1", "r2"), c("r1", "r2"),
+    callback = function() data.table::setcolorder(state$df, c(2L, 1L))
+  )
+  state$df = structure(
+    list(a = c(0, 0.5), b = c(1, 1)),
+    names = c("a", "b"),
+    row.names = row_names,
+    class = "data.frame"
+  )
+  invisible(.Call(
+    get("C_test_stateful_altrep_row_names_rearm", envir = namespace),
+    state$df,
+    c(NA_integer_, 0L)
+  ))
+
+  observed = param_set$qunif(state$df)
+  expected = param_set$qunif(data.frame(a = c(0, 0.5), b = c(1, 1)))
+  expect_identical(observed$a, expected$a)
+  expect_identical(observed$b, expected$b)
+  expect_identical(observed$a, c(0, 5))
+  expect_identical(observed$b, c(1, 1))
+})

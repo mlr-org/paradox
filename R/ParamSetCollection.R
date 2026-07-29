@@ -124,6 +124,12 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   The outer set list, names, and list metadata must be ordinary
     #'   non-ALTREP/non-S4. ParamSet objects are not cloned.
     #'   Names are used as "set_id" for the naming scheme of delegated parameters.
+    #'   A name is therefore part of every parameter ID it contributes and must
+    #'   keep that ID inside the ID grammar: a prefix must itself match
+    #'   `^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$`, while a postfix (see `postfix_names`)
+    #'   only has to use ASCII letters, digits, `.`, and `_`.
+    #'   The empty name is also allowed and delegates the set's parameters
+    #'   without affixing them.
     #' @param tag_sets (`logical(1)`)\cr
     #'   Whether to add tags of the form `"set_<set_id>"` to each parameter originating from a given `ParamSet` given with name `<set_id>`.
     #' @param tag_params (`logical(1)`)\cr
@@ -132,6 +138,14 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Whether to use the names inside `sets` as postfixes, rather than prefixes.
     initialize = function(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE) {
       if (typeof(sets) == "list" && is.null(names(sets))) {
+        # `names<-` has to duplicate the referenced argument, and R returns a
+        # wrapper ALTREP for a list of 64 or more elements. The native
+        # boundary admits only ordinary containers, so take the ordinary copy
+        # explicitly instead of relying on the duplicate's representation.
+        # `$search_space()` reaches this through `ps_union()` with one part per
+        # TuneToken, so without it a set with 64 tuned parameters cannot
+        # produce a search space at all.
+        sets = sets[seq_along(sets)]
         names(sets) = rep("", length(sets))
       }
 
@@ -150,7 +164,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         trafos = native$trafos,
         sets = sets,
         translation = native$translation,
-        postfix = postfix_names
+        postfix = postfix_names,
+        edges = native$edges
       )
       invisible(sets)
     },
@@ -160,7 +175,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'
     #' @param p ([ParamSet]).
     #' @param n (`character(1)`)\cr
-    #'   Name to use. Default `""`.
+    #'   Name to use. Must keep the IDs it creates inside the ID grammar --
+    #'   `^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$` when this collection prefixes, ASCII
+    #'   letters, digits, `.`, and `_` when it postfixes -- or be `""` to
+    #'   delegate `p`'s parameters without affixing them. Default `""`.
     #' @param tag_sets (`logical(1)`)\cr
     #'   Whether to add tags of the form `"set_<n>"` to the newly added parameters.
     #' @param tag_params (`logical(1)`)\cr
@@ -242,7 +260,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       assert_subset(ids, self$ids(tags = "internal_tuning"))
 
       full_prefix = function(param_set, id_, prefix = "") {
-        nested_state = param_set_core_state(get_private(param_set))
+        nested_state = param_set_core_state(get_private(param_set), param_set)
         row = match(id_, nested_state$.translation$id)
         info = nested_state$.translation[row, , drop = FALSE]
         subset = nested_state$.sets[[info$owner_ps_index[[1L]]]]
@@ -312,7 +330,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       flatps = super$flatten()
 
       recurse_prefix = function(id_, param_set, prefix = "") {
-        nested_state = param_set_core_state(get_private(param_set))
+        nested_state = param_set_core_state(get_private(param_set), param_set)
         info = nested_state$.translation[
           match(id_, nested_state$.translation$id), , drop = FALSE
         ]
@@ -359,7 +377,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       }
 
       flat_private = flatps$.__enclos_env__$private
-      flat_state = param_set_core_state(flat_private)
+      flat_state = param_set_core_state(flat_private, flatps)
       flat_params = param_set_table_rows(
         flat_state$.params,
         seq_len(nrow(flat_state$.params))

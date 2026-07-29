@@ -634,3 +634,26 @@ test_that("clone and serialization cannot reintroduce callback sources", {
     data.table::address(trafo_second)
   )
 })
+
+test_that("a stripped function node keeps no partial srcref cell", {
+  # A parsed `function(...)` node carries its srcref as a fourth positional
+  # cell. Stripping only that cell's `srcfile` leaves an integer vector still
+  # classed "srcref", which `function` installs on the closure it builds, so
+  # the closure prints as a source descriptor instead of its body.
+  source_text = parse(
+    text = paste(
+      "set = ps(x = p_dbl(0, 1), .extra_trafo = function(x, param_set) {",
+      "  helper = function(v) v + 1",
+      "  list(x = helper(x$x), h = helper)",
+      "})",
+      sep = "\n"
+    ),
+    keep.source = TRUE
+  )
+  eval(source_text)
+
+  produced = set$trafo(list(x = 0.5))$h
+  expect_null(attr(produced, "srcref", exact = TRUE))
+  expect_identical(produced(1), 2)
+  expect_match(paste(format(produced), collapse = " "), "v \\+ 1")
+})

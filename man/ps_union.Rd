@@ -8,7 +8,10 @@ ps_union(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE)
 }
 \arguments{
 \item{sets}{(\code{list} of \code{\link{ParamSet}})\cr
-This may be a named list, in which case non-empty names are prefixed to parameters in the corresponding \code{\link{ParamSet}}.}
+This may be a named list, in which case non-empty names are prefixed to parameters in the corresponding \code{\link{ParamSet}}.
+A name becomes part of every parameter ID it creates: a prefix must itself
+match the ID grammar \verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$}, a postfix (see
+\code{postfix_names}) only has to use ASCII letters, digits, \code{.}, and \verb{_}.}
 
 \item{tag_sets}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"set_<set_id>"} to each parameter originating from a given \code{ParamSet} given with name \verb{<name in "sets">}.}

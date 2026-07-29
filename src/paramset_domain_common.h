@@ -110,6 +110,15 @@ attribute_hidden R_xlen_t paradox_domain_find_string(
   SEXP sought,
   R_xlen_t *work_since_interrupt
 );
+/* Derived tags with a node's own `$tags<-` answer applied: every ID the
+ * override governs takes its rows from the override, every other ID keeps the
+ * rows derived from the sets. `override` is `NULL` or the exact two-field
+ * `{ids, tags}` record validated by the capsule schema. */
+attribute_hidden SEXP paradox_domain_apply_tag_override(
+  SEXP derived,
+  SEXP override,
+  R_xlen_t *work_since_interrupt
+);
 attribute_hidden int paradox_domain_string_in(
   SEXP strings,
   SEXP sought,

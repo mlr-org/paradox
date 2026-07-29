@@ -182,6 +182,31 @@ hazards that Paradox 2 is intended to remove.
   graph admission and use its subtree count. The flag no longer constructs a
   detached dependency table or data.table facade solely to test whether it is
   empty.
+* A `ParamSetCollection`'s flattened schema and a `ParamSetShadow`'s visible
+  schema are now live views of the sets they are derived from, in the same way
+  their values, dependencies, and callbacks always were. Adding a parameter to
+  a contained set, or assigning tags to it, is reflected by every containing
+  collection and by any shadow over it, on every read surface -- `$ids()`,
+  `$params`, `$tags`, `$lower`, `as.data.table()`, `$check()`, `$values`,
+  `$qunif()`, `$subset()`, and the design and sampler entry points. Paradox 1
+  left the flattened tables of an outer collection stale in this situation
+  while its `$values` already reported the new parameter, so an outer set could
+  report values under names its own `$ids()` did not contain; Paradox 2 makes
+  every ancestor behave as if it had just been constructed from its current
+  sets. A name collision that only a later change creates is reported when the
+  affected collection is next read, naming both the set that changed and the
+  colliding ID.
+* Tags are the one part of a derived schema a derived set owns outright.
+  `ParamSetCollection$tags<-` keeps working and now *stays* worked: the
+  assignment becomes the collection's own answer for the IDs it named and
+  survives every later re-derivation, while the contained sets are left
+  untouched. `ParamSetShadow$tags<-`, previously read-only, works the same way,
+  so two views over one set may tag the same parameter differently. An ID that
+  no assignment named -- a parameter a contained set gains later, or one added
+  by `$add()` -- is still derived from the sets. Upgrading a Paradox-1
+  collection recovers the per-edge `tag_sets`/`tag_params` flags from the tags
+  they generated so those keep being produced, and preserves any remaining rows
+  that no set accounts for as the upgraded collection's own answer.
 * `ParamSetCollection$add()` now validates the complete current and proposed
   child graphs—including Shadow origin edges—in one native transaction. It
   rejects existing/proposed cycles, corruption, collisions, and reentrant
@@ -521,6 +546,36 @@ hazards that Paradox 2 is intended to remove.
 
 ## Correctness fixes
 
+* Assigning values through a `ParamSet` that one assignment reaches by more
+  than one path -- a set contained twice in a `ParamSetCollection`, or a
+  `ParamSetShadow` next to its own origin -- now warns when the two paths plan
+  conflicting values. Each path plans a complete replacement of that set's
+  store, so the later one wins; assigning through only one alias therefore
+  discarded the value entirely. The outcome is unchanged and still
+  deterministic, but it is no longer silent. An ordinary graph reaches no
+  duplicate target and pays nothing for the check.
+* A `ParamSetCollection` or `ParamSetShadow` graph that shares a subtree
+  exposing no parameters, dependencies, values, or callbacks now validates that
+  subtree once instead of once per path through it. `$check()` on a 41-object
+  alternating shared graph took 19 seconds and allocated a node snapshot per
+  path (2^20 of them) to produce an empty result; it is now flat. A shared
+  subtree that does contribute is still expanded once per occurrence, because
+  each occurrence exposes its own affixed IDs.
+* Every clause of the canonical Domain-state gate reports the argument it
+  guards. `p_fct(c("a", "a"))`, `p_dbl(0, 1, tags = NA_character_)`, and
+  `p_dbl(0, 1, trafo = 1)` reported "Invalid built-in Domain state; Paradox 2
+  supports only canonical p_dbl, p_int, p_fct, p_lgl, and p_uty Domains",
+  which names no argument and reads like an internal failure. The clause
+  evaluation order is unchanged, so an input wrong in two places still reports
+  the same one it always did.
+* `$check()` results follow checkmate's convention that a check result is an
+  unpunctuated sentence fragment which the assertion wrapper terminates.
+  Paradox's own fragments carried a trailing period, so every assertion built
+  on one ended in `..` -- for example
+  `Assertion on 'xs' failed: Parameter 'nope' not available..`. The native
+  assertion wrapper additionally terminates a fragment only when it does not
+  already end a sentence itself, which is what the two-sentence
+  `"Did you mean ...?"` hint does.
 * Converting a Domain's current `to_tune()` value into a search space no longer
   copies that TuneToken back as a fixed design value. Exact native clones now
   preserve ordinary fixed values without making a FullTuneToken's two fields
@@ -581,6 +636,184 @@ hazards that Paradox 2 is intended to remove.
 * Malformed/corrupt capsules, tables, graphs, callbacks, and direct native
   inputs produce deterministic errors rather than fallback replay or unsafe
   memory access.
+* Single-element cells taken out of an attributed public-table column are now
+  independently owned. Previously the cells that `Design$transpose()` and the
+  table check/constraint entry points cut out of a logical column shared R's
+  global `TRUE`/`FALSE`/`NA` singletons, so copying that column's attributes
+  onto a cell attached them to every logical scalar in the session; and a
+  column attribute that encodes the column's own length (`names`, `dim`,
+  `dimnames`) was copied verbatim onto the one-element cell, producing a vector
+  whose metadata described more elements than it stored. Ordinary column
+  classes such as `factor` and `Date` still reach the cell unchanged.
+* The `ObjectTuneToken` receipt set of a checked value assignment is kept
+  rooted for the whole operation. It was previously displaced from the
+  protection stack by the first receipt it stored, so a collection during any
+  later validation, callback, or allocation could invalidate it.
+* A capsule table whose columns disagree in length is rejected by the shared
+  exact-table validator instead of being admitted on the strength of its first
+  column and then indexed out of bounds by whichever reader reached it first.
+* `rd_info()` reports untyped defaults against the right parameters when
+  `descriptions` is supplied. The description merge reorders the table by id
+  while the untyped defaults still followed the parameter table, so generated
+  documentation could show one parameter's `p_uty()` default under another.
+* Deep cloning a `ParamSetCollection` with no children produces a usable
+  collection again. The rebuilt edge list lost its zero-length `names`, which
+  the capsule validator requires, so every operation except `$ids()`, cloning,
+  and serialization reported corrupt collection state on the clone.
+* `generate_design_random()` rejects a factor `n` instead of silently sampling
+  as many rows as the level's internal code. Every other scalar attribute
+  remains tolerated, and `Sampler$sample()` already rejected it.
+* Random, LHS, Sobol, and directly constructed designs now write fixed
+  `$values` exactly as the native grid generator already did. Only one ordinary
+  element of the parameter's own storage type collapses into a typed column;
+  a `NULL`, multi-element, cross-storage, or container special value keeps its
+  identity as a list-column entry. Previously such a value was written with
+  plain data.table column semantics, so a cross-storage special became `NA`
+  with coercion warnings, a container value was unwrapped and recycled, a
+  multi-element value errored on length, and a `NULL` deleted the column from
+  the design entirely. A stored `TuneToken` now raises the same informative
+  error on these generators that grid generation already raised, instead of
+  scattering the token's fields across the design.
+* The `$get_values(type = "with_internal")` documentation described the
+  complement of what the filter returns; it selects only `InternalTuneToken`
+  values. The behaviour is unchanged.
+* `upgrade_paradox_object()` migrates a Domain whose numeric bounds are stored
+  as integers. `p_int()` stores integer bounds in both Paradox 1 and 2 and the
+  native capsule admits either storage, so requiring a double refused an
+  ordinary legacy `p_int(1L, 10L)`. A legacy collection's `owner_ps_index` is
+  likewise accepted when Paradox 1's `$add()` promoted it to a double.
+* Upgrading a Domain without `depends` no longer denormalizes its requirements
+  to an empty list, so an upgraded object is `identical()` to the object the
+  current constructors produce.
+* Source stripping removes a parsed `function(...)` node's srcref cell instead
+  of emptying it. The cell kept its `"srcref"` class after losing `srcfile`, so
+  a closure built from such a node -- for example one a `.extra_trafo` creates
+  at call time -- printed as `<srcref: file "" chars ...>` instead of its body,
+  and the package's own scan then reported the callback as already clean.
+* `$search_space()` no longer emits `non-uniform 'Rounding' sampler used` (or
+  the Kinderman-Ramage note) once per converted TuneToken for callers who set
+  a legacy `sample.kind`/`normal.kind`. Restoring the caller's own setting is
+  bookkeeping, not a new choice; under `options(warn = 2)` that warning also
+  aborted the exit handler before `.Random.seed` was put back, leaving the
+  caller's random stream desynchronized.
+* The `ParamSetShadow` constraint adapter admits only an ordinary names vector,
+  like every sibling gate. It indexes those names element by element, so an
+  ALTREP or S4 names object could pair each value with another parameter's name
+  and silently change the constraint's verdict.
+* `$deps<-` measures the dependency columns it indexes rather than the lengths
+  observed before its name and type checks. Those checks allocate and can
+  dispatch an ALTREP `Length` method, so a callback replacing a column of the
+  supplied table left the row loop reading past the end of a retained column --
+  a segfault on the older supported runtimes.
+* Collection callback detachment roots each generated affix before the next
+  allocation. The fresh strings were parked in operation-local storage that the
+  collector does not scan, and R sweeps its string cache on every collection,
+  so building a plan for a large collection could raise
+  `Corrupt ParamSetCollection affix translation` on valid input, emit a plan
+  whose affixes compare unequal to their own text, or crash. Its route scratch
+  is also allocated once per plan instead of once per selected parameter.
+* A snapshotted `default`/`init` value leaf keeps the materialized ordinary
+  `names` the snapshot produced. Copying the source's attribute set afterwards
+  replaced the whole attribute list, so the caller's original names object went
+  into the capsule instead -- including an ALTREP one, and including one whose
+  length could later disagree with the value it names.
+* An unsupported `disable_in_tune`, `logscale`, or `repr` cargo entry is
+  reported by argument name again. A closure, symbol, call, or environment
+  reached the internal value snapshot first and produced
+  `Cannot snapshot semantic value of type ...`.
+* `$qunif()` takes a data.frame's column names and column identities from one
+  generation of the input. The names were captured before the row-name Length
+  observation and the columns after it, so a reentrant callback -- a hostile
+  ALTREP `row.names` method, or a finalizer running at the intervening
+  allocation -- could pair each name with a different column and silently map
+  every value through another parameter's Domain.
+* The Domain `id` column re-read on a failed built-in check is bound to the
+  admitted row count. Every other column re-read in that kernel already was.
+  A hostile ALTREP `special_vals` entry re-enters R while `identical()`
+  dispatches its `Length` method, so the column could be shorter by the time
+  the diagnostic indexed it; on R releases whose `STRING_ELT` is unchecked
+  that was an out-of-bounds read handed to the diagnostic builder.
+* Diagnostics escape a fragment whose bytes are not valid UTF-8 in the current
+  locale instead of failing the message builder. An unknown parameter name
+  carrying such bytes reported `Internal error: invalid UTF-8 parameter
+  identifier` (or `... a message fragment is not valid UTF-8`) from `$check()`,
+  `$test()`, `$values<-`, `$subset()`, and `$get_domain()` rather than the
+  operation's own "not available" message; and a `custom_check` diagnostic was
+  minted as UTF-8 without validation, so `domain_check()` could return a string
+  that declared an encoding its bytes did not satisfy and that `nchar()`
+  rejected. Declared `latin1` and `bytes` names keep their existing behaviour.
+* `domain_check()` observes its `internal` flag exactly once. It was validated
+  and then read a second time after value admission, which may materialize a
+  semantic ALTREP and reenter R; a second answer of `NA` was treated as
+  "internal" and silently stopped honoring `special_vals`.
+* `p_uty()` values that are symbols or unevaluated calls now reach
+  `custom_check` and per-parameter `trafo` as themselves. They were previously
+  spliced into the callback call as an expression, so the callback received the
+  *evaluation* of the value (silently checking or transforming something other
+  than what is stored), failed on names that are not visible in the base
+  environment, or ran the call. Every other R value is self-evaluating and was
+  and remains unaffected.
+* `paramset_to_configspace()` exports single-element sequences as sequences.
+  A one-level `p_fct()` and a single-value `CondAnyOf()` reached Python as a
+  scalar string, which ConfigSpace iterates character by character: the
+  conversion either silently produced one level (or one condition value) per
+  character, or failed outright when a character repeated. Dependencies on a
+  `p_lgl()` parent now use its exported `"TRUE"`/`"FALSE"` levels instead of
+  passing a Python `bool` that no parent level can match, and exported
+  `meta$tags` is always a Python list.
+* `to_tune(<Domain>)` again keeps an `init` given on that Domain as a fixed
+  value of the generated search space, as `ps()` does for the same Domain.
+  Paradox 2 dropped it, so `to_tune(p_int(1, 10, init = 5))` produced a free
+  three-point grid axis instead of the single fixed point Paradox 1 produced.
+  Tuning the whole parameter with `to_tune()` still contributes no value: the
+  `.init` a recovered Domain facade projects there is the parameter's own
+  current value, which in that branch is the `TuneToken` itself.
+* `ParamSet$search_space(values = )` rejects a name that is not a parameter ID
+  of the set, restoring the Paradox 1 `subset.of` assertion natively. An entry
+  that was not a `TuneToken` was silently dropped, so one misspelled name
+  returned an empty search space instead of an error. Resolving the container
+  now uses one hashed ID index instead of a per-name linear scan.
+* `ParamSetCollection$new()`, `$add()`, `ps_union()`, `psc()`, `c.ParamSet()`,
+  and `ps_replicate()` require a set name or affix to keep the IDs it creates
+  inside the parameter-ID grammar: a prefix must itself match
+  `^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$`, a postfix must use only ASCII letters,
+  digits, `.`, and `_`, and the empty name still affixes nothing. A looser
+  name built a collection whose generated IDs its own `$search_space()` and
+  `ParamSet$new(<collection>$domains)` then rejected. This is the Paradox 1
+  `assert_names(type = "strict")` check, which `$add()` had never applied.
+* `condition_test()`, and the dependency evaluation behind `$check()`,
+  `$test()`, `$get_values()`, and design generation, report a comparison
+  between a character value and a logical, integer, or numeric right-hand side
+  (or the reverse) as not satisfied, instead of raising "Condition comparison
+  operands have incompatible types" or reporting the operand's shape as
+  unsupported. A value of a type the right-hand side cannot equal does not
+  satisfy the Condition.
+  This is deliberately *not* Paradox 1's answer: Paradox 1 compared through
+  R's `==`, so `condition_test(CondEqual(1), "1")` was `TRUE` there because
+  `1` was coerced to `"1"`. The closed comparator never reinterprets a value
+  as another type. Like Paradox 1, it does not raise for this.
+  The structural admission gates — a non-atomic, classed, S4, or
+  complex/raw operand — still error.
+* Validating the capsule graph visits each node once. A graph that shares one
+  child between two parents was re-walked once per distinct path, so cost grew
+  as `2^depth`: 56 objects took 0.2s and deeper shares were unusable. Cycle
+  detection is now the same node colouring instead of a per-edge scan of the
+  active path, which also removes a quadratic term for deep chains.
+  The collection traversals behind `$check()`, `$get_values()`, `$domains()`,
+  and `$add()` remain proportional to the number of distinct root-to-set
+  paths, because each path exposes its own set of prefixed parameter IDs;
+  that count is the size of the collection's own parameter table whenever its
+  shared sets carry parameters.
+* `ParamSetCollection$new()` accepts an unnamed `sets` list of any length, and
+  with it `ps_union()`, `psc()`, `c.ParamSet()`, `ps_replicate()`, and
+  `$search_space()`. Naming the argument had to duplicate it, and R returns a
+  wrapper ALTREP for a list of 64 or more elements, which the native boundary
+  refuses. `$search_space()` unions one part per `TuneToken`, so a `ParamSet`
+  with 64 or more tuned parameters could not produce a search space at all.
+* A non-finite `tolerance` is reported as a `` `tolerance` `` argument error.
+  `p_dbl(0, 1, tolerance = Inf)` passed the named-argument gate and was
+  rejected by the final canonical-state check, which can only name the whole
+  `lower/upper/tolerance` field group.
 
 # paradox 1.0.1-9000
 

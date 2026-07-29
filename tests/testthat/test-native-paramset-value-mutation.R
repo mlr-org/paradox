@@ -317,13 +317,13 @@ test_that("checked diagnostics transcode unknown IDs, token calls, and dependenc
   expect_s3_class(error, "error")
   expect_identical(
     enc2utf8(conditionMessage(error)),
-    "Assertion on 'xs' failed: Parameter 'm\u00fcssing' not available.."
+    "Assertion on 'xs' failed: Parameter 'm\u00fcssing' not available."
   )
   bytes_id = utf8[[1L]]
   Encoding(bytes_id) = "bytes"
   expect_identical(
     checked$check(setNames(list(1L), bytes_id)),
-    "Parameter 'm\\xc3\\xbcssing' not available."
+    "Parameter 'm\\xc3\\xbcssing' not available"
   )
 
   token_target = ps(payload = p_dbl())
@@ -597,7 +597,10 @@ test_that("shared collection targets use deterministic last-owner semantics", {
   collection = ParamSetCollection$new(list(left = shared, right = shared))
   collection$assert_values = FALSE
 
-  collection$values = list(left.a = 1L, right.b = 2L)
+  expect_warning(
+    collection$values <- list(left.a = 1L, right.b = 2L),
+    "more than one path"
+  )
   expect_identical(shared$values, list(b = 2L))
 })
 
@@ -644,4 +647,44 @@ test_that("shadow validation preserves a nested origin commit", {
   }, "changed")
   expect_identical(origin$values, list(hidden = 9L))
   expect_identical(shadow$values, setNames(list(), character()))
+})
+
+test_that("ObjectTuneToken receipts stay rooted across later validation work", {
+  skip_on_cran()
+
+  # The receipt set is retained for the whole checked assignment and handed to
+  # the caller afterwards, so it must be the object left on the protection
+  # stack. Torturing the collector while a constraint and many ordinary values
+  # allocate exposes a receipt set that is only reachable through a C local.
+  make_set = function() {
+    domains = c(
+      list(candidate = p_dbl(0, 1)),
+      set_names(
+        lapply(seq_len(30L), function(index) p_dbl(0, 1)),
+        paste0("v", seq_len(30L))
+      )
+    )
+    set = do.call(ps, domains)
+    set$constraint = function(x) {
+      invisible(vapply(seq_len(40L), function(i) sum(runif(20L)), numeric(1)))
+      TRUE
+    }
+    set
+  }
+
+  for (round in seq_len(8L)) {
+    set = make_set()
+    values = c(
+      list(candidate = to_tune(ps(z = p_dbl(0, 1)))),
+      set_names(as.list(runif(30L)), paste0("v", seq_len(30L)))
+    )
+
+    previous = gctorture2(11L)
+    on.exit(gctorture2(previous), add = TRUE)
+    set$values = values
+    gctorture2(previous)
+
+    expect_class(set$values$candidate, "ObjectTuneToken")
+    expect_identical(set$search_space()$ids(), "z")
+  }
 })

@@ -387,50 +387,57 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
     Rf_error("`x` must have at least one column");
   }
 
-  /* Own names before a row-name Length or column accessor can reenter and
-   * mutate shared metadata in place. */
-  SEXP source_names = PROTECT(paradox_api_raw_attribute(
-    x,
-    R_NamesSymbol
-  ));
-  snapshot_input_names(
-    source_names,
-    info->columns,
-    FALSE,
-    roots,
-    work_since_interrupt
-  );
+  /* Allocate both snapshot holders before reading anything out of `x`.
+   * Allocation may run a pending finalizer, and the row-name Length method
+   * below may reenter R outright; either can replace or permute the caller's
+   * columns. Names and column identities are therefore copied afterwards in
+   * one pass that cannot allocate, so they are one consistent generation. A
+   * name paired with another generation's column would silently map every
+   * value through the wrong parameter's Domain. */
+  SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, info->columns));
+  SEXP source_columns = PROTECT(Rf_allocVector(VECSXP, info->columns));
+  SEXP source_names = paradox_api_raw_attribute(x, R_NamesSymbol);
+  if (XLENGTH(x) != info->columns ||
+      !ordinary_character_metadata(source_names, FALSE) ||
+      XLENGTH(source_names) != info->columns) {
+    UNPROTECT(2);
+    Rf_error("`x` must have one column name for every column");
+  }
+  for (R_xlen_t column = 0; column < info->columns; ++column) {
+    SEXP name = STRING_ELT(source_names, column);
+    if (name == NA_STRING) {
+      UNPROTECT(2);
+      Rf_error("Column names of `x` must not be missing");
+    }
+    SET_STRING_ELT(stable_names, column, name);
+    SET_VECTOR_ELT(source_columns, column, VECTOR_ELT(x, column));
+  }
+  SET_VECTOR_ELT(roots, QUNIF_INPUT_NAMES, stable_names);
+  SET_VECTOR_ELT(roots, QUNIF_INPUT_SOURCE, source_columns);
+  UNPROTECT(2);
+
   if (!paradox_public_table_row_count(x, &info->rows)) {
-    UNPROTECT(1);
     Rf_error("`x` has invalid data.frame row names");
   }
   if (info->rows > INT_MAX) {
-    UNPROTECT(1);
     Rf_error("`x` has too many rows for a data.frame result");
   }
 
-  /* Own every observed column before invoking an ALTREP Length/Elt method.
-   * A callback may replace a data.frame column, but this operation must finish
-   * from the single input generation selected at entry. */
-  SEXP source_columns = PROTECT(Rf_allocVector(VECSXP, info->columns));
+  /* Validate the owned columns. These reads may dispatch an ALTREP Length,
+   * but they observe this operation's own snapshot. */
   for (R_xlen_t column = 0; column < info->columns; ++column) {
     paradox_account_work(work_since_interrupt);
-    SEXP source = PROTECT(VECTOR_ELT(x, column));
+    SEXP source = VECTOR_ELT(source_columns, column);
     const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
     if ((type != REALSXP && type != INTSXP) || Rf_isObject(source)) {
-      UNPROTECT(3);
       Rf_error("Every column of `x` must be an unclassed numeric vector");
     }
     if (XLENGTH(source) != info->rows) {
-      UNPROTECT(3);
       Rf_error(column == 0
         ? "`x` has invalid data.frame row names"
         : "Columns of `x` must have equal lengths");
     }
-    SET_VECTOR_ELT(source_columns, column, source);
-    UNPROTECT(1);
   }
-  SET_VECTOR_ELT(roots, QUNIF_INPUT_SOURCE, source_columns);
   const R_xlen_t size = checked_input_size(info->rows, info->columns);
 
   SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
@@ -450,7 +457,7 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
   SET_VECTOR_ELT(roots, QUNIF_INPUT_VALUES, stable_values);
   info->column_names = VECTOR_ELT(roots, QUNIF_INPUT_NAMES);
   info->values = VECTOR_ELT(roots, QUNIF_INPUT_VALUES);
-  UNPROTECT(3);
+  UNPROTECT(1);
 }
 
 static void snapshot_qunif_input(SEXP x, qunif_input_t *info, SEXP roots) {
@@ -780,11 +787,12 @@ SEXP paradox_param_set_qunif_builtin(SEXP private_environment, SEXP self,
     UNPROTECT(2);
     Rf_error("Corrupt ParamSet quantile state: missing core capsule");
   }
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
+  }
   const paradox_core_kind_t kind = paradox_core_kind(core);
-  if (kind == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
-  } else if (kind != PARADOX_CORE_BASE &&
-      kind != PARADOX_CORE_COLLECTION) {
+  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
+      kind != PARADOX_CORE_SHADOW) {
     UNPROTECT(2);
     Rf_error("Corrupt ParamSet quantile state: unknown core kind");
   }
@@ -962,11 +970,10 @@ static void load_grid_state(SEXP private_environment, SEXP self,
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet grid state: missing core capsule");
   }
-  paradox_core_kind_t kind = paradox_core_kind(core);
-  if (kind == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
-    kind = paradox_core_kind(core);
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
   }
+  const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
       kind != PARADOX_CORE_SHADOW) {
     Rf_error("Corrupt ParamSet grid state: unknown core kind");

@@ -145,7 +145,7 @@ test_that("malformed or ambiguous public table class vectors reject", {
     attr(frame, "class") = classes
     expect_identical(
       param_set$check_dt(frame),
-      "Must be a data.frame or data.table."
+      "Must be a data.frame or data.table"
     )
     expect_error(
       param_set$test_constraint_dt(frame, assert_value = FALSE),
@@ -190,7 +190,7 @@ expect_public_row_names_rejected = function(row_names, remove = FALSE) {
 
   expect_identical(
     param_set$check_dt(frame(), presence = "all"),
-    "Invalid data.frame row names."
+    "Invalid data.frame row names"
   )
   expect_error(
     param_set$test_constraint_dt(frame(TRUE)),
@@ -322,7 +322,7 @@ test_that("row-count mismatches reject only row-consuming table operations", {
 
   expect_identical(
     param_set$check_dt(mismatched(), presence = "all"),
-    "Invalid data.frame row names."
+    "Invalid data.frame row names"
   )
   expect_error(
     param_set$test_constraint_dt(mismatched(TRUE)),
@@ -375,7 +375,7 @@ test_that("ignored data.table caches still have ordinary carrier metadata", {
   data.table::setattr(table, "sorted", asS4("x"))
   expect_identical(
     param_set$check_dt(table),
-    "Must be a data.frame or data.table."
+    "Must be a data.frame or data.table"
   )
   expect_error(param_set$qunif(table), "numeric matrix or data.frame")
   expect_error(param_set$trafo(table), "ordinary named list")
@@ -411,7 +411,7 @@ test_that("ignored data.table caches still have ordinary carrier metadata", {
     malformed = mutate(public_table_fixture(TRUE))
     expect_identical(
       param_set$check_dt(malformed),
-      "Must be a data.frame or data.table."
+      "Must be a data.frame or data.table"
     )
     expect_error(
       .Call(
@@ -643,7 +643,7 @@ test_that("lazy table normalization does not admit exotic attributes", {
 
   expect_identical(
     param_set$check_dt(wrapped),
-    "Must be a data.frame or data.table."
+    "Must be a data.frame or data.table"
   )
   expect_error(
     param_set$qunif(wrapped),

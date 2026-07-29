@@ -120,7 +120,9 @@ purpose:\cr
 }}
 
 \item{tolerance}{(\code{numeric(1)})\cr
-Initializes the \verb{$tolerance} field that determines the}
+Initializes the \verb{$tolerance} field that determines the tolerance of the
+\code{lower} and \code{upper} values. Must be finite and non-negative; for
+\code{p_int()} it must additionally not exceed \code{0.5}.}
 
 \item{depends}{(\code{call} | \code{expression})\cr
 An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an

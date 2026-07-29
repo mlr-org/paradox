@@ -410,7 +410,8 @@ SEXP paradox_param_set_filter_argument(SEXP frame,
   return result;
 }
 
-SEXP paradox_param_set_ids_lazy(SEXP private_environment, SEXP frame) {
+SEXP paradox_param_set_ids_lazy(SEXP private_environment, SEXP self,
+    SEXP frame) {
   if (TYPEOF(private_environment) != ENVSXP || TYPEOF(frame) != ENVSXP) {
     Rf_error(
       "Internal error: ParamSet ID filtering requires private and method "
@@ -435,7 +436,11 @@ SEXP paradox_param_set_ids_lazy(SEXP private_environment, SEXP frame) {
    * capsule only after all three promises have been forced, so a nested
    * mutation is observed without consulting retired private tables or
    * replaying the operation in R. */
-  SEXP state = PROTECT(paradox_core_state_from_private(private_environment));
+  SEXP selected = paradox_core_from_private(private_environment);
+  if (selected != R_UnboundValue && !paradox_core_is_verified(selected)) {
+    selected = paradox_core_refresh(self, private_environment);
+  }
+  SEXP state = PROTECT(paradox_core_state_from_core(selected));
   if (state == R_UnboundValue) {
     UNPROTECT(4);
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");

@@ -709,8 +709,8 @@ SEXP paradox_param_set_params(SEXP private_environment, SEXP self) {
   if (!paradox_domain_owns_private_environment(self, private_environment)) {
     Rf_error("Corrupt ParamSet parameter shell ownership");
   }
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
   }
   const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_SHADOW) {

@@ -388,3 +388,40 @@ test_that("corrupt callback graphs error instead of returning a sentinel", {
     "cycle"
   )
 })
+
+test_that("detachment affixes stay rooted while the plan is built", {
+  skip_on_cran()
+
+  # `make_affix()` mints a fresh CHARSXP that the plan parks in operation-local
+  # R_alloc storage, which the collector does not scan. R sweeps its string
+  # cache on every collection, so each affix must be rooted before the next
+  # allocation or the plan is built from freed strings.
+  nodes = 20L
+  for (round in seq_len(10L)) {
+    tag = sprintf("t%05d", round)
+    prefixes = sprintf("pzzz%s%04d", tag, seq_len(nodes))
+    suffixes = sprintf("qzzz%s%04d", tag, seq_len(nodes))
+    children = lapply(seq_len(nodes), function(index) {
+      ParamSetCollection$new(
+        set_names(list(ps(x = p_dbl(0, 1))), suffixes[[index]]),
+        postfix_names = TRUE
+      )
+    })
+    collection = ParamSetCollection$new(set_names(children, prefixes))
+
+    invisible(gc())
+    previous = gctorture(TRUE)
+    plan = .Call(
+      paradox:::C_param_set_collection_detach_plan,
+      collection$.__enclos_env__$private,
+      collection,
+      NULL
+    )
+    gctorture(previous)
+
+    # Compare only after the call: interning the expected text beforehand would
+    # root it in the string cache and hide the defect.
+    expect_identical(plan$translation$.prefix, paste0(prefixes, "."))
+    expect_identical(plan$translation$.suffix, paste0(".", suffixes))
+  }
+})

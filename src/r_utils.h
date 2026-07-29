@@ -12,6 +12,33 @@ static inline int paradox_charsxp_is_ordinary(SEXP value) {
   return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES;
 }
 
+/* checkmate's convention, which every `$check()` fragment follows: the
+ * fragment carries no sentence terminator and the `assert_*` wrapper supplies
+ * one.  A fragment that legitimately ends a sentence itself -- the suggestion
+ * clause "Did you mean 'x'?" -- must not be given a second terminator.  Every
+ * continuation byte of a multibyte UTF-8 or Latin-1 character is >= 0x80, so
+ * inspecting the last raw byte cannot misfire on a translated string. */
+static inline int paradox_charsxp_ends_sentence(SEXP value) {
+  const int size = LENGTH(value);
+  if (size == 0) return FALSE;
+  const char last = CHAR(value)[size - 1];
+  return last == '.' || last == '?' || last == '!';
+}
+
+/* The documented checkmate `type = "strict"` grammar,
+ * ^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$, that every interpreted parameter ID must
+ * satisfy.  A ParamSet parameter name and a prepended ParamSetCollection set
+ * name both own the leading position of an ID and admit through this one
+ * predicate, so a collection cannot assemble an ID its own `$search_space()`
+ * or `ParamSet$new()` would then reject. */
+attribute_hidden int paradox_string_is_strict_id(SEXP value);
+
+/* The continuation grammar of a strict ID, `[a-zA-Z0-9._]+`: everything a
+ * strict ID may contain after its first letter.  A `ParamSetCollection` set
+ * name that is appended rather than prepended lands in exactly that position,
+ * so it is the rule such a name has to satisfy. */
+attribute_hidden int paradox_string_is_strict_id_tail(SEXP value);
+
 typedef enum {
   PARADOX_UTF8_PIECE_ASCII = 1,
   PARADOX_UTF8_PIECE_CHARSXP = 2
@@ -122,8 +149,19 @@ attribute_hidden SEXP paradox_utf8_message(
 /* Convert one semantic CHARSXP into a diagnostic-safe UTF-8 fragment. Native,
  * UTF-8, and Latin-1 strings retain their text; bytes-marked strings are
  * rendered as deterministic `\xHH` escapes instead of being passed through an
- * invalid UTF-8 translation. */
+ * invalid UTF-8 translation. The caller must root `string` for the whole
+ * call: escaping holds a raw byte pointer into it across an R_alloc that can
+ * collect. Escaping also allocates in the caller's R_alloc frame, so take any
+ * `vmaxget()` watermark that is meant to release it before calling. */
 attribute_hidden SEXP paradox_diagnostic_charsxp(SEXP string);
+
+/* Build `callback(<value>)` for a documented one-argument R callback that
+ * receives a semantic parameter value. Almost every R value is
+ * self-evaluating and is spliced in directly; a symbol, call, promise, or
+ * byte-code object is not, and is wrapped so that Rf_eval() hands the object
+ * itself to the callback instead of evaluating it. The result is unprotected
+ * and must be rooted by the caller. */
+attribute_hidden SEXP paradox_unary_callback_call(SEXP callback, SEXP value);
 
 /* Rf_error() consumes text in the current locale.  Translate and own the
  * bytes before entering its allocating formatter. */

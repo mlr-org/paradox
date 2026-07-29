@@ -127,3 +127,62 @@ test_that("multiple dependent children can coexist", {
   expect_setequal(children, c("c1", "c2"))
   expect_true(all(parents == c("parent", "parent")))
 })
+
+test_that("scalar sequences are exported as sequences, not as scalars", {
+  # A length-1 R vector reaches Python as a scalar, which ConfigSpace would
+  # iterate element-by-element: a single level or a single condition value
+  # would silently become one entry per character.
+  param_set = ps(
+    only = p_fct(levels = "gini"),
+    par = p_fct(levels = c("gini", "entropy"), default = "gini"),
+    ch = p_dbl(lower = 0, upper = 1, default = 0.5, depends = quote(par %in% "gini"))
+  )
+
+  cs = paramset_to_configspace(param_set, name = "scalar-sequences")
+  expect_equal(unlist(cs$get_hyperparameter("only")$choices), "gini")
+  expect_equal(unlist(cs$get_hyperparameter("par")$choices), c("gini", "entropy"))
+
+  conds = cs$get_conditions()
+  expect_true(length(conds) == 1)
+  expect_equal(unlist(conds[[1]]$values), "gini")
+
+  configuration = cs$sample_configuration()
+  expect_identical(as.character(configuration["only"]), "gini")
+})
+
+test_that("dependencies on a p_lgl parent use its exported string levels", {
+  # p_lgl is exported as a Categorical over "TRUE"/"FALSE", so a logical
+  # right-hand side has to be spelled the same way.
+  param_set = ps(
+    flag = p_lgl(default = TRUE),
+    other = p_lgl(default = FALSE),
+    ch = p_dbl(lower = 0, upper = 1, default = 0.5, depends = quote(flag == TRUE)),
+    ch2 = p_int(lower = 1, upper = 5, default = 2, depends = quote(other %in% c(TRUE, FALSE)))
+  )
+
+  cs = paramset_to_configspace(param_set, name = "lgl-parent")
+  conds = cs$get_conditions()
+  expect_true(length(conds) == 2)
+  conds = set_names(conds, map_chr(conds, function(z) z$child$name))
+
+  expect_identical(as.character(conds$ch$value), "TRUE")
+  expect_setequal(unlist(conds$ch2$values), c("TRUE", "FALSE"))
+})
+
+test_that("exported tag metadata keeps one Python type", {
+  param_set = ps(
+    none = p_dbl(lower = 0, upper = 1),
+    one = p_dbl(lower = 0, upper = 1, tags = "single"),
+    many = p_dbl(lower = 0, upper = 1, tags = c("first", "second"))
+  )
+
+  cs = paramset_to_configspace(param_set, name = "tag-metadata")
+  # Inspect the Python object itself: reticulate would simplify a one-element
+  # list back to a length-1 character vector on conversion.
+  expect_identical(
+    map_chr(c("none", "one", "many"), function(id) {
+      reticulate::py_str(reticulate::py_get_attr(cs$get_hyperparameter(id), "meta"))
+    }),
+    c("{'tags': []}", "{'tags': ['single']}", "{'tags': ['first', 'second']}")
+  )
+})

@@ -481,7 +481,11 @@
 }
 
 .upgrade_paradox_requirements = function(requirements, path) {
-  if (is.null(requirements)) return(list())
+  # A Domain without `depends` stores NULL, which is exactly what the current
+  # constructors produce. Returning an empty list instead denormalized the
+  # column, so an upgraded object was no longer `identical()` to a freshly
+  # constructed one.
+  if (is.null(requirements)) return(NULL)
   if (!is.list(requirements) || is.object(requirements)) {
     .upgrade_paradox_abort(path, "Domain requirements must be a plain list")
   }
@@ -510,7 +514,7 @@
 
 .upgrade_paradox_validate_domain_columns = function(columns, path) {
   scalar_character = c("id", "cls", "grouping", "storage_type")
-  scalar_double = c("lower", "upper", "tolerance")
+  scalar_numeric = c("lower", "upper", "tolerance")
   list_columns = c("cargo", "levels", "special_vals", "default")
   for (name in scalar_character) {
     value = columns[[name]]
@@ -518,9 +522,15 @@
       .upgrade_paradox_abort(path, "Domain column `%s` must be character", name)
     }
   }
-  for (name in scalar_double) {
-    if (!is.double(columns[[name]])) {
-      .upgrade_paradox_abort(path, "Domain column `%s` must be double", name)
+  for (name in scalar_numeric) {
+    # An integer column is canonical here -- `p_int()` stores integer bounds in
+    # both Paradox 1 and 2, and the native capsule admits REALSXP or INTSXP --
+    # so requiring a double refused to migrate an ordinary `p_int(1L, 10L)`.
+    value = columns[[name]]
+    if (!is.double(value) && !is.integer(value)) {
+      .upgrade_paradox_abort(
+        path, "Domain column `%s` must be numeric", name
+      )
     }
   }
   for (name in list_columns) {
@@ -555,7 +565,7 @@
       )
     }
   }
-  invisible(NULL)
+  columns
 }
 
 .upgrade_paradox_crate_bindings = function(callback, binding_names, template) {
@@ -759,17 +769,19 @@
   if (length(columns$id) != 1L || !identical(columns$cls, kind)) {
     .upgrade_paradox_abort(path, "Domain must contain one matching built-in row")
   }
-  .upgrade_paradox_validate_domain_columns(columns, path)
+  columns = .upgrade_paradox_validate_domain_columns(columns, path)
   if (!is.logical(columns$.init_given) || length(columns$.init_given) != 1L ||
       is.na(columns$.init_given) || !is.list(columns$.init) ||
       !is.list(columns$.tags) || !is.list(columns$.trafo) ||
       !is.list(columns$.requirements)) {
     .upgrade_paradox_abort(path, "malformed transient Domain columns")
   }
-  columns$.requirements[[1L]] = .upgrade_paradox_requirements(
+  # Single-bracket list assignment, because the canonical value for a Domain
+  # without `depends` is NULL and `[[<- NULL` would delete the cell.
+  columns$.requirements[1L] = list(.upgrade_paradox_requirements(
     columns$.requirements[[1L]],
     paste0(path, "$.requirements[[1]]")
-  )
+  ))
   domain_tags = .upgrade_paradox_materialize_atomic(columns$.tags[[1L]])
   if (!is.character(domain_tags) || !is.null(attributes(domain_tags)) ||
       anyNA(domain_tags) || anyDuplicated(domain_tags)) {
@@ -792,7 +804,7 @@
 
 .upgrade_paradox_params = function(params, path) {
   columns = .upgrade_paradox_table(params, domain_names_permanent, path)
-  .upgrade_paradox_validate_domain_columns(columns, path)
+  columns = .upgrade_paradox_validate_domain_columns(columns, path)
   ids = columns$id
   if (anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids)) {
     .upgrade_paradox_abort(path, "parameter IDs must be nonempty and unique")
@@ -1360,6 +1372,15 @@
     c("id", "original_id", "owner_ps_index", "owner_name"),
     paste0(path, "$private$.translation")
   )
+  # Paradox 1's `$add()` computed `length(sets) + 1`, so a collection that ever
+  # grew carries a double owner index. Accept an integerish double and
+  # normalize it rather than refusing to migrate the object.
+  owner_index = translation_columns$owner_ps_index
+  if (is.double(owner_index) && !anyNA(owner_index) &&
+      all(owner_index == trunc(owner_index)) &&
+      all(abs(owner_index) <= .Machine$integer.max)) {
+    translation_columns$owner_ps_index = as.integer(owner_index)
+  }
   if (!is.character(translation_columns$id) ||
       !is.character(translation_columns$original_id) ||
       !is.integer(translation_columns$owner_ps_index) ||
@@ -1496,7 +1517,7 @@
     }
   )
   private = result$.__enclos_env__$private
-  state = param_set_core_state(private)
+  state = param_set_core_state(private, result)
   if (!.upgrade_paradox_columns_identical(info$param_columns, state$.params) ||
       !.upgrade_paradox_columns_identical(
         info$translation_columns,
@@ -1507,14 +1528,83 @@
       "legacy collection caches disagree with the child graph"
     )
   }
+  # A Paradox-2 collection derives its tags from the sets it contains, so the
+  # legacy table is only stable if the per-edge `tag_sets`/`tag_params` flags
+  # that generated it are recovered too. Paradox 1 consumed those flags at
+  # `$new()`/`$add()` and kept only their output, so they are read back off
+  # that output: an edge carries a flag exactly when every parameter it
+  # contributes has the tag the flag would have generated. An edge whose child
+  # is empty contributes nothing to read, and Paradox 1 recorded nothing for it
+  # either.
   param_set_core_replace(
     private,
     tags = info$tags,
     deps = info$deps,
-    trafos = info$trafos
+    trafos = info$trafos,
+    edges = .upgrade_paradox_collection_edges(state, info$tags)
   )
   result$assert_values = info$assert_values
   result
+}
+
+.upgrade_paradox_collection_edges = function(state, tags) {
+  translation = state$.translation
+  owner_names = names(state$.sets)
+  ids = state$.params$id
+  legacy = split(tags$tag, factor(tags$id, levels = ids))
+  inherited = split(state$.tags$tag, factor(state$.tags$id, levels = ids))
+  edge_count = length(state$.sets)
+  tag_sets = logical(edge_count)
+  tag_params = logical(edge_count)
+  generated = stats::setNames(rep(list(character()), length(ids)), ids)
+  for (edge in seq_len(edge_count)) {
+    rows = translation$owner_ps_index == edge
+    edge_ids = translation$id[rows]
+    if (!length(edge_ids)) next
+    owner = owner_names[[edge]]
+    set_tag = if (nzchar(owner)) paste0("set_", owner)
+    param_tags = paste0("param_", translation$original_id[rows])
+    if (!is.null(set_tag)) {
+      tag_sets[[edge]] = all(vapply(
+        edge_ids,
+        function(id) set_tag %in% legacy[[id]],
+        logical(1L)
+      ))
+    }
+    tag_params[[edge]] = all(vapply(
+      seq_along(edge_ids),
+      function(index) param_tags[[index]] %in% legacy[[edge_ids[[index]]]],
+      logical(1L)
+    ))
+    for (index in seq_along(edge_ids)) {
+      generated[[edge_ids[[index]]]] = c(
+        if (isTRUE(tag_sets[[edge]])) set_tag,
+        if (tag_params[[edge]]) param_tags[[index]]
+      )
+    }
+  }
+  # Whatever the recovered flags reproduce stays derived, so a later change to
+  # a contained set still reaches it. Only the rows Paradox 1 held that no set
+  # accounts for become this node's own answer.
+  differs = vapply(
+    ids,
+    function(id) !setequal(legacy[[id]], c(inherited[[id]], generated[[id]])),
+    logical(1L)
+  )
+  list(
+    cores = state$.edges$cores,
+    tag_sets = tag_sets,
+    tag_params = tag_params,
+    tag_override = if (any(differs)) {
+      governed = ids[differs]
+      list(
+        ids = governed,
+        tags = param_set_internal_table(
+          tags[tags$id %in% governed, , drop = FALSE]
+        )
+      )
+    }
+  )
 }
 
 .upgrade_paradox_graph = function(x) {
@@ -2112,7 +2202,7 @@
         info$callback_carriers
       ))) {
     private = .upgrade_paradox_shell(prepared, path)$private
-    state = param_set_core_state(private)
+    state = param_set_core_state(private, prepared)
     callbacks = .upgrade_paradox_rebind_callback_carriers(
       state$.extra_trafo,
       state$.constraint,
@@ -2134,7 +2224,7 @@
     )
     if (length(dependencies$base)) {
       private = .upgrade_paradox_shell(prepared, path)$private
-      state = param_set_core_state(private)
+      state = param_set_core_state(private, prepared)
       callbacks = .upgrade_paradox_rebind_callback_carriers(
         state$.extra_trafo,
         state$.constraint,

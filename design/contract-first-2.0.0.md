@@ -101,22 +101,67 @@ state” means complete capsule/model state subject to this sole shell policy.
 ### Chosen capsule representation
 
 For 2.0.0 this design choice is fixed, even though it remains an internal ABI.
-The private `.core` binding contains a NULL-address external-pointer shell. Its
+The private `.core` binding contains an external-pointer shell. Its
 tag is one of `paradox.core.base.v1`, `paradox.core.collection.v1`, or
 `paradox.core.shadow.v1`; its protected slot is the complete serializable
-ordinary-R payload. There is no unmanaged allocation, address dereference, or
-finalizer. The shell supplies an opaque, difficult-to-forge type boundary while
+ordinary-R payload; its address slot carries only the session-local
+verification stamp described under *Derived schema* below. There is no
+unmanaged allocation, address dereference, or finalizer. The shell supplies an opaque, difficult-to-forge type boundary while
 the protected ordinary-R graph remains the sole source of capsule/model truth
 and round trips through R serialization.
 
-The v1 payload is a fixed named ten-field list: `.params`, `.values`, `.tags`,
-`.deps`, `.trafos`, `.extra_trafo`, `.constraint`, `.sets`, `.translation`, and
-`.postfix`. These names are package-internal schema, not downstream accessors.
+The v1 payload is a fixed named eleven-field list: `.params`, `.values`,
+`.tags`, `.deps`, `.trafos`, `.extra_trafo`, `.constraint`, `.sets`,
+`.translation`, `.postfix`, and `.edges`. These names are package-internal
+schema, not downstream accessors.
 `BASE`, `COLLECTION`, and `SHADOW` use the same physical schema and interpret
 only the fields appropriate to their kind. This intentionally avoids three
 partially duplicated state implementations.
 
-The protected ten-field payload is the complete capsule/model state, subject
+`.edges` is the derivation record of a node whose schema is derived rather
+than owned. It is `NULL` for `BASE`. For `COLLECTION` it holds, per edge in
+`.sets` order, the exact child capsule generation that edge was flattened from
+and that edge's `tag_sets`/`tag_params` flags -- flags no flattened table can
+recover, because an edge whose child is still empty contributes no row. For
+`SHADOW` it holds the origin schema slice the visible tables were projected
+from plus the retained hidden ID set, which is what makes the visible schema
+"origin minus hidden" computed live rather than frozen at construction. The
+record is a cache: an absent or mismatched one makes the node stale, and the
+next read re-derives it.
+
+Both derived kinds additionally record a `tag_override`. Tags are the one
+derived field a derived node may own outright: a `$tags<-` assignment on a
+`COLLECTION` or `SHADOW` is stored as that node's own answer for exactly the
+IDs it named, survives every later re-derivation, and leaves the sets the
+schema is derived from untouched -- so two views over one set may tag the same
+parameter differently. An ID no assignment named stays derived.
+
+#### Derived schema
+
+A `COLLECTION`'s flattened schema and a `SHADOW`'s projection are derived from
+other nodes and are kept current lazily. Every semantic entry point passes one
+gate that walks the graph below it in post-order, re-flattens a `COLLECTION`
+whose child's `.params`/`.tags`/`.trafos` slice has moved, and refreshes a
+`SHADOW`. The result is what the node would be if it had just been constructed
+from its current children. Because each installed generation is individually
+consistent, an interrupt or a deferred name collision leaves a partially healed
+graph in which every healed node is correct and the rest heals at the next
+entry; no transaction is needed. Parent back-references are deliberately not
+used: a missed *entry* is impossible (every entry passes the gate), whereas a
+missed *registration* would silently reintroduce the staleness.
+
+Two session-global epochs make "nothing changed anywhere" a single comparison.
+A capsule installation that changes a derived-schema input advances the schema
+epoch; any other semantic installation advances the state epoch; a cache
+refresh advances neither. Each capsule records the epoch at which its own
+subtree was proven to agree -- mixed with the capsule's own address, so a
+capsule duplicated by an ordinary R attribute assignment is unverified -- in
+the external pointer's address slot, the one place R guarantees to reset on
+unserialize. The stamp proves that nothing was installed; it never records
+that a caller or a node may be trusted, and a `SHADOW` still reauthenticates
+its refresh signature on every entry.
+
+The protected eleven-field payload is the complete capsule/model state, subject
 only to the public `assert_values` shell policy described above. A SHADOW core
 also carries exactly one package-private attribute,
 `.paradox.shadow.snapshot.v1`, containing an ordinary attribute-free list of

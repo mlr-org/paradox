@@ -33,6 +33,13 @@ attribute_hidden int paradox_builtin_condition_scalar_supported(
   SEXP value,
   SEXP rhs
 );
+/* TRUE when the predicate above refused an ordinary scalar leaf only because
+ * the right-hand side can never equal its type: an unsatisfied comparison
+ * rather than an operand the comparator cannot inspect. */
+attribute_hidden int paradox_builtin_condition_scalar_type_mismatch(
+  SEXP value,
+  SEXP rhs
+);
 attribute_hidden int paradox_builtin_condition_element_matches(
   SEXP values,
   R_xlen_t index,

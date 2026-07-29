@@ -68,13 +68,15 @@ param_set_dependencies_snapshot = function(deps) {
 }
 
 # The only mutable binding in a ParamSet's private environment is `.core`.
-# Its NULL-address external pointer protects this fixed, serializable payload.
+# Its external pointer protects this fixed, serializable payload; the pointer's
+# address slot carries only a session-local verification stamp.
 # Package code captures the payload once per operation; every mutation installs
 # a fresh capsule, so callbacks can mutate the object without changing the
 # snapshot already being consumed by the outer operation.
 param_set_core_new = function(kind, params, values = named_list(), tags,
     deps = new_empty_deps(), trafos, extra_trafo = NULL,
-    constraint = NULL, sets = NULL, translation = NULL, postfix = FALSE) {
+    constraint = NULL, sets = NULL, translation = NULL, postfix = FALSE,
+    edges = NULL) {
   .Call(C_param_set_core_new, as.integer(kind), list(
     .params = param_set_internal_table(params),
     .values = values,
@@ -85,12 +87,17 @@ param_set_core_new = function(kind, params, values = named_list(), tags,
     .constraint = constraint,
     .sets = sets,
     .translation = if (is.null(translation)) NULL else param_set_internal_table(translation),
-    .postfix = postfix
+    .postfix = postfix,
+    .edges = edges
   ))
 }
 
-param_set_core_state = function(private) {
-  .Call(C_param_set_core_state, private)
+# The single funnel for every raw capsule read. Passing `self` lets the
+# native gate heal a derived schema -- a collection whose sets have grown, a
+# Shadow whose origin moved -- before the payload is handed out. A capsule may
+# be supplied directly instead, in which case it is read exactly as given.
+param_set_core_state = function(private, self = NULL) {
+  .Call(C_param_set_core_state, private, self)
 }
 
 param_set_core_replace = function(private, ...) {
@@ -140,15 +147,13 @@ param_set_core_deep_clone = function(self, core) {
     if (!is.null(expected_core) && !identical(current_core, expected_core)) {
       stop("ParamSet capsule changed during deep clone", call. = FALSE)
     }
+    # A clone copies the state the node denotes, so it first admits the source
+    # through the same authoritative gate as every semantic reader: a derived
+    # schema whose sets have moved on is brought current, and a malformed
+    # Shadow signature errors instead of being cloned as it stands.
+    current_core = .Call(C_param_set_core_refresh, node, private)
     kind = .Call(C_param_set_core_kind, current_core)
-    if (identical(kind, 3L)) {
-      # A clone rebuilds derived Shadow metadata against cloned identities, but
-      # it must first admit the source through the same authoritative refresh
-      # as every semantic reader. Malformed signatures therefore error instead
-      # of being silently healed by cloning the protected payload alone.
-      current_core = .Call(C_param_set_shadow_refresh, node, private)
-    }
-    state = .Call(C_param_set_core_state, current_core)
+    state = .Call(C_param_set_core_state, current_core, node)
     sets = state$.sets
     if (identical(kind, 1L)) {
       if (!is.null(sets)) {
@@ -237,9 +242,11 @@ param_set_core_deep_clone = function(self, core) {
     if (is_r6) value$clone(deep = TRUE) else value
   }
 
-  clone_payload = function(snapshot, cloned_sets) {
+  clone_payload = function(snapshot, cloned_sets, cloned_child_cores) {
     state = snapshot$state
     if (identical(snapshot$kind, 3L)) {
+      # `.edges` carries the hidden ID set forward; the visible schema itself
+      # is rebuilt against the cloned origin by the native Shadow builder.
       template = param_set_core_new(
         3L,
         params = state$.params,
@@ -251,7 +258,8 @@ param_set_core_deep_clone = function(self, core) {
         constraint = NULL,
         sets = cloned_sets,
         translation = NULL,
-        postfix = FALSE
+        postfix = FALSE,
+        edges = state$.edges
       )
       return(.Call(
         C_param_set_shadow_core_new,
@@ -275,7 +283,17 @@ param_set_core_deep_clone = function(self, core) {
       constraint = constraint,
       sets = if (identical(snapshot$kind, 1L)) NULL else cloned_sets,
       translation = state$.translation,
-      postfix = state$.postfix
+      postfix = state$.postfix,
+      # A collection's edge record must name the cloned children, not the
+      # originals, or the clone would re-flatten itself on its first read.
+      edges = if (identical(snapshot$kind, 2L)) {
+        list(
+          cores = cloned_child_cores,
+          tag_sets = state$.edges$tag_sets,
+          tag_params = state$.edges$tag_params,
+          tag_override = state$.edges$tag_override
+        )
+      }
     )
   }
 
@@ -296,12 +314,18 @@ param_set_core_deep_clone = function(self, core) {
     }
 
     children = edge_indices[[index]]
-    cloned_sets = if (!length(children)) list() else {
-      result = lapply(children, function(child) clones[[child]])
-      names(result) = names(snapshot$sets)
-      result
-    }
-    cloned_core = clone_payload(snapshot, cloned_sets)
+    # Carry the source edge list's exact attribute shape, including the
+    # zero-length `names` that a childless COLLECTION capsule must have: the
+    # validator admits only that shape, so dropping it would clone a valid
+    # collection into a permanently corrupt one.
+    cloned_sets = lapply(children, function(child) clones[[child]])
+    names(cloned_sets) = names(snapshot$sets)
+    # `children` carries the edge names, which the canonical edge record must
+    # not: it is positional, exactly like `.sets`.
+    cloned_child_cores = unname(
+      lapply(children, function(child) cloned_cores[[child]])
+    )
+    cloned_core = clone_payload(snapshot, cloned_sets, cloned_child_cores)
     cloned_cores[[index]] = cloned_core
     if (index != 1L) {
       clone = nodes[[index]]$clone(deep = FALSE)
@@ -534,7 +558,7 @@ ParamSet = R6Class("ParamSet",
     #'   Return only IDs of dimensions that have at least one of the tags given in this argument.
     #' @return `character()`.
     ids = function(class = NULL, tags = NULL, any_tags = NULL) {
-      .Call(C_param_set_ids_lazy, private, environment())
+      .Call(C_param_set_ids_lazy, private, self, environment())
     },
 
     #' @description
@@ -551,7 +575,7 @@ ParamSet = R6Class("ParamSet",
     #' @param type (`character(1)`)\cr
     #'   Return values `"with_token"` (i.e. all values),
     #'   `"without_token"` (all values that are not [`TuneToken`] objects), `"only_token"` (only [`TuneToken`] objects),
-    #'   or `"with_internal"` (all values that are not `InternalTuneToken`)?
+    #'   or `"with_internal"` (only `InternalTuneToken` objects)?
     #' @param check_required (`logical(1)`)\cr
     #'   Check if all active required parameters are set? This check uses the
     #'   dependency-filtered view, even when `remove_dependencies = FALSE`.
@@ -1045,7 +1069,9 @@ ParamSet = R6Class("ParamSet",
     #'   containers are rejected. Construct tokens with [`to_tune()`]; subclasses and
     #'   metadata-extended tokens are not supported. Exact creator provenance is
     #'   not authenticated, so an indistinguishable manual copy may pass even
-    #'   though the representation is not an API.
+    #'   though the representation is not an API. Every name must be an ID of
+    #'   this `ParamSet`, whether or not the entry it names is a [`TuneToken`];
+    #'   an unknown name is an error rather than a silently ignored entry.
     search_space = function(values = self$values) {
       pars = private$get_tune_ps(values)
       on = NULL  # pacify static code check
@@ -1309,7 +1335,7 @@ ParamSet = R6Class("ParamSet",
 
   private = list(
     .core = NULL,
-    .state = function() param_set_core_state(private),
+    .state = function() param_set_core_state(private, self),
     .store_values = function(xs) {
       invisible(.Call(C_param_set_store_values, private, self, xs))
     },
@@ -1408,13 +1434,18 @@ rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
   }
 
   params = as.data.table(obj)[, c("id", "storage_type", "default", "lower", "upper", "levels"), with = FALSE]
-  cargo = obj$params$cargo
+  parameters = obj$params
+  cargo = parameters$cargo
 
   if (length(descriptions)) {
     params = merge(params, enframe(descriptions, name = "id", value = "description"), all.x = TRUE, by = "id")
     description = NULL
     params[is.na(description), description := ""]
     setcolorder(params, c("id", "description"))
+    # `merge()` orders its result by `id`, while `cargo` still follows the
+    # parameter table. Realign it before it is indexed by row position, or the
+    # untyped defaults are reported against the wrong parameters.
+    cargo = cargo[match(params$id, parameters$id)]
   }
   is_default = map_lgl(params$default, inherits, "NoDefault")
   is_uty = params$storage_type == "list"

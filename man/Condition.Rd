@@ -57,6 +57,10 @@ non-ALTREP/non-S4 objects.
 \itemize{
 \item \code{condition_test()}: Used internally. Tests whether a value satisfies a given condition.
 Vectorizes over a plain logical, integer, numeric, or character \code{x}.
+A character \code{x} never satisfies a logical, integer, or numeric right-hand
+side, and vice versa: such an element is \code{FALSE} rather than an error. No
+value is reinterpreted as another type in order to compare it, so unlike
+Paradox 1 -- which compared through R's \code{==} -- \code{condition_test(CondEqual(1), "1")} is \code{FALSE}. Dependency evaluation uses the same answer.
 \code{NULL} produces \code{logical()}. A names attribute is retained; classed vectors
 and other attributes, including S4 operands, are not part of the closed
 Condition boundary. Stable

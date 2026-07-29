@@ -1302,3 +1302,77 @@ test_that("cannot mark non-int-tuneable parameters for int tuning", {
     "Trying to assign"
   )
 })
+
+test_that("to_tune(<Domain>) keeps the Domain's init as a fixed value", {
+  # Paradox 1 wrapped the user-supplied Domain in ParamSet$new() unchanged, so
+  # its `init` became a value of the generated search space.
+  set = ps(x = p_dbl(0, 100))
+  set$values$x = to_tune(p_int(1, 10, init = 5L))
+
+  search_space = set$search_space()
+  expect_equal(search_space$ids(), "x")
+  expect_equal(search_space$values, list(x = 5L))
+  expect_equal(nrow(generate_design_grid(search_space, 3)$data), 1L)
+
+  factor_set = ps(x = p_fct(c("a", "b", "c")))
+  factor_set$values$x = to_tune(p_fct(c("a", "b"), init = "a"))
+  expect_equal(factor_set$search_space()$values, list(x = "a"))
+
+  # A Domain without an init still contributes no value.
+  set$values$x = to_tune(p_dbl(0, 10))
+  expect_equal(set$search_space()$values, named_list())
+})
+
+test_that("to_tune(<ParamSet>) keeps the ParamSet's init as a fixed value", {
+  set = ps(x = p_dbl(0, 100))
+  set$values$x = to_tune(ps(a = p_dbl(0, 1, init = 0.5)))
+  expect_equal(set$search_space()$values, list(a = 0.5))
+})
+
+test_that("tuning the whole parameter does not fix its own current value", {
+  # `$domains` projects the ParamSet's current value into the recovered
+  # Domain's `.init`; for a tuned parameter that value is the TuneToken.
+  set = ps(x = p_dbl(0, 100, init = 7))
+  expect_equal(set$values, list(x = 7))
+
+  set$values$x = to_tune()
+  expect_equal(set$search_space()$values, named_list())
+  expect_equal(set$search_space()$ids(), "x")
+
+  set$values$x = to_tune(1, 10)
+  expect_equal(set$search_space()$values, named_list())
+
+  set$values$x = to_tune(p_dbl(1, 10, logscale = TRUE))
+  expect_equal(set$search_space()$values, named_list())
+})
+
+test_that("search_space() rejects values naming an unknown parameter", {
+  # Paradox 1 asserted names(values) to be a subset of $ids(); without that a
+  # misspelled non-token entry silently produced an empty search space.
+  set = ps(a = p_dbl(0, 1))
+  expect_error(
+    set$search_space(values = list(zzz = 1)),
+    "unknown parameter ID"
+  )
+  expect_error(
+    set$search_space(values = list(zzz = to_tune(0, 1))),
+    "unknown parameter ID"
+  )
+  expect_error(
+    set$search_space(values = list(a = to_tune(0, 1), zzz = 1)),
+    "unknown parameter ID"
+  )
+  expect_equal(set$search_space(values = list(a = to_tune(0, 1)))$ids(), "a")
+  expect_equal(length(set$search_space(values = list())$ids()), 0L)
+  expect_equal(length(set$search_space(values = list(a = 0.5))$ids()), 0L)
+
+  collection = ParamSetCollection$new(list(g = ps(a = p_dbl(0, 1))))
+  expect_error(
+    collection$search_space(values = list(a = 1)),
+    "unknown parameter ID"
+  )
+  expect_equal(
+    collection$search_space(values = list(g.a = to_tune(0, 1)))$ids(),
+    "g.a"
+  )
+})

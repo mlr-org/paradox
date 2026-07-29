@@ -152,11 +152,18 @@ test_that("shared collection children retain last-owner mutation semantics", {
   child$values = list(a = 0L, b = 0L)
   collection = ParamSetCollection$new(list(left = child, right = child))
 
-  collection$values = list(
-    right.b = 4L,
-    left.a = 1L,
-    right.a = 3L,
-    left.b = 2L
+  # The two aliases of `child` plan two complete replacements of one store, so
+  # the later one wins outright.  The outcome is still deterministic, but it is
+  # no longer silent: each such assignment warns, see
+  # test-regression-aliased-write-conflict.R.
+  expect_warning(
+    collection$values <- list(
+      right.b = 4L,
+      left.a = 1L,
+      right.a = 3L,
+      left.b = 2L
+    ),
+    "more than one path"
   )
   expect_identical(child$values, list(a = 3L, b = 4L))
   expect_identical(
@@ -166,10 +173,10 @@ test_that("shared collection children retain last-owner mutation semantics", {
 
   # In insertion mode both aliases are present in the merged assignment. The
   # later owner therefore restores its old value over the earlier alias.
-  collection$set_values(left.a = 8L)
+  expect_warning(collection$set_values(left.a = 8L), "more than one path")
   expect_identical(child$values, list(a = 3L, b = 4L))
 
-  collection$set_values(right.b = NULL)
+  expect_warning(collection$set_values(right.b = NULL), "more than one path")
   expect_identical(child$values, list(a = 3L))
   expect_identical(collection$values, list(left.a = 3L, right.a = 3L))
 })

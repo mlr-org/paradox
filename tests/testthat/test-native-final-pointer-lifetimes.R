@@ -31,7 +31,7 @@ test_that("capsule and diagnostic paths survive forced collection", {
   previous = gctorture(TRUE)
   on.exit(gctorture(previous), add = TRUE)
   active_message = tryCatch({
-    .Call(paradox:::C_param_set_core_state, active_private)
+    .Call(paradox:::C_param_set_core_state, active_private, NULL)
     NA_character_
   }, error = conditionMessage)
   value_message = tryCatch({

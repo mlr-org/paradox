@@ -55,7 +55,7 @@ static SEXP scalar_string(SEXP value, const char *name) {
 
 static SEXP checked_core(SEXP private_environment, SEXP self,
     paradox_core_kind_t *kind, paradox_domain_params_t *params,
-    R_xlen_t *work_since_interrupt) {
+    int allow_derived, R_xlen_t *work_since_interrupt) {
   if (!paradox_domain_owns_private_environment(self, private_environment)) {
     Rf_error("ParamSet method called with a foreign private environment");
   }
@@ -63,8 +63,11 @@ static SEXP checked_core(SEXP private_environment, SEXP self,
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
+  }
   *kind = paradox_core_kind(core);
-  if (*kind == PARADOX_CORE_SHADOW) {
+  if (*kind == PARADOX_CORE_SHADOW && !allow_derived) {
     Rf_error("ParamSetShadow state is read-only at this mutation boundary");
   }
   SEXP state = R_ExternalPtrProtected(core);
@@ -240,8 +243,13 @@ static SEXP snapshot_dependencies(SEXP input,
     UNPROTECT(4);
     Rf_error("`deps` columns have unsupported types");
   }
-  const R_xlen_t rows = column_sizes[0];
-  if (column_sizes[1] != rows || column_sizes[2] != rows) {
+  /* Measure the columns this loop will actually index, not the lengths seen
+   * before the name and type checks: everything in between can allocate or
+   * dispatch an ALTREP Length method, and a callback may replace a column of
+   * the caller's table. Indexing a retained column with a stale bound was an
+   * out-of-range read on every supported R. */
+  const R_xlen_t rows = XLENGTH(ids);
+  if (XLENGTH(on) != rows || XLENGTH(conditions) != rows) {
     UNPROTECT(4);
     Rf_error("`deps` columns must have equal lengths");
   }
@@ -319,14 +327,13 @@ SEXP paradox_param_set_dependencies(SEXP private_environment, SEXP self) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  paradox_core_kind_t kind = paradox_core_kind(core);
-  if (kind == PARADOX_CORE_SHADOW) {
+  if (!paradox_core_is_verified(core)) {
     REPROTECT(
-      core = paradox_core_refresh_shadow(self, private_environment),
+      core = paradox_core_refresh(self, private_environment),
       core_index
     );
-    kind = paradox_core_kind(core);
   }
+  const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_SHADOW) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet dependency capsule kind");
@@ -352,8 +359,8 @@ SEXP paradox_param_set_get_tags(SEXP private_environment, SEXP self) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
-    SEXP refreshed = PROTECT(paradox_core_refresh_shadow(
+  if (!paradox_core_is_verified(core)) {
+    SEXP refreshed = PROTECT(paradox_core_refresh(
       self,
       private_environment
     ));
@@ -440,9 +447,9 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
     self,
     &kind,
     &params,
+    TRUE,
     &work_since_interrupt
   ));
-  (void) kind;
   if (TYPEOF(tags) != VECSXP || ALTREP(tags)) {
     UNPROTECT(1);
     Rf_error("`tags` must be a list");
@@ -523,8 +530,66 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
       ++output;
     }
   }
-  (void) replace_one(private_environment, core, ".tags", table);
-  UNPROTECT(5);
+  if (kind == PARADOX_CORE_BASE) {
+    (void) replace_one(private_environment, core, ".tags", table);
+    UNPROTECT(5);
+    return tags;
+  }
+
+  /* A derived node owns the answer it was given for the IDs it was given it
+   * for. Recording that in the edge record is what makes the assignment
+   * survive re-derivation without writing through to the sets the schema
+   * comes from: an ID added later is still derived. */
+  SEXP governed = PROTECT(Rf_allocVector(STRSXP, parameter_count));
+  for (R_xlen_t index = 0; index < parameter_count; ++index) {
+    SET_STRING_ELT(governed, index, STRING_ELT(params.ids, index));
+  }
+  SEXP override = PROTECT(Rf_allocVector(
+    VECSXP,
+    PARADOX_TAG_OVERRIDE_FIELD_COUNT
+  ));
+  SET_VECTOR_ELT(override, PARADOX_TAG_OVERRIDE_IDS, governed);
+  SET_VECTOR_ELT(override, PARADOX_TAG_OVERRIDE_TAGS, table);
+  SEXP override_names = PROTECT(paradox_domain_character_vector(
+    (const char *const[]) {"ids", "tags"},
+    PARADOX_TAG_OVERRIDE_FIELD_COUNT
+  ));
+  Rf_setAttrib(override, R_NamesSymbol, override_names);
+
+  SEXP state = R_ExternalPtrProtected(core);
+  SEXP old_edges = VECTOR_ELT(state, PARADOX_CORE_EDGES);
+  const R_xlen_t edge_count = XLENGTH(old_edges);
+  SEXP edges = PROTECT(Rf_allocVector(VECSXP, edge_count));
+  for (R_xlen_t index = 0; index < edge_count; ++index) {
+    SET_VECTOR_ELT(edges, index, VECTOR_ELT(old_edges, index));
+  }
+  SET_VECTOR_ELT(
+    edges,
+    kind == PARADOX_CORE_COLLECTION
+      ? PARADOX_COLLECTION_EDGE_TAG_OVERRIDE
+      : PARADOX_SHADOW_EDGE_TAG_OVERRIDE,
+    override
+  );
+  Rf_setAttrib(
+    edges,
+    R_NamesSymbol,
+    Rf_getAttrib(old_edges, R_NamesSymbol)
+  );
+
+  if (paradox_core_from_private(private_environment) != core) {
+    UNPROTECT(9);
+    Rf_error("ParamSet changed while a native mutation was being validated");
+  }
+  SEXP updates = PROTECT(Rf_allocVector(VECSXP, 2));
+  SET_VECTOR_ELT(updates, 0, table);
+  SET_VECTOR_ELT(updates, 1, edges);
+  SEXP update_names = PROTECT(paradox_domain_character_vector(
+    (const char *const[]) {".tags", ".edges"},
+    2
+  ));
+  Rf_setAttrib(updates, R_NamesSymbol, update_names);
+  (void) paradox_param_set_core_replace(private_environment, updates);
+  UNPROTECT(11);
   return tags;
 }
 
@@ -538,6 +603,7 @@ SEXP paradox_param_set_set_dependencies(SEXP private_environment, SEXP self,
     self,
     &kind,
     &params,
+    FALSE,
     &work_since_interrupt
   ));
   if (kind != PARADOX_CORE_BASE) {
@@ -564,8 +630,13 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
   if (initial_core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
+  /* The ID lookups below read this node's own schema, so a collection whose
+   * children have grown must be flattened again first. */
+  if (!paradox_core_is_verified(initial_core)) {
+    initial_core = paradox_core_refresh(self, private_environment);
+  }
   if (paradox_core_kind(initial_core) == PARADOX_CORE_SHADOW) {
-    SEXP core = PROTECT(paradox_core_refresh_shadow(
+    SEXP core = PROTECT(paradox_core_refresh(
       self,
       private_environment
     ));
@@ -632,6 +703,7 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
     self,
     &kind,
     &params,
+    FALSE,
     &work_since_interrupt
   ));
   (void) kind;
@@ -733,6 +805,7 @@ SEXP paradox_param_set_set_callback(SEXP private_environment, SEXP self,
     self,
     &kind,
     &params,
+    FALSE,
     &work_since_interrupt
   ));
   (void) params;

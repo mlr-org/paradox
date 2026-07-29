@@ -517,6 +517,7 @@ static int initialize_new_node(SEXP self, SEXP private_environment,
     .next_child = 0,
     .consumed_params = 0,
     .subtree_dependencies = 0,
+    .subtree_contributes = FALSE,
     .postfix = FALSE
   };
   if ((kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
@@ -525,6 +526,13 @@ static int initialize_new_node(SEXP self, SEXP private_environment,
     return FALSE;
   }
   node->subtree_dependencies = node->dependencies.row_count;
+  /* A callback is a contribution even on a set with no parameters: it runs
+   * once per occurrence, so pruning a node that carries one would silently
+   * drop those calls. */
+  node->subtree_contributes = node->params.row_count != 0 ||
+    node->dependencies.row_count != 0 || node->values.size != 0 ||
+    VECTOR_ELT(state, PARADOX_CORE_EXTRA_TRAFO) != R_NilValue ||
+    VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT) != R_NilValue;
 
   SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
   SEXP translation = VECTOR_ELT(state, PARADOX_CORE_TRANSLATION);
@@ -575,9 +583,9 @@ void paradox_collection_validate_single_node(SEXP private_environment,
     core = paradox_core_from_private(private_environment),
     &core_index
   );
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
+  if (!paradox_core_is_verified(core)) {
     REPROTECT(
-      core = paradox_core_refresh_shadow(self, private_environment),
+      core = paradox_core_refresh(self, private_environment),
       core_index
     );
   }
@@ -619,6 +627,10 @@ static int initialize_node(SEXP self, SEXP private_environment,
     node->next_child = 0;
     node->consumed_params = 0;
     node->subtree_dependencies = node->dependencies.row_count;
+    node->subtree_contributes = node->params.row_count != 0 ||
+      node->dependencies.row_count != 0 || node->values.size != 0 ||
+      VECTOR_ELT(node->state, PARADOX_CORE_EXTRA_TRAFO) != R_NilValue ||
+      VECTOR_ELT(node->state, PARADOX_CORE_CONSTRAINT) != R_NilValue;
     return TRUE;
   }
   return initialize_new_node(
@@ -689,9 +701,21 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
     Rf_error("Corrupt ParamSetCollection shell");
   }
 
+  /* A traversal re-proves that every cached flatten agrees with its children,
+   * so the graph must be healed before it is admitted -- otherwise a schema
+   * change below an ancestor is reported as corruption instead of being
+   * absorbed. A verified graph pays one comparison for this. Migration
+   * preflight is deliberately excluded: it may not install anything into a
+   * current shell, so a stale collection still fails it, exactly as before. */
+  SEXP selected = paradox_core_from_private(private_environment);
+  if (commit_shadow_refreshes && selected != R_UnboundValue &&
+      !paradox_core_is_verified(selected)) {
+    selected = paradox_core_refresh(self, private_environment);
+  }
+
   /* Choose and root the root capsule before any shell traversal or callback.
    * The private argument comes directly from the package active binding. */
-  SEXP root_core = PROTECT(paradox_core_from_private(private_environment));
+  SEXP root_core = PROTECT(selected);
   if (root_core == R_UnboundValue ||
       paradox_core_kind(root_core) != PARADOX_CORE_COLLECTION) {
     UNPROTECT(1);
@@ -758,6 +782,18 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
         }
       }
       const int reused = previous_node != R_XLEN_T_MAX;
+      /* A shared subtree that exposes no parameter, no dependency, and no
+       * value contributes nothing that can differ between two occurrences of
+       * it, and the first occurrence already validated every node in it.
+       * Re-descending it is what made an alternating shared graph cost
+       * Theta(2^depth) nodes -- and therefore memory -- to produce an empty
+       * result.  A subtree that does contribute is still expanded per
+       * occurrence, because each occurrence exposes its own affixed IDs. */
+      if (reused && !graph->nodes[previous_node].subtree_contributes) {
+        ++graph->nodes[node_index].next_child;
+        UNPROTECT(1);
+        continue;
+      }
       SEXP child_private = R_UnboundValue;
       SEXP child_source_core = R_UnboundValue;
       SEXP child_operation_core = R_UnboundValue;
@@ -777,7 +813,7 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
         );
         if (paradox_core_kind(child_source_core) == PARADOX_CORE_SHADOW) {
           SEXP authoritative_core = commit_shadow_refreshes
-            ? paradox_core_refresh_shadow(child_self, child_private)
+            ? paradox_core_refresh(child_self, child_private)
             : paradox_shadow_preview_authoritative(child_self, child_private);
           REPROTECT(
             child_operation_core = authoritative_core,
@@ -835,6 +871,9 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
         Rf_error("ParamSetCollection dependency result is too large");
       }
       parent->subtree_dependencies += node->subtree_dependencies;
+      if (node->subtree_contributes) {
+        parent->subtree_contributes = TRUE;
+      }
     }
     graph->postorder[graph->postorder_count++] = node_index;
     --depth;

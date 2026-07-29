@@ -28,6 +28,14 @@ static paradox_activity_reason_t compare_operand(
     SEXP value, SEXP rhs, int from_default,
     R_xlen_t *work_since_interrupt) {
   if (!paradox_builtin_condition_scalar_supported(value, rhs)) {
+    /* An ordinary scalar of a type the right-hand side can never equal does
+     * not satisfy the Condition; reporting it as an unsupported operand shape
+     * would contradict `condition_test()`, which is the same comparator. */
+    if (paradox_builtin_condition_scalar_type_mismatch(value, rhs)) {
+      return from_default
+        ? PARADOX_ACTIVITY_DEFAULT_MISMATCH
+        : PARADOX_ACTIVITY_VALUE_MISMATCH;
+    }
     return from_default
       ? PARADOX_ACTIVITY_DEFAULT_UNSUPPORTED
       : PARADOX_ACTIVITY_VALUE_UNSUPPORTED;

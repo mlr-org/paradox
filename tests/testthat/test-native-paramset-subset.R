@@ -115,7 +115,8 @@ test_that("subset slices one canonical snapshot in requested order", {
 
   state = .Call(
     get("C_param_set_core_state", envir = asNamespace("paradox")),
-    observed$.__enclos_env__$private
+    observed$.__enclos_env__$private,
+    observed
   )
   for (field in c(".params", ".tags", ".trafos", ".deps")) {
     expect_identical(class(state[[field]]), "data.frame")
@@ -213,7 +214,8 @@ test_that("subset can discard all transformation authority independently", {
 
   state = .Call(
     get("C_param_set_core_state", envir = asNamespace("paradox")),
-    stripped$.__enclos_env__$private
+    stripped$.__enclos_env__$private,
+    stripped
   )
   expect_identical(state$.trafos$id, character())
   expect_null(state$.extra_trafo)

@@ -482,6 +482,26 @@ test_that("rd_info.ParamSet", {
   expect_character(rd_info(ps), len = 1L)
 })
 
+test_that("rd_info.ParamSet reports untyped defaults against the right rows", {
+  skip_if_not_installed("knitr")
+
+  # `descriptions` merges by id, which reorders the table. The untyped defaults
+  # come from the parameter table and must be realigned before that.
+  set = ps(zz = p_uty(default = "ZDEF"), aa = p_uty(default = "ADEF"), mm = p_dbl(0, 1))
+  described = strsplit(
+    rd_info(set, descriptions = c(zz = "Zdesc", aa = "Adesc", mm = "Mdesc")),
+    "\n"
+  )[[1L]]
+  rows = grep("^\\|(aa|mm|zz) ", described, value = TRUE)
+
+  expect_match(rows[[1L]], "^\\|aa .*Adesc.*\"ADEF\"")
+  expect_match(rows[[3L]], "^\\|zz .*Zdesc.*\"ZDEF\"")
+
+  plain = strsplit(rd_info(set), "\n")[[1L]]
+  expect_match(grep("^\\|zz ", plain, value = TRUE), "\"ZDEF\"")
+  expect_match(grep("^\\|aa ", plain, value = TRUE), "\"ADEF\"")
+})
+
 
 test_that("ParamSet$values convert nums to ints for ParamInt", {
   pp = ParamInt$new("x")

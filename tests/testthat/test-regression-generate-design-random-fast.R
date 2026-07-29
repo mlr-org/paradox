@@ -151,3 +151,21 @@ test_that("random designs preserve zero-level factor emptiness", {
   )
   expect_identical(.Random.seed, before)
 })
+
+test_that("row counts reject a factor rather than reading its level code", {
+  param_set = ps(a = p_dbl(0, 1))
+  levels = factor("b", levels = c("a", "b", "c"))
+
+  expect_error(
+    generate_design_random(param_set, levels),
+    "must be one non-negative integer"
+  )
+  expect_error(SamplerUnif$new(param_set)$sample(levels), "not a factor|'count'")
+
+  # The deliberately tolerated scalar attributes are unaffected.
+  expect_identical(nrow(generate_design_random(param_set, c(rows = 3L))$data), 3L)
+  expect_identical(
+    nrow(generate_design_random(param_set, structure(2L, class = "myint"))$data),
+    2L
+  )
+})

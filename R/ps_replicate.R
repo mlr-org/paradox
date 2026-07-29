@@ -13,6 +13,9 @@
 #' @param affixes (`character`)\cr
 #'   A `character` vector indicating the prefixes / postfixes to use for each repetition of `set`.
 #'   Per default, these are prefixes; if `postfix` is `TRUE`, these values are postfixed instead.
+#'   Each affix becomes part of every parameter ID it creates: a prefix must
+#'   itself match the ID grammar `^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$`, a postfix
+#'   only has to use ASCII letters, digits, `.`, and `_`.
 #'   If this is given, `times` is inferred from `length(affixes)` and should not be given separately.
 #'   If `times` is given, this defaults to `"repX"`, with `X` counting up from 1.
 #' @param postfix (`logical(1)`)\cr

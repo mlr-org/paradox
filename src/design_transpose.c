@@ -162,9 +162,20 @@ static int scalar_is_na(SEXP value) {
 
 static SEXP atomic_scalar(SEXP column, R_xlen_t row) {
   SEXP result;
+  /* Ordinary columns carry no attributes and take the allocation-free path
+   * below. An attributed column needs its own one-element cell: the copied
+   * set may contain the column's own length (`names`, `dim`, `dimnames`),
+   * and Rf_ScalarLogical() hands out R's shared TRUE/FALSE/NA singletons,
+   * which must never receive attributes. */
+  const int attributed = !paradox_api_has_no_attributes(column);
   switch (TYPEOF(column)) {
   case LGLSXP:
-    result = PROTECT(Rf_ScalarLogical(LOGICAL_ELT(column, row)));
+    if (attributed) {
+      result = PROTECT(Rf_allocVector(LGLSXP, 1));
+      SET_LOGICAL_ELT(result, 0, LOGICAL_ELT(column, row));
+    } else {
+      result = PROTECT(Rf_ScalarLogical(LOGICAL_ELT(column, row)));
+    }
     break;
   case INTSXP:
     result = PROTECT(Rf_ScalarInteger(INTEGER_ELT(column, row)));
@@ -186,10 +197,12 @@ static SEXP atomic_scalar(SEXP column, R_xlen_t row) {
     Rf_error("Internal error: non-atomic Design column");
     return R_NilValue;
   }
-  DUPLICATE_ATTRIB(result, column);
-  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
-  Rf_setAttrib(result, R_DimSymbol, R_NilValue);
-  Rf_setAttrib(result, R_DimNamesSymbol, R_NilValue);
+  if (attributed) {
+    DUPLICATE_ATTRIB(result, column);
+    Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
+    Rf_setAttrib(result, R_DimSymbol, R_NilValue);
+    Rf_setAttrib(result, R_DimNamesSymbol, R_NilValue);
+  }
   UNPROTECT(1);
   return result;
 }

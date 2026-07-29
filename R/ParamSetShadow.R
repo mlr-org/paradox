@@ -29,10 +29,11 @@ param_set_shadow_constraint_factory = function(callback, hidden_values) {
 #' entries. The default `$get_values()` view evaluates the current visible
 #' dependency graph using recorded defaults and omits dormant visible entries.
 #'
-#' The visible parameter schema is captured when the shadow is constructed.
-#' Later changes to structural metadata in the origin therefore do not change
-#' the view. Dependencies may change, but a dependency crossing the
-#' visible/hidden boundary is always an error.
+#' What the shadow fixes is the *hidden* set, not the visible schema: the view
+#' is "origin minus hidden", computed live. A parameter the origin gains later
+#' is therefore visible, and changed structural metadata -- tags, for
+#' instance -- is reflected. Dependencies may change too, but a dependency
+#' crossing the visible/hidden boundary is always an error.
 #'
 #' Checked assignment validates every supplied visible value, including a
 #' dependency-inactive value, and preserves hidden origin values. If the live
@@ -160,13 +161,6 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
       super$deps
     },
 
-    #' @field tags (named `list()`)
-    #' Tags captured with the visible schema. Read-only for a shadow.
-    tags = function(value) {
-      if (!missing(value)) stop("tags is read-only.")
-      super$tags
-    },
-
     #' @field constraint (`function` or `NULL`)
     #' Live origin constraint adapted to the visible schema. During
     #' package-owned check, test, and assignment operations it receives the
@@ -177,7 +171,6 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
       if (!missing(value)) {
         stop("ParamSetShadow does not allow setting constraint.")
       }
-      invisible(.Call(C_param_set_shadow_refresh, self, private))
       private$.state()$.constraint
     },
 
@@ -186,7 +179,6 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     #' therefore applies the origin's source-reference normalization.
     extra_trafo = function(value) {
       if (missing(value)) {
-        invisible(.Call(C_param_set_shadow_refresh, self, private))
         return(private$.state()$.extra_trafo)
       }
       # Validate and refresh the immutable origin edge before performing
@@ -200,7 +192,6 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     #' @field has_constraint (`logical(1)`)
     #' Whether the origin currently has a constraint.
     has_constraint = function() {
-      invisible(.Call(C_param_set_shadow_refresh, self, private))
       !is.null(private$.state()$.constraint)
     }
   ),
@@ -210,7 +201,7 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
       # `$origin` and every origin-directed mutation are semantic Shadow reads.
       # Admit the complete metadata signature and live origin graph before
       # exposing the edge or executing any operation through it.
-      invisible(.Call(C_param_set_shadow_refresh, self, private))
+      invisible(.Call(C_param_set_core_refresh, self, private))
       if (!identical(.Call(C_param_set_core_kind, private), 3L)) {
         stop("Corrupt ParamSetShadow capsule kind", call. = FALSE)
       }
@@ -223,7 +214,6 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     },
 
     .get_values = function() {
-      invisible(.Call(C_param_set_shadow_refresh, self, private))
       private$.state()$.values
     },
 

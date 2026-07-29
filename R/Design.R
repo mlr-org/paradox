@@ -57,7 +57,24 @@ Design = R6Class("Design",
         # placeholder data. The native grid generator has already performed this
         # normalization while pruning its search and enters with the package's
         # namespace-owned prepared-grid token.
-        imap(param_set$values, function(v, n) set(data, j = n, value = v))
+        storage_types = param_set$storage_type
+        imap(param_set$values, function(v, n) {
+          # Mirror the native grid generator: one ordinary element of the
+          # parameter's own storage type collapses into that typed column,
+          # while every other legal stored value -- `NULL`, a multi-element or
+          # cross-storage special value, an S4 or list leaf -- keeps its
+          # identity as a list-column entry. Assigning such a value as a plain
+          # column would instead coerce it to `NA`, recycle or reject it by
+          # length, or (for `NULL`) delete the column outright.
+          if (inherits(v, "TuneToken")) {
+            stopf("Design generation cannot materialize the stored TuneToken value of parameter '%s'.", n)
+          }
+          if (design_column_value_is_plain(v, storage_types[[n]])) {
+            set(data, j = n, value = v)
+          } else {
+            set(data, j = n, value = rep(list(v), nrow(data)))
+          }
+        })
         private$set_deps_to_na()
         # NB: duplicated rows can happen due to NA setting.
         if (remove_dupl) {
@@ -132,3 +149,20 @@ Design = R6Class("Design",
     }
   )
 )
+
+# A stored parameter value collapses into an ordinary typed design column only
+# when it is exactly one attribute-free element of the parameter's own storage
+# type. `p_uty()` stores into a list column, so its values never collapse.
+design_column_value_is_plain = function(value, storage_type) {
+  if (storage_type == "list" || !is.atomic(value) || is.object(value) ||
+    length(value) != 1L || !is.null(attributes(value))) {
+    return(FALSE)
+  }
+  switch(storage_type,
+    numeric = is.double(value) || is.integer(value),
+    integer = is.integer(value),
+    character = is.character(value),
+    logical = is.logical(value),
+    FALSE
+  )
+}

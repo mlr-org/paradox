@@ -14,6 +14,9 @@
 #' used with a preceding dot instead: `.tag_sets`, `.tag_params`, and `.postfix_names`.
 #' @param sets (`list` of [`ParamSet`])\cr
 #'   This may be a named list, in which case non-empty names are prefixed to parameters in the corresponding [`ParamSet`].
+#'   A name becomes part of every parameter ID it creates: a prefix must itself
+#'   match the ID grammar `^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$`, a postfix (see
+#'   `postfix_names`) only has to use ASCII letters, digits, `.`, and `_`.
 #' @param tag_sets (`logical(1)`)\cr
 #'   Whether to add tags of the form `"set_<set_id>"` to each parameter originating from a given `ParamSet` given with name `<name in "sets">`.
 #' @param tag_params (`logical(1)`)\cr

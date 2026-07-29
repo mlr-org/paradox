@@ -168,7 +168,13 @@ This field provides direct references to the \code{\link{ParamSet}} objects.}
       \item{\code{sets}}{(named \code{list()} of \link{ParamSet})\cr
 The outer set list, names, and list metadata must be ordinary
 non-ALTREP/non-S4. ParamSet objects are not cloned.
-Names are used as "set_id" for the naming scheme of delegated parameters.}
+Names are used as "set_id" for the naming scheme of delegated parameters.
+A name is therefore part of every parameter ID it contributes and must
+keep that ID inside the ID grammar: a prefix must itself match
+\verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$}, while a postfix (see \code{postfix_names})
+only has to use ASCII letters, digits, \code{.}, and \verb{_}.
+The empty name is also allowed and delegates the set's parameters
+without affixing them.}
       \item{\code{tag_sets}}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"set_<set_id>"} to each parameter originating from a given \code{ParamSet} given with name \verb{<set_id>}.}
       \item{\code{tag_params}}{(\code{logical(1)})\cr
@@ -195,7 +201,10 @@ Whether to use the names inside \code{sets} as postfixes, rather than prefixes.}
     \describe{
       \item{\code{p}}{(\link{ParamSet}).}
       \item{\code{n}}{(\code{character(1)})\cr
-Name to use. Default \code{""}.}
+Name to use. Must keep the IDs it creates inside the ID grammar --
+\verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$} when this collection prefixes, ASCII
+letters, digits, \code{.}, and \verb{_} when it postfixes -- or be \code{""} to
+delegate \code{p}'s parameters without affixing them. Default \code{""}.}
       \item{\code{tag_sets}}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"set_<n>"} to the newly added parameters.}
       \item{\code{tag_params}}{(\code{logical(1)})\cr

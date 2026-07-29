@@ -196,11 +196,10 @@ static void load_param_state(SEXP param_set, SEXP private,
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet state in Design dependency operation");
   }
-  paradox_core_kind_t kind = paradox_core_kind(core);
-  if (kind == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(param_set, private);
-    kind = paradox_core_kind(core);
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(param_set, private);
   }
+  const paradox_core_kind_t kind = paradox_core_kind(core);
 
   if (kind == PARADOX_CORE_COLLECTION) {
     paradox_collection_graph_t graph;

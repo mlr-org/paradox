@@ -481,3 +481,90 @@ test_that("PSC postfix", {
     )
   )
 })
+
+test_that("collection set names must satisfy the parameter ID grammar", {
+  # A set name is part of every ID it contributes, so a name the ParamSet
+  # constructor would reject built a collection whose own $search_space() and
+  # ParamSet$new(<collection>$domains) then failed.
+  child = ps(z = p_dbl(0, 1))
+  for (bad in c("a-b", "1x", "_a", "a b", ".", "..", "a+b")) {
+    expect_error(
+      ParamSetCollection$new(setNames(list(child), bad)),
+      "ASCII parameter ID matching"
+    )
+    collection = ParamSetCollection$new(list(ok = ps(y = p_dbl(0, 1))))
+    expect_error(collection$add(child, bad), "ASCII parameter ID matching")
+  }
+
+  for (good in c("a", "a.b", "a_b", ".a", "..a", "a.", "A1", "classif.xgboost")) {
+    collection = ParamSetCollection$new(setNames(list(child), good))
+    expect_equal(collection$ids(), paste0(good, ".z"))
+    # An admitted name always produces IDs the exact ParamSet constructor takes.
+    expect_equal(ParamSet$new(collection$domains)$ids(), paste0(good, ".z"))
+  }
+
+  # The empty name still delegates without prefixing, including several times.
+  expect_equal(ParamSetCollection$new(list(child))$ids(), "z")
+  expect_equal(
+    ParamSetCollection$new(list(ps(a = p_dbl()), ps(b = p_dbl())))$ids(),
+    c("a", "b")
+  )
+  collection = ParamSetCollection$new(list(child))
+  collection$add(ps(w = p_dbl(0, 1)))
+  expect_equal(collection$ids(), c("z", "w"))
+
+  expect_error(
+    ParamSetCollection$new(setNames(list(child), NA_character_)),
+    "is NA at position"
+  )
+  expect_error(
+    ParamSetCollection$new(list(ok = child))$add(child, NA_character_),
+    "non-missing name"
+  )
+})
+
+test_that("a postfixed set name only has to be a legal ID continuation", {
+  # A postfix lands after the child ID, so it never occupies the leading
+  # position the strict grammar constrains: "x.1" is a legal parameter ID.
+  child = ps(x = p_dbl(0, 1))
+  for (good in c("1", "_a", ".", "9_9", "a.b")) {
+    collection = ParamSetCollection$new(
+      setNames(list(child), good), postfix_names = TRUE
+    )
+    expect_equal(collection$ids(), paste0("x.", good))
+    expect_equal(ParamSet$new(collection$domains)$ids(), paste0("x.", good))
+  }
+  for (bad in c("a-b", "a b", "a+b")) {
+    expect_error(
+      ParamSetCollection$new(setNames(list(child), bad), postfix_names = TRUE),
+      "ASCII letters, digits"
+    )
+  }
+  # The same name is still rejected when it would be prepended instead.
+  expect_error(
+    ParamSetCollection$new(list(`1` = child)),
+    "ASCII parameter ID matching"
+  )
+  expect_equal(
+    ps_replicate(child, affixes = c("1", "2"), postfix = TRUE)$ids(),
+    c("x.1", "x.2")
+  )
+  expect_error(
+    ps_replicate(child, affixes = c("1", "2")),
+    "ASCII parameter ID matching"
+  )
+
+  postfixed = ParamSetCollection$new(list(a = child), postfix_names = TRUE)
+  postfixed$add(ps(y = p_dbl(0, 1)), "2")
+  expect_equal(postfixed$ids(), c("x.a", "y.2"))
+})
+
+test_that("a strict set name keeps the whole collection usable", {
+  collection = ParamSetCollection$new(list(a.b = ps(z = p_dbl(0, 1))))
+  collection$values = list(a.b.z = to_tune(0, 1))
+  expect_equal(collection$search_space()$ids(), "a.b.z")
+  expect_equal(
+    ParamSetCollection$new(list(g = collection))$ids(),
+    "g.a.b.z"
+  )
+})

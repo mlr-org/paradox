@@ -65,10 +65,12 @@ test_that("constructor fixes schema metadata and keeps live child semantics", {
   child$assert_values = FALSE
   child$values = list(enabled = FALSE, amount = 2L)
 
-  expect_identical(collection$params$.tags, schema_before$.tags)
+  # Tags are part of the flattened schema and are therefore a live view of the
+  # contained sets, exactly like values, dependencies, and callbacks.
+  expect_identical(collection$params$id, schema_before$id)
   expect_identical(collection$tags, list(
-    component.enabled = "initial",
-    component.amount = character()
+    component.enabled = "changed",
+    component.amount = "changed"
   ))
   expect_identical(collection$values, list(
     component.enabled = FALSE,

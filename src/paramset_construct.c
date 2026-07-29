@@ -56,38 +56,6 @@ static const char *const result_names[RESULT_COUNT] = {
   "params", "tags", "trafos", "requirements", "init_values"
 };
 
-/* This is the documented checkmate `type = "strict"` grammar used by the R
- * constructor: ^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$. Enforcing it here makes the
- * common native path independent of a preceding checkmate call and also makes
- * bytewise key ordering unambiguous. */
-static int string_is_strict_id(SEXP value) {
-  if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES ||
-      LENGTH(value) == 0) {
-    return FALSE;
-  }
-
-  const unsigned char *bytes = (const unsigned char *) CHAR(value);
-  const int size = LENGTH(value);
-  int index = 0;
-  while (index < size && bytes[index] == '.') {
-    ++index;
-  }
-  if (index == size ||
-      !((bytes[index] >= 'a' && bytes[index] <= 'z') ||
-        (bytes[index] >= 'A' && bytes[index] <= 'Z'))) {
-    return FALSE;
-  }
-
-  for (++index; index < size; ++index) {
-    const unsigned char byte = bytes[index];
-    if (!((byte >= 'a' && byte <= 'z') ||
-          (byte >= 'A' && byte <= 'Z') ||
-          (byte >= '0' && byte <= '9') || byte == '.' || byte == '_')) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
 
 static int class_is_builtin_domain(SEXP domain, SEXP cls) {
   if (TYPEOF(cls) != STRSXP || ALTREP(cls) || Rf_isS4(cls) ||
@@ -205,7 +173,14 @@ static SEXP snapshot_builtin_value_leaf(SEXP source) {
     return source;
   }
   SEXP result = PROTECT(paradox_snapshot_semantic_vector(source));
+  /* The snapshot already owns a materialized ordinary `names`. Copying the
+   * source's attribute set replaces the whole attribute list, so reinstall
+   * that owned copy afterwards; otherwise the caller's original names object
+   * -- possibly ALTREP, possibly length-changing -- lands in the capsule. */
+  SEXP owned_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
   SHALLOW_DUPLICATE_ATTRIB(result, source);
+  Rf_setAttrib(result, R_NamesSymbol, owned_names);
+  UNPROTECT(1);
   UNPROTECT(1);
   return result;
 }
@@ -649,7 +624,7 @@ SEXP paradox_param_set_construct(SEXP domains) {
       R_CheckUserInterrupt();
     }
     SEXP id = STRING_ELT(ids, row);
-    if (!string_is_strict_id(id)) {
+    if (!paradox_string_is_strict_id(id)) {
       UNPROTECT(3);
       Rf_error(
         "ParamSet parameter names must be nonempty, non-missing strict ASCII IDs"

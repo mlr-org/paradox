@@ -569,7 +569,20 @@ test_that("direct constructor admission is closed and structurally exact", {
       if (specific_lower) {
         "`lower` must be one number"
       } else {
-        "Invalid built-in Domain state|cannot both be supplied"
+        # Each canonical-state clause now names the argument it guards.
+        paste(
+          "must describe one canonical Domain",
+          "`grouping` must be",
+          "`levels` must be",
+          "`special_vals` must be",
+          "`tags` must be",
+          "`trafo` must be",
+          "`logscale` must be given as an argument",
+          "invalid `init` admission flag",
+          "Invalid built-in Domain state",
+          "cannot both be supplied",
+          sep = "|"
+        )
       },
       fixed = specific_lower,
       info = name
@@ -606,7 +619,7 @@ test_that("unknown kinds and invalid utility callbacks fail at admission", {
   }
   expect_error(
     p_extension(),
-    "Paradox 2 supports only canonical p_dbl, p_int, p_fct, p_lgl, and p_uty",
+    "Paradox 2 supports only p_dbl, p_int, p_fct, p_lgl, and p_uty",
     fixed = TRUE
   )
 
@@ -672,4 +685,88 @@ test_that("Domain constructors remain rooted during GC and callback reentry", {
   ))
   expect_identical(callback_count, 1L)
   expect_s3_class(nested, "ParamInt")
+})
+
+
+test_that("a snapshotted value leaf keeps its own materialized names", {
+  skip_on_cran()
+  namespace = asNamespace("paradox")
+  skip_if_not(
+    exists("C_test_stateful_altrep", namespace, inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  growing = native_stateful_altrep(
+    "a", c("a", "b"),
+    length_switch_after = 7L
+  )
+  value = 1
+  names(value) = growing
+
+  set = ps(a = p_dbl(0, 2, default = value), b = p_dbl(0, 1))
+  stored = set$params$default[[1L]]
+  expect_identical(length(stored), 1L)
+  expect_identical(length(attr(stored, "names", exact = TRUE)), 1L)
+})
+
+test_that("a non-finite tolerance is reported as a `tolerance` argument error", {
+  # A canonical numeric Domain stores a finite tolerance. Without the argument
+  # gate, `Inf` reached the final canonical-state check, which can only name
+  # the whole `lower/upper/tolerance` field group.
+  expect_error(p_dbl(0, 1, tolerance = Inf), "`tolerance` must be one finite non-negative number", fixed = TRUE)
+  expect_error(p_dbl(0, 1, tolerance = -Inf), "`tolerance` must be one finite non-negative number", fixed = TRUE)
+  expect_error(p_dbl(1, 10, logscale = TRUE, tolerance = Inf), "`tolerance` must be one finite non-negative number", fixed = TRUE)
+  expect_error(p_int(0L, 1L, tolerance = Inf), "`tolerance` must be one number between 0 and 0.5", fixed = TRUE)
+
+  expect_silent(p_dbl(0, 1, tolerance = 0))
+  expect_silent(p_dbl(0, 1, tolerance = 1e9))
+  expect_silent(p_int(0L, 1L, tolerance = 0.5))
+})
+
+test_that("each canonical-state clause names the argument it guards", {
+  # These all reported "Invalid built-in Domain state; Paradox 2 supports only
+  # canonical p_dbl, p_int, p_fct, p_lgl, and p_uty Domains", which names no
+  # argument at all and reads like an internal failure.
+  expect_error(
+    p_fct(c("a", "a")),
+    "`levels` must be a character vector of unique, non-missing values",
+    fixed = TRUE
+  )
+  expect_error(
+    p_fct(c("a", NA_character_)),
+    "`levels` must be a character vector of unique, non-missing values",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(0, 1, tags = NA_character_),
+    "`tags` must be an attribute-free character vector of unique, non-missing values",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(0, 1, tags = c("x", "x")),
+    "`tags` must be an attribute-free character vector of unique, non-missing values",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(0, 1, trafo = 1),
+    "`trafo` must be a function or NULL",
+    fixed = TRUE
+  )
+  expect_error(
+    p_uty(custom_check = 1),
+    "custom_check",
+    ignore.case = TRUE
+  )
+
+  # The clause order of the single condition these replaced is preserved, so an
+  # input that is wrong in two places still reports the earlier argument.
+  expect_error(
+    p_fct(c("a", "a"), tags = c("x", "x")),
+    "`levels` must be",
+    fixed = TRUE
+  )
+
+  expect_silent(p_fct(c("a", "b")))
+  expect_silent(p_dbl(0, 1, tags = c("x", "y")))
+  expect_silent(p_dbl(0, 1, trafo = function(x) x))
 })

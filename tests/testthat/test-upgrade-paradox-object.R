@@ -1648,3 +1648,55 @@ test_that("pinned mbo_config search spaces are explicit upgrade fixtures", {
     }
   }
 })
+
+test_that("Paradox 1 numeric bound storage is normalized, not rejected", {
+  # Paradox 1 stored the bound arguments verbatim, so `p_int(1L, 10L)` kept an
+  # integer `lower`/`upper`/`tolerance`. Refusing that shape made an ordinary
+  # legacy Domain unmigratable.
+  domain = p_int(1L, 10L)
+  legacy = setDT(copy(unclass(domain)))
+  for (name in c("lower", "upper", "tolerance")) {
+    set(legacy, j = name, value = as.integer(legacy[[name]]))
+  }
+  class(legacy) = class(domain)
+  expect_identical(typeof(legacy$lower), "integer")
+
+  upgraded = upgrade_paradox_object(legacy)
+  expect_identical(upgraded$lower, 1L)
+  expect_identical(upgraded$upper, 10L)
+  expect_identical(upgraded$id, domain$id)
+})
+
+test_that("upgrading a Domain without depends is shape-preserving", {
+  # A Domain without `depends` stores NULL requirements, which is what the
+  # current constructors produce; an empty list denormalized the column.
+  for (domain in list(p_dbl(0, 1), p_int(1L, 10L), p_fct(c("a", "b")),
+      p_lgl(), p_uty())) {
+    expect_identical(upgrade_paradox_object(domain), domain)
+  }
+})
+
+test_that("upgraded collections keep generating the tags Paradox 1 recorded", {
+  child = ps(x = p_int(), y = p_lgl())
+  other = ps(z = p_dbl())
+  current = ParamSetCollection$new(
+    list(a = child, b = other),
+    tag_sets = TRUE,
+    tag_params = TRUE
+  )
+  legacy = legacy_collection_from_current(
+    current,
+    list(a = legacy_base_from_current(child), b = legacy_base_from_current(other))
+  )
+  upgraded = upgrade_paradox_object(legacy)
+  expect_setequal(upgraded$tags$a.x, c("set_a", "param_x"))
+  expect_setequal(upgraded$tags$b.z, c("set_b", "param_z"))
+
+  # Paradox 1 consumed the flags and kept only their output, so the upgrade has
+  # to read them back: once a contained set changes, the tags are derived again
+  # and a lost flag would silently drop them.
+  state = paradox:::param_set_core_state(mlr3misc::get_private(upgraded))
+  state$.sets[[1L]]$tags = list(x = "kept", y = character())
+  expect_setequal(upgraded$tags$a.x, c("set_a", "param_x", "kept"))
+  expect_setequal(upgraded$tags$b.z, c("set_b", "param_z"))
+})

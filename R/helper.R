@@ -100,11 +100,21 @@ as_type = function(x, type) {
       stripped = x
     } else {
       stripped = x
-      for (i in seq_len(length(x))) {
-        if (typeof(x[[i]]) == "symbol" && !nzchar(as.character(x[[i]]))) {
+      # A parser-produced `function(...)` node carries its srcref as a fourth
+      # positional cell. Remove that cell outright: recursing into it would
+      # strip only `srcfile` and leave an integer vector still classed
+      # "srcref", which `function` installs on the closure and `print()` then
+      # shows in place of the body.
+      if (length(stripped) == 4L &&
+          identical(stripped[[1L]], quote(`function`))) {
+        stripped[[4L]] = NULL
+      }
+      for (i in seq_len(length(stripped))) {
+        if (typeof(stripped[[i]]) == "symbol" &&
+            !nzchar(as.character(stripped[[i]]))) {
           next
         }
-        child = x[[i]]
+        child = stripped[[i]]
         # `[[<- NULL` removes a call/pairlist cell. Rebuild only syntax nodes
         # that actually carry source metadata; this also avoids rewriting the
         # empty formal pairlist of a nested `function()`.

@@ -40,6 +40,12 @@ typedef struct {
   R_xlen_t next_child;
   R_xlen_t consumed_params;
   R_xlen_t subtree_dependencies;
+  /* TRUE once this node or anything below it exposes a parameter, a
+   * dependency, or a stored value.  A shared node whose whole subtree is
+   * barren contributes nothing that can differ between two occurrences of it,
+   * so the builder stops re-descending it; see the skip in
+   * `collection_graph_build()`. */
+  int subtree_contributes;
   int postfix;
 } paradox_collection_graph_node_t;
 

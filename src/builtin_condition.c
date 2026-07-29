@@ -178,13 +178,10 @@ static int compatible_operand_types(SEXPTYPE value_type,
     (value_type == STRSXP && rhs_type == STRSXP);
 }
 
-int paradox_builtin_condition_scalar_supported(SEXP value, SEXP rhs) {
-  if (value == R_NilValue || Rf_inherits(value, "TuneToken")) {
-    return TRUE;
-  }
+static int scalar_leaf_is_inspectable(SEXP value, SEXP rhs) {
   const SEXPTYPE value_type = (SEXPTYPE) TYPEOF(value);
-  const SEXPTYPE rhs_type = (SEXPTYPE) TYPEOF(rhs);
-  if (!compatible_operand_types(value_type, rhs_type) || ALTREP(value) ||
+  if ((value_type != LGLSXP && value_type != INTSXP &&
+      value_type != REALSXP && value_type != STRSXP) || ALTREP(value) ||
       XLENGTH(value) != 1 || Rf_isObject(value) || Rf_isS4(value) ||
       Rf_isS4(rhs) ||
       !paradox_api_has_no_attributes(value)) {
@@ -192,6 +189,27 @@ int paradox_builtin_condition_scalar_supported(SEXP value, SEXP rhs) {
   }
   return value_type != STRSXP || STRING_ELT(value, 0) == NA_STRING ||
     Rf_getCharCE(STRING_ELT(value, 0)) != CE_BYTES;
+}
+
+int paradox_builtin_condition_scalar_supported(SEXP value, SEXP rhs) {
+  if (value == R_NilValue || Rf_inherits(value, "TuneToken")) {
+    return TRUE;
+  }
+  return scalar_leaf_is_inspectable(value, rhs) &&
+    compatible_operand_types(
+      (SEXPTYPE) TYPEOF(value),
+      (SEXPTYPE) TYPEOF(rhs)
+    );
+}
+
+/* Distinguishes the two reasons the predicate above can refuse a leaf. A
+ * plain scalar whose type the right-hand side can never equal is an ordinary
+ * unsatisfied comparison, exactly as `condition_test()` reports it; only a
+ * leaf the comparator cannot inspect at all is a shape the caller must
+ * diagnose separately. */
+int paradox_builtin_condition_scalar_type_mismatch(SEXP value, SEXP rhs) {
+  return value != R_NilValue && !Rf_inherits(value, "TuneToken") &&
+    scalar_leaf_is_inspectable(value, rhs);
 }
 
 int paradox_builtin_condition_element_matches(SEXP values,
@@ -406,15 +424,23 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
     UNPROTECT(2);
     Rf_error("Condition comparison requires a plain atomic vector");
   }
-  if (!compatible_operand_types(type, (SEXPTYPE) TYPEOF(stable_rhs))) {
-    UNPROTECT(2);
-    Rf_error("Condition comparison operands have incompatible types");
-  }
+  /* A value whose type the right-hand side cannot equal simply does not
+   * satisfy the Condition: this is an ordinary negative comparison result, not
+   * a failure of the operation. Paradox 1 also never raised here, but it
+   * compared through R's `==`, so `1 == "1"` coerced to TRUE; the closed
+   * comparator deliberately does not reinterpret a value as another type. */
+  const int comparable = compatible_operand_types(
+    type, (SEXPTYPE) TYPEOF(stable_rhs)
+  );
 
   SEXP stable = PROTECT(ALTREP(x) ? materialize_atomic_vector(x) : x);
   const R_xlen_t size = XLENGTH(stable);
   SEXP result = PROTECT(Rf_allocVector(LGLSXP, size));
-  if (kind == PARADOX_BUILTIN_CONDITION_EQUAL) {
+  if (!comparable) {
+    for (R_xlen_t index = 0; index < size; ++index) {
+      SET_LOGICAL_ELT(result, index, FALSE);
+    }
+  } else if (kind == PARADOX_BUILTIN_CONDITION_EQUAL) {
     condition_equal_vector(
       stable, stable_rhs, result, &work_since_interrupt
     );

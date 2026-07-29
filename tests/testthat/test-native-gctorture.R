@@ -371,7 +371,7 @@ test_that("every allocating native entry point survives forced collection", {
   expect_identical(shadow_has_dependencies, TRUE)
   expect_true(adopted_subset_token)
   expect_identical(
-    .Call(symbols$C_param_set_core_state, subset_private)$.params$id,
+    .Call(symbols$C_param_set_core_state, subset_private, NULL)$.params$id,
     c("factor", "double")
   )
   expect_false(consumed_subset_token)
@@ -379,14 +379,16 @@ test_that("every allocating native entry point survives forced collection", {
   expect_identical(
     .Call(
       symbols$C_param_set_core_state,
-      collection_subset_private
+      collection_subset_private,
+      NULL
     )$.params$id,
     c("inner.factor", "inner.double")
   )
   expect_true(adopted_stripped_subset_token)
   stripped_state = .Call(
     symbols$C_param_set_core_state,
-    stripped_subset_private
+    stripped_subset_private,
+    NULL
   )
   expect_identical(nrow(stripped_state$.trafos), 0L)
   expect_null(stripped_state$.extra_trafo)

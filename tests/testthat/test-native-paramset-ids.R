@@ -14,7 +14,7 @@ test_that("ids entry points are registered with fixed arities", {
   expect_s3_class(direct, "NativeSymbolInfo")
   expect_s3_class(lazy, "NativeSymbolInfo")
   expect_identical(direct$numParameters, 5L)
-  expect_identical(lazy$numParameters, 2L)
+  expect_identical(lazy$numParameters, 3L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
   expect_error(
     .Call(
@@ -36,12 +36,12 @@ test_that("lazy IDs reject malformed direct-call environments", {
   private = set$.__enclos_env__$private
 
   expect_error(
-    .Call(symbol, NULL, new.env(parent = emptyenv())),
+    .Call(symbol, NULL, NULL, new.env(parent = emptyenv())),
     "requires private and method environments",
     fixed = TRUE
   )
   expect_error(
-    .Call(symbol, private, NULL),
+    .Call(symbol, private, NULL, NULL),
     "requires private and method environments",
     fixed = TRUE
   )

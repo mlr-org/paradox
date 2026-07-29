@@ -36,5 +36,9 @@ attribute_hidden SEXP paradox_shadow_origin_from_core(SEXP core);
 /* Authenticate the complete package-private refresh signature without
  * refreshing or otherwise evaluating the origin graph. */
 attribute_hidden int paradox_shadow_metadata_is_exact(SEXP core);
+/* Carry a SHADOW's derived-cache carrier onto a replacement generation. A
+ * field-level capsule replacement rebuilds the external pointer, and a SHADOW
+ * without its refresh signature is not a canonical capsule at all. */
+attribute_hidden void paradox_shadow_copy_metadata(SEXP source, SEXP target);
 
 #endif

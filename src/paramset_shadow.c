@@ -94,7 +94,12 @@ static int shadow_constraint_values_shape(SEXP values, int allow_s3,
     *names = observed_names;
     return TRUE;
   }
-  if (TYPEOF(observed_names) != STRSXP ||
+  /* Same ordinary-names admission as every sibling gate: the merge loop below
+   * indexes this vector element by element, so an ALTREP or S4 names object
+   * could answer differently per observation and pair a value with another
+   * parameter's name. */
+  if (TYPEOF(observed_names) != STRSXP || ALTREP(observed_names) ||
+      Rf_isS4(observed_names) || Rf_isObject(observed_names) ||
       XLENGTH(observed_names) != XLENGTH(values) ||
       !paradox_api_has_no_attributes(observed_names)) {
     return FALSE;
@@ -297,6 +302,14 @@ static SEXP exact_metadata_signature(SEXP core) {
   }
   SEXP signature = Rf_getAttrib(core, shadow_metadata_symbol());
   return exact_signature(signature) ? signature : R_UnboundValue;
+}
+
+void paradox_shadow_copy_metadata(SEXP source, SEXP target) {
+  SEXP signature = PROTECT(Rf_getAttrib(source, shadow_metadata_symbol()));
+  if (signature != R_NilValue) {
+    Rf_setAttrib(target, shadow_metadata_symbol(), signature);
+  }
+  UNPROTECT(1);
 }
 
 int paradox_shadow_metadata_is_exact(SEXP core) {
@@ -796,13 +809,19 @@ static void copy_param_element(SEXP target, R_xlen_t target_row,
 }
 
 static SEXP visible_parameter_table(const paradox_domain_params_t *source,
-    SEXP shadowed, R_xlen_t *work_since_interrupt) {
+    SEXP shadowed, int strict, R_xlen_t *work_since_interrupt) {
   if (TYPEOF(shadowed) != STRSXP || Rf_any_duplicated(shadowed, FALSE) != 0) {
     Rf_error("`shadowed` must be a unique character vector");
   }
   for (R_xlen_t index = 0; index < XLENGTH(shadowed); ++index) {
     SEXP id = STRING_ELT(shadowed, index);
-    if (id == NA_STRING || Rf_getCharCE(id) == CE_BYTES ||
+    if (id == NA_STRING || Rf_getCharCE(id) == CE_BYTES) {
+      Rf_error("`shadowed` contains an unknown or unsupported parameter ID");
+    }
+    /* Construction requires every hidden ID to exist; a later refresh does
+     * not, because an origin that lost a parameter must still yield a usable
+     * view rather than an unreadable object. */
+    if (strict &&
         !paradox_domain_string_in(source->ids, id, work_since_interrupt)) {
       Rf_error("`shadowed` contains an unknown or unsupported parameter ID");
     }
@@ -858,24 +877,60 @@ static SEXP visible_parameter_table(const paradox_domain_params_t *source,
   return result;
 }
 
+/* The origin fields a Shadow's own visible schema is derived from. Recording
+ * them is what turns "origin minus hidden" into a live view: the hidden set
+ * cannot be recovered from the visible schema alone, because a parameter the
+ * origin gained after construction is neither visible nor hidden by it. */
+static SEXP shadow_edge_record(SEXP origin_params, SEXP origin_tags,
+    SEXP origin_trafos, SEXP shadowed, SEXP tag_override) {
+  SEXP edges = PROTECT(Rf_allocVector(
+    VECSXP,
+    PARADOX_SHADOW_EDGE_FIELD_COUNT
+  ));
+  SET_VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_PARAMS, origin_params);
+  SET_VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_TAGS, origin_tags);
+  SET_VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_TRAFOS, origin_trafos);
+  SET_VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_SHADOWED, shadowed);
+  SET_VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_TAG_OVERRIDE, tag_override);
+  SEXP names = PROTECT(paradox_domain_character_vector(
+    (const char *const[]) {
+      "params", "tags", "trafos", "shadowed", "tag_override"
+    },
+    PARADOX_SHADOW_EDGE_FIELD_COUNT
+  ));
+  Rf_setAttrib(edges, R_NamesSymbol, names);
+  UNPROTECT(2);
+  return edges;
+}
+
 static SEXP build_shadow_template_state(SEXP origin, SEXP shadowed,
     const paradox_domain_params_t *params,
     const paradox_domain_tags_t *tags,
+    SEXP origin_params, SEXP origin_tags, SEXP origin_trafos,
+    SEXP tag_override, int strict_shadowed,
     R_xlen_t *work_since_interrupt) {
   SEXP visible_params = PROTECT(visible_parameter_table(
     params,
     shadowed,
+    strict_shadowed,
     work_since_interrupt
   ));
   SEXP visible_ids = VECTOR_ELT(visible_params, PARADOX_DOMAIN_ID);
-  SEXP visible_tags = PROTECT(filter_tags(
-    tags,
-    visible_ids,
+  SEXP visible_tags = PROTECT(paradox_domain_apply_tag_override(
+    PROTECT(filter_tags(tags, visible_ids, work_since_interrupt)),
+    tag_override,
     work_since_interrupt
   ));
   SEXP sets = PROTECT(Rf_allocVector(VECSXP, 1));
   SET_VECTOR_ELT(sets, 0, origin);
   SEXP postfix = PROTECT(Rf_ScalarLogical(FALSE));
+  SEXP edges = PROTECT(shadow_edge_record(
+    origin_params,
+    origin_tags,
+    origin_trafos,
+    shadowed,
+    tag_override
+  ));
   /* This short-lived construction plan is not a capsule and therefore needs
    * neither canonical field names nor placeholder tables. The final assembly
    * below creates the one exact payload and capsule exposed by the object. */
@@ -884,7 +939,8 @@ static SEXP build_shadow_template_state(SEXP origin, SEXP shadowed,
   SET_VECTOR_ELT(result, PARADOX_CORE_TAGS, visible_tags);
   SET_VECTOR_ELT(result, PARADOX_CORE_SETS, sets);
   SET_VECTOR_ELT(result, PARADOX_CORE_POSTFIX, postfix);
-  UNPROTECT(5);
+  SET_VECTOR_ELT(result, PARADOX_CORE_EDGES, edges);
+  UNPROTECT(7);
   return result;
 }
 
@@ -1048,7 +1104,7 @@ static SEXP assemble_shadow_core(SEXP template_state, SEXP factories,
     const paradox_domain_values_t *source_values,
     const paradox_domain_dependencies_t *source_dependencies,
     const paradox_domain_trafos_t *source_trafos,
-    SEXP source_constraint, SEXP source_extra_trafo,
+    SEXP source_constraint, SEXP source_extra_trafo, SEXP reused_trafos,
     R_xlen_t *work_since_interrupt) {
   SEXP visible_ids = VECTOR_ELT(
     VECTOR_ELT(template_state, PARADOX_CORE_PARAMS),
@@ -1066,11 +1122,16 @@ static SEXP assemble_shadow_core(SEXP template_state, SEXP factories,
     visible_ids,
     work_since_interrupt
   ));
-  SEXP trafos = PROTECT(filter_trafos(
-    source_trafos,
-    visible_ids,
-    work_since_interrupt
-  ));
+  /* Reusing the previous projection when the origin's schema slice is
+   * unchanged is not just an allocation saving: an enclosing collection
+   * decides whether its flatten is stale by comparing these very objects, so
+   * a fresh table on every value commit would re-flatten the whole graph
+   * around a Shadow on every iteration of a tuning loop. */
+  SEXP trafos = PROTECT(
+    reused_trafos != R_NilValue
+      ? reused_trafos
+      : filter_trafos(source_trafos, visible_ids, work_since_interrupt)
+  );
   SEXP constraint_hidden_values = PROTECT(
     source_constraint == R_NilValue
       ? R_NilValue
@@ -1112,7 +1173,8 @@ static SEXP assemble_shadow_core(SEXP template_state, SEXP factories,
     constraint,
     VECTOR_ELT(template_state, PARADOX_CORE_SETS),
     R_NilValue,
-    VECTOR_ELT(template_state, PARADOX_CORE_POSTFIX)
+    VECTOR_ELT(template_state, PARADOX_CORE_POSTFIX),
+    VECTOR_ELT(template_state, PARADOX_CORE_EDGES)
   };
   SEXP result = PROTECT(paradox_core_new_from_fields(
     PARADOX_CORE_SHADOW,
@@ -1128,7 +1190,8 @@ static SEXP build_from_validated_base(SEXP template_state, SEXP state,
     const paradox_domain_dependencies_t *dependencies,
     const paradox_domain_trafos_t *trafos,
     const paradox_domain_values_t *values,
-    SEXP factories, SEXP signature, R_xlen_t *work_since_interrupt) {
+    SEXP factories, SEXP signature, SEXP reused_trafos,
+    R_xlen_t *work_since_interrupt) {
   return assemble_shadow_core(
     template_state,
     factories,
@@ -1139,34 +1202,7 @@ static SEXP build_from_validated_base(SEXP template_state, SEXP state,
     trafos,
     VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT),
     VECTOR_ELT(state, PARADOX_CORE_EXTRA_TRAFO),
-    work_since_interrupt
-  );
-}
-
-static SEXP build_from_base(SEXP template_state, SEXP origin_core,
-    SEXP factories, SEXP signature,
-    R_xlen_t *work_since_interrupt) {
-  paradox_domain_params_t params;
-  paradox_domain_dependencies_t dependencies;
-  paradox_domain_trafos_t trafos;
-  paradox_domain_values_t values;
-  SEXP state = validate_base_origin(
-    origin_core,
-    &params,
-    &dependencies,
-    &trafos,
-    &values,
-    work_since_interrupt
-  );
-  return build_from_validated_base(
-    template_state,
-    state,
-    &params,
-    &dependencies,
-    &trafos,
-    &values,
-    factories,
-    signature,
+    reused_trafos,
     work_since_interrupt
   );
 }
@@ -1202,7 +1238,7 @@ static SEXP collection_extra_trafo_from_plan(SEXP plan, SEXP factories) {
 }
 
 static SEXP build_from_collection(SEXP template_state, SEXP origin,
-    SEXP origin_private, SEXP factories, SEXP signature,
+    SEXP origin_private, SEXP factories, SEXP signature, SEXP reused_trafos,
     const paradox_collection_graph_t *graph,
     R_xlen_t *work_since_interrupt) {
   const paradox_collection_graph_node_t *root = &graph->nodes[0];
@@ -1265,19 +1301,30 @@ static SEXP build_from_collection(SEXP template_state, SEXP origin,
     &trafos,
     constraint,
     extra_trafo,
+    reused_trafos,
     work_since_interrupt
   ));
   UNPROTECT(6);
   return result;
 }
 
-static SEXP origin_private_and_core(SEXP origin, SEXP *private_environment) {
+static SEXP origin_private_and_core(SEXP origin, SEXP *private_environment,
+    int commit) {
   SEXP private_result = PROTECT(paradox_domain_private_environment(origin));
   if (private_result == R_UnboundValue) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSetShadow origin shell");
   }
-  SEXP core = PROTECT(paradox_core_from_private(private_result));
+  SEXP selected = paradox_core_from_private(private_result);
+  /* A Shadow projects its origin's current semantics, so an origin whose own
+   * derived state is stale is brought current before it is read -- except on
+   * the read-only preview path, which may not install a capsule into any
+   * current shell and therefore reads the origin exactly as it stands. */
+  if (commit && selected != R_UnboundValue &&
+      !paradox_core_is_verified(selected)) {
+    selected = paradox_core_refresh(origin, private_result);
+  }
+  SEXP core = PROTECT(selected);
   if (!paradox_core_has_exact_schema(core)) {
     UNPROTECT(2);
     Rf_error("Corrupt ParamSetShadow origin capsule");
@@ -1285,6 +1332,75 @@ static SEXP origin_private_and_core(SEXP origin, SEXP *private_environment) {
   *private_environment = private_result;
   UNPROTECT(2);
   return core;
+}
+
+/* TRUE when the origin still exposes the exact schema objects this Shadow's
+ * visible tables were derived from, so the projection can be carried forward
+ * with its identity intact. */
+static int shadow_slice_unchanged(SEXP core, SEXP origin_params,
+    SEXP origin_tags, SEXP origin_trafos) {
+  SEXP edges = VECTOR_ELT(
+    R_ExternalPtrProtected(core),
+    PARADOX_CORE_EDGES
+  );
+  return VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_PARAMS) == origin_params &&
+    VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_TAGS) == origin_tags &&
+    VECTOR_ELT(edges, PARADOX_SHADOW_EDGE_TRAFOS) == origin_trafos;
+}
+
+static SEXP shadow_hidden_ids(SEXP core) {
+  return VECTOR_ELT(
+    VECTOR_ELT(R_ExternalPtrProtected(core), PARADOX_CORE_EDGES),
+    PARADOX_SHADOW_EDGE_SHADOWED
+  );
+}
+
+static SEXP shadow_tag_override(SEXP core) {
+  return VECTOR_ELT(
+    VECTOR_ELT(R_ExternalPtrProtected(core), PARADOX_CORE_EDGES),
+    PARADOX_SHADOW_EDGE_TAG_OVERRIDE
+  );
+}
+
+/* The template a rebuild projects through: the visible schema recomputed from
+ * the origin's current parameters, or -- when the origin's schema slice has
+ * not moved -- the previous one carried forward with its object identity
+ * intact, so a value commit does not look like a schema change to an
+ * enclosing collection. */
+static SEXP shadow_refresh_template(SEXP current_core, SEXP template_state,
+    SEXP origin, const paradox_domain_params_t *origin_params_checked,
+    SEXP origin_state, SEXP *reused_trafos,
+    R_xlen_t *work_since_interrupt) {
+  SEXP origin_params = VECTOR_ELT(origin_state, PARADOX_CORE_PARAMS);
+  SEXP origin_tags = VECTOR_ELT(origin_state, PARADOX_CORE_TAGS);
+  SEXP origin_trafos = VECTOR_ELT(origin_state, PARADOX_CORE_TRAFOS);
+  if (shadow_slice_unchanged(
+      current_core, origin_params, origin_tags, origin_trafos
+    )) {
+    *reused_trafos = VECTOR_ELT(template_state, PARADOX_CORE_TRAFOS);
+    return template_state;
+  }
+  paradox_domain_tags_t checked_tags;
+  if (!paradox_domain_validate_tags(
+      origin_tags,
+      &checked_tags,
+      work_since_interrupt
+    )) {
+    Rf_error("Corrupt ParamSetShadow origin tags");
+  }
+  *reused_trafos = R_NilValue;
+  return build_shadow_template_state(
+    origin,
+    shadow_hidden_ids(current_core),
+    origin_params_checked,
+    &checked_tags,
+    origin_params,
+    origin_tags,
+    origin_trafos,
+    shadow_tag_override(current_core),
+    FALSE,
+    work_since_interrupt
+  );
 }
 
 SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
@@ -1302,12 +1418,14 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
   SEXP origin_private = R_NilValue;
   SEXP origin_core = PROTECT(origin_private_and_core(
     origin,
-    &origin_private
+    &origin_private,
+    TRUE
   ));
   PROTECT(origin_private);
   SEXP factories = PROTECT(fixed_factories());
   R_xlen_t work_since_interrupt = 0;
   const paradox_core_kind_t kind = paradox_core_kind(origin_core);
+  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   SEXP result;
   if (kind == PARADOX_CORE_BASE) {
     paradox_domain_params_t params;
@@ -1336,6 +1454,11 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
       shadowed_snapshot,
       &params,
       &tags,
+      VECTOR_ELT(state, PARADOX_CORE_PARAMS),
+      VECTOR_ELT(state, PARADOX_CORE_TAGS),
+      VECTOR_ELT(state, PARADOX_CORE_TRAFOS),
+      R_NilValue,
+      TRUE,
       &work_since_interrupt
     ));
     SEXP signature = PROTECT(base_signature(origin, origin_core));
@@ -1348,6 +1471,7 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
       &values,
       factories,
       signature,
+      R_NilValue,
       &work_since_interrupt
     ));
     UNPROTECT(3);
@@ -1379,6 +1503,11 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
       shadowed_snapshot,
       &root->params,
       &tags,
+      VECTOR_ELT(root->state, PARADOX_CORE_PARAMS),
+      VECTOR_ELT(root->state, PARADOX_CORE_TAGS),
+      VECTOR_ELT(root->state, PARADOX_CORE_TRAFOS),
+      R_NilValue,
+      TRUE,
       &work_since_interrupt
     ));
     SEXP signature = PROTECT(graph_signature(&graph));
@@ -1388,6 +1517,7 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
       origin_private,
       factories,
       signature,
+      R_NilValue,
       &graph,
       &work_since_interrupt
     ));
@@ -1399,7 +1529,11 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
     UNPROTECT(6);
     Rf_error("ParamSetShadow origin must be a BASE or COLLECTION node");
   }
-  UNPROTECT(6);
+  PROTECT(result);
+  if (paradox_core_state_epoch_value() == entry_epoch) {
+    paradox_core_stamp_verified(result);
+  }
+  UNPROTECT(7);
   return result;
 }
 
@@ -1420,22 +1554,51 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
   SEXP origin_private = R_NilValue;
   SEXP origin_core = PROTECT(origin_private_and_core(
     origin,
-    &origin_private
+    &origin_private,
+    TRUE
   ));
   PROTECT(origin_private);
   SEXP factories = PROTECT(fixed_factories());
   const paradox_core_kind_t kind = paradox_core_kind(origin_core);
+  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   SEXP result;
   if (kind == PARADOX_CORE_BASE) {
-    SEXP signature = PROTECT(base_signature(origin, origin_core));
-    result = PROTECT(build_from_base(
-      template_state,
+    paradox_domain_params_t origin_params;
+    paradox_domain_dependencies_t origin_dependencies;
+    paradox_domain_trafos_t origin_trafos;
+    paradox_domain_values_t origin_values;
+    SEXP origin_state = validate_base_origin(
       origin_core,
-      factories,
-      signature,
+      &origin_params,
+      &origin_dependencies,
+      &origin_trafos,
+      &origin_values,
+      &work_since_interrupt
+    );
+    SEXP reused_trafos = R_NilValue;
+    SEXP refreshed_template = PROTECT(shadow_refresh_template(
+      template_core,
+      template_state,
+      origin,
+      &origin_params,
+      origin_state,
+      &reused_trafos,
       &work_since_interrupt
     ));
-    UNPROTECT(2);
+    SEXP signature = PROTECT(base_signature(origin, origin_core));
+    result = PROTECT(build_from_validated_base(
+      refreshed_template,
+      origin_state,
+      &origin_params,
+      &origin_dependencies,
+      &origin_trafos,
+      &origin_values,
+      factories,
+      signature,
+      reused_trafos,
+      &work_since_interrupt
+    ));
+    UNPROTECT(3);
   } else if (kind == PARADOX_CORE_COLLECTION) {
     PROTECT_INDEX roots_index;
     SEXP roots;
@@ -1449,17 +1612,28 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
       roots_index,
       &work_since_interrupt
     );
+    SEXP reused_trafos = R_NilValue;
+    SEXP refreshed_template = PROTECT(shadow_refresh_template(
+      template_core,
+      template_state,
+      origin,
+      &graph.nodes[0].params,
+      graph.nodes[0].state,
+      &reused_trafos,
+      &work_since_interrupt
+    ));
     SEXP signature = PROTECT(graph_signature(&graph));
     result = PROTECT(build_from_collection(
-      template_state,
+      refreshed_template,
       origin,
       origin_private,
       factories,
       signature,
+      reused_trafos,
       &graph,
       &work_since_interrupt
     ));
-    UNPROTECT(3);
+    UNPROTECT(4);
   } else if (kind == PARADOX_CORE_SHADOW) {
     UNPROTECT(5);
     Rf_error("A ParamSetShadow cannot directly wrap another ParamSetShadow");
@@ -1467,7 +1641,11 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
     UNPROTECT(5);
     Rf_error("ParamSetShadow origin must be a BASE or COLLECTION node");
   }
-  UNPROTECT(5);
+  PROTECT(result);
+  if (paradox_core_state_epoch_value() == entry_epoch) {
+    paradox_core_stamp_verified(result);
+  }
+  UNPROTECT(6);
   return result;
 }
 
@@ -1512,10 +1690,12 @@ static SEXP shadow_refresh_authoritative(SEXP self,
   SEXP origin_private = R_NilValue;
   SEXP origin_core = PROTECT(origin_private_and_core(
     origin,
-    &origin_private
+    &origin_private,
+    commit
   ));
   PROTECT(origin_private);
   const paradox_core_kind_t kind = paradox_core_kind(origin_core);
+  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   SEXP replacement;
   if (kind == PARADOX_CORE_BASE) {
     if (signature_matches_base(signature, origin, origin_core)) {
@@ -1524,20 +1704,50 @@ static SEXP shadow_refresh_authoritative(SEXP self,
         UNPROTECT(7);
         Rf_error("ParamSetShadow origin changed during native refresh");
       }
+      if (commit) {
+        paradox_core_stamp_verified(current_core);
+      }
       UNPROTECT(7);
       return current_core;
     }
+    paradox_domain_params_t origin_params;
+    paradox_domain_dependencies_t origin_dependencies;
+    paradox_domain_trafos_t origin_trafos;
+    paradox_domain_values_t origin_values;
+    SEXP origin_state = validate_base_origin(
+      origin_core,
+      &origin_params,
+      &origin_dependencies,
+      &origin_trafos,
+      &origin_values,
+      &work_since_interrupt
+    );
+    SEXP reused_trafos = R_NilValue;
+    SEXP refreshed_template = PROTECT(shadow_refresh_template(
+      current_core,
+      template_state,
+      origin,
+      &origin_params,
+      origin_state,
+      &reused_trafos,
+      &work_since_interrupt
+    ));
     SEXP factories = PROTECT(fixed_factories());
     SEXP replacement_signature = PROTECT(base_signature(origin, origin_core));
-    replacement = PROTECT(build_from_base(
-      template_state,
-      origin_core,
+    replacement = PROTECT(build_from_validated_base(
+      refreshed_template,
+      origin_state,
+      &origin_params,
+      &origin_dependencies,
+      &origin_trafos,
+      &origin_values,
       factories,
       replacement_signature,
+      reused_trafos,
       &work_since_interrupt
     ));
     if (!base_is_current(origin, origin_private, origin_core)) {
-      UNPROTECT(10);
+      UNPROTECT(11);
       Rf_error("ParamSetShadow origin changed during native refresh");
     }
   } else if (kind == PARADOX_CORE_COLLECTION) {
@@ -1571,22 +1781,36 @@ static SEXP shadow_refresh_authoritative(SEXP self,
         UNPROTECT(8);
         Rf_error("ParamSetShadow origin graph changed during refresh");
       }
+      if (commit) {
+        paradox_core_stamp_verified(current_core);
+      }
       UNPROTECT(8);
       return current_core;
     }
+    SEXP reused_trafos = R_NilValue;
+    SEXP refreshed_template = PROTECT(shadow_refresh_template(
+      current_core,
+      template_state,
+      origin,
+      &graph.nodes[0].params,
+      graph.nodes[0].state,
+      &reused_trafos,
+      &work_since_interrupt
+    ));
     SEXP factories = PROTECT(fixed_factories());
     SEXP replacement_signature = PROTECT(graph_signature(&graph));
     replacement = PROTECT(build_from_collection(
-      template_state,
+      refreshed_template,
       origin,
       origin_private,
       factories,
       replacement_signature,
+      reused_trafos,
       &graph,
       &work_since_interrupt
     ));
     if (!graph_is_current(&graph)) {
-      UNPROTECT(11);
+      UNPROTECT(12);
       Rf_error("ParamSetShadow origin graph changed during refresh");
     }
   } else if (kind == PARADOX_CORE_SHADOW) {
@@ -1598,13 +1822,19 @@ static SEXP shadow_refresh_authoritative(SEXP self,
   }
 
   if (paradox_core_from_private(private_environment) != current_core) {
-    UNPROTECT(kind == PARADOX_CORE_BASE ? 10 : 11);
+    UNPROTECT(kind == PARADOX_CORE_BASE ? 11 : 12);
     Rf_error("ParamSetShadow capsule changed during native refresh");
   }
   if (commit) {
+    /* A refresh installs the projection this Shadow already denoted, so it is
+     * not a semantic change; the generation is current unless one of the
+     * callback factories above installed a capsule of its own. */
+    if (paradox_core_state_epoch_value() == entry_epoch) {
+      paradox_core_stamp_verified(replacement);
+    }
     Rf_defineVar(Rf_install(".core"), replacement, private_environment);
   }
-  UNPROTECT(kind == PARADOX_CORE_BASE ? 10 : 11);
+  UNPROTECT(kind == PARADOX_CORE_BASE ? 11 : 12);
   return replacement;
 }
 

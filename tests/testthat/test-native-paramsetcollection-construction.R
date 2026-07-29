@@ -92,8 +92,8 @@ test_that("native construction creates exact canonical collection state", {
   sets = list(left = left, right = right)
   native = collection2_construct(sets, tag_sets = TRUE, tag_params = TRUE)
 
-  expect_named(native, c("params", "tags", "trafos", "translation"))
-  for (table in native) {
+  expect_named(native, c("params", "tags", "trafos", "translation", "edges"))
+  for (table in native[c("params", "tags", "trafos", "translation")]) {
     expect_identical(class(table), "data.frame")
     expect_null(attr(table, ".internal.selfref", exact = TRUE))
     expect_null(attr(table, "index", exact = TRUE))
@@ -131,7 +131,8 @@ test_that("native construction creates exact canonical collection state", {
     names(state),
     c(
       ".params", ".values", ".tags", ".deps", ".trafos",
-      ".extra_trafo", ".constraint", ".sets", ".translation", ".postfix"
+      ".extra_trafo", ".constraint", ".sets", ".translation", ".postfix",
+      ".edges"
     )
   )
   expect_identical(
@@ -145,6 +146,17 @@ test_that("native construction creates exact canonical collection state", {
   expect_identical(state$.sets[[1L]], left)
   expect_identical(state$.sets[[2L]], right)
   expect_identical(state$.postfix, FALSE)
+  expect_identical(
+    names(state$.edges),
+    c("cores", "tag_sets", "tag_params", "tag_override")
+  )
+  expect_null(state$.edges$tag_override)
+  expect_identical(state$.edges$tag_sets, c(TRUE, TRUE))
+  expect_identical(state$.edges$tag_params, c(TRUE, TRUE))
+  expect_identical(
+    state$.edges$cores,
+    list(collection2_private(left)$.core, collection2_private(right)$.core)
+  )
 })
 
 test_that("native collection add installs one complete replacement generation", {
@@ -312,8 +324,19 @@ test_that("native collection add rejects cycles and corruption atomically", {
 
 test_that("empty, prefix, postfix, nested, and shared public graphs are stable", {
   empty_native = collection2_construct(setNames(list(), character()))
-  expect_named(empty_native, c("params", "tags", "trafos", "translation"))
-  expect_identical(unname(vapply(empty_native, nrow, integer(1L))), rep(0L, 4L))
+  expect_named(
+    empty_native,
+    c("params", "tags", "trafos", "translation", "edges")
+  )
+  expect_identical(
+    unname(vapply(
+      empty_native[c("params", "tags", "trafos", "translation")],
+      nrow,
+      integer(1L)
+    )),
+    rep(0L, 4L)
+  )
+  expect_identical(empty_native$edges$cores, list())
   empty = ParamSetCollection$new(list())
   expect_identical(empty$ids(), character())
   expect_identical(empty$sets, setNames(list(), character()))

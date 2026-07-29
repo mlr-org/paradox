@@ -59,19 +59,32 @@ private fields during ordinary current operations. The cold legacy migration
 boundary described below may inspect authenticated historical shell/enclosure
 structure solely to replace it.
 
-`.core` is a NULL-address `EXTPTRSXP`. It has no unmanaged memory and no
-finalizer. Its tag is exactly one of:
+`.core` is an `EXTPTRSXP`. It has no unmanaged memory and no finalizer; its
+address slot holds only a session-local verification stamp for derived state,
+never a pointer. Its tag is exactly one of:
 
 - `paradox.core.base.v1`;
 - `paradox.core.collection.v1`;
 - `paradox.core.shadow.v1`.
 
 The protected slot is the sole complete serializable capsule/model truth: an
-ordinary, exactly named ten-element list containing `.params`, `.values`,
+ordinary, exactly named eleven-element list containing `.params`, `.values`,
 `.tags`, `.deps`, `.trafos`, `.extra_trafo`, `.constraint`, `.sets`,
-`.translation`, and `.postfix`. The identical physical schema avoids three
-subtly different state implementations. Node-kind validation decides which
-fields are meaningful.
+`.translation`, `.postfix`, and `.edges`. The identical physical schema avoids
+three subtly different state implementations. Node-kind validation decides
+which fields are meaningful.
+
+`.edges` is the derivation record of a node whose schema is derived: `NULL` for
+BASE; per-edge child generation plus `tag_sets`/`tag_params` flags for
+COLLECTION; the origin schema slice plus the retained hidden ID set for SHADOW.
+Both derived kinds also record a `tag_override`, the node's own answer for the
+IDs a `$tags<-` assignment named, which survives re-derivation without writing
+through to the sets.
+COLLECTION flattens and SHADOW projections are refreshed lazily at one native
+entry gate that walks the graph in post-order, so an ancestor of a set that
+grew re-derives instead of going stale. Two session-global epochs (schema and
+state) plus a per-capsule stamp in the address slot make an unchanged graph a
+single comparison; a cache refresh advances neither epoch.
 
 The documented public `assert_values` field is the sole stateful R-shell policy
 outside that model. It selects checked versus unchecked native value-store

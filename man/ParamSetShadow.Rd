@@ -12,10 +12,11 @@ operation. \verb{$values} is the raw visible store and may include dormant
 entries. The default \verb{$get_values()} view evaluates the current visible
 dependency graph using recorded defaults and omits dormant visible entries.
 
-The visible parameter schema is captured when the shadow is constructed.
-Later changes to structural metadata in the origin therefore do not change
-the view. Dependencies may change, but a dependency crossing the
-visible/hidden boundary is always an error.
+What the shadow fixes is the \emph{hidden} set, not the visible schema: the view
+is "origin minus hidden", computed live. A parameter the origin gains later
+is therefore visible, and changed structural metadata -- tags, for
+instance -- is reflected. Dependencies may change too, but a dependency
+crossing the visible/hidden boundary is always an error.
 
 Checked assignment validates every supplied visible value, including a
 dependency-inactive value, and preserves hidden origin values. If the live
@@ -52,9 +53,6 @@ current dependency/transformation snapshot.}
     \item{\code{deps}}{(\link[data.table:data.table]{data.table::data.table})
 Current origin dependencies wholly inside the visible schema. Read-only;
 the detached facade has ordinary non-ALTREP/non-S4 structural metadata.}
-
-    \item{\code{tags}}{(named \code{list()})
-Tags captured with the visible schema. Read-only for a shadow.}
 
     \item{\code{constraint}}{(\code{function} or \code{NULL})
 Live origin constraint adapted to the visible schema. During

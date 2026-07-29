@@ -24,6 +24,9 @@ Should not be given if \code{affixes} is provided.}
 \item{affixes}{(\code{character})\cr
 A \code{character} vector indicating the prefixes / postfixes to use for each repetition of \code{set}.
 Per default, these are prefixes; if \code{postfix} is \code{TRUE}, these values are postfixed instead.
+Each affix becomes part of every parameter ID it creates: a prefix must
+itself match the ID grammar \verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$}, a postfix
+only has to use ASCII letters, digits, \code{.}, and \verb{_}.
 If this is given, \code{times} is inferred from \code{length(affixes)} and should not be given separately.
 If \code{times} is given, this defaults to \code{"repX"}, with \code{X} counting up from 1.}
 

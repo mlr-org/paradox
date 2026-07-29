@@ -14,6 +14,51 @@ SEXP paradox_stored_attribute(SEXP object, SEXP symbol) {
   return paradox_api_raw_attribute(object, symbol);
 }
 
+static int strict_id_tail_byte(unsigned char byte) {
+  return (byte >= 'a' && byte <= 'z') ||
+    (byte >= 'A' && byte <= 'Z') ||
+    (byte >= '0' && byte <= '9') || byte == '.' || byte == '_';
+}
+
+int paradox_string_is_strict_id(SEXP value) {
+  if (!paradox_charsxp_is_ordinary(value) || LENGTH(value) == 0) {
+    return FALSE;
+  }
+
+  const unsigned char *bytes = (const unsigned char *) CHAR(value);
+  const int size = LENGTH(value);
+  int index = 0;
+  while (index < size && bytes[index] == '.') {
+    ++index;
+  }
+  if (index == size ||
+      !((bytes[index] >= 'a' && bytes[index] <= 'z') ||
+        (bytes[index] >= 'A' && bytes[index] <= 'Z'))) {
+    return FALSE;
+  }
+
+  for (++index; index < size; ++index) {
+    if (!strict_id_tail_byte(bytes[index])) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+int paradox_string_is_strict_id_tail(SEXP value) {
+  if (!paradox_charsxp_is_ordinary(value) || LENGTH(value) == 0) {
+    return FALSE;
+  }
+  const unsigned char *bytes = (const unsigned char *) CHAR(value);
+  const int size = LENGTH(value);
+  for (int index = 0; index < size; ++index) {
+    if (!strict_id_tail_byte(bytes[index])) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
 static int public_table_class_name(SEXP value, const char *expected) {
   return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES &&
     strcmp(CHAR(value), expected) == 0;
@@ -744,11 +789,24 @@ SEXP paradox_diagnostic_charsxp(SEXP string) {
   if (TYPEOF(string) != CHARSXP || string == NA_STRING) {
     Rf_error("Internal error: invalid diagnostic string fragment");
   }
-  if (Rf_getCharCE(string) != CE_BYTES) return string;
+  const unsigned char *source;
+  size_t source_size;
+  if (Rf_getCharCE(string) == CE_BYTES) {
+    source = (const unsigned char *) CHAR(string);
+    source_size = strlen((const char *) source);
+  } else {
+    /* A string whose UTF-8 translation is not valid UTF-8 -- a native or
+     * mismarked identifier carrying foreign bytes -- cannot enter the UTF-8
+     * message builder. Escape it exactly like bytes rather than turning an
+     * ordinary "not available" diagnostic into an internal error. */
+    const char *translated = Rf_translateCharUTF8(string);
+    const size_t translated_size = strlen(translated);
+    if (valid_utf8_fragment(translated, translated_size)) return string;
+    source = (const unsigned char *) translated;
+    source_size = translated_size;
+  }
 
   static const char hex[] = "0123456789abcdef";
-  const unsigned char *source = (const unsigned char *) CHAR(string);
-  const size_t source_size = strlen((const char *) source);
   if (source_size > (size_t) INT_MAX / 4U) {
     Rf_error("Diagnostic string fragment exceeds R's string limit");
   }
@@ -770,6 +828,25 @@ SEXP paradox_diagnostic_charsxp(SEXP string) {
   }
   output[output_size] = '\0';
   return Rf_mkCharLenCE(output, (int) output_size, CE_UTF8);
+}
+
+SEXP paradox_unary_callback_call(SEXP callback, SEXP value) {
+  switch (TYPEOF(value)) {
+  case SYMSXP:
+  case LANGSXP:
+  case PROMSXP:
+  case BCODESXP: {
+    /* These four are the R values that Rf_eval() interprets instead of
+     * returning. `quote` is a base primitive and cannot be shadowed in the
+     * base environment the callbacks are evaluated in. */
+    SEXP quoted = PROTECT(Rf_lang2(R_QuoteSymbol, value));
+    SEXP call = Rf_lang2(callback, quoted);
+    UNPROTECT(1);
+    return call;
+  }
+  default:
+    return Rf_lang2(callback, value);
+  }
 }
 
 NORET void paradox_error_from_scalar_string(SEXP message) {
@@ -810,7 +887,9 @@ NORET void paradox_assertion_error(const char *variable, SEXP diagnostic) {
     paradox_utf8_ascii_piece(variable),
     paradox_utf8_ascii_piece("' failed: "),
     paradox_utf8_charsxp_piece(text),
-    paradox_utf8_ascii_piece(".")
+    paradox_utf8_ascii_piece(
+      paradox_charsxp_ends_sentence(text) ? "" : "."
+    )
   };
   SEXP message = PROTECT(paradox_utf8_message(pieces, 5));
   paradox_error_from_scalar_string(message);

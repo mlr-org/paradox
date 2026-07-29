@@ -76,7 +76,9 @@ paramset_to_configspace = function(param_set, name = NULL) {
   # add parameters
   pwalk(param_set$params, function(id, cls, lower, upper, levels, default, .tags, ...) {
     meta = list(
-      tags = .tags
+      # A length-1 character vector reaches Python as a scalar `str`, so the
+      # exported metadata type would otherwise depend on the number of tags.
+      tags = as.list(.tags)
     )
 
     if (cls == "ParamDbl") {
@@ -95,13 +97,19 @@ paramset_to_configspace = function(param_set, name = NULL) {
   # add dependencies
   if (nrow(param_set$deps)) {
     deps_grouped = split(param_set$deps, by = "id")
+    parent_classes = param_set$class
 
     walk(deps_grouped, function(deps) {
       conditions = pmap(deps, function(id, on, cond) {
+        # `p_lgl` is exported as a Categorical over the strings "TRUE"/"FALSE",
+        # so a logical right-hand side has to be spelled the same way.
+        rhs = if (identical(parent_classes[[on]], "ParamLgl")) as.character(cond$rhs) else cond$rhs
         if (inherits(cond, "CondEqual")) {
-          ConfigSpace$EqualsCondition(cs[id], cs[on], cond$rhs)
+          ConfigSpace$EqualsCondition(cs[id], cs[on], rhs)
         } else {
-          ConfigSpace$InCondition(cs[id], cs[on], cond$rhs)
+          # `values` is a sequence: a length-1 vector would reach Python as a
+          # scalar and be iterated element-by-element (a string by character).
+          ConfigSpace$InCondition(cs[id], cs[on], as.list(rhs))
         }
       })
 
@@ -175,6 +183,10 @@ build_cat = function(ConfigSpace, id, choices, default, meta, old_cs_version) {
   assert_list(meta)
   assert_flag(old_cs_version)
   default = normalize_default(default)
+  # The choices must reach Python as a sequence. A length-1 character vector
+  # would arrive as a scalar `str`, which ConfigSpace iterates character by
+  # character, turning a single-level `p_fct` into one level per character.
+  choices = as.list(choices)
 
   if (old_cs_version) {
     hp = ConfigSpace$hyperparameters$CategoricalHyperparameter

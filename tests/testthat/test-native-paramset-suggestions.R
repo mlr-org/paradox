@@ -28,7 +28,9 @@ test_that("unknown parameter suggestions use the misspelled ID and stay atomic",
     conditionMessage(assignment_error),
     paste0(
       "Assertion on 'xs' failed: Parameter 'nop' not available. ",
-      "Did you mean 'nope' / 'no'?."
+      # The hint already ends its own sentence, so the native assertion
+      # wrapper adds no second terminator.
+      "Did you mean 'nope' / 'no'?"
     )
   )
   expect_identical(param_set$values, before)
@@ -45,7 +47,9 @@ test_that("unknown parameter suggestions use the misspelled ID and stay atomic",
     conditionMessage(merge_error),
     paste0(
       "Assertion on 'xs' failed: Parameter 'nop' not available. ",
-      "Did you mean 'nope' / 'no'?."
+      # The hint already ends its own sentence, so the native assertion
+      # wrapper adds no second terminator.
+      "Did you mean 'nope' / 'no'?"
     )
   )
   expect_identical(param_set$values, before)
@@ -74,7 +78,7 @@ test_that("unknown parameter suggestions have a bounded stable candidate set", {
     ps(yes = p_int(), no = p_int(), nope = p_int())$check(
       list(banana = 1L)
     ),
-    "Parameter 'banana' not available."
+    "Parameter 'banana' not available"
   )
 })
 
@@ -144,7 +148,7 @@ test_that("Shadow suggestions expose only its visible schema and stay atomic", {
   )
   expect_identical(
     shadow$check(list(hidde = 2L)),
-    "Parameter 'hidde' not available."
+    "Parameter 'hidde' not available"
   )
 
   before = origin$values

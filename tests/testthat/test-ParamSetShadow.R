@@ -22,14 +22,24 @@ test_that("ParamSetShadow captures its schema and keeps a live origin", {
     x = "changed",
     flag = "changed"
   )
+  # The visible schema is "origin minus hidden", computed live: the hidden set
+  # is what the Shadow fixes, not the parameters or tags themselves.
   expect_identical(
     shadow$tags,
-    list(x = "visible", flag = character())
+    list(x = "changed", flag = "changed")
   )
 
   expect_error({shadow$origin = ps()}, "origin is read-only")
-  expect_error({shadow$tags = list()}, "tags is read-only")
   expect_error({shadow$deps = data.table::data.table()}, "deps is read-only")
+
+  # Tags are the one derived field a view owns outright: the assignment is the
+  # shadow's own answer and leaves the origin alone.
+  shadow$tags = list(x = "mine", flag = character())
+  expect_identical(shadow$tags, list(x = "mine", flag = character()))
+  expect_identical(
+    origin$tags,
+    list(hidden = "changed", x = "changed", flag = "changed")
+  )
 })
 
 test_that("ParamSetShadow keeps no parallel R visible or hidden schema", {
@@ -132,7 +142,7 @@ test_that("ParamSetShadow dependency reads have one native refresh boundary", {
 
   deps = testthat::with_mocked_bindings(
     shadow$deps,
-    C_param_set_shadow_refresh = NULL,
+    C_param_set_core_refresh = NULL,
     .package = "paradox"
   )
   expect_identical(deps$id, "x")
@@ -594,4 +604,32 @@ test_that("deep cloning rejects cycles without rejecting shared siblings", {
     "capsule graph contains a cycle"
   )
   expect_error(shadow$clone(deep = TRUE), "capsule graph contains a cycle")
+})
+
+test_that("the shadow constraint adapter admits only ordinary names", {
+  skip_on_cran()
+  namespace = asNamespace("paradox")
+  skip_if_not(
+    exists("C_test_stateful_altrep", namespace, inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  # The merge loop indexes this names vector element by element, so a names
+  # object that can answer differently per observation would pair a value with
+  # another parameter's name and silently change the constraint's verdict.
+  origin = ps(x = p_dbl(0, 1), flag = p_lgl(), g = p_dbl(0, 1))
+  origin$constraint = function(x) isTRUE(x$flag)
+  origin$values = list(x = 0.5, flag = TRUE)
+  view = ParamSetShadow$new(origin, "x")
+
+  hostile = native_stateful_altrep(
+    c("flag", "g"), c("g", "flag"),
+    elt_switch_after = 2L
+  )
+  values = list(TRUE, 0.5)
+  names(values) = hostile
+  expect_error(view$constraint(values), "must be a named list")
+
+  expect_true(view$constraint(list(flag = TRUE, g = 0.5)))
+  expect_false(view$constraint(list(flag = FALSE, g = 0.5)))
 })

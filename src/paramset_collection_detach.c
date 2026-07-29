@@ -453,6 +453,18 @@ static SEXP collection_detach_plan(SEXP requested,
     selected_count,
     sizeof(*units)
   );
+  /* One route scratch pair for the whole scan. Each iteration rewrites both
+   * from index zero before reading them, and an admitted unit keeps its own
+   * copy, so allocating them per selected row only raised the retained peak
+   * to selected_count times the node count. */
+  R_xlen_t *collection_nodes = paradox_temporary_alloc(
+    graph.count,
+    sizeof(*collection_nodes)
+  );
+  R_xlen_t *owners = paradox_temporary_alloc(
+    graph.count,
+    sizeof(*owners)
+  );
   R_xlen_t unit_count = 0;
   R_xlen_t output = 0;
   for (R_xlen_t root_row = 0;
@@ -465,14 +477,6 @@ static SEXP collection_detach_plan(SEXP requested,
     R_xlen_t current = 0;
     SEXP local_id = root_id;
     R_xlen_t depth = 0;
-    R_xlen_t *collection_nodes = paradox_temporary_alloc(
-      graph.count,
-      sizeof(*collection_nodes)
-    );
-    R_xlen_t *owners = paradox_temporary_alloc(
-      graph.count,
-      sizeof(*owners)
-    );
     while (graph.nodes[current].kind == PARADOX_CORE_COLLECTION) {
       const detach_node_t *node = &graph.nodes[current];
       const R_xlen_t row = translation_row(node, local_id);
@@ -523,6 +527,10 @@ static SEXP collection_detach_plan(SEXP requested,
         owners,
         (size_t) depth * sizeof(*created->owners)
       );
+      /* make_affix() returns a fresh unprotected CHARSXP, and `created` lives
+       * in R_alloc memory that the GC does not scan. Root each affix before
+       * the next allocation: R sweeps its string cache on every collection,
+       * so an unmarked fresh CHARSXP parked here would be evicted and freed. */
       created->prefix = make_affix(
         &graph,
         collection_nodes,
@@ -530,6 +538,7 @@ static SEXP collection_detach_plan(SEXP requested,
         depth,
         TRUE
       );
+      append_root(&roots, roots_index, created->prefix);
       created->suffix = make_affix(
         &graph,
         collection_nodes,
@@ -537,7 +546,6 @@ static SEXP collection_detach_plan(SEXP requested,
         depth,
         FALSE
       );
-      append_root(&roots, roots_index, created->prefix);
       append_root(&roots, roots_index, created->suffix);
       const detach_node_t *leaf = &graph.nodes[current];
       created->constraint = VECTOR_ELT(

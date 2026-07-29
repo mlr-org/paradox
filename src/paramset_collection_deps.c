@@ -136,9 +136,9 @@ SEXP paradox_param_set_has_dependencies(SEXP private_environment, SEXP self) {
     return Rf_ScalarLogical(result);
   }
 
-  if (kind == PARADOX_CORE_SHADOW) {
+  if (!paradox_core_is_verified(core)) {
     REPROTECT(
-      core = paradox_core_refresh_shadow(self, private_environment),
+      core = paradox_core_refresh(self, private_environment),
       core_index
     );
     kind = paradox_core_kind(core);

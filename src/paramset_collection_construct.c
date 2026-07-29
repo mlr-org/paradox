@@ -26,12 +26,14 @@ enum constructor_root_slot {
   CONSTRUCTOR_ROOT_TRAFOS,
   CONSTRUCTOR_ROOT_TRAFO_IDS,
   CONSTRUCTOR_ROOT_TRAFO_VALUES,
+  CONSTRUCTOR_ROOT_CORE,
   CONSTRUCTOR_ROOT_STRIDE
 };
 
 typedef struct {
   SEXP self;
   SEXP private_environment;
+  SEXP core;
   SEXP owner;
   SEXP params_columns[PARADOX_DOMAIN_TAGS];
   SEXP tag_ids;
@@ -103,8 +105,8 @@ static int supported_ascii(SEXP value) {
   return TRUE;
 }
 
-static SEXP checked_set_names(SEXP sets,
-    R_xlen_t *work_since_interrupt) {
+static SEXP checked_set_names(SEXP sets, int postfix,
+    const char *names_argument, R_xlen_t *work_since_interrupt) {
   if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets) ||
       !paradox_params_names_are_only_attribute(sets)) {
     Rf_error("`sets` must be an ordinary named list");
@@ -128,12 +130,25 @@ static SEXP checked_set_names(SEXP sets,
       UNPROTECT(1);
       Rf_error("`sets` name is NA at position %.0f", (double) right + 1.0);
     }
-    if (!supported_ascii(right_name)) {
-      UNPROTECT(1);
-      Rf_error("`sets` names must use supported non-bytes ASCII strings");
-    }
     if (CHAR(right_name)[0] == '\0') {
       continue;
+    }
+    /* A named set affixes every ID it contributes, so its name must keep that
+     * ID inside the parameter-name grammar.  Admitting a looser name would
+     * build a collection whose own `$search_space()` and
+     * `ParamSet$new(<collection>$domains)` reject its generated IDs.  A
+     * prepended name owns the leading position and must itself be a strict
+     * ID; an appended one only has to be a legal continuation. */
+    if (postfix ? !paradox_string_is_strict_id_tail(right_name)
+        : !paradox_string_is_strict_id(right_name)) {
+      UNPROTECT(1);
+      Rf_error(
+        postfix
+          ? "%s must be \"\" or use only ASCII letters, digits, `.`, and `_`"
+          : "%s must be \"\" or an ASCII parameter ID matching "
+            "^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$",
+        names_argument
+      );
     }
     for (R_xlen_t left = 0; left < right; ++left) {
       paradox_account_work(work_since_interrupt);
@@ -281,14 +296,22 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
     return FALSE;
   }
   SEXP core = paradox_core_from_private(private_environment);
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
+  if (core == R_UnboundValue) {
+    return FALSE;
+  }
+  /* A parent caches its children's schema, so a child whose own derived state
+   * is stale must be brought current before it is flattened -- otherwise a
+   * nested collection copies an outdated slice into the new parent. */
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
   }
   const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
       kind != PARADOX_CORE_SHADOW) {
     return FALSE;
   }
+  child->core = core;
+  SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_CORE, core);
 
   SEXP params = paradox_domain_local_value(private_environment, ".params");
   if (params == R_UnboundValue) {
@@ -615,11 +638,42 @@ static SEXP allocate_columns(const SEXPTYPE *types, R_xlen_t column_count,
   return table;
 }
 
-static SEXP build_collection_static_state(SEXP sets, int tag_sets,
-    int tag_params, int postfix) {
+/* `tag_sets` and `tag_params` are per-edge logical vectors, not scalars: a
+ * re-flatten has to reproduce the flags each edge was originally added with,
+ * and an edge whose child is still empty carries no row that could record
+ * them. */
+/* A re-flatten discovers a collision long after the statement that caused it,
+ * so its diagnostic has to name the edge that moved as well as the ID. */
+static void report_duplicate_id(SEXP id, SEXP changed_owner) {
+  if (changed_owner == R_NilValue) {
+    Rf_error(
+      "Cannot construct ParamSetCollection: translated parameter IDs must "
+      "be unique"
+    );
+  }
+  if (CHAR(changed_owner)[0] == '\0') {
+    Rf_error(
+      "Cannot refresh ParamSetCollection after a contained set changed: "
+      "translated parameter ID '%s' is not unique",
+      CHAR(id)
+    );
+  }
+  Rf_error(
+    "Cannot refresh ParamSetCollection after contained set '%s' changed: "
+    "translated parameter ID '%s' is not unique",
+    CHAR(changed_owner),
+    CHAR(id)
+  );
+}
+
+static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
+    SEXP tag_params, SEXP tag_override, int postfix,
+    const char *names_argument, SEXP changed_owner) {
   R_xlen_t work_since_interrupt = 0;
   SEXP set_names = PROTECT(checked_set_names(
     sets,
+    postfix,
+    names_argument,
     &work_since_interrupt
   ));
   const R_xlen_t child_count = XLENGTH(sets);
@@ -627,6 +681,13 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
       child_count > R_XLEN_T_MAX / CONSTRUCTOR_ROOT_STRIDE) {
     UNPROTECT(1);
     Rf_error("ParamSetCollection contains too many child sets");
+  }
+  if (TYPEOF(tag_sets) != LGLSXP || XLENGTH(tag_sets) != child_count ||
+      TYPEOF(tag_params) != LGLSXP || XLENGTH(tag_params) != child_count) {
+    UNPROTECT(1);
+    Rf_error(
+      "Internal error: ParamSetCollection edge flags disagree with sets"
+    );
   }
   SEXP roots = PROTECT(Rf_allocVector(
     VECSXP,
@@ -670,17 +731,25 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
         &work_since_interrupt
       )) {
       UNPROTECT(2);
+      if (changed_owner != R_NilValue) {
+        Rf_error(
+          "Corrupt or unsupported ParamSet state in a contained set while "
+          "refreshing a ParamSetCollection"
+        );
+      }
       Rf_error(
         "Cannot construct ParamSetCollection from unsupported or corrupt "
         "ParamSet child state"
       );
     }
+    const int edge_tag_sets = LOGICAL_ELT(tag_sets, child_index);
+    const int edge_tag_params = LOGICAL_ELT(tag_params, child_index);
     if (!checked_add(&total_params, child->param_count) ||
         !checked_add(&total_tags, child->tag_count) ||
         !checked_add(&total_trafos, child->trafo_count) ||
-        (tag_sets && CHAR(child->owner)[0] != '\0' &&
+        (edge_tag_sets && CHAR(child->owner)[0] != '\0' &&
           !checked_add(&total_tags, child->param_count)) ||
-        (tag_params && !checked_add(&total_tags, child->param_count))) {
+        (edge_tag_params && !checked_add(&total_tags, child->param_count))) {
       UNPROTECT(2);
       Rf_error("ParamSetCollection metadata exceeds the supported size");
     }
@@ -765,15 +834,17 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
     UNPROTECT(4);
     Rf_error("Internal error: incomplete collection params output");
   }
-  if (Rf_any_duplicated(
+  const R_xlen_t duplicate = Rf_any_duplicated(
+    VECTOR_ELT(params, PARADOX_DOMAIN_ID),
+    FALSE
+  );
+  if (duplicate != 0) {
+    SEXP duplicate_id = STRING_ELT(
       VECTOR_ELT(params, PARADOX_DOMAIN_ID),
-      FALSE
-    ) != 0) {
-    UNPROTECT(4);
-    Rf_error(
-      "Cannot construct ParamSetCollection: translated parameter IDs must "
-      "be unique"
+      duplicate - 1
     );
+    UNPROTECT(4);
+    report_duplicate_id(duplicate_id, changed_owner);
   }
 
   SEXP tags_raw = PROTECT(allocate_columns(tag_types, 2, total_tags));
@@ -808,7 +879,7 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
       );
       ++tag_output;
     }
-    if (tag_sets && CHAR(child->owner)[0] != '\0') {
+    if (LOGICAL_ELT(tag_sets, child_index) && CHAR(child->owner)[0] != '\0') {
       SEXP generated = PROTECT(make_generated_tag("set_", 4U, child->owner));
       for (R_xlen_t row = 0; row < child->param_count; ++row) {
         if (tag_output >= total_tags) {
@@ -825,7 +896,7 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
       }
       UNPROTECT(1);
     }
-    if (tag_params) {
+    if (LOGICAL_ELT(tag_params, child_index)) {
       for (R_xlen_t row = 0; row < child->param_count; ++row) {
         if (tag_output >= total_tags) {
           UNPROTECT(6);
@@ -881,12 +952,16 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
     total_params,
     &work_since_interrupt
   ));
-  SEXP tags = PROTECT(sorted_table(
-    tags_raw,
-    tag_names,
-    tag_types,
-    2,
-    total_tags,
+  SEXP tags = PROTECT(paradox_domain_apply_tag_override(
+    PROTECT(sorted_table(
+      tags_raw,
+      tag_names,
+      tag_types,
+      2,
+      total_tags,
+      &work_since_interrupt
+    )),
+    tag_override,
     &work_since_interrupt
   ));
   SEXP trafos = PROTECT(sorted_table(
@@ -898,18 +973,73 @@ static SEXP build_collection_static_state(SEXP sets, int tag_sets,
     &work_since_interrupt
   ));
 
-  SEXP state = PROTECT(Rf_allocVector(VECSXP, 4));
+  /* The exact generations this flatten consumed, so a later read can decide
+   * in one pointer comparison per edge whether it is still current. */
+  SEXP edge_cores = PROTECT(Rf_allocVector(VECSXP, child_count));
+  for (R_xlen_t child_index = 0; child_index < child_count; ++child_index) {
+    SET_VECTOR_ELT(edge_cores, child_index, children[child_index].core);
+  }
+  SEXP edges = PROTECT(Rf_allocVector(
+    VECSXP,
+    PARADOX_COLLECTION_EDGE_FIELD_COUNT
+  ));
+  SET_VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_CORES, edge_cores);
+  SET_VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_SETS, tag_sets);
+  SET_VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_PARAMS, tag_params);
+  SET_VECTOR_ELT(
+    edges,
+    PARADOX_COLLECTION_EDGE_TAG_OVERRIDE,
+    tag_override
+  );
+  SEXP edge_names = PROTECT(paradox_domain_character_vector(
+    (const char *const[]) {"cores", "tag_sets", "tag_params", "tag_override"},
+    PARADOX_COLLECTION_EDGE_FIELD_COUNT
+  ));
+  Rf_setAttrib(edges, R_NamesSymbol, edge_names);
+
+  SEXP state = PROTECT(Rf_allocVector(VECSXP, 5));
   SET_VECTOR_ELT(state, 0, params);
   SET_VECTOR_ELT(state, 1, tags);
   SET_VECTOR_ELT(state, 2, trafos);
   SET_VECTOR_ELT(state, 3, translation);
+  SET_VECTOR_ELT(state, 4, edges);
   SEXP state_names = PROTECT(paradox_domain_character_vector(
-    (const char *const[]) {"params", "tags", "trafos", "translation"},
-    4
+    (const char *const[]) {
+      "params", "tags", "trafos", "translation", "edges"
+    },
+    5
   ));
   Rf_setAttrib(state, R_NamesSymbol, state_names);
-  UNPROTECT(11);
+  UNPROTECT(15);
   return state;
+}
+
+/* The recorded flags fitted to the node's current edge count. */
+static SEXP resized_edge_flags(SEXP flags, R_xlen_t count) {
+  const R_xlen_t available = TYPEOF(flags) == LGLSXP ? XLENGTH(flags) : 0;
+  if (available == count) {
+    return flags;
+  }
+  SEXP result = PROTECT(Rf_allocVector(LGLSXP, count));
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SET_LOGICAL_ELT(
+      result,
+      index,
+      index < available ? LOGICAL_ELT(flags, index) : FALSE
+    );
+  }
+  UNPROTECT(1);
+  return result;
+}
+
+/* One flag vector per edge from a single construction-time scalar. */
+static SEXP uniform_edge_flags(int flag, R_xlen_t count) {
+  SEXP result = PROTECT(Rf_allocVector(LGLSXP, count));
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SET_LOGICAL_ELT(result, index, flag);
+  }
+  UNPROTECT(1);
+  return result;
 }
 
 SEXP paradox_param_set_collection_construct(SEXP sets, SEXP tag_sets_sexp,
@@ -917,7 +1047,18 @@ SEXP paradox_param_set_collection_construct(SEXP sets, SEXP tag_sets_sexp,
   const int tag_sets = checked_flag(tag_sets_sexp, "tag_sets");
   const int tag_params = checked_flag(tag_params_sexp, "tag_params");
   const int postfix = checked_flag(postfix_sexp, "postfix_names");
-  return build_collection_static_state(sets, tag_sets, tag_params, postfix);
+  /* Sizing only: the builder owns the `sets` shape diagnostics, and it rejects
+   * anything this fallback length could not describe. */
+  const R_xlen_t child_count =
+    TYPEOF(sets) == VECSXP && !ALTREP(sets) ? XLENGTH(sets) : 0;
+  SEXP edge_tag_sets = PROTECT(uniform_edge_flags(tag_sets, child_count));
+  SEXP edge_tag_params = PROTECT(uniform_edge_flags(tag_params, child_count));
+  SEXP result = PROTECT(build_collection_static_state(
+    sets, edge_tag_sets, edge_tag_params, R_NilValue, postfix,
+    "`sets` names", R_NilValue
+  ));
+  UNPROTECT(3);
+  return result;
 }
 
 typedef struct {
@@ -942,9 +1083,13 @@ static SEXP checked_add_name(SEXP value) {
     Rf_error("`n` must be an unclassed character scalar");
   }
   SEXP result = STRING_ELT(value, 0);
-  if (!supported_ascii(result)) {
-    Rf_error("`n` must be one non-missing supported ASCII name");
+  if (result == NA_STRING) {
+    Rf_error("`n` must be one non-missing name");
   }
+  /* The empty name adds a set without affixing its IDs. Which grammar every
+   * other name has to satisfy depends on whether this collection prepends or
+   * appends it, so the shared admission below applies that rule to this same
+   * name once the collection's own affix direction is known. */
   return result;
 }
 
@@ -1065,9 +1210,9 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
         core = paradox_core_from_private(private_environment),
         &core_index
       );
-      if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
+      if (!paradox_core_is_verified(core)) {
         REPROTECT(
-          core = paradox_core_refresh_shadow(
+          core = paradox_core_refresh(
             frame->self,
             private_environment
           ),
@@ -1251,6 +1396,15 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
   const int tag_params = checked_flag(tag_params_sexp, "tag_params");
   SEXP owner = checked_add_name(name);
 
+  /* Both graphs are flattened here, so both must already agree with their own
+   * children; otherwise the transaction would append to, or admit, an
+   * outdated schema. */
+  SEXP selected_core = paradox_core_from_private(private_environment);
+  if (selected_core != R_UnboundValue &&
+      !paradox_core_is_verified(selected_core)) {
+    (void) paradox_core_refresh(self, private_environment);
+  }
+
   R_xlen_t work_since_interrupt = 0;
   PROTECT_INDEX current_graph_roots_index;
   SEXP current_graph_roots;
@@ -1311,11 +1465,16 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
   SET_VECTOR_ELT(singleton, 0, child);
   SET_STRING_ELT(singleton_names, 0, owner);
   Rf_setAttrib(singleton, R_NamesSymbol, singleton_names);
+  SEXP singleton_tag_sets = PROTECT(uniform_edge_flags(tag_sets, 1));
+  SEXP singleton_tag_params = PROTECT(uniform_edge_flags(tag_params, 1));
   SEXP child_static = PROTECT(build_collection_static_state(
     singleton,
-    tag_sets,
-    tag_params,
-    root->postfix
+    singleton_tag_sets,
+    singleton_tag_params,
+    R_NilValue,
+    root->postfix,
+    "`n`",
+    R_NilValue
   ));
 
   PROTECT_INDEX child_graph_roots_index;
@@ -1474,6 +1633,68 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
   SET_STRING_ELT(set_names, old_child_count, owner);
   Rf_setAttrib(sets, R_NamesSymbol, set_names);
 
+  /* Extend the edge record with the generation and flags this append actually
+   * consumed. The appended core comes from the singleton flatten, so it is the
+   * exact generation the new rows describe. */
+  SEXP old_edges = VECTOR_ELT(old_state, PARADOX_CORE_EDGES);
+  SEXP child_edges = VECTOR_ELT(child_static, 4);
+  SEXP edge_cores = PROTECT(Rf_allocVector(VECSXP, old_child_count + 1));
+  SEXP edge_tag_sets = PROTECT(Rf_allocVector(LGLSXP, old_child_count + 1));
+  SEXP edge_tag_params = PROTECT(Rf_allocVector(
+    LGLSXP,
+    old_child_count + 1
+  ));
+  for (R_xlen_t index = 0; index < old_child_count; ++index) {
+    SET_VECTOR_ELT(
+      edge_cores,
+      index,
+      VECTOR_ELT(VECTOR_ELT(old_edges, PARADOX_COLLECTION_EDGE_CORES), index)
+    );
+    SET_LOGICAL_ELT(
+      edge_tag_sets,
+      index,
+      LOGICAL_ELT(
+        VECTOR_ELT(old_edges, PARADOX_COLLECTION_EDGE_TAG_SETS),
+        index
+      )
+    );
+    SET_LOGICAL_ELT(
+      edge_tag_params,
+      index,
+      LOGICAL_ELT(
+        VECTOR_ELT(old_edges, PARADOX_COLLECTION_EDGE_TAG_PARAMS),
+        index
+      )
+    );
+  }
+  SET_VECTOR_ELT(
+    edge_cores,
+    old_child_count,
+    VECTOR_ELT(VECTOR_ELT(child_edges, PARADOX_COLLECTION_EDGE_CORES), 0)
+  );
+  SET_LOGICAL_ELT(edge_tag_sets, old_child_count, tag_sets);
+  SET_LOGICAL_ELT(edge_tag_params, old_child_count, tag_params);
+  SEXP edges = PROTECT(Rf_allocVector(
+    VECSXP,
+    PARADOX_COLLECTION_EDGE_FIELD_COUNT
+  ));
+  SET_VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_CORES, edge_cores);
+  SET_VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_SETS, edge_tag_sets);
+  SET_VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_PARAMS, edge_tag_params);
+  /* An assignment this node made governs the IDs it named; the appended child
+   * brings IDs it never named, so the record carries over untouched and the
+   * appended rows stay derived. */
+  SET_VECTOR_ELT(
+    edges,
+    PARADOX_COLLECTION_EDGE_TAG_OVERRIDE,
+    VECTOR_ELT(old_edges, PARADOX_COLLECTION_EDGE_TAG_OVERRIDE)
+  );
+  SEXP edge_names = PROTECT(paradox_domain_character_vector(
+    (const char *const[]) {"cores", "tag_sets", "tag_params", "tag_override"},
+    PARADOX_COLLECTION_EDGE_FIELD_COUNT
+  ));
+  Rf_setAttrib(edges, R_NamesSymbol, edge_names);
+
   SEXP fields[PARADOX_CORE_FIELD_COUNT];
   for (int field = 0; field < PARADOX_CORE_FIELD_COUNT; ++field) {
     fields[field] = VECTOR_ELT(old_state, field);
@@ -1483,6 +1704,7 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
   fields[PARADOX_CORE_TRAFOS] = trafos;
   fields[PARADOX_CORE_SETS] = sets;
   fields[PARADOX_CORE_TRANSLATION] = translation;
+  fields[PARADOX_CORE_EDGES] = edges;
   SEXP replacement = PROTECT(paradox_core_new_from_fields(
     PARADOX_CORE_COLLECTION,
     fields
@@ -1505,7 +1727,77 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
     Rf_error("ParamSet capsule graph changed during collection add");
   }
 
+  /* The flatten grew, so every derived schema in the session revalidates; this
+   * generation was just built from its current children and is exempt. */
+  paradox_core_note_change(PARADOX_CORE_CHANGE_SCHEMA);
+  paradox_core_stamp_verified(replacement);
   Rf_defineVar(Rf_install(".core"), replacement, private_environment);
-  UNPROTECT(21);
+  UNPROTECT(28);
   return self;
+}
+
+SEXP paradox_collection_reflatten(SEXP private_environment, SEXP core,
+    R_xlen_t changed_edge) {
+  PROTECT(private_environment);
+  PROTECT(core);
+  SEXP state = R_ExternalPtrProtected(core);
+  SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
+  SEXP edges = VECTOR_ELT(state, PARADOX_CORE_EDGES);
+  int postfix = FALSE;
+  if (!exact_flag(VECTOR_ELT(state, PARADOX_CORE_POSTFIX), &postfix)) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSetCollection affix policy");
+  }
+  SEXP set_names = PROTECT(Rf_getAttrib(sets, R_NamesSymbol));
+  SEXP changed_owner = TYPEOF(set_names) == STRSXP &&
+      changed_edge >= 0 && changed_edge < XLENGTH(set_names)
+    ? STRING_ELT(set_names, changed_edge)
+    : R_BlankString;
+  /* The record is a cache and may describe fewer or more edges than the node
+   * currently has; an edge it does not describe simply carries no generated
+   * tags. */
+  const R_xlen_t child_count = TYPEOF(sets) == VECSXP ? XLENGTH(sets) : 0;
+  SEXP tag_sets = PROTECT(resized_edge_flags(
+    VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_SETS),
+    child_count
+  ));
+  SEXP tag_params = PROTECT(resized_edge_flags(
+    VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_PARAMS),
+    child_count
+  ));
+  /* Rebuilding through the constructor's own builder is what makes the healed
+   * node identical to a collection freshly constructed from these children,
+   * including the per-edge tag flags recorded when each edge was added. */
+  SEXP rebuilt = PROTECT(build_collection_static_state(
+    sets,
+    tag_sets,
+    tag_params,
+    VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_OVERRIDE),
+    postfix,
+    "`sets` names",
+    changed_owner
+  ));
+
+  SEXP fields[PARADOX_CORE_FIELD_COUNT];
+  for (int field = 0; field < PARADOX_CORE_FIELD_COUNT; ++field) {
+    fields[field] = VECTOR_ELT(state, field);
+  }
+  fields[PARADOX_CORE_PARAMS] = VECTOR_ELT(rebuilt, 0);
+  fields[PARADOX_CORE_TAGS] = VECTOR_ELT(rebuilt, 1);
+  fields[PARADOX_CORE_TRAFOS] = VECTOR_ELT(rebuilt, 2);
+  fields[PARADOX_CORE_TRANSLATION] = VECTOR_ELT(rebuilt, 3);
+  fields[PARADOX_CORE_EDGES] = VECTOR_ELT(rebuilt, 4);
+  SEXP replacement = PROTECT(paradox_core_new_from_fields(
+    PARADOX_CORE_COLLECTION,
+    fields
+  ));
+  if (paradox_core_from_private(private_environment) != core) {
+    UNPROTECT(7);
+    Rf_error("ParamSetCollection capsule changed during refresh");
+  }
+  /* A refresh installs the schema this node already denoted, so it is not a
+   * semantic change and must not advance the epoch. */
+  Rf_defineVar(Rf_install(".core"), replacement, private_environment);
+  UNPROTECT(7);
+  return replacement;
 }

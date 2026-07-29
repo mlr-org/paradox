@@ -540,13 +540,18 @@ static SEXP stable_list_argument(SEXP values, R_xlen_t expected_size,
 static SEXP check_failure(SEXP id, SEXP reason) {
   PROTECT(id);
   PROTECT(reason);
+  /* `reason` is whatever a user `custom_check` returned. Both fragments must
+   * be diagnostic-safe before the result below is minted as UTF-8, or it
+   * would declare an encoding its bytes do not satisfy. */
+  SEXP safe_id = PROTECT(paradox_diagnostic_charsxp(id));
+  SEXP safe_reason = PROTECT(paradox_diagnostic_charsxp(reason));
   const void *vmax = vmaxget();
-  const size_t id_size = strlen(Rf_translateCharUTF8(id));
-  const size_t reason_size = strlen(Rf_translateCharUTF8(reason));
+  const size_t id_size = strlen(Rf_translateCharUTF8(safe_id));
+  const size_t reason_size = strlen(Rf_translateCharUTF8(safe_reason));
   if (id_size > (size_t) R_XLEN_T_MAX - 3U ||
       reason_size > (size_t) R_XLEN_T_MAX - id_size - 3U) {
     vmaxset(vmax);
-    UNPROTECT(2);
+    UNPROTECT(4);
     Rf_error("Domain diagnostic is too large");
   }
   char *message = paradox_temporary_alloc(
@@ -555,18 +560,18 @@ static SEXP check_failure(SEXP id, SEXP reason) {
   );
   /* Keep only sizes across allocation. Both owning CHARSXPs are rooted, so
    * each UTF-8 translation can be reacquired and consumed immediately. */
-  memcpy(message, Rf_translateCharUTF8(id), id_size);
+  memcpy(message, Rf_translateCharUTF8(safe_id), id_size);
   message[id_size] = ':';
   message[id_size + 1U] = ' ';
   memcpy(
     message + id_size + 2U,
-    Rf_translateCharUTF8(reason),
+    Rf_translateCharUTF8(safe_reason),
     reason_size + 1U
   );
   SEXP text = PROTECT(Rf_mkCharCE(message, CE_UTF8));
   SEXP result = PROTECT(Rf_ScalarString(text));
   vmaxset(vmax);
-  UNPROTECT(4);
+  UNPROTECT(6);
   return result;
 }
 
@@ -667,6 +672,11 @@ static SEXP check_numeric_domain(SEXP param, SEXP values,
       SEXP ids = PROTECT(paradox_get_named_column_checked(
         param, "Domain storage", "Domain", "id"
       ));
+      /* The shell check above does not bind this column to the admitted row
+       * count, and a callback-capable admission may have replaced it. */
+      paradox_require_column_checked(
+        ids, STRSXP, info->size, "Domain storage", "id"
+      );
       SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
         STRING_ELT(ids, row),
         &spec,
@@ -739,6 +749,11 @@ static SEXP check_factor_domain(SEXP param, SEXP values,
       SEXP ids = PROTECT(paradox_get_named_column_checked(
         param, "Domain storage", "Domain", "id"
       ));
+      /* The shell check above does not bind this column to the admitted row
+       * count, and a callback-capable admission may have replaced it. */
+      paradox_require_column_checked(
+        ids, STRSXP, info->size, "Domain storage", "id"
+      );
       SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
         STRING_ELT(ids, row),
         &spec,
@@ -782,6 +797,11 @@ static SEXP check_logical_domain(SEXP param, SEXP values,
       SEXP ids = PROTECT(paradox_get_named_column_checked(
         param, "Domain storage", "Domain", "id"
       ));
+      /* The shell check above does not bind this column to the admitted row
+       * count, and a callback-capable admission may have replaced it. */
+      paradox_require_column_checked(
+        ids, STRSXP, info->size, "Domain storage", "id"
+      );
       SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
         STRING_ELT(ids, row),
         &spec,
@@ -797,15 +817,19 @@ static SEXP check_logical_domain(SEXP param, SEXP values,
 }
 
 static SEXP named_list_element(SEXP values, const char *target) {
-  if (TYPEOF(values) != VECSXP) {
+  /* Reject ALTREP and measure once, exactly like the ParamSet twin: the
+   * `names` length is checked against this container's length, so a second
+   * Length observation must not be able to answer differently. */
+  if (TYPEOF(values) != VECSXP || ALTREP(values)) {
     return R_UnboundValue;
   }
+  const R_xlen_t size = XLENGTH(values);
   SEXP names = PROTECT(Rf_getAttrib(values, R_NamesSymbol));
-  if (TYPEOF(names) != STRSXP || XLENGTH(names) != XLENGTH(values)) {
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || XLENGTH(names) != size) {
     UNPROTECT(1);
     return R_UnboundValue;
   }
-  for (R_xlen_t index = 0; index < XLENGTH(values); ++index) {
+  for (R_xlen_t index = 0; index < size; ++index) {
     SEXP name = STRING_ELT(names, index);
     if (name != NA_STRING && strcmp(CHAR(name), target) == 0) {
       SEXP result = VECTOR_ELT(values, index);
@@ -854,6 +878,11 @@ static SEXP check_utility_domain(SEXP param, SEXP values,
   SEXP ids = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "id"
   ));
+  /* The shell check above does not bind this column to the admitted row
+   * count, and a callback-capable admission may have replaced it. */
+  paradox_require_column_checked(
+    ids, STRSXP, info->size, "Domain storage", "id"
+  );
   for (R_xlen_t row = 0; row < info->size; ++row) {
     periodic_interrupt(row);
     if (skip[row]) {
@@ -863,7 +892,10 @@ static SEXP check_utility_domain(SEXP param, SEXP values,
     if (callback == R_NilValue) {
       continue;
     }
-    SEXP call = PROTECT(Rf_lang2(callback, VECTOR_ELT(values, row)));
+    SEXP call = PROTECT(paradox_unary_callback_call(
+      callback,
+      VECTOR_ELT(values, row)
+    ));
     SEXP answer = PROTECT(Rf_eval(call, R_BaseEnv));
     if (TYPEOF(answer) == LGLSXP && XLENGTH(answer) == 1 &&
         LOGICAL_ELT(answer, 0) == TRUE) {
@@ -890,8 +922,16 @@ static SEXP check_utility_domain(SEXP param, SEXP values,
 }
 
 SEXP paradox_domain_check_builtin(SEXP param, SEXP values, SEXP internal) {
-  if (TYPEOF(internal) != LGLSXP || XLENGTH(internal) != 1 ||
-      LOGICAL_ELT(internal, 0) == NA_LOGICAL) {
+  if (TYPEOF(internal) != LGLSXP || XLENGTH(internal) != 1) {
+    Rf_error("`internal` must be TRUE or FALSE");
+  }
+  /* Observe the flag exactly once. Value admission below may materialize a
+   * semantic ALTREP and reenter R, and a second observation of an ALTREP
+   * scalar can answer differently -- including with NA, which the
+   * special-value snapshot would read as "internal" and silently stop
+   * honoring `special_vals`. */
+  const int internal_flag = LOGICAL_ELT(internal, 0);
+  if (internal_flag == NA_LOGICAL) {
     Rf_error("`internal` must be TRUE or FALSE");
   }
 
@@ -934,7 +974,7 @@ SEXP paradox_domain_check_builtin(SEXP param, SEXP values, SEXP internal) {
     param,
     stable_values,
     &info,
-    LOGICAL_ELT(internal, 0)
+    internal_flag
   );
 
   if (info.kind == DOMAIN_KIND_UTY) {
@@ -1226,13 +1266,16 @@ static void validate_logical_levels(SEXP param, const domain_info_t *info) {
 }
 
 SEXP paradox_domain_property_builtin(SEXP param, SEXP property) {
-  if (TYPEOF(property) != INTSXP || XLENGTH(property) != 1 ||
-      INTEGER_ELT(property, 0) < 0 ||
-      INTEGER_ELT(property, 0) >= PARADOX_PROPERTY_COUNT) {
+  if (TYPEOF(property) != INTSXP || XLENGTH(property) != 1) {
     Rf_error("Internal error: unknown Domain property");
   }
-  const paradox_property_t requested =
-    (paradox_property_t) INTEGER_ELT(property, 0);
+  /* One observation, like the ParamSet-table property reader: the selector is
+   * validated and used from the same read. */
+  const int selector = INTEGER_ELT(property, 0);
+  if (selector < 0 || selector >= PARADOX_PROPERTY_COUNT) {
+    Rf_error("Internal error: unknown Domain property");
+  }
+  const paradox_property_t requested = (paradox_property_t) selector;
   const domain_info_t info = domain_info(param);
   /* Keep dispatch independent of the helper calls that receive `&info`. */
   const domain_kind_t kind = info.kind;

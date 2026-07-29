@@ -229,3 +229,78 @@ test_that("dependency comparison does not reinterpret an S4 ParamUty leaf", {
     ignore.case = TRUE
   )
 })
+
+test_that("cross-type Condition operands do not match instead of erroring", {
+  # Paradox 1 compared through R's `==`, which coerced rather than erroring.
+  # A character value simply never equals a numeric right-hand side here.
+  expect_false(condition_test(CondEqual(1), "1"))
+  expect_false(condition_test(CondEqual(1), "a"))
+  expect_false(condition_test(CondEqual("1"), 1))
+  expect_false(condition_test(CondEqual(TRUE), "TRUE"))
+  expect_false(condition_test(CondAnyOf(c(1, 2)), "1"))
+  expect_false(condition_test(CondAnyOf(c("a", "b")), 1L))
+  expect_false(condition_test(CondEqual(1), NA_character_))
+  expect_equal(condition_test(CondEqual(1), c("1", "2")), c(FALSE, FALSE))
+  expect_equal(condition_test(CondEqual(1), character(0)), logical(0))
+  expect_equal(
+    condition_test(CondEqual("x"), c(one = 1, two = 2)),
+    c(one = FALSE, two = FALSE)
+  )
+
+  # The logical/integer/double family stays mutually comparable.
+  expect_true(condition_test(CondEqual(1), 1L))
+  expect_true(condition_test(CondEqual(1L), TRUE))
+  expect_false(condition_test(CondEqual(0), TRUE))
+
+  # A cross-type operand is a comparison result, not an admission failure:
+  # the structural gates still error.
+  expect_error(
+    condition_test(CondEqual(1), list(1)),
+    "plain atomic vector",
+    fixed = TRUE
+  )
+  expect_error(
+    condition_test(CondEqual("a"), factor("a")),
+    "plain atomic vector",
+    fixed = TRUE
+  )
+  values = c("1", "2")
+  attr(values, "names") = c("one", "two", "three")[1:2]
+  expect_equal(
+    condition_test(CondEqual(1), values),
+    c(one = FALSE, two = FALSE)
+  )
+})
+
+test_that("dependency evaluation gives the same answer as condition_test", {
+  # The dependency kernel is the same closed comparator, so a cross-type parent
+  # value must read as an unsatisfied condition, not as an unsupported operand.
+  set = ps(u = p_uty(), c = p_dbl(0, 1, depends = u == 1))
+
+  expect_false(condition_test(CondEqual(1), "1"))
+  expect_false(set$test(list(u = "1", c = 0.5)))
+  expect_match(
+    set$check(list(u = "1", c = 0.5)),
+    "can only be set if the following condition is met",
+    fixed = TRUE
+  )
+
+  values = set$clone(deep = TRUE)
+  values$values = list(u = "1", c = 0.5)
+  expect_equal(names(values$get_values()), "u")
+
+  # An operand the comparator cannot inspect at all keeps its own diagnostic.
+  expect_match(
+    set$check(list(u = list(1), c = 0.5)),
+    "requires a plain scalar",
+    fixed = TRUE
+  )
+
+  # A satisfied same-type comparison is unaffected.
+  expect_true(set$check(list(u = 1, c = 0.5)))
+  expect_match(
+    set$check(list(u = 2, c = 0.5)),
+    "can only be set if the following condition is met",
+    fixed = TRUE
+  )
+})

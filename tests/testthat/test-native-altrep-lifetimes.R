@@ -296,7 +296,7 @@ test_that("check rejects structural ALTREP before selecting capsule state", {
     FALSE,
     "none",
     TRUE
-  ), "Must be an ordinary named list.")
+  ), "Must be an ordinary named list")
   expect_identical(point_callbacks, 0L)
   expect_identical(altrep2_state(point_set)$.params$upper, 1L)
 
@@ -312,8 +312,10 @@ test_that("check rejects structural ALTREP before selecting capsule state", {
   expect_identical(
     point_set$check(named_point),
     paste(
+      # Two sentences: the separating period is the fragment's own, the
+      # terminating one belongs to the assertion wrapper.
       "Must be a named list.",
-      "Names must be an ordinary character vector."
+      "Names must be an ordinary character vector"
     )
   )
 
@@ -630,7 +632,7 @@ test_that("structural shells reject S4 while table prefixes stay inert", {
     TRUE,
     "none",
     TRUE
-  ), "Must be a data.frame or data.table.")
+  ), "Must be a data.frame or data.table")
   expect_error(
     .Call(altrep2_symbol("param_set_qunif_builtin"),
       altrep2_private(param_set), param_set, s4_table),
@@ -688,7 +690,7 @@ test_that("structural shells reject S4 while table prefixes stay inert", {
   attr(zero_columns, "row.names") = asS4(integer())
   expect_identical(
     param_set$check_dt(zero_columns),
-    "Invalid data.frame row names."
+    "Invalid data.frame row names"
   )
 })
 
@@ -730,7 +732,7 @@ test_that("value merge alone snapshots shells while preserving opaque leaves", {
     structure(list(payload = new.env()), names = "payload"),
     elt_switch_after = 1L
   )
-  expect_identical(utility$check(point), "Must be an ordinary named list.")
+  expect_identical(utility$check(point), "Must be an ordinary named list")
   expect_null(seen)
   expect_identical(
     .Call(altrep2_symbol("design_transpose"), list(payload = list(marker)), FALSE)[[1L]]$payload,
@@ -836,5 +838,66 @@ test_that("materialized and rejected inputs remain safe under forced collection"
   gctorture(previous)
 
   expect_identical(quantiles, c(2.5, 7.5))
-  expect_identical(checked, "Must be an ordinary named list.")
+  expect_identical(checked, "Must be an ordinary named list")
+})
+
+test_that("the domain_check() internal flag is observed exactly once", {
+  altrep2_skip_without_helpers()
+
+  # Value admission below the flag check can materialize a semantic ALTREP and
+  # reenter R. A second observation of the flag could answer NA, which the
+  # special-value snapshot reads as "internal" and would silently stop
+  # honoring `special_vals`.
+  domain = p_dbl(0, 1, special_vals = list("special"))
+  switching = native_stateful_altrep(FALSE, NA, elt_switch_after = 1L)
+
+  expect_true(domain_check(domain, list("special"), internal = switching))
+  expect_true(domain_check(domain, list("special"), internal = FALSE))
+  expect_match(
+    domain_check(domain, list("special"), internal = TRUE),
+    "Must be of type 'number'"
+  )
+  expect_error(
+    domain_check(domain, list("special"), internal = NA),
+    "`internal` must be TRUE or FALSE"
+  )
+})
+
+test_that("a Domain id column re-read on the failure path is revalidated", {
+  altrep2_skip_without_helpers()
+
+  # `special_vals` membership uses identical(), which dispatches a hostile
+  # ALTREP special's Length method and so re-enters R after the Domain shape
+  # was admitted. The failure path then re-reads the `id` column; it must be
+  # bound to the admitted row count instead of being indexed blind.
+  mutate_column = function(table, name, value) {
+    discarded = .Call(
+      altrep2_symbol("test_gc_column_mutator"),
+      table,
+      match(name, names(table)) - 1L,
+      value
+    )
+    rm(discarded)
+    for (round in seq_len(3L)) invisible(gc(full = TRUE))
+  }
+
+  for (case in list(
+    list(domain = p_dbl(0, 1), values = list(5)),
+    list(domain = p_uty(custom_check = function(x) "rejected"), values = list(1))
+  )) {
+    domain = case$domain
+    calls = 0L
+    hostile = native_stateful_altrep(
+      c(99, 98), c(99, 98),
+      callback = function() {
+        calls <<- calls + 1L
+        mutate_column(domain, "id", character(0))
+      },
+      callback_after = c(NA_integer_, 0L)
+    )
+    mutate_column(domain, "special_vals", list(list(hostile)))
+
+    expect_error(domain_check(domain, case$values), "Corrupt Domain storage")
+    expect_identical(calls, 1L)
+  }
 })

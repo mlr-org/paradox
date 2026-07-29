@@ -126,6 +126,7 @@ attribute_hidden SEXP paradox_param_set_ids(
 );
 attribute_hidden SEXP paradox_param_set_ids_lazy(
   SEXP private_environment,
+  SEXP self,
   SEXP frame
 );
 attribute_hidden SEXP paradox_param_set_get_values(

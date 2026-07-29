@@ -227,16 +227,36 @@ test_that("native construction gates fail closed on malformed shapes", {
   }
 
   expect_type(call_domain(), "list")
-  expect_error(call_domain(cls = "ParamUnknown"), "Invalid built-in Domain state")
-  expect_error(call_domain(grouping = character()), "Invalid built-in Domain state")
+  expect_error(
+    call_domain(cls = "ParamUnknown"),
+    "`cls` and `storage_type` must describe one canonical Domain",
+    fixed = TRUE
+  )
+  expect_error(
+    call_domain(grouping = character()),
+    "`grouping` must be one non-missing string",
+    fixed = TRUE
+  )
   expect_error(
     call_domain(lower = numeric()),
     "`lower` must be one number",
     fixed = TRUE
   )
-  expect_error(call_domain(tags = c("x", "x")), "Invalid built-in Domain state")
-  expect_error(call_domain(trafo = 1L), "Invalid built-in Domain state")
-  expect_error(call_domain(init_given = NA), "Invalid built-in Domain state")
+  expect_error(
+    call_domain(tags = c("x", "x")),
+    "`tags` must be an attribute-free character vector",
+    fixed = TRUE
+  )
+  expect_error(
+    call_domain(trafo = 1L),
+    "`trafo` must be a function or NULL",
+    fixed = TRUE
+  )
+  expect_error(
+    call_domain(init_given = NA),
+    "Internal error: invalid `init` admission flag",
+    fixed = TRUE
+  )
 })
 
 test_that("unified ParamSet checking rejects malformed calls without replay", {
@@ -258,8 +278,8 @@ test_that("unified ParamSet checking rejects malformed calls without replay", {
   non_table_result = .Call(
     table, private, param_set, list(x = 0.5), TRUE, "none", TRUE
   )
-  expect_identical(unnamed_result, "Must be a named list.")
-  expect_identical(non_table_result, "Must be a data.frame or data.table.")
+  expect_identical(unnamed_result, "Must be a named list")
+  expect_identical(non_table_result, "Must be a data.frame or data.table")
 
   corrupt_private = new.env(parent = emptyenv())
   corrupt_private$.core = new("externalptr")

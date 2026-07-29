@@ -34,7 +34,9 @@
 #' * **`to_tune(<Domain>)`**: The given bounded, value-producing [`Domain`]
 #'   object (constructed e.g. with [`p_int()`] or [`p_fct()`]) indicates the
 #'   range which should be tuned over. The supplied `trafo` function is used
-#'   for parameter transformation. An unbounded [`p_uty()`] or zero-level
+#'   for parameter transformation. An `init` given on that Domain becomes a
+#'   fixed value of the generated search space, exactly as it would when the
+#'   Domain is given to [`ps()`]. An unbounded [`p_uty()`] or zero-level
 #'   [`p_fct()`] Domain is not a tuning range; use another bounded typed Domain
 #'   or the BASE-ParamSet form when the resulting value is opaque.
 #' * **`to_tune(<ParamSet>)`**: The given exact BASE [`ParamSet`] is used to tune over a single dimension. This is useful for cases
@@ -289,7 +291,7 @@ tunetoken_full_to_ps = function(tt, param, ...) {
       # https://github.com/Rdatatable/data.table/issues/6104
       param$cargo[[1L]] = list(insert_named(param$cargo[[1L]], list(aggr = tt$content$aggr)))
     }
-    result = pslike_to_ps(param, tt$call, param)
+    result = pslike_to_ps(domain_detach_projected_init(param), tt$call, param)
     # `param` is a detached Domain facade recovered from the source ParamSet.
     # Its `.requirements` column describes the source graph, not an intrinsic
     # dependency of this temporary one-parameter tuning part. `get_tune_ps()`
@@ -373,23 +375,29 @@ pslike_to_ps = function(pslike, call, param, usersupplied = TRUE) {
 domain_to_tune_ps = function(pslike, call, param, usersupplied = TRUE) {
   # 'pslike' could be the same as 'param', i.e. a Domain with some cols missing.
   # We could consider allowing construction of ParamSet from these unfinished domains instead.
-  # A Domain recovered from a ParamSet exposes its current value through
-  # `.init` for compatibility.  Clear that detached compatibility projection
-  # before the exact ParamSet constructor admits the row; it is the TuneToken
-  # being converted, not a fixed value of the generated search space.
-  pslike$.init_given[[1L]] = FALSE
-  # Replacing a single element through `$` on a data.table with `list(NULL)`
-  # is interpreted as deleting the entire column. Replace the detached list
-  # column as a whole so the exact 16-column Domain shape is retained.
-  pslike[[".init"]] = list(NULL)
+  # A Domain the user handed to `to_tune()` keeps its own `init`, which becomes
+  # a fixed value of the generated search space.  Only the recovered facade of
+  # the tuned parameter itself carries a projected `.init`; the one caller that
+  # converts that facade detaches it first, see `domain_detach_projected_init()`.
   pslike = ParamSet$new(structure(list(pslike), names = param$id), allow_dangling_dependencies = TRUE)
-  # Keep this explicit reset as a defense against future alternate Domain
-  # projections; the canonical row above normally produces no initial value.
-  pslike$values = named_list()
   param_set_to_tune_ps(
     pslike, call, param, usersupplied = FALSE,
     already_flattened = TRUE
   )
+}
+
+# A Domain recovered from a ParamSet exposes that ParamSet's current value of
+# the parameter through `.init` for compatibility.  When the whole parameter is
+# tuned, that value is the `TuneToken` itself, so the projection must be
+# detached before the exact ParamSet constructor admits the row.  Paradox 1 read
+# the undecorated `.params` row here, which never carried `.init` at all.
+domain_detach_projected_init = function(param) {
+  param$.init_given[[1L]] = FALSE
+  # Replacing a single element through `$` on a data.table with `list(NULL)`
+  # is interpreted as deleting the entire column. Replace the detached list
+  # column as a whole so the exact 16-column Domain shape is retained.
+  param[[".init"]] = list(NULL)
+  param
 }
 
 param_set_to_tune_ps = function(pslike, call, param, usersupplied = TRUE,
@@ -409,7 +417,11 @@ param_set_to_tune_ps = function(pslike, call, param, usersupplied = TRUE,
   rng_state = if (had_rng_state) get(".Random.seed", envir = rng_env, inherits = FALSE)
   rng_kind = RNGkind()
   on.exit({
-    do.call(RNGkind, as.list(rng_kind))
+    # `RNGkind()` warns unconditionally for the legacy non-uniform samplers.
+    # This call restores the caller's own setting rather than making a new
+    # choice, so the warning is noise -- and under `options(warn = 2)` it would
+    # abort this handler before the seed below is put back.
+    suppressWarnings(do.call(RNGkind, as.list(rng_kind)))
     if (had_rng_state) {
       assign(".Random.seed", rng_state, envir = rng_env)
     } else if (exists(".Random.seed", envir = rng_env, inherits = FALSE)) {

@@ -209,10 +209,18 @@ static void snapshot_cargo_containers(SEXP cargo) {
         "use ordinary unclassed storage"
       );
     }
-    if (value != R_NilValue && !Rf_isS4(value) && !Rf_isObject(value)) {
-      SEXP snapshot = PROTECT(paradox_snapshot_semantic_vector(value));
-      SET_VECTOR_ELT(cargo, index, snapshot);
-      UNPROTECT(1);
+    if (value != R_NilValue) {
+      /* Only an ordinary vector can be snapshotted. Anything else is left for
+       * the canonical cargo validator below, which names the offending
+       * constructor argument instead of reporting an internal snapshot type. */
+      const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+      if (type == LGLSXP || type == INTSXP || type == REALSXP ||
+          type == CPLXSXP || type == STRSXP || type == RAWSXP ||
+          type == VECSXP) {
+        SEXP snapshot = PROTECT(paradox_snapshot_semantic_vector(value));
+        SET_VECTOR_ELT(cargo, index, snapshot);
+        UNPROTECT(1);
+      }
     }
   }
   UNPROTECT(2);
@@ -1034,7 +1042,14 @@ static SEXP snapshot_builtin_value_leaf(SEXP value) {
     return value;
   }
   SEXP result = PROTECT(paradox_snapshot_semantic_vector(value));
+  /* The snapshot already owns a materialized ordinary `names`. Copying the
+   * source's attribute set replaces the whole attribute list, so reinstall
+   * that owned copy afterwards; otherwise the caller's original names object
+   * -- possibly ALTREP, possibly length-changing -- lands in the capsule. */
+  SEXP owned_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
   SHALLOW_DUPLICATE_ATTRIB(result, value);
+  Rf_setAttrib(result, R_NamesSymbol, owned_names);
+  UNPROTECT(1);
   UNPROTECT(1);
   return result;
 }
@@ -1300,26 +1315,74 @@ SEXP paradox_domain_construct(
     (source_kind == NUMERIC_SOURCE_DBL && kind == DOMAIN_KIND_DBL) ||
     (source_kind == NUMERIC_SOURCE_INT && kind == DOMAIN_KIND_INT);
   const int numeric_source = source_kind != NUMERIC_SOURCE_NONE;
-  if (kind == DOMAIN_KIND_UNKNOWN || !source_matches_kind ||
-      (source_kind == NUMERIC_SOURCE_NONE && logscale) ||
-      !scalar_string(grouping) ||
-      (!numeric_source && (!scalar_numeric(lower) ||
-        !scalar_numeric(upper) || !scalar_numeric(tolerance))) ||
-      !levels_are_canonical(kind, levels) ||
-      !checkmate_list(special_vals) ||
-      !unique_nonmissing_strings(tags, FALSE) ||
-      !paradox_api_has_no_attributes(tags) || !function_or_null(trafo) ||
-      TYPEOF(init_given) != LGLSXP || ALTREP(init_given) ||
+  /* One argument-named diagnostic per canonical-state clause.  The clauses are
+   * tested in exactly the order of the single combined condition they replace,
+   * so an input that violates several of them still reports the one it always
+   * reported -- now naming the argument that is actually wrong instead of one
+   * sentence that covered every field at once. */
+  if (kind == DOMAIN_KIND_UNKNOWN) {
+    UNPROTECT(1);
+    Rf_error(
+      "`cls` and `storage_type` must describe one canonical Domain; "
+      "Paradox 2 supports only p_dbl, p_int, p_fct, p_lgl, and p_uty"
+    );
+  }
+  if (!source_matches_kind ||
+      (source_kind == NUMERIC_SOURCE_NONE && logscale)) {
+    UNPROTECT(1);
+    Rf_error(
+      "Internal error: `.numeric_source_kind` and `.numeric_logscale` do not "
+      "match `cls`/`storage_type`"
+    );
+  }
+  if (!scalar_string(grouping)) {
+    UNPROTECT(1);
+    Rf_error("`grouping` must be one non-missing string");
+  }
+  if (!numeric_source && (!scalar_numeric(lower) ||
+      !scalar_numeric(upper) || !scalar_numeric(tolerance))) {
+    UNPROTECT(1);
+    Rf_error("`lower`, `upper`, and `tolerance` must each be one number");
+  }
+  if (!levels_are_canonical(kind, levels)) {
+    UNPROTECT(1);
+    if (kind == DOMAIN_KIND_FCT) {
+      Rf_error(
+        "`levels` must be a character vector of unique, non-missing values"
+      );
+    }
+    if (kind == DOMAIN_KIND_LGL) {
+      Rf_error("`levels` must be `c(TRUE, FALSE)`");
+    }
+    Rf_error("`levels` must be NULL for a p_dbl, p_int, or p_uty Domain");
+  }
+  if (!checkmate_list(special_vals)) {
+    UNPROTECT(1);
+    Rf_error("`special_vals` must be an ordinary list");
+  }
+  if (!unique_nonmissing_strings(tags, FALSE) ||
+      !paradox_api_has_no_attributes(tags)) {
+    UNPROTECT(1);
+    Rf_error(
+      "`tags` must be an attribute-free character vector of unique, "
+      "non-missing values"
+    );
+  }
+  if (!function_or_null(trafo)) {
+    UNPROTECT(1);
+    Rf_error("`trafo` must be a function or NULL");
+  }
+  if (TYPEOF(init_given) != LGLSXP || ALTREP(init_given) ||
       Rf_isObject(init_given) ||
       !paradox_api_has_no_attributes(init_given) ||
       XLENGTH(init_given) != 1 ||
-      LOGICAL_ELT(init_given, 0) == NA_LOGICAL ||
-      named_element(cargo, "logscale") != R_NilValue) {
+      LOGICAL_ELT(init_given, 0) == NA_LOGICAL) {
     UNPROTECT(1);
-    Rf_error(
-      "Invalid built-in Domain state; Paradox 2 supports only canonical "
-      "p_dbl, p_int, p_fct, p_lgl, and p_uty Domains."
-    );
+    Rf_error("Internal error: invalid `init` admission flag");
+  }
+  if (named_element(cargo, "logscale") != R_NilValue) {
+    UNPROTECT(1);
+    Rf_error("`logscale` must be given as an argument, not through `cargo`");
   }
   {
     paradox_domain_field_t cargo_failure = PARADOX_DOMAIN_FIELD_CARGO;
@@ -1338,13 +1401,18 @@ SEXP paradox_domain_construct(
     }
 
     double tolerance_value;
+    /* A canonical numeric Domain stores a finite tolerance, so admit only
+     * that here: an infinite `tolerance` would otherwise pass this named
+     * argument gate and be rejected by the final canonical-state check, which
+     * can only name the whole `lower/upper/tolerance` field group. */
     if (!plain_scalar_number_value(tolerance, &tolerance_value) ||
-        tolerance_value < 0.0 || (integer && tolerance_value > 0.5)) {
+        tolerance_value < 0.0 || !R_FINITE(tolerance_value) ||
+        (integer && tolerance_value > 0.5)) {
       UNPROTECT(1);
       Rf_error(
         integer
           ? "`tolerance` must be one number between 0 and 0.5"
-          : "`tolerance` must be one non-negative number"
+          : "`tolerance` must be one finite non-negative number"
       );
     }
 

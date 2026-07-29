@@ -106,7 +106,7 @@ test_that("check_dependencies is the strict native dependency-only boundary", {
   # `$check()`, even when there happen to be no dependency rows.
   expect_identical(
     ps(x = p_int())$check_dependencies(list(unknown = 1L)),
-    "Parameter 'unknown' not available."
+    "Parameter 'unknown' not available"
   )
   expect_match(
     param_set$check_dependencies(structure(

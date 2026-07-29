@@ -46,7 +46,14 @@ static R_xlen_t parse_row_count(SEXP input) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(n);
   /* Names/classes on a scalar count never carried sampling semantics and
    * checkmate historically admitted them. The owned snapshot deliberately
-   * ignores those attributes after materialization. */
+   * ignores those attributes after materialization. A factor is the one
+   * classed integer checkmate rejects, and reading its level code as a row
+   * count is the sole way this boundary could answer a nonsensical request
+   * with a plausible design instead of the established diagnostic. */
+  if (Rf_isFactor(input)) {
+    UNPROTECT(1);
+    Rf_error("`n` must be one non-negative integer, not a factor");
+  }
   if ((type != INTSXP && type != REALSXP) || XLENGTH(n) != 1) {
     UNPROTECT(1);
     Rf_error("`n` must be one non-negative integer");
@@ -371,14 +378,17 @@ SEXP paradox_sampler_unif_sample_builtin(SEXP param_set, SEXP n) {
     );
     params = graph.nodes[0].params;
   } else {
-    if (kind == PARADOX_CORE_SHADOW) {
-      SEXP refreshed = PROTECT(paradox_core_refresh_shadow(
+    if (!paradox_core_is_verified(core)) {
+      SEXP refreshed = PROTECT(paradox_core_refresh(
         param_set,
         private_environment
       ));
       core = refreshed;
       UNPROTECT(1);
-    } else if (kind != PARADOX_CORE_BASE) {
+    }
+    const paradox_core_kind_t sampled_kind = paradox_core_kind(core);
+    if (sampled_kind != PARADOX_CORE_BASE &&
+        sampled_kind != PARADOX_CORE_SHADOW) {
       UNPROTECT(4);
       Rf_error("Corrupt ParamSet sampling state: unknown core kind");
     }

@@ -214,7 +214,7 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   state model.
 - The public `assert_values` flag is the sole stateful R-shell policy outside
   that model. It selects checked versus unchecked native storage and remains
-  clone/serialization/equality-visible without changing the ten-field capsule.
+  clone/serialization/equality-visible without changing the eleven-field capsule.
 - Capsule tables are plain data.frames; data.table is outward-only.
 - Domain and Condition kinds are closed; ParamUty custom checking remains.
 - Canonical built-in Domain-row semantics have one native admission owner shared
@@ -493,8 +493,11 @@ remaining convergence and acceptance steps are:
 
 ### State and public model
 
-- [x] v1 NULL-address external-pointer capsule with ordinary protected truth;
-- [x] fixed ten-field BASE/COLLECTION/SHADOW schema;
+- [x] v1 external-pointer capsule with ordinary protected truth and a
+      session-local derived-state stamp in its address slot;
+- [x] fixed eleven-field BASE/COLLECTION/SHADOW schema;
+- [x] lazily refreshed derived schema: a collection flatten and a shadow
+      projection follow the sets they are derived from;
 - [x] canonical plain internal table constructors/validators;
 - [x] package-owned exported ParamSetShadow shell and initial bridge contract;
 - [x] closed Domain and Condition public dispatch;

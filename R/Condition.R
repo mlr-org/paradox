@@ -4,6 +4,11 @@
 #'
 #' Used internally. Tests whether a value satisfies a given condition.
 #' Vectorizes over a plain logical, integer, numeric, or character `x`.
+#' A character `x` never satisfies a logical, integer, or numeric right-hand
+#' side, and vice versa: such an element is `FALSE` rather than an error. No
+#' value is reinterpreted as another type in order to compare it, so unlike
+#' Paradox 1 -- which compared through R's `==` -- `condition_test(CondEqual(1),
+#' "1")` is `FALSE`. Dependency evaluation uses the same answer.
 #' `NULL` produces `logical()`. A names attribute is retained; classed vectors
 #' and other attributes, including S4 operands, are not part of the closed
 #' Condition boundary. Stable

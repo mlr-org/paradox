@@ -184,6 +184,73 @@ R_xlen_t paradox_domain_find_string(SEXP strings, SEXP sought,
   return R_XLEN_T_MAX;
 }
 
+SEXP paradox_domain_apply_tag_override(SEXP derived, SEXP override,
+    R_xlen_t *work_since_interrupt) {
+  if (override == R_NilValue) {
+    return derived;
+  }
+  PROTECT(derived);
+  PROTECT(override);
+  SEXP governed = VECTOR_ELT(override, PARADOX_TAG_OVERRIDE_IDS);
+  SEXP asserted = VECTOR_ELT(override, PARADOX_TAG_OVERRIDE_TAGS);
+  SEXP derived_ids = VECTOR_ELT(derived, 0);
+  SEXP derived_tags = VECTOR_ELT(derived, 1);
+  SEXP asserted_ids = VECTOR_ELT(asserted, 0);
+  SEXP asserted_tags = VECTOR_ELT(asserted, 1);
+  const R_xlen_t derived_rows = XLENGTH(derived_ids);
+  const R_xlen_t asserted_rows = XLENGTH(asserted_ids);
+
+  R_xlen_t kept = 0;
+  for (R_xlen_t row = 0; row < derived_rows; ++row) {
+    kept += !paradox_domain_string_in(
+      governed,
+      STRING_ELT(derived_ids, row),
+      work_since_interrupt
+    );
+  }
+  if (kept == derived_rows && asserted_rows == 0) {
+    UNPROTECT(2);
+    return derived;
+  }
+  if (kept > R_XLEN_T_MAX - asserted_rows) {
+    UNPROTECT(2);
+    Rf_error("ParamSet tag table exceeds the supported row count");
+  }
+
+  static const char *const columns[] = {"id", "tag"};
+  static const SEXPTYPE types[] = {STRSXP, STRSXP};
+  SEXP result = PROTECT(paradox_domain_new_plain_table(
+    columns,
+    types,
+    2,
+    kept + asserted_rows
+  ));
+  SEXP result_ids = VECTOR_ELT(result, 0);
+  SEXP result_tags = VECTOR_ELT(result, 1);
+  R_xlen_t output = 0;
+  for (R_xlen_t row = 0; row < derived_rows; ++row) {
+    paradox_account_work(work_since_interrupt);
+    if (paradox_domain_string_in(
+        governed,
+        STRING_ELT(derived_ids, row),
+        work_since_interrupt
+      )) {
+      continue;
+    }
+    SET_STRING_ELT(result_ids, output, STRING_ELT(derived_ids, row));
+    SET_STRING_ELT(result_tags, output, STRING_ELT(derived_tags, row));
+    ++output;
+  }
+  for (R_xlen_t row = 0; row < asserted_rows; ++row) {
+    paradox_account_work(work_since_interrupt);
+    SET_STRING_ELT(result_ids, output, STRING_ELT(asserted_ids, row));
+    SET_STRING_ELT(result_tags, output, STRING_ELT(asserted_tags, row));
+    ++output;
+  }
+  UNPROTECT(3);
+  return result;
+}
+
 int paradox_domain_string_in(SEXP strings, SEXP sought,
     R_xlen_t *work_since_interrupt) {
   return paradox_domain_find_string(
@@ -249,6 +316,15 @@ int paradox_domain_exact_plain_table(SEXP table,
     ) && TYPEOF(row_names) == INTSXP &&
     paradox_api_has_no_attributes(row_names) &&
     XLENGTH(row_names) == observed_row_count;
+  /* An exact plain capsule table is rectangular and ordinary. Column zero
+   * defined the row count above; admitting a table whose remaining columns
+   * are shorter would let every consumer index them out of bounds. */
+  for (R_xlen_t column = 1; valid && column < column_count; ++column) {
+    SEXP child = VECTOR_ELT(table, column);
+    if (ALTREP(child) || XLENGTH(child) != observed_row_count) {
+      valid = FALSE;
+    }
+  }
   if (valid) {
     for (R_xlen_t row = 0; row < observed_row_count; ++row) {
       paradox_account_work(work_since_interrupt);

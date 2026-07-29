@@ -135,7 +135,7 @@ main <- function() {
   namespace <- asNamespace("paradox")
   private_of <- function(object) object$.__enclos_env__$private
   state_of <- function(object) {
-    .Call(symbol("param_set_core_state"), private_of(object))
+    .Call(symbol("param_set_core_state"), private_of(object), object)
   }
   bind_null <- function(environment, names) {
     for (name in names) assign(name, NULL, envir = environment)
@@ -177,10 +177,11 @@ main <- function() {
     },
     direct_param_set_core_state = function() {
       set <- ps(x = p_int(init = 1L))
-      result <- .Call(symbol("param_set_core_state"), private_of(set))
+      result <- .Call(symbol("param_set_core_state"), private_of(set), set)
       check(identical(names(result), c(
         ".params", ".values", ".tags", ".deps", ".trafos",
-        ".extra_trafo", ".constraint", ".sets", ".translation", ".postfix"
+        ".extra_trafo", ".constraint", ".sets", ".translation", ".postfix",
+        ".edges"
       )) && identical(result$.values, list(x = 1L)),
       "capsule payload recovery differs")
     },
@@ -230,16 +231,16 @@ main <- function() {
         origin,
         "hidden"
       )
-      state <- .Call(symbol("param_set_core_state"), result)
+      state <- .Call(symbol("param_set_core_state"), result, NULL)
       check(typeof(result) == "externalptr" && identical(state$.params$id, "x"),
         "native Shadow schema construction differs")
     },
-    direct_param_set_shadow_refresh = function() {
+    direct_param_set_core_refresh = function() {
       origin <- ps(hidden = p_int(), x = p_dbl(0, 1))
       shadow <- ParamSetShadow$new(origin, "hidden")
       origin$values <- list(hidden = 1L, x = 0.5)
       result <- .Call(
-        symbol("param_set_shadow_refresh"),
+        symbol("param_set_core_refresh"),
         shadow,
         private_of(shadow)
       )
@@ -562,7 +563,7 @@ main <- function() {
     },
     direct_param_set_ids_lazy = function() {
       set <- ps(x = p_int(), y = p_dbl())
-      check(identical(.Call(symbol("param_set_ids_lazy"), private_of(set), ids_frame()), c("x", "y")), "lazy ids differ")
+      check(identical(.Call(symbol("param_set_ids_lazy"), private_of(set), set, ids_frame()), c("x", "y")), "lazy ids differ")
     },
     direct_param_set_get_values = function() {
       set <- ps(x = p_int(init = 1L))
@@ -895,7 +896,7 @@ main <- function() {
       )
       target <- subset_private()
       adopted <- .Call(symbol("param_set_adopt_subset_state"), target, token)
-      result <- .Call(symbol("param_set_core_state"), target)
+      result <- .Call(symbol("param_set_core_state"), target, NULL)
       check(isTRUE(adopted) && nrow(result$.trafos) == 0L &&
         is.null(result$.extra_trafo), "stripped subset capsule transaction differs")
     },
@@ -918,7 +919,7 @@ main <- function() {
       target <- subset_private()
       check(isTRUE(.Call(symbol("param_set_adopt_subset_state"), target, plan)),
         "subset adoption failed")
-      adopted <- .Call(symbol("param_set_core_state"), target)
+      adopted <- .Call(symbol("param_set_core_state"), target, NULL)
       check(identical(adopted$.params$id, "y"), "adopted subset differs")
     },
     direct_upgrade_graph_discover = function() {

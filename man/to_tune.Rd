@@ -56,7 +56,9 @@ corresponding \code{character} vector with distinct values using \code{as.charac
 \item \strong{\verb{to_tune(<Domain>)}}: The given bounded, value-producing \code{\link{Domain}}
 object (constructed e.g. with \code{\link[=p_int]{p_int()}} or \code{\link[=p_fct]{p_fct()}}) indicates the
 range which should be tuned over. The supplied \code{trafo} function is used
-for parameter transformation. An unbounded \code{\link[=p_uty]{p_uty()}} or zero-level
+for parameter transformation. An \code{init} given on that Domain becomes a
+fixed value of the generated search space, exactly as it would when the
+Domain is given to \code{\link[=ps]{ps()}}. An unbounded \code{\link[=p_uty]{p_uty()}} or zero-level
 \code{\link[=p_fct]{p_fct()}} Domain is not a tuning range; use another bounded typed Domain
 or the BASE-ParamSet form when the resulting value is opaque.
 \item \strong{\verb{to_tune(<ParamSet>)}}: The given exact BASE \code{\link{ParamSet}} is used to tune over a single dimension. This is useful for cases

@@ -264,8 +264,12 @@ static int find_suggestions(SEXP id, SEXP candidate_ids,
     if (candidate == NA_STRING || Rf_getCharCE(candidate) == CE_BYTES) {
       continue;
     }
-    SEXP safe_candidate = PROTECT(paradox_diagnostic_charsxp(candidate));
+    /* Take the watermark first: a candidate whose UTF-8 translation is
+     * invalid makes `paradox_diagnostic_charsxp()` build an escaped copy in
+     * R_alloc memory, and that copy has to be released with the distance
+     * scratch rather than accumulate for the whole call. */
     const void *translation_watermark = vmaxget();
+    SEXP safe_candidate = PROTECT(paradox_diagnostic_charsxp(candidate));
     const int distance = partial_edit_distance(
       query,
       query_length,
@@ -296,7 +300,7 @@ static int find_suggestions(SEXP id, SEXP candidate_ids,
 
 static SEXP format_unavailable(SEXP id, SEXP candidate_ids,
     const suggestion_t *suggestions, int suggestion_count,
-    const char *location, int base_period) {
+    const char *location) {
   SEXP roots = PROTECT(Rf_allocVector(
     STRSXP,
     (R_xlen_t) suggestion_count + 1
@@ -321,11 +325,12 @@ static SEXP format_unavailable(SEXP id, SEXP candidate_ids,
   );
   pieces[piece_count++] = paradox_utf8_ascii_piece("' not available");
   pieces[piece_count++] = paradox_utf8_ascii_piece(location);
-  pieces[piece_count++] = paradox_utf8_ascii_piece(
-    base_period || suggestion_count != 0 ? "." : ""
-  );
+  /* The one period this diagnostic owns separates its two sentences.  A
+   * terminating period is the assertion wrapper's to add, and adding one here
+   * as well is what produced `not available..`; see
+   * `paradox_charsxp_ends_sentence()`. */
   if (suggestion_count != 0) {
-    pieces[piece_count++] = paradox_utf8_ascii_piece(" Did you mean '");
+    pieces[piece_count++] = paradox_utf8_ascii_piece(". Did you mean '");
     pieces[piece_count++] = paradox_utf8_charsxp_piece(
       STRING_ELT(roots, 1)
     );
@@ -348,12 +353,12 @@ static SEXP format_unavailable(SEXP id, SEXP candidate_ids,
 }
 
 SEXP paradox_parameter_unavailable_diagnostic(SEXP id, SEXP candidate_ids,
-    const char *location, int base_period) {
+    const char *location) {
   PROTECT(id);
   PROTECT(candidate_ids);
   if (TYPEOF(id) != CHARSXP || id == NA_STRING ||
       TYPEOF(candidate_ids) != STRSXP || ALTREP(candidate_ids) ||
-      location == NULL || (base_period != FALSE && base_period != TRUE)) {
+      location == NULL) {
     UNPROTECT(2);
     Rf_error("Internal error: invalid parameter suggestion input");
   }
@@ -369,8 +374,7 @@ SEXP paradox_parameter_unavailable_diagnostic(SEXP id, SEXP candidate_ids,
     candidate_ids,
     suggestions,
     suggestion_count,
-    location,
-    base_period
+    location
   ));
   UNPROTECT(3);
   return result;

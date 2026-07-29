@@ -45,10 +45,19 @@ mixed_encoding_collection_values_fixture = function() {
   translation = state$.translation
   translation$id[[1L]] = utf8_outer
   translation$original_id[[1L]] = latin1_inner
+  # The forged flatten is a deliberate white-box state, so its edge record
+  # must name the forged child generation too: otherwise the next read simply
+  # re-flattens the collection and the hand-built encoding mix disappears.
   paradox:::param_set_core_replace(
     private,
     params = params,
-    translation = translation
+    translation = translation,
+    edges = list(
+      cores = list(child_private$.core),
+      tag_sets = FALSE,
+      tag_params = FALSE,
+      tag_override = NULL
+    )
   )
 
   list(

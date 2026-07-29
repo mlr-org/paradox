@@ -122,6 +122,11 @@ typedef struct {
   R_xlen_t parent;
   R_xlen_t child_position;
   R_xlen_t next_child;
+  /* TRUE once this node or anything below it exposes a parameter, a
+   * dependency, a stored value, or a callback.  A shared node whose whole
+   * subtree is barren has nothing that can differ between two occurrences of
+   * it, so the builder stops re-expanding it; see `barren_registry_t`. */
+  int subtree_contributes;
   int postfix;
   int semantic;
 } check_node_t;
@@ -897,6 +902,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
   node->parent = parent;
   node->child_position = child_position;
   node->next_child = 0;
+  node->subtree_contributes = FALSE;
   node->postfix = FALSE;
   node->semantic = semantic;
 
@@ -974,13 +980,23 @@ static void initialize_node(SEXP self, SEXP private_environment,
       !paradox_shadow_metadata_is_exact(core)) {
     Rf_error("Corrupt ParamSetShadow native snapshot metadata");
   }
+  if (!refresh_shadows && paradox_collection_flatten_is_stale(core)) {
+    /* Migration preflight may not install anything into a current shell, so
+     * it cannot re-flatten this node the way every ordinary read does. Say
+     * what is actually wrong rather than reporting the mismatch downstream as
+     * corruption. */
+    Rf_error(
+      "ParamSetCollection schema is out of date with its contained sets; "
+      "read it once (for example with `$ids()`) before this operation"
+    );
+  }
   if (node->kind == PARADOX_CORE_SHADOW) {
     if (refresh_shadows) {
-      /* A shadow's schema is immutable but its effective values, dependencies,
-       * and constraint are a package-owned live view. Refresh exactly once at
-       * an ordinary operation boundary, before snapshotting or invoking user
-       * code. */
-      core = paradox_core_refresh_shadow(self, private_environment);
+      /* A shadow's visible schema, effective values, dependencies, and
+       * constraint are all a package-owned live view of its origin. Refresh
+       * exactly once at an ordinary operation boundary, before snapshotting or
+       * invoking user code. */
+      core = paradox_core_refresh(self, private_environment);
     } else {
       /* Migration needs the same authoritative live projection, including
        * cross-shadow dependency checks, but cannot mutate any current shell
@@ -1094,12 +1110,71 @@ static void initialize_node(SEXP self, SEXP private_environment,
       Rf_error("Corrupt ParamSetShadow state: invalid origin edge");
     }
   }
+
+  node->subtree_contributes = node->checked_params.row_count != 0 ||
+    node->checked_dependencies.row_count != 0 ||
+    node->checked_values.size != 0 ||
+    node->constraint != R_NilValue || node->extra_trafo != R_NilValue;
+}
+
+/* Shells whose entire subtree turned out to expose nothing the plan can use.
+ * Every registered shell is rooted for the whole build by its own node's
+ * `roots` entry in the protected root plan, so holding the raw pointer in
+ * unscanned R_alloc storage cannot observe a collected-and-reused address.
+ * The registry stays empty for a graph without a barren subtree, which is why
+ * the ordinary build pays nothing for the lookup below. */
+typedef struct {
+  SEXP *shells;
+  R_xlen_t count;
+  R_xlen_t capacity;
+} barren_registry_t;
+
+static int barren_registry_contains(const barren_registry_t *registry,
+    SEXP shell, R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t index = 0; index < registry->count; ++index) {
+    paradox_account_work(work_since_interrupt);
+    if (registry->shells[index] == shell) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+static void barren_registry_add(barren_registry_t *registry, SEXP shell) {
+  if (registry->count == registry->capacity) {
+    if (registry->capacity > R_XLEN_T_MAX / 2) {
+      Rf_error("ParamSet graph is too large to validate");
+    }
+    const R_xlen_t expanded =
+      registry->capacity == 0 ? 8 : registry->capacity * 2;
+    SEXP *shells = paradox_temporary_alloc(expanded, sizeof(*shells));
+    if (registry->count != 0) {
+      memcpy(
+        shells,
+        registry->shells,
+        (size_t) registry->count * sizeof(*shells)
+      );
+    }
+    registry->shells = shells;
+    registry->capacity = expanded;
+  }
+  registry->shells[registry->count++] = shell;
 }
 
 static void build_graph(SEXP private_environment, SEXP self,
     check_graph_t *graph, SEXP *root_plan, PROTECT_INDEX root_plan_index,
     int refresh_shadows, SEXP selected_root_core) {
   initialize_check_binding_symbols();
+  /* Heal before the first snapshot: this traversal validates every cached
+   * flatten against its children, so an ancestor of a set that grew must be
+   * brought up to date first. Migration preflight installs nothing and is
+   * excluded, as is a caller that pinned an exact generation. */
+  if (refresh_shadows && selected_root_core == R_NilValue) {
+    SEXP selected = paradox_core_from_private(private_environment);
+    if (selected != R_UnboundValue && !paradox_core_is_verified(selected)) {
+      (void) paradox_core_refresh(self, private_environment);
+    }
+  }
   initialize_graph(graph);
   R_xlen_t work_since_interrupt = 0;
   initialize_node(
@@ -1110,6 +1185,7 @@ static void build_graph(SEXP private_environment, SEXP self,
   graph->count = 1;
   graph->path[0] = 0;
   R_xlen_t depth = 1;
+  barren_registry_t barren = {NULL, 0, 0};
 
   while (depth != 0) {
     const R_xlen_t node_index = graph->path[depth - 1];
@@ -1129,6 +1205,17 @@ static void build_graph(SEXP private_environment, SEXP self,
           UNPROTECT(1);
           Rf_error("ParamSet graph contains a cycle");
         }
+      }
+      /* This shell was already expanded once through another path and its
+       * whole subtree turned out to be barren, so a second expansion can only
+       * reproduce the same nothing.  Re-expanding it is what made an
+       * alternating shared graph cost Theta(2^depth) node snapshots for an
+       * empty result; a subtree that does contribute is still expanded once
+       * per occurrence, because each occurrence exposes its own affixed IDs. */
+      if (barren_registry_contains(&barren, child, &work_since_interrupt)) {
+        UNPROTECT(1);
+        ++graph->nodes[node_index].next_child;
+        continue;
       }
       SEXP child_private = PROTECT(paradox_domain_private_environment(child));
       if (child_private == R_UnboundValue) {
@@ -1150,6 +1237,15 @@ static void build_graph(SEXP private_environment, SEXP self,
       graph->path[depth] = child_index;
       ++depth;
       continue;
+    }
+    {
+      check_node_t *finished = &graph->nodes[node_index];
+      if (finished->parent != R_XLEN_T_MAX && finished->subtree_contributes) {
+        graph->nodes[finished->parent].subtree_contributes = TRUE;
+      }
+      if (!finished->subtree_contributes) {
+        barren_registry_add(&barren, finished->self);
+      }
     }
     --depth;
   }
@@ -2119,26 +2215,26 @@ static SEXP snapshot_named_list(SEXP values) {
   static const char *const allowed_attributes[] = {"names", "class"};
   if (TYPEOF(values) != VECSXP) {
     return check_message(
-      "Must be a list, not '%s'.",
+      "Must be a list, not '%s'",
       Rf_type2char((SEXPTYPE) TYPEOF(values))
     );
   }
   if (ALTREP(values) || Rf_isS4(values) ||
       !paradox_api_has_only_attributes(values, allowed_attributes, 2) ||
       !representation_only_s3_classes(values)) {
-    return check_message("Must be an ordinary named list.");
+    return check_message("Must be an ordinary named list");
   }
   const R_xlen_t size = XLENGTH(values);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
   SEXP names = PROTECT(Rf_getAttrib(values, R_NamesSymbol));
   if (names == R_NilValue && size != 0) {
     UNPROTECT(2);
-    return check_message("Must be a named list.");
+    return check_message("Must be a named list");
   }
   if (!ordinary_names_vector(names, size, size == 0)) {
     UNPROTECT(2);
     return check_message(
-      "Must be a named list. Names must be an ordinary character vector."
+      "Must be a named list. Names must be an ordinary character vector"
     );
   }
   /* `list()` is the canonical public spelling of an empty point.  R does not
@@ -2151,13 +2247,13 @@ static SEXP snapshot_named_list(SEXP values) {
       Rf_isS4(stable_names) || XLENGTH(stable_names) != size ||
       !no_attributes(stable_names)) {
     UNPROTECT(3);
-    return check_message("Names must be an ordinary character vector.");
+    return check_message("Names must be an ordinary character vector");
   }
   for (R_xlen_t index = 0; index < size; ++index) {
     if (STRING_ELT(stable_names, index) == NA_STRING ||
         CHAR(STRING_ELT(stable_names, index))[0] == '\0') {
       UNPROTECT(3);
-      return check_message("Names must be non-missing and non-empty.");
+      return check_message("Names must be non-missing and non-empty");
     }
     SEXP value = PROTECT(VECTOR_ELT(values, index));
     SEXP copy = PROTECT(snapshot_parameter_value(value));
@@ -2166,14 +2262,17 @@ static SEXP snapshot_named_list(SEXP values) {
   }
   if (Rf_any_duplicated(stable_names, FALSE) != 0) {
     UNPROTECT(3);
-    return check_message("Names must be unique.");
+    return check_message("Names must be unique");
   }
   Rf_setAttrib(result, R_NamesSymbol, stable_names);
   UNPROTECT(3);
   return result;
 }
 
-static SEXP snapshot_tune_tokens_from_values(SEXP values) {
+/* Publishes the complete admitted name vector through `value_names` beside the
+ * TuneToken subset it returns. Both cross the return boundary unrooted, so the
+ * caller must root them before anything that can allocate. */
+static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
   static const char *const allowed_attributes[] = {"names", "class"};
   if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isS4(values) ||
       !paradox_api_has_only_attributes(values, allowed_attributes, 2)) {
@@ -2234,12 +2333,13 @@ static SEXP snapshot_tune_tokens_from_values(SEXP values) {
     UNPROTECT(1);
   }
   Rf_setAttrib(result, R_NamesSymbol, result_names);
+  *value_names = stable_names;
   UNPROTECT(4);
   return result;
 }
 
-static SEXP select_tune_target_domains(SEXP all_domains, SEXP token_names,
-    R_xlen_t *work_since_interrupt) {
+static SEXP select_tune_target_domains(SEXP all_domains, SEXP value_names,
+    SEXP token_names, R_xlen_t *work_since_interrupt) {
   if (TYPEOF(all_domains) != VECSXP) {
     Rf_error("Internal error: invalid target Domain snapshot");
   }
@@ -2249,29 +2349,46 @@ static SEXP select_tune_target_domains(SEXP all_domains, SEXP token_names,
     UNPROTECT(1);
     Rf_error("Internal error: unnamed target Domain snapshot");
   }
+  const R_xlen_t value_count = XLENGTH(value_names);
   const R_xlen_t size = XLENGTH(token_names);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
   SEXP result_names = PROTECT(Rf_duplicate(token_names));
   Rf_setAttrib(result, R_NamesSymbol, result_names);
-  for (R_xlen_t output = 0; output < size; ++output) {
-    SEXP requested = STRING_ELT(token_names, output);
-    R_xlen_t found = R_XLEN_T_MAX;
-    for (R_xlen_t candidate = 0;
-        candidate < XLENGTH(all_domains); ++candidate) {
-      paradox_account_work(work_since_interrupt);
-      if (paradox_domain_strings_equal(
-          requested,
-          STRING_ELT(all_names, candidate)
+  if (value_count != 0) {
+    /* One index over the parameter IDs serves both loops below.  It replaces
+     * a per-name linear scan, so admitting the complete value container costs
+     * less than resolving the TuneToken subset alone used to.  An empty
+     * container resolves nothing and skips the index entirely. */
+    id_map_t parameter_ids;
+    initialize_id_map(all_names, &parameter_ids);
+    /* Paradox 1 asserted `names(values)` to be a subset of `$ids()`.  Without
+     * it a misspelled entry that is not a TuneToken is silently dropped and
+     * the caller receives an empty search space instead of an error. */
+    for (R_xlen_t index = 0; index < value_count; ++index) {
+      R_xlen_t found = R_XLEN_T_MAX;
+      if (!find_id(
+          &parameter_ids,
+          STRING_ELT(value_names, index),
+          &found,
+          work_since_interrupt
         )) {
-        found = candidate;
-        break;
+        UNPROTECT(3);
+        Rf_error("Search-space values contain an unknown parameter ID");
       }
     }
-    if (found == R_XLEN_T_MAX) {
-      UNPROTECT(3);
-      Rf_error("Search-space values contain an unknown parameter ID");
+    for (R_xlen_t output = 0; output < size; ++output) {
+      R_xlen_t found = R_XLEN_T_MAX;
+      if (!find_id(
+          &parameter_ids,
+          STRING_ELT(token_names, output),
+          &found,
+          work_since_interrupt
+        )) {
+        UNPROTECT(3);
+        Rf_error("Search-space values contain an unknown parameter ID");
+      }
+      SET_VECTOR_ELT(result, output, VECTOR_ELT(all_domains, found));
     }
-    SET_VECTOR_ELT(result, output, VECTOR_ELT(all_domains, found));
   }
   UNPROTECT(3);
   return result;
@@ -2323,7 +2440,9 @@ static value_spec_t target_domain_spec(SEXP domain) {
 
 SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
     SEXP values) {
-  SEXP tokens = PROTECT(snapshot_tune_tokens_from_values(values));
+  SEXP value_names = R_NilValue;
+  SEXP tokens = PROTECT(snapshot_tune_tokens_from_values(values, &value_names));
+  PROTECT(value_names);
   SEXP token_names = PROTECT(Rf_getAttrib(tokens, R_NamesSymbol));
   R_xlen_t work_since_interrupt = 0;
   SEXP all_domains = PROTECT(paradox_param_set_domains(
@@ -2332,6 +2451,7 @@ SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
   ));
   SEXP targets = PROTECT(select_tune_target_domains(
     all_domains,
+    value_names,
     token_names,
     &work_since_interrupt
   ));
@@ -2347,7 +2467,7 @@ SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
           &candidate_private,
           NULL
         )) {
-        UNPROTECT(4);
+        UNPROTECT(5);
         Rf_error("Malformed ObjectTuneToken: malformed exact BASE ParamSet");
       }
       PROTECT(candidate_private);
@@ -2383,7 +2503,7 @@ SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
   SET_STRING_ELT(names, 0, Rf_mkChar("tokens"));
   SET_STRING_ELT(names, 1, Rf_mkChar("targets"));
   Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(6);
+  UNPROTECT(7);
   return result;
 }
 
@@ -2410,12 +2530,11 @@ static SEXP initialize_point(SEXP stable_values, const check_plan_t *plan,
       return paradox_parameter_unavailable_diagnostic(
         id,
         plan->root_ids.ids,
-        "",
-        TRUE
+        ""
       );
     }
     if (point->value_for_param[row] != R_XLEN_T_MAX) {
-      return check_message("Names must be unique.");
+      return check_message("Names must be unique");
     }
     point->param_rows[index] = row;
     point->value_for_param[row] = index;
@@ -2489,7 +2608,10 @@ static SEXP validate_ordinary_value(const value_spec_t *spec, SEXP value,
 
   if (spec->kind == VALUE_UTY) {
     if (spec->custom_check == R_NilValue) return R_NilValue;
-    SEXP call = PROTECT(Rf_lang2(spec->custom_check, value));
+    SEXP call = PROTECT(paradox_unary_callback_call(
+      spec->custom_check,
+      value
+    ));
     SEXP answer = PROTECT(Rf_eval(call, R_BaseEnv));
     if (TYPEOF(answer) == LGLSXP && XLENGTH(answer) == 1 &&
         LOGICAL_ELT(answer, 0) == TRUE) {
@@ -3197,13 +3319,20 @@ static SEXP validate_initialized_point(check_plan_t *plan,
       return failure;
     }
     if (receipt != R_NilValue) {
-      PROTECT(receipt);
       if (receipts == R_NilValue) {
-        receipts = PROTECT(Rf_allocVector(VECSXP, point->size));
+        /* UNPROTECT is strictly LIFO, and the receipt set, not the
+         * individual receipt, is the root this operation retains until it
+         * hands the set to its caller. Protect the receipt only across the
+         * one allocation, then leave the set itself on the stack. */
+        PROTECT(receipt);
+        receipts = Rf_allocVector(VECSXP, point->size);
+        SET_VECTOR_ELT(receipts, index, receipt);
+        UNPROTECT(1);
+        PROTECT(receipts);
         ++protected_count;
+      } else {
+        SET_VECTOR_ELT(receipts, index, receipt);
       }
-      SET_VECTOR_ELT(receipts, index, receipt);
-      UNPROTECT(1);
     }
   }
   verify_token_receipts(receipts);
@@ -3322,7 +3451,7 @@ static int ordinary_table_class(SEXP table, const char *required_class) {
 
 static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
   if (!ordinary_table_class(table, "data.frame")) {
-    return check_message("Must be a data.frame or data.table.");
+    return check_message("Must be a data.frame or data.table");
   }
   const R_xlen_t columns = XLENGTH(table);
   SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
@@ -3331,11 +3460,11 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
         Rf_isObject(names) || !no_attributes(names) ||
         XLENGTH(names) != columns)) {
     UNPROTECT(1);
-    return check_message("Table columns must be named.");
+    return check_message("Table columns must be named");
   }
   if (names == R_NilValue && columns != 0) {
     UNPROTECT(1);
-    return check_message("Table columns must be named.");
+    return check_message("Table columns must be named");
   }
   SEXP stable_names = PROTECT(names == R_NilValue
     ? Rf_allocVector(STRSXP, 0)
@@ -3344,18 +3473,18 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
     if (STRING_ELT(stable_names, column) == NA_STRING ||
         CHAR(STRING_ELT(stable_names, column))[0] == '\0') {
       UNPROTECT(2);
-      return check_message("Table column names must be non-missing and non-empty.");
+      return check_message("Table column names must be non-missing and non-empty");
     }
   }
   if (Rf_any_duplicated(stable_names, FALSE) != 0) {
     UNPROTECT(2);
-    return check_message("Table column names must be unique.");
+    return check_message("Table column names must be unique");
   }
 
   R_xlen_t rows = 0;
   if (!paradox_public_table_row_count(table, &rows)) {
     UNPROTECT(2);
-    return check_message("Invalid data.frame row names.");
+    return check_message("Invalid data.frame row names");
   }
 
   SEXP result = PROTECT(Rf_allocVector(VECSXP, columns));
@@ -3367,14 +3496,14 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
         type != CPLXSXP && type != STRSXP && type != RAWSXP &&
         type != VECSXP) {
       UNPROTECT(5);
-      return check_message("Unsupported table column type '%s'.",
+      return check_message("Unsupported table column type '%s'",
         Rf_type2char(type));
     }
     if (XLENGTH(stable) != rows) {
       UNPROTECT(5);
       return check_message(column == 0
-        ? "Invalid data.frame row names."
-        : "Table columns must have equal lengths.");
+        ? "Invalid data.frame row names"
+        : "Table columns must have equal lengths");
     }
     SET_VECTOR_ELT(result, column, stable);
     UNPROTECT(2);
@@ -3406,9 +3535,20 @@ static int table_cell_missing(SEXP column, R_xlen_t row) {
 
 static SEXP table_cell(SEXP column, R_xlen_t row) {
   SEXP result;
+  /* Ordinary columns carry no attributes and take the allocation-free path
+   * below. An attributed column needs its own one-element cell: the copied
+   * set may contain the column's own length (`names`, `dim`, `dimnames`),
+   * and Rf_ScalarLogical() hands out R's shared TRUE/FALSE/NA singletons,
+   * which must never receive attributes. */
+  const int attributed = !paradox_api_has_no_attributes(column);
   switch ((SEXPTYPE) TYPEOF(column)) {
   case LGLSXP:
-    result = PROTECT(Rf_ScalarLogical(LOGICAL_ELT(column, row)));
+    if (attributed) {
+      result = PROTECT(Rf_allocVector(LGLSXP, 1));
+      SET_LOGICAL_ELT(result, 0, LOGICAL_ELT(column, row));
+    } else {
+      result = PROTECT(Rf_ScalarLogical(LOGICAL_ELT(column, row)));
+    }
     break;
   case INTSXP:
     result = PROTECT(Rf_ScalarInteger(INTEGER_ELT(column, row)));
@@ -3432,7 +3572,12 @@ static SEXP table_cell(SEXP column, R_xlen_t row) {
   default:
     Rf_error("Internal error: unsupported table column type");
   }
-  SHALLOW_DUPLICATE_ATTRIB(result, column);
+  if (attributed) {
+    SHALLOW_DUPLICATE_ATTRIB(result, column);
+    Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
+    Rf_setAttrib(result, R_DimSymbol, R_NilValue);
+    Rf_setAttrib(result, R_DimNamesSymbol, R_NilValue);
+  }
   UNPROTECT(1);
   return result;
 }
@@ -3623,7 +3768,7 @@ SEXP paradox_param_set_check_dependencies_builtin(
   static const char *const allowed_attributes[] = {"names"};
   if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isObject(values) ||
       !paradox_api_has_only_attributes(values, allowed_attributes, 1)) {
-    return Rf_mkString("Must be an ordinary named list.");
+    return Rf_mkString("Must be an ordinary named list");
   }
 
   SEXP stable_values = PROTECT(snapshot_named_list(values));
@@ -3665,7 +3810,8 @@ static void constraint_input_error(SEXP failure, const char *argument) {
   }
   SEXP prefix = PROTECT(check_message("Assertion on '%s' failed: ", argument));
   SEXP message = PROTECT(utf8_message_2(
-    "", STRING_ELT(prefix, 0), "", STRING_ELT(failure, 0), "."
+    "", STRING_ELT(prefix, 0), "", STRING_ELT(failure, 0),
+    paradox_charsxp_ends_sentence(STRING_ELT(failure, 0)) ? "" : "."
   ));
   paradox_error_from_scalar_string(message);
 }

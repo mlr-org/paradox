@@ -16,7 +16,8 @@ test_that("current nodes expose only one versioned state capsule", {
 
   retired = c(
     ".params", ".values", ".tags", ".deps", ".trafos",
-    ".extra_trafo", ".constraint", ".sets", ".translation", ".postfix"
+    ".extra_trafo", ".constraint", ".sets", ".translation", ".postfix",
+    ".edges"
   )
   for (object in list(base, collection, shadow)) {
     private = core_private(object)
@@ -43,7 +44,7 @@ test_that("capsule admission rejects noncanonical physical schemas", {
       1L,
       extra_payload_attribute
     ),
-    "exact canonical ten-field"
+    "exact canonical eleven-field"
   )
 
   attributed_names = state
@@ -53,7 +54,7 @@ test_that("capsule admission rejects noncanonical physical schemas", {
   )
   expect_error(
     .Call(paradox:::C_param_set_core_new, 1L, attributed_names),
-    "exact canonical ten-field"
+    "exact canonical eleven-field"
   )
 })
 
@@ -85,14 +86,14 @@ test_that("capsule admission rejects S4-marked carriers and schema metadata", {
   s4_state = asS4(state)
   expect_error(
     .Call(paradox:::C_param_set_core_new, 1L, s4_state),
-    "exact canonical ten-field"
+    "exact canonical eleven-field"
   )
 
   s4_names = state
   attr(s4_names, "names") = asS4(names(s4_names))
   expect_error(
     .Call(paradox:::C_param_set_core_new, 1L, s4_names),
-    "exact canonical ten-field"
+    "exact canonical eleven-field"
   )
 
   carrier_set = ps(x = p_int())
@@ -235,4 +236,84 @@ test_that("additive ParamSet subclasses share the sealed engine", {
   expect_identical(set$label, "kept")
   expect_identical(set$get_values(), list(x = 1L))
   expect_identical(.Call(paradox:::C_param_set_core_kind, core_private(set)), 1L)
+})
+
+test_that("capsule tables must be rectangular before any consumer indexes them", {
+  # The shared exact-table validator derives the row count from column zero.
+  # A capsule whose remaining columns are shorter must be rejected there, not
+  # read out of bounds by whichever consumer indexes them first.
+  make_collection = function() {
+    collection = ParamSetCollection$new(list(
+      a = ps(x = p_dbl(0, 1), y = p_dbl(0, 1)),
+      b = ps(z = p_dbl(0, 1))
+    ))
+    collection$values = list(a.x = 0.25, a.y = 0.5, b.z = 0.75)
+    collection
+  }
+
+  truncate_column = function(table, column) {
+    ragged = unclass(table)
+    ragged[[column]] = ragged[[column]][1L]
+    attributes(ragged) = list(
+      names = names(table),
+      class = "data.frame",
+      row.names = seq_along(ragged[[1L]])
+    )
+    ragged
+  }
+
+  for (column in c("original_id", "owner_ps_index", "owner_name")) {
+    collection = make_collection()
+    private = core_private(collection)
+    state = core_state(collection)
+    state$.translation = truncate_column(state$.translation, column)
+    assign(
+      ".core",
+      .Call(paradox:::C_param_set_core_new, 2L, state),
+      envir = private
+    )
+
+    expect_error(collection$values, "Corrupt ParamSetCollection")
+    expect_error(collection$deps, "Corrupt ParamSetCollection")
+    expect_error(collection$get_values(), "Corrupt ParamSetCollection")
+  }
+})
+
+test_that("capsule table columns must use ordinary representations", {
+  set = ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
+  private = core_private(set)
+  state = core_state(set)
+
+  params = unclass(state$.params)
+  params$lower = seq_along(params$lower) / 10
+  attributes(params) = list(
+    names = names(state$.params),
+    class = "data.frame",
+    row.names = seq_along(params$id)
+  )
+  state$.params = params
+  assign(
+    ".core",
+    .Call(paradox:::C_param_set_core_new, 1L, state),
+    envir = private
+  )
+  expect_identical(unname(set$lower), c(0.1, 0.2))
+})
+
+test_that("deep cloning a childless collection keeps a usable capsule", {
+  origin = ParamSetCollection$new(list())
+  clone = origin$clone(deep = TRUE)
+
+  expect_identical(clone$ids(), character(0))
+  expect_identical(clone$values, named_list())
+  expect_identical(nrow(clone$deps), 0L)
+  expect_identical(nrow(clone$params), 0L)
+  expect_identical(clone$get_values(), named_list())
+  expect_identical(clone$flatten()$ids(), character(0))
+  expect_identical(clone$subset(character(0))$ids(), character(0))
+  expect_true(all.equal(clone, origin))
+
+  clone$add(ps(x = p_dbl(0, 1)), n = "later")
+  expect_identical(clone$ids(), "later.x")
+  expect_identical(origin$ids(), character(0))
 })

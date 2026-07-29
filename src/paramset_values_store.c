@@ -50,8 +50,7 @@ static void shadow_parameter_unavailable(SEXP id, SEXP candidate_ids) {
   SEXP message = PROTECT(paradox_parameter_unavailable_diagnostic(
     id,
     candidate_ids,
-    " in ParamSetShadow",
-    FALSE
+    " in ParamSetShadow"
   ));
   paradox_error_from_scalar_string(message);
 }
@@ -1017,6 +1016,10 @@ typedef struct {
   SEXP values;
   SEXP sources;
   SEXP replacement_core;
+  /* One conflict report per target per transaction. A graph that shares one
+   * set under k names reaches it k times, and k-1 identical warnings say
+   * nothing the first one did not. */
+  int conflict_reported;
 } value_write_target_t;
 
 typedef struct {
@@ -1216,6 +1219,98 @@ static R_xlen_t target_index(const value_write_transaction_t *transaction,
   return R_XLEN_T_MAX;
 }
 
+/* Locate one entry on which two complete-replacement plans for the same base
+ * ParamSet disagree.  Both plans are named by child-local ID in whatever order
+ * their planning path produced, so entries are matched by name, not position.
+ * Returns R_NilValue when the plans agree, the disagreeing ID otherwise, or
+ * R_BlankString when the disagreement cannot be attributed to one ID. */
+static SEXP conflicting_plan_entry(SEXP left, SEXP right,
+    R_xlen_t *work_since_interrupt) {
+  SEXP left_names = Rf_getAttrib(left, R_NamesSymbol);
+  SEXP right_names = Rf_getAttrib(right, R_NamesSymbol);
+  const R_xlen_t left_size = XLENGTH(left);
+  const R_xlen_t right_size = XLENGTH(right);
+  if (TYPEOF(left) != VECSXP || TYPEOF(right) != VECSXP ||
+      TYPEOF(left_names) != STRSXP || TYPEOF(right_names) != STRSXP ||
+      XLENGTH(left_names) != left_size ||
+      XLENGTH(right_names) != right_size) {
+    return R_BlankString;
+  }
+  for (R_xlen_t index = 0; index < left_size; ++index) {
+    paradox_account_work(work_since_interrupt);
+    SEXP name = STRING_ELT(left_names, index);
+    R_xlen_t match = R_XLEN_T_MAX;
+    for (R_xlen_t other = 0; other < right_size; ++other) {
+      if (paradox_domain_strings_equal(STRING_ELT(right_names, other), name)) {
+        match = other;
+        break;
+      }
+    }
+    /* An entry only one plan carries is the silent-drop case: the other path
+     * replaces the whole store without it. */
+    if (match == R_XLEN_T_MAX) return name;
+    SEXP left_value = VECTOR_ELT(left, index);
+    SEXP right_value = VECTOR_ELT(right, match);
+    if (left_value != right_value && !R_compute_identical(
+        left_value,
+        right_value,
+        paradox_api_identical_default_flags()
+      )) {
+      return name;
+    }
+  }
+  for (R_xlen_t index = 0; index < right_size; ++index) {
+    paradox_account_work(work_since_interrupt);
+    SEXP name = STRING_ELT(right_names, index);
+    int found = FALSE;
+    for (R_xlen_t other = 0; other < left_size; ++other) {
+      if (paradox_domain_strings_equal(STRING_ELT(left_names, other), name)) {
+        found = TRUE;
+        break;
+      }
+    }
+    if (!found) return name;
+  }
+  return R_NilValue;
+}
+
+static void warn_conflicting_write(SEXP id) {
+  /* The escape helper and the translation below both allocate in this frame,
+   * so take the watermark before entering either. */
+  const void *watermark = vmaxget();
+  PROTECT_INDEX message_index;
+  SEXP message;
+  PROTECT_WITH_INDEX(message = R_NilValue, &message_index);
+  if (id == R_BlankString || id == NA_STRING) {
+    REPROTECT(message = Rf_mkString(
+      "Value assignment reaches one ParamSet through more than one path of "
+      "the ParamSet graph with conflicting plans; only the values planned by "
+      "the last path are stored"
+    ), message_index);
+  } else {
+    SEXP safe = PROTECT(paradox_diagnostic_charsxp(id));
+    paradox_utf8_piece_t pieces[3] = {
+      paradox_utf8_ascii_piece(
+        "Value assignment reaches one ParamSet through more than one path of "
+        "the ParamSet graph with conflicting values for '"
+      ),
+      paradox_utf8_charsxp_piece(safe),
+      paradox_utf8_ascii_piece(
+        "'; only the values planned by the last path are stored"
+      )
+    };
+    REPROTECT(message = paradox_utf8_message(pieces, 3), message_index);
+    UNPROTECT(1);
+  }
+  const char *text = Rf_translateChar(STRING_ELT(message, 0));
+  const size_t size = strlen(text);
+  char *owned = paradox_temporary_alloc((R_xlen_t) size + 1, sizeof(*owned));
+  memcpy(owned, text, size + 1U);
+  UNPROTECT(1);
+  Rf_warning("%s", owned);
+  vmaxset(watermark);
+}
+
 static void retain_write_target(value_write_transaction_t *transaction,
     SEXP self, SEXP private_environment, SEXP expected_core, SEXP values,
     SEXP sources) {
@@ -1225,9 +1320,24 @@ static void retain_write_target(value_write_transaction_t *transaction,
     if (target->expected_core != expected_core) {
       Rf_error("ParamSet value target changed while planning the transaction");
     }
+    /* Two paths of this transaction reach the same base ParamSet: one set
+     * contained twice in a ParamSetCollection, or a ParamSetShadow next to its
+     * own origin.  Each path plans a *complete* replacement of that set's
+     * store, so the later plan wins outright -- which silently drops a value
+     * the other path asked for, or overwrites it.  Only the duplicate-target
+     * branch pays for this comparison; an ordinary graph never reaches it. */
+    value_transaction_retain(transaction, values);
+    SEXP conflict = conflicting_plan_entry(
+      target->values,
+      values,
+      transaction->work_since_interrupt
+    );
+    if (conflict != R_NilValue && !target->conflict_reported) {
+      target->conflict_reported = TRUE;
+      warn_conflicting_write(conflict);
+    }
     target->values = values;
     target->sources = sources;
-    value_transaction_retain(transaction, values);
     value_transaction_retain(transaction, sources);
     return;
   }
@@ -1244,7 +1354,8 @@ static void retain_write_target(value_write_transaction_t *transaction,
     expected_core,
     values,
     sources,
-    R_NilValue
+    R_NilValue,
+    FALSE
   };
 }
 
@@ -1541,7 +1652,7 @@ static void process_shadow_write(value_write_transaction_t *transaction,
     UNPROTECT(2);
     Rf_error("Corrupt ParamSetShadow origin shell");
   }
-  SEXP origin_core = PROTECT(paradox_core_refresh_shadow(
+  SEXP origin_core = PROTECT(paradox_core_refresh(
     origin,
     origin_private
   ));
@@ -1629,7 +1740,7 @@ static void process_write_task(value_write_transaction_t *transaction,
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet value transaction shell ownership");
   }
-  SEXP core = PROTECT(paradox_core_refresh_shadow(
+  SEXP core = PROTECT(paradox_core_refresh(
     task->self,
     private_environment
   ));
@@ -1869,6 +1980,11 @@ static void commit_replacement_cores(
       target->replacement_core,
       target->private_environment
     );
+  }
+  /* Values are not a derived-schema input, so this does not invalidate any
+   * cached flatten; a Shadow does project them live and must revalidate. */
+  if (transaction->target_count != 0) {
+    paradox_core_note_change(PARADOX_CORE_CHANGE_STATE);
   }
 }
 

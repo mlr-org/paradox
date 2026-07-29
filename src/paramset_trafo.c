@@ -356,11 +356,10 @@ static void load_snapshot(SEXP private_environment, SEXP self,
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet transformation capsule");
   }
-  paradox_core_kind_t kind = paradox_core_kind(core);
-  if (kind == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
-    kind = paradox_core_kind(core);
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
   }
+  const paradox_core_kind_t kind = paradox_core_kind(core);
 
   *snapshot = (trafo_snapshot_t) {
     .self = self,
@@ -413,7 +412,7 @@ static void load_snapshot(SEXP private_environment, SEXP self,
 }
 
 static SEXP evaluate_unary(SEXP callback, SEXP value) {
-  SEXP call = PROTECT(Rf_lang2(callback, value));
+  SEXP call = PROTECT(paradox_unary_callback_call(callback, value));
   SEXP result = PROTECT(Rf_eval(call, R_BaseEnv));
   UNPROTECT(2);
   return result;

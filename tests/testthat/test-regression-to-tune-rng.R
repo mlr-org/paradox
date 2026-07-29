@@ -69,3 +69,29 @@ test_that("TuneToken ParamSet plausibility validation is repeatable", {
     expect_match(message_mt, "Bad value", fixed = TRUE)
   })
 })
+
+test_that("restoring the caller's RNG kind is silent and always completes", {
+  # RNGkind() warns unconditionally for the legacy non-uniform samplers. The
+  # restore is the package's own bookkeeping, and under options(warn = 2) the
+  # warning used to abort the exit handler before the seed was put back.
+  previous_kind = RNGkind()
+  on.exit(suppressWarnings(do.call(RNGkind, as.list(previous_kind))), add = TRUE)
+  suppressWarnings(RNGkind(sample.kind = "Rounding"))
+
+  set.seed(42L)
+  before = .Random.seed
+  set = ps(cp = p_dbl(0, 1), minsplit = p_int(1, 100))
+  set$values = list(cp = to_tune(1e-4, 0.1), minsplit = to_tune(1, 64))
+
+  expect_silent(search_space <- set$search_space())
+  expect_setequal(search_space$ids(), c("cp", "minsplit"))
+  expect_identical(RNGkind()[[3L]], "Rounding")
+  expect_identical(.Random.seed, before)
+
+  previous_warn = options(warn = 2L)
+  on.exit(options(previous_warn), add = TRUE)
+  set.seed(42L)
+  strict_before = .Random.seed
+  expect_setequal(set$search_space()$ids(), c("cp", "minsplit"))
+  expect_identical(.Random.seed, strict_before)
+})

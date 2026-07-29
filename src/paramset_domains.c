@@ -38,9 +38,12 @@ static void unknown_domain_id(SEXP id) {
     UNPROTECT(1);
     Rf_error("Unknown bytes-encoded parameter ID");
   }
+  /* An id whose bytes are not valid UTF-8 in this locale is escaped rather
+   * than failing the message builder with an internal error. */
+  SEXP safe_id = PROTECT(paradox_diagnostic_charsxp(id));
   const paradox_utf8_piece_t pieces[] = {
     paradox_utf8_ascii_piece("No param with id '"),
-    paradox_utf8_charsxp_piece(id),
+    paradox_utf8_charsxp_piece(safe_id),
     paradox_utf8_ascii_piece("'")
   };
   SEXP message = PROTECT(paradox_utf8_message(pieces, 3));
@@ -260,8 +263,8 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
+  if (!paradox_core_is_verified(core)) {
+    core = paradox_core_refresh(self, private_environment);
   }
   const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&

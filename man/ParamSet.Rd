@@ -127,7 +127,13 @@ When you set values, all previously set values will be unset / removed.}
 
     \item{\code{tags}}{(named \code{list()} of \code{character()})\cr
 Can be used to group and subset parameters.
-Named with parameter IDs.}
+Named with parameter IDs.
+A \code{\link{ParamSetCollection}}'s and a \code{\link{ParamSetShadow}}'s tags are derived from
+the sets they are built on, but may also be assigned directly: the
+assignment becomes that object's own answer for the IDs it names, leaves the
+contained sets untouched, and survives later changes to them. IDs it does
+not name -- a parameter a contained set gains later, for instance -- stay
+derived.}
 
     \item{\code{params}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 \code{data.table} representing the combined \code{\link{Domain}} objects used to construct the \code{\link{ParamSet}}.
@@ -364,7 +370,7 @@ make them active.
       \item{\code{type}}{(\code{character(1)})\cr
 Return values \code{"with_token"} (i.e. all values),
 \code{"without_token"} (all values that are not \code{\link{TuneToken}} objects), \code{"only_token"} (only \code{\link{TuneToken}} objects),
-or \code{"with_internal"} (all values that are not \code{InternalTuneToken})?}
+or \code{"with_internal"} (only \code{InternalTuneToken} objects)?}
       \item{\code{check_required}}{(\code{logical(1)})\cr
 Check if all active required parameters are set? This check uses the
 dependency-filtered view, even when \code{remove_dependencies = FALSE}.}
@@ -1052,7 +1058,9 @@ method is dispatched. ALTREP, S4/list-like, and other attributed
 containers are rejected. Construct tokens with \code{\link[=to_tune]{to_tune()}}; subclasses and
 metadata-extended tokens are not supported. Exact creator provenance is
 not authenticated, so an indistinguishable manual copy may pass even
-though the representation is not an API.}
+though the representation is not an API. Every name must be an ID of
+this \code{ParamSet}, whether or not the entry it names is a \code{\link{TuneToken}};
+an unknown name is an error rather than a silently ignored entry.}
     }
     \if{html}{\out{</div>}}
   }
