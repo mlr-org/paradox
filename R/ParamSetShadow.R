@@ -35,6 +35,14 @@ param_set_shadow_constraint_factory = function(callback, hidden_values) {
 #' instance -- is reflected. Dependencies may change too, but a dependency
 #' crossing the visible/hidden boundary is always an error.
 #'
+#' Mutations through the view reach the origin: `$values<-`, `$add_dep()`, and
+#' `$extra_trafo<-` write through, while `$constraint<-` and `$deps<-` are
+#' refused (change them on the origin). `$add_dep()` requires both endpoints
+#' to be visible parameters; a dangling dependency cannot be declared through
+#' a view, so `allow_dangling_dependencies` has no effect here. `$tags<-` is
+#' the one exception to write-through: it is this view's own answer for the
+#' IDs it names and leaves the origin's tags untouched.
+#'
 #' Checked assignment validates every supplied visible value, including a
 #' dependency-inactive value, and preserves hidden origin values. If the live
 #' origin has a constraint, the complete merged configuration is filtered for

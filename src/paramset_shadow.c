@@ -1415,6 +1415,13 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
   }
   paradox_core_validate_graph_path(origin);
 
+  /* Captured before the origin generation is selected: everything from that
+   * selection to the stamp below allocates -- the factories, the projection
+   * build -- and a finalizer installing a capsule anywhere in that span may
+   * have mutated the very origin this Shadow is being built from. A refresh
+   * inside the selection advances no epoch, so the ordinary path still
+   * stamps. */
+  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   SEXP origin_private = R_NilValue;
   SEXP origin_core = PROTECT(origin_private_and_core(
     origin,
@@ -1425,7 +1432,6 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
   SEXP factories = PROTECT(fixed_factories());
   R_xlen_t work_since_interrupt = 0;
   const paradox_core_kind_t kind = paradox_core_kind(origin_core);
-  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   SEXP result;
   if (kind == PARADOX_CORE_BASE) {
     paradox_domain_params_t params;
@@ -1551,6 +1557,10 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
   (void) template_params;
   paradox_core_validate_graph_path(origin);
 
+  /* Captured before the origin generation is selected, for the same reason as
+   * in the constructor above: an install between that selection and the stamp
+   * below must forfeit the stamp. */
+  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   SEXP origin_private = R_NilValue;
   SEXP origin_core = PROTECT(origin_private_and_core(
     origin,
@@ -1560,7 +1570,6 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
   PROTECT(origin_private);
   SEXP factories = PROTECT(fixed_factories());
   const paradox_core_kind_t kind = paradox_core_kind(origin_core);
-  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   SEXP result;
   if (kind == PARADOX_CORE_BASE) {
     paradox_domain_params_t origin_params;

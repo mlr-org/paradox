@@ -351,11 +351,11 @@ static int exact_edges(paradox_core_kind_t kind, SEXP payload) {
      * the current `.sets`: an edge list installed without a matching record is
      * simply stale, and the next read re-flattens it. */
     SEXP cores = VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_CORES);
-    const R_xlen_t count = TYPEOF(cores) == VECSXP ? XLENGTH(cores) : -1;
     if (TYPEOF(cores) != VECSXP || ALTREP(cores) || Rf_isS4(cores) ||
-        !paradox_api_has_no_attributes(cores) || XLENGTH(cores) != count) {
+        !paradox_api_has_no_attributes(cores)) {
       return FALSE;
     }
+    const R_xlen_t count = XLENGTH(cores);
     for (R_xlen_t index = 0; index < count; ++index) {
       if (!paradox_core_is_canonical(VECTOR_ELT(cores, index))) {
         return FALSE;
@@ -1283,9 +1283,12 @@ SEXP paradox_param_set_core_new(SEXP kind, SEXP state) {
       "`state` must use the exact canonical eleven-field ParamSet state schema"
     );
   }
+  /* Captured before the duplication below can allocate; the edge re-check
+   * after it is allocation-free, so a finalizer installing a capsule anywhere
+   * in between forfeits the stamp instead of being certified past. */
+  const uintptr_t entry_epoch = core_state_epoch;
   SEXP payload = PROTECT(Rf_shallow_duplicate(state));
   SEXP result = PROTECT(new_core(parsed_kind, payload));
-  const uintptr_t entry_epoch = core_state_epoch;
   if (parsed_kind == PARADOX_CORE_COLLECTION &&
       collection_edges_current(result) &&
       core_state_epoch == entry_epoch) {

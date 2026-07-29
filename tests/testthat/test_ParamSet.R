@@ -323,6 +323,17 @@ test_that("setting empty tags on empty paramset", {
 
 })
 
+test_that("tags<- rejects a non-plain list container", {
+  # The same ordinary-container boundary as every sibling structural gate: an
+  # S4-classed list is not a plain list, on BASE and derived nodes alike.
+  param_set = ps(x = p_dbl())
+  expect_error(param_set$tags <- asS4(list(x = "a")), "`tags` must be a list", fixed = TRUE)
+  collection = ParamSetCollection$new(list(s = ps(z = p_lgl())))
+  expect_error(collection$tags <- asS4(list(s.z = "a")), "`tags` must be a list", fixed = TRUE)
+  expect_identical(param_set$tags, list(x = character(0)))
+  expect_identical(collection$tags, list(s.z = character(0)))
+})
+
 test_that("paramset clones properly", {
   ps = ParamSet_legacy$new()
   ps = ps_union(list(ps, ParamFct$new("a", levels = letters[1:3])))

@@ -18,6 +18,14 @@ is therefore visible, and changed structural metadata -- tags, for
 instance -- is reflected. Dependencies may change too, but a dependency
 crossing the visible/hidden boundary is always an error.
 
+Mutations through the view reach the origin: \verb{$values<-}, \verb{$add_dep()}, and
+\verb{$extra_trafo<-} write through, while \verb{$constraint<-} and \verb{$deps<-} are
+refused (change them on the origin). \verb{$add_dep()} requires both endpoints
+to be visible parameters; a dangling dependency cannot be declared through
+a view, so \code{allow_dangling_dependencies} has no effect here. \verb{$tags<-} is
+the one exception to write-through: it is this view's own answer for the
+IDs it names and leaves the origin's tags untouched.
+
 Checked assignment validates every supplied visible value, including a
 dependency-inactive value, and preserves hidden origin values. If the live
 origin has a constraint, the complete merged configuration is filtered for

@@ -450,7 +450,9 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
     TRUE,
     &work_since_interrupt
   ));
-  if (TYPEOF(tags) != VECSXP || ALTREP(tags)) {
+  /* The same ordinary-container admission as every sibling structural
+   * boundary: an S4-classed list is not a plain list. */
+  if (TYPEOF(tags) != VECSXP || ALTREP(tags) || Rf_isS4(tags)) {
     UNPROTECT(1);
     Rf_error("`tags` must be a list");
   }
