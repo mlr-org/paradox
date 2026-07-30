@@ -1038,7 +1038,8 @@ test_that("TuneToken snapshots revalidate after allocation finalizers", {
     ),
     token,
     0L,
-    asS4(0)
+    asS4(0),
+    "content"
   )
   expect_identical(snapshot$content$lower, 0)
   expect_true(isS4(token$content$lower))
@@ -1051,7 +1052,8 @@ test_that("TuneToken snapshots revalidate after allocation finalizers", {
     ),
     values,
     0L,
-    0
+    0,
+    "content"
   )
   expect_identical(names(snapshot), "value")
   expect_s3_class(snapshot$value, "RangeTuneToken")
@@ -1389,4 +1391,174 @@ test_that("search_space() rejects values naming an unknown parameter", {
     collection$search_space(values = list(g.a = to_tune(0, 1)))$ids(),
     "g.a"
   )
+})
+
+test_that("search-space token selection is terminal", {
+  token_snapshot = function(values, column = NULL, replacement = NULL,
+      phase = "content") {
+    .Call(
+      get("C_test_tune_token_gc_mutation_snapshot", envir = asNamespace("paradox")),
+      values,
+      column,
+      replacement,
+      phase
+    )
+  }
+  attribute_mutator = function(target, name, value) {
+    .Call(
+      get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
+      target,
+      name,
+      value
+    )
+  }
+
+  # A value classified as an ordinary value, then turned into a TuneToken in
+  # place while the result carriers were allocated, used to disappear from the
+  # search space with no diagnostic at all.
+  values = list(
+    a = to_tune(0, 1),
+    b = list(
+      content = list(lower = 0, upper = 1, logscale = FALSE),
+      call = "late token"
+    )
+  )
+  pending = attribute_mutator(
+    values$b,
+    "class",
+    c("RangeTuneToken", "TuneToken")
+  )
+  rm(pending)
+  expect_error(
+    token_snapshot(values, phase = "selection"),
+    "Search-space values changed while their TuneToken snapshot was constructed",
+    fixed = TRUE
+  )
+  expect_s3_class(values$b, "RangeTuneToken")
+
+  # The mirror direction was already fail-closed: a selected value whose class
+  # disappears reaches the established structural diagnostic.
+  demoted = list(a = to_tune(0, 1))
+  pending = attribute_mutator(demoted$a, "class", NULL)
+  rm(pending)
+  expect_error(
+    token_snapshot(demoted, phase = "selection"),
+    "unsupported class vector",
+    fixed = TRUE
+  )
+
+  # A kind change that keeps the content shape admissible reaches neither of
+  # those diagnostics; only the retained kind rejects it.
+  retyped = list(a = to_tune(0, 1))
+  pending = attribute_mutator(
+    retyped$a,
+    "class",
+    c("InternalTuneToken", "RangeTuneToken", "TuneToken")
+  )
+  rm(pending)
+  expect_error(
+    token_snapshot(retyped, phase = "selection"),
+    "Search-space values changed while their TuneToken snapshot was constructed",
+    fixed = TRUE
+  )
+
+  # A class vector that merely contains "TuneToken" is still selected and still
+  # reaches the established structural diagnostic.
+  subclassed = list(a = to_tune(0, 1))
+  class(subclassed$a) = c("ExternalTuneToken", class(subclassed$a))
+  expect_error(
+    token_snapshot(subclassed, phase = "selection"),
+    "unsupported class vector",
+    fixed = TRUE
+  )
+
+  # Without a mutation the same barrier must accept both tokens.
+  unchanged = list(a = to_tune(0, 1), b = to_tune(2, 3))
+  snapshot = token_snapshot(unchanged, phase = "selection")
+  expect_named(snapshot, c("a", "b"))
+  expect_s3_class(snapshot$a, "RangeTuneToken")
+  expect_s3_class(snapshot$b, "RangeTuneToken")
+})
+
+test_that("a TuneToken snapshot owns its shell and never rereads its source", {
+  token = to_tune(0.25, 0.75)
+  snapshot = .Call(
+    get("C_test_tune_token_gc_mutation_snapshot", envir = asNamespace("paradox")),
+    token,
+    0L,
+    list(lower = 0, upper = 1, logscale = FALSE),
+    "token"
+  )
+  # A supported mutation of the source after its generation was selected wins
+  # on the source and leaves a coherent older snapshot behind.
+  expect_identical(
+    snapshot$content,
+    list(lower = 0.25, upper = 0.75, logscale = FALSE)
+  )
+  expect_identical(token$content, list(lower = 0, upper = 1, logscale = FALSE))
+  # The snapshot's own shell metadata is owned, not shared with the live token:
+  # a shared class vector would remain the dispatch authority for every later
+  # reader of the detached snapshot.
+  expect_false(identical(
+    data.table::address(attr(snapshot, "class")),
+    data.table::address(attr(token, "class"))
+  ))
+  expect_false(identical(
+    data.table::address(attr(snapshot, "names")),
+    data.table::address(attr(token, "names"))
+  ))
+  expect_identical(class(snapshot), c("RangeTuneToken", "TuneToken"))
+  expect_identical(names(snapshot), c("content", "call"))
+
+  # Replacing the live class after the snapshot exists cannot reach it.
+  data.table::setattr(token, "class", c("FullTuneToken", "TuneToken"))
+  expect_identical(class(snapshot), c("RangeTuneToken", "TuneToken"))
+})
+
+test_that("TuneToken content fields come from one generation", {
+  # `to_tune()` retains the exact scalar objects it was given, so a by-reference
+  # write to the source columns is a same-object mutation of the token's own
+  # payload.
+  source = data.table::data.table(lo = 0.2, hi = 0.9)
+  token = to_tune(source$lo, source$hi)
+  expect_identical(
+    data.table::address(token$content$lower),
+    data.table::address(source$lo)
+  )
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(e) {
+    data.table::set(source, 1L, "lo", 0.4)
+    data.table::set(source, 1L, "hi", 0.5)
+  })
+  rm(trigger)
+  snapshot = .Call(
+    get("C_test_tune_token_gc_mutation_snapshot", envir = asNamespace("paradox")),
+    token,
+    NULL,
+    NULL,
+    "content"
+  )
+  # The payload copy is one allocation-free pass, so the two bounds are always
+  # taken from the same generation. A per-leaf copy could pair the pre-mutation
+  # lower bound with the post-mutation upper bound.
+  expect_identical(
+    c(snapshot$content$lower, snapshot$content$upper),
+    c(source$lo, source$hi)
+  )
+  expect_false(identical(
+    c(snapshot$content$lower, snapshot$content$upper),
+    c(0.2, 0.5)
+  ))
+  # The owned destinations are canonical: representation names are dropped
+  # without mutating the caller's leaves.
+  named = to_tune(c(low = 0.1), c(high = 0.9))
+  owned = .Call(
+    get("C_test_tune_token_gc_mutation_snapshot", envir = asNamespace("paradox")),
+    named,
+    NULL,
+    NULL,
+    "content"
+  )
+  expect_null(names(owned$content$lower))
+  expect_identical(names(named$content$lower), "low")
 })

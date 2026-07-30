@@ -109,9 +109,9 @@ traced end to end.
 | O6 | high correctness | terminal ownership receipt for public leaves and columns | fixed, current clean build and focused ownership proof green | the first ownership repair used `R_compute_identical()` as a final comparison after detaching arbitrary attributes. That operation can itself allocate and recurse, so it was not a terminal barrier. Ordinary built-in leaves and public table columns now compare exact payload bytes/element identities plus the selected top-level attribute tags and values in one allocation-free tail; stable ALTREP leaves materialize once and use the exact structural receipt around that observation. The attribute-free ordinary hot path remains one shallow copy with no receipt allocation. |
 | M12 | high correctness on cold migration | dispatch-free class/environment/table admission | fixed, current clean build and both focused migration files green | candidate recognition and environment exclusion previously used inheritance/package helpers which can inspect malformed outward metadata through behavior broader than the migration contract. One native ordinary-class snapshot now serves Domain, Condition, node, and top-level admission. The crawler identifies package and namespace environments from non-forcing ordinary bindings and exact namespace identity, excludes recognized user databases, and never traverses `.GlobalEnv`. R rejects unsupported table columns before `lengths()` or materialization can dispatch. The registered routine and native coverage ledger agree. |
 | M13 | high correctness on cold deep clone | clone target and enclosure freshness | fixed, current clean build and focused equality/Shadow/migration proof green | graph cloning previously called each child shell's live `$clone` binding and trusted the returned shell topology. It now snapshots the complete public/enclosure/private/super chain through non-forcing plain-binding reads, invokes the locked package implementation selected by built-in node kind, and requires every returned public, private, and enclosure environment to be internally canonical and disjoint from the complete source graph and every earlier clone before assigning `.core` or `assert_values`. Shared-DAG identity and Shadow origin memoization remain unchanged. |
-| P1 | high correctness | TuneToken value snapshots | confirmed open; no source change at wrap boundary | token admission still rereads token contents while per-leaf snapshots may allocate, and the outer values-list extractor later rereads live elements after selecting names and token positions. The repair should first capture the complete ordinary token/name/element carriers, then admit only those owned selections. |
-| P2 | high correctness | Collection `$add()` terminal Shadow receipt | confirmed open; no source change at wrap boundary | the final add barrier compares shell/private/core topology but does not yet retain the exact Shadow signature carrier and entries selected during both graph walks. The converged fix should reuse the existing flat graph-receipt representation rather than add a second validator. |
-| P3 | medium public-kernel correctness | nested factor/logical Domain cargo | confirmed open; no source change at wrap boundary | several public Domain property/quantile/check paths do not yet apply the same canonical nested-level and special-value admission before operation-specific work. In particular, an early special-value match can avoid validating malformed factor levels. This should be repaired by routing those paths through the single Domain-row admission owner, not by duplicating checks in each kernel. |
+| P1 | high correctness | TuneToken value snapshots | fixed, current/R-3.6 strict compile, analyzer, registered native probes and focused tests green | Three distinct residues remained after the committed carrier work. (a) Search-space selection classified values, then allocated both result carriers and every per-token snapshot before revisiting the selected positions; an in-place class rewrite of an unselected value dropped that parameter from the search space with no diagnostic. Selection now uses one allocation-free exact classifier factored out of `exact_token_kind()` -- three-valued, so a value that merely claims `TuneToken` is still selected and still reaches its established structural error -- retains the exact kind per value, and ends with an allocation-free terminal reclassification of every retained value. (b) Token content was copied leaf by leaf with an allocation between copies, so an in-place write to a later bound could pair it with an earlier one; `to_tune(dt$lo, dt$hi)` retains the exact `data.table` columns, so `set()` alone reaches it. Canonical destination scalars are now preallocated and the payload copy is one allocation-free pass, eliminating the window instead of detecting it. (c) `SHALLOW_DUPLICATE_ATTRIB` copies only the attribute pairlist spine, so the detached snapshot shared its `class` and `names` vectors with the live token -- the same shape as O5 -- while four later readers use that class as the dispatch authority. The snapshot now owns both from the closed class table, and the terminal barrier compares the live token instead of a vector the caller still shares. The classifier also removes an ALTREP `Elt` dispatch from ordinary value admission, which the surrounding comment already forbade. |
+| P2 | high correctness | Collection `$add()` terminal Shadow receipt | fixed, current/R-3.6 strict compile, analyzer, registered native probes and focused tests green | The hole was wider than ledgered: neither the add-topology snapshots nor the two flattened collection graphs retained any Shadow metadata, and a Shadow's `.core` stays pointer-identical while its `.paradox.shadow.snapshot.v1` carrier or one entry is replaced, so more than twenty allocations between selection and commit were unguarded. Both topology walks now retain the exact signature carrier and its entry snapshot per node, rooted in the existing graph root carrier, and the terminal scan compares them through the shared `paradox_shadow_signature_receipt_is_current()` -- no second Shadow validator. Both collection graphs switch to the receipted builder and the terminal wave adds `paradox_collection_graph_snapshot_is_intact()` beside the existing live-binding scan; the two are complementary, not redundant. The topology receipt is still required on its own: a Shadow reachable only by descending another Shadow's origin edge appears in no flattened graph, and a directly added BASE or SHADOW child gets no graph at all. A test-only registered reentry entry point evaluates a hook at the graph and topology snapshot boundaries, mirroring the subset reentry seam; the production entry passes `R_NilValue`. Direct, in-place-entry, nested-below-a-child-Collection, already-in-the-receiver, origin-edge-only, and shared-DAG mutations are permanent regressions, each asserting that the collection core, its `$sets`, and the child graph are unchanged. |
+| P3 | medium public-kernel correctness | nested factor/logical Domain cargo | fixed, current/R-3.6 strict compile, analyzer, registered native probes and focused tests green; Domain microbenchmarks measured and reported below | `paradox_snapshot_builtin_domain()` is not usable at this boundary: it admits exactly one row of a bounded non-`ParamUty` Domain, so it rejects multi-row tables, zero-row tables, `ParamUty`, and unbounded numeric Domains -- all supported public operations -- and it changes the identity of what a read-only operation validates. The repair is therefore the shared admission-only adapter, with `paradox_admit_builtin_domain_row()` still the sole semantic owner: that owner is split into `paradox_admit_builtin_domain_schema_row()` -- identity, closed kind, grouping, tags, cargo, transformation, special values, bounds, levels -- plus the default/requirement/initialization remainder a constructor additionally owns, and the full-row entry point is now that schema call plus the remainder. The split is required, not cosmetic: a public `$domains` projection deliberately carries the stored TuneToken in `.init`, which the cold search-space converter detaches. `paradox_admit_public_domain_table()` validates only the outward column container, captures all sixteen columns in one allocation-free pass, reuses eight preallocated scalar carriers, and admits every row unconditionally; the four public kernels then read the admitted columns, rows, and numeric schema instead of reselecting them. Fifteen defects close together, all reachable with an ordinary malformed Domain: the special-value fast path no longer suppresses factor-level admission; duplicate, attributed, classed, named, S4, and structural-ALTREP factor levels are rejected by check, property, sanitize, and quantile alike; logical-level shells are admitted structurally rather than by value alone; special-value row shells and typed ALTREP special leaves are rejected before observation; `ParamUty` cargo is admitted canonically and non-`ParamUty` cargo is admitted at all; infinite and integer-inappropriate tolerances, non-integerish integer bounds, kind-inappropriate levels and bounds, an empty `id`, and a `grouping` unrelated to `cls` are rejected everywhere. Duplicated per-kernel validators are removed rather than kept beside the owner. Canonical zero-level `ParamFct`, the empty Domain, zero-row typed Domains, unbounded numeric Domains, `ParamUty` opacity, multi-row tables, and every pinned diagnostic are preserved by regression. |
 
 The final migration slice used a clean staged source. Strict GCC 14/C99
 installation on R 4.6.1 was warning-free; its DSO SHA-256 is
@@ -192,6 +192,60 @@ The final receipt scanner also passed strict current and R-3.6 compiler
 diagnostics, Clang analysis, and cppcheck; all changed R files parsed and
 `git diff --check` remained clean. The source-convergence review still did not
 run the deferred full compatibility, memory, portability, or release matrices.
+
+## P1--P3 convergence slice
+
+All three deferred items are closed with permanent regressions. The evidence
+for this slice, all from a clean staged install of the worktree:
+
+- Strict GCC and Clang syntax sets and the Clang static analyzer are green for
+  every changed translation unit -- `domain_kernels.c`, the new
+  `domain_row_admission.c`, `domain_construct.c`, `paramset_check.c`,
+  `paramset_collection_construct.c`, `test_altrep.c`, and `init.c` -- against
+  both the current R 4.6.1 headers and the pinned R 3.6.0 header set. The
+  analyzer emitted no diagnostic; logs are under
+  `.local/tmp/analyzer-p1p3-final/`.
+- The complete plain registered-native inventory passes: 220 records and zero
+  failures, and its independent verifier accepts the result. Two ledger
+  defects had to be repaired first and were both failing before this slice:
+  `environment/native-routine-coverage.tsv` ledgered `upgrade_class_snapshot`
+  with no `direct_upgrade_class_snapshot` probe, which made the whole probes
+  mode refuse to start, and `direct_test_tune_token_gc_mutation_snapshot`
+  asserted the opposite of what the fixture has always returned. Three
+  routines are new: the collection-add reentry seam, the GC attribute mutator,
+  and the fourth `phase` argument of the TuneToken fixture.
+- A 29-file focused selection under `NOT_CRAN=true` passes 2809 assertions.
+  The seven remaining results are identical on a `214fdf3` build and are
+  therefore pre-existing: three in `test-core-state-contract.R`, an eager
+  `repr` deparse of an ALTREP default and an unguarded initial-value warning in
+  `test-native-domain-construction.R`, one `gctorture` finalizer fixture in
+  `test-native-paramsetcollection-construction.R`, and one ALTREP row-name
+  rearm in `test-native-snapshot-atomicity.R`. None is caused or masked by
+  this slice; they are reported to the root review unchanged. Note that the
+  last of these fails the gate on its own, because the focused runner treats an
+  uncaught warning as a failure.
+- Targeted Domain microbenchmarks, median of medians over paired alternating
+  processes at 20,000 iterations per workload. `ParamSet` hot paths are
+  unchanged -- `$check()` 22.3 to 22.8 microseconds (1.02x) and `$qunif()`
+  262.9 to 258.7 microseconds (0.98x) -- confirming that no ParamSet operation
+  enters these kernels. The public Domain operations pay the admission they
+  previously skipped: on a one-row Domain, `domain_check()` moves from about
+  4.5--5.1 to 8.4--9.8 microseconds (1.7--2.1x), `domain_nlevels()` and
+  `domain_is_bounded()` from 3.0--3.4 to 7.4--8.1 (2.2--2.7x),
+  `domain_qunif()` from 3.2--3.6 to 7.8--8.3 (2.2--2.6x), and
+  `domain_sanitize()` from 4.1 to 8.3 (2.1x). A 512-row bound Domain costs
+  4.5x on check and 8.7x on quantile. Two reductions are already applied: the
+  owner answers duplicate detection directly below two elements instead of
+  building a hash table, and the adapter selects only the twelve columns a
+  Domain operation interprets. The residue is the per-row semantic admission
+  itself, which is the repair. `paradox_snapshot_builtin_domain()` was not a
+  cheaper alternative -- it allocates roughly forty objects per row and
+  structurally rejects multi-row, zero-row, `ParamUty`, and unbounded numeric
+  Domains, all of which are supported public operations. Whether about four
+  microseconds per public Domain call is worth paying is a maintainer
+  decision; no benchmark policy row covers these entry points today.
+- Not run for this slice: the R 3.6.3 runtime behavior stage, GCT/Valgrind,
+  and the deferred compatibility, memory, portability, and release matrices.
 
 ## Completion criteria
 

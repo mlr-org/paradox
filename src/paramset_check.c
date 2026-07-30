@@ -2634,24 +2634,132 @@ static int exact_token_string_vector(SEXP value,
     );
 }
 
+/* The closed set of admitted TuneToken class vectors, shared by the exact
+ * classifier, the erroring admission below, and owned snapshot construction.
+ * One table set keeps those three from drifting apart. */
+typedef struct {
+  const char *const *names;
+  R_xlen_t size;
+  token_snapshot_kind_t kind;
+} token_class_vector_t;
+
+static const char *const token_full_classes[] = {
+  "FullTuneToken", "TuneToken"
+};
+static const char *const token_range_classes[] = {
+  "RangeTuneToken", "TuneToken"
+};
+static const char *const token_object_classes[] = {
+  "ObjectTuneToken", "TuneToken"
+};
+static const char *const token_internal_full_classes[] = {
+  "InternalTuneToken", "FullTuneToken", "TuneToken"
+};
+static const char *const token_internal_range_classes[] = {
+  "InternalTuneToken", "RangeTuneToken", "TuneToken"
+};
+static const char *const token_shell_names[] = {"content", "call"};
+
+#define TOKEN_CLASS_VECTOR_COUNT 5
+static const token_class_vector_t
+    token_class_vectors[TOKEN_CLASS_VECTOR_COUNT] = {
+  {token_full_classes, 2, TOKEN_SNAPSHOT_FULL},
+  {token_range_classes, 2, TOKEN_SNAPSHOT_RANGE},
+  {token_object_classes, 2, TOKEN_SNAPSHOT_OBJECT},
+  {token_internal_full_classes, 3, TOKEN_SNAPSHOT_INTERNAL_FULL},
+  {token_internal_range_classes, 3, TOKEN_SNAPSHOT_INTERNAL_RANGE}
+};
+
+static int token_kind_from_classes(SEXP classes,
+    token_snapshot_kind_t *kind, R_xlen_t *work_since_interrupt) {
+  for (int index = 0; index < TOKEN_CLASS_VECTOR_COUNT; ++index) {
+    if (exact_token_string_vector(
+        classes,
+        token_class_vectors[index].names,
+        token_class_vectors[index].size,
+        work_since_interrupt
+      )) {
+      *kind = token_class_vectors[index].kind;
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+typedef enum {
+  /* An ordinary value: never selected as a TuneToken. */
+  TOKEN_CLAIM_NONE = 0,
+  /* Exactly one of the five admitted class vectors; `kind` is reported. */
+  TOKEN_CLAIM_EXACT,
+  /* Claims to be a TuneToken without being one: selected, then rejected by
+   * the erroring admission so its established diagnostic is unchanged. */
+  TOKEN_CLAIM_MALFORMED
+} token_claim_t;
+
+/*
+ * Allocation-free and callback-free classification. It reproduces the
+ * extension of `Rf_inherits(value, "TuneToken")` for every admissible token
+ * while never observing a non-ordinary class vector: a TuneToken class vector
+ * is contractually ordinary character, so a value whose class representation
+ * is ALTREP, S4, or attributed is an opaque value and not a token. That also
+ * keeps an ALTREP `Elt` method off the value-admission path, which the
+ * surrounding snapshot rules already forbid.
+ */
+static token_claim_t exact_token_claim(SEXP value,
+    token_snapshot_kind_t *kind) {
+  *kind = TOKEN_SNAPSHOT_FULL;
+  if (!Rf_isObject(value)) return TOKEN_CLAIM_NONE;
+  SEXP classes = Rf_getAttrib(value, R_ClassSymbol);
+  if (classes == R_NilValue) return TOKEN_CLAIM_NONE;
+  /* A class representation that cannot describe an admitted token is a claim,
+   * not an ordinary value: it is selected and rejected by the erroring
+   * admission, exactly as it is today. An ALTREP class vector is the one
+   * shape whose elements cannot be read without dispatching into user code,
+   * so it is rejected without being observed. */
+  if (TYPEOF(classes) != STRSXP || ALTREP(classes)) {
+    return TOKEN_CLAIM_MALFORMED;
+  }
+  R_xlen_t work_since_interrupt = 0;
+  if (token_kind_from_classes(classes, kind, &work_since_interrupt)) {
+    return TOKEN_CLAIM_EXACT;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(classes); ++index) {
+    SEXP entry = STRING_ELT(classes, index);
+    if (entry != NA_STRING && strcmp(CHAR(entry), "TuneToken") == 0) {
+      return TOKEN_CLAIM_MALFORMED;
+    }
+  }
+  return TOKEN_CLAIM_NONE;
+}
+
+static int value_is_tune_token(SEXP value) {
+  token_snapshot_kind_t ignored;
+  return exact_token_claim(value, &ignored) != TOKEN_CLAIM_NONE;
+}
+
+/* Own the snapshot's shell metadata instead of sharing the caller's vectors.
+ * `SHALLOW_DUPLICATE_ATTRIB` copies only the attribute pairlist spine, so a
+ * shared class vector would remain the dispatch authority for every later
+ * reader of the supposedly detached snapshot. */
+static SEXP owned_token_class(token_snapshot_kind_t kind) {
+  for (int index = 0; index < TOKEN_CLASS_VECTOR_COUNT; ++index) {
+    if (token_class_vectors[index].kind == kind) {
+      return paradox_domain_character_vector(
+        token_class_vectors[index].names,
+        token_class_vectors[index].size
+      );
+    }
+  }
+  Rf_error("Internal error: unknown TuneToken kind");
+  return R_NilValue;
+}
+
+static SEXP owned_token_names(void) {
+  return paradox_domain_character_vector(token_shell_names, 2);
+}
+
 static token_snapshot_kind_t exact_token_kind(SEXP token) {
   static const char *const attributes[] = {"names", "class"};
-  static const char *const names[] = {"content", "call"};
-  static const char *const full_classes[] = {
-    "FullTuneToken", "TuneToken"
-  };
-  static const char *const range_classes[] = {
-    "RangeTuneToken", "TuneToken"
-  };
-  static const char *const object_classes[] = {
-    "ObjectTuneToken", "TuneToken"
-  };
-  static const char *const internal_full_classes[] = {
-    "InternalTuneToken", "FullTuneToken", "TuneToken"
-  };
-  static const char *const internal_range_classes[] = {
-    "InternalTuneToken", "RangeTuneToken", "TuneToken"
-  };
   if (TYPEOF(token) != VECSXP || ALTREP(token) || Rf_isS4(token) ||
       XLENGTH(token) != 2 ||
       !paradox_api_has_only_attributes(token, attributes, 2)) {
@@ -2664,7 +2772,7 @@ static token_snapshot_kind_t exact_token_kind(SEXP token) {
   SEXP classes = PROTECT(Rf_getAttrib(token, R_ClassSymbol));
   if (!exact_token_string_vector(
         observed_names,
-        names,
+        token_shell_names,
         2,
         &work_since_interrupt
       )) {
@@ -2674,42 +2782,7 @@ static token_snapshot_kind_t exact_token_kind(SEXP token) {
     );
   }
   token_snapshot_kind_t kind;
-  if (exact_token_string_vector(
-      classes,
-      full_classes,
-      2,
-      &work_since_interrupt
-    )) {
-    kind = TOKEN_SNAPSHOT_FULL;
-  } else if (exact_token_string_vector(
-      classes,
-      range_classes,
-      2,
-      &work_since_interrupt
-    )) {
-    kind = TOKEN_SNAPSHOT_RANGE;
-  } else if (exact_token_string_vector(
-      classes,
-      object_classes,
-      2,
-      &work_since_interrupt
-    )) {
-    kind = TOKEN_SNAPSHOT_OBJECT;
-  } else if (exact_token_string_vector(
-      classes,
-      internal_full_classes,
-      3,
-      &work_since_interrupt
-    )) {
-    kind = TOKEN_SNAPSHOT_INTERNAL_FULL;
-  } else if (exact_token_string_vector(
-      classes,
-      internal_range_classes,
-      3,
-      &work_since_interrupt
-    )) {
-    kind = TOKEN_SNAPSHOT_INTERNAL_RANGE;
-  } else {
+  if (!token_kind_from_classes(classes, &kind, &work_since_interrupt)) {
     UNPROTECT(2);
     Rf_error("Malformed TuneToken: unsupported class vector");
   }
@@ -2816,31 +2889,48 @@ static void validate_token_call(SEXP call) {
   }
 }
 
-static void run_test_gc_column_mutation(
-    SEXP source, SEXP column, SEXP replacement) {
-  if (column == R_NilValue) return;
-  PROTECT(paradox_test_gc_column_mutator(source, column, replacement));
-  UNPROTECT(1);
-  const int selected = INTEGER_ELT(column, 0);
+/* Boundaries a test fixture may select. `TOKEN_TEST_PHASE_NONE` is what every
+ * production caller passes, so the accepted path pays one comparison. */
+#define TOKEN_TEST_PHASE_NONE (-1)
+#define TOKEN_TEST_PHASE_CONTENT 0
+#define TOKEN_TEST_PHASE_TOKEN 1
+#define TOKEN_TEST_PHASE_SELECTION 2
+
+static void run_token_test_barrier(int active, SEXP source, SEXP column,
+    SEXP replacement) {
+  if (!active) return;
+  if (column != R_NilValue) {
+    PROTECT(paradox_test_gc_column_mutator(source, column, replacement));
+    UNPROTECT(1);
+  }
   /*
    * This is a test-only deterministic finalizer barrier. R_gc() and
    * R_RunPendingFinalizers() are public APIs; invoking both here guarantees
-   * that the mutation occurs at the exact snapshot boundary under test.
+   * that a pending mutation occurs at the exact snapshot boundary under test.
    */
   R_gc();
   R_RunPendingFinalizers();
-  if (VECTOR_ELT(source, selected) != replacement) {
-    Rf_error("TuneToken GC-mutation test fixture did not run");
+  if (column != R_NilValue) {
+    const int selected = INTEGER_ELT(column, 0);
+    if (VECTOR_ELT(source, selected) != replacement) {
+      Rf_error("TuneToken GC-mutation test fixture did not run");
+    }
   }
 }
 
 static SEXP snapshot_search_space_value_carrier(SEXP values);
-static SEXP snapshot_tune_tokens_from_value_carrier(
-  SEXP stable_values, SEXP *value_names
+static SEXP snapshot_tune_tokens_from_value_carrier_impl(
+  SEXP stable_values, SEXP *value_names, int phase,
+  SEXP mutation_column, SEXP mutation_replacement
 );
 
-static SEXP snapshot_tune_token_impl(
-    SEXP token, SEXP mutation_column, SEXP mutation_replacement) {
+/* The widest representation-scalar prefix any admitted token content has:
+ * `{lower, upper, logscale}`. The optional `aggr` callback is opaque and is
+ * never copied. */
+#define TOKEN_CONTENT_MAX_SCALARS 3
+
+static SEXP snapshot_tune_token_impl(SEXP token, int phase,
+    SEXP mutation_column, SEXP mutation_replacement) {
   const token_snapshot_kind_t kind = exact_token_kind(token);
   SEXP content = PROTECT(VECTOR_ELT(token, 0));
   SEXP call = PROTECT(VECTOR_ELT(token, 1));
@@ -2849,8 +2939,15 @@ static SEXP snapshot_tune_token_impl(
   SEXP stable_content;
   if (kind == TOKEN_SNAPSHOT_OBJECT) {
     validate_token_content(content, kind);
-    run_test_gc_column_mutation(
+    run_token_test_barrier(
+      phase == TOKEN_TEST_PHASE_CONTENT,
       content,
+      mutation_column,
+      mutation_replacement
+    );
+    run_token_test_barrier(
+      phase == TOKEN_TEST_PHASE_TOKEN,
+      token,
       mutation_column,
       mutation_replacement
     );
@@ -2896,14 +2993,6 @@ static SEXP snapshot_tune_token_impl(
       stable_content = PROTECT(content);
     }
   } else {
-    /*
-     * Allocate both destination carriers before selecting any caller-owned
-     * content. A pending finalizer may rewrite `content` during either
-     * allocation. Afterwards, select every name beside its exact matching
-     * element in one allocation-free pass. Per-leaf duplication may allocate,
-     * but it consumes only this rooted carrier and never rereads the source
-     * spine or its names.
-     */
     const R_xlen_t size = TYPEOF(content) == VECSXP && !ALTREP(content)
       ? XLENGTH(content)
       : 0;
@@ -2912,9 +3001,21 @@ static SEXP snapshot_tune_token_impl(
       UNPROTECT(2);
       Rf_error("Malformed TuneToken content");
     }
+    /*
+     * Capture the content spine, admit the captured leaves, and allocate one
+     * canonical destination per representation scalar before any payload is
+     * read.  The copy below is then a single allocation-free pass, so no
+     * instant exists at which one admitted field has been taken from an older
+     * generation than another.  The token shapes are tiny and closed, so this
+     * replaces per-leaf duplication rather than adding a recursive receipt.
+     */
     stable_content = PROTECT(Rf_allocVector(VECSXP, size));
     SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, size));
+    Rf_setAttrib(stable_content, R_NamesSymbol, stable_names);
 
+    /* Both carriers exist, so select every name beside its exact matching
+     * element in one allocation-free pass. From here the source spine is
+     * never read again. */
     R_xlen_t work_since_interrupt = 0;
     SEXP observed_names = Rf_getAttrib(content, R_NamesSymbol);
     if (TYPEOF(content) != VECSXP || ALTREP(content) ||
@@ -2938,66 +3039,167 @@ static SEXP snapshot_tune_token_impl(
       );
       SET_VECTOR_ELT(stable_content, index, VECTOR_ELT(content, index));
     }
-    Rf_setAttrib(stable_content, R_NamesSymbol, stable_names);
-    UNPROTECT(1);
 
     validate_token_content(stable_content, kind);
-    run_test_gc_column_mutation(
+    SEXPTYPE destination_types[TOKEN_CONTENT_MAX_SCALARS];
+    for (R_xlen_t index = 0;
+        index < layout.representation_scalar_count;
+        ++index) {
+      destination_types[index] =
+        (SEXPTYPE) TYPEOF(VECTOR_ELT(stable_content, index));
+    }
+    SEXP destinations = PROTECT(Rf_allocVector(
+      VECSXP,
+      layout.representation_scalar_count
+    ));
+    for (R_xlen_t index = 0;
+        index < layout.representation_scalar_count;
+        ++index) {
+      if (destination_types[index] == NILSXP) continue;
+      SEXP carrier = PROTECT(Rf_allocVector(destination_types[index], 1));
+      SET_VECTOR_ELT(destinations, index, carrier);
+      UNPROTECT(1);
+    }
+
+    run_token_test_barrier(
+      phase == TOKEN_TEST_PHASE_CONTENT,
       content,
       mutation_column,
       mutation_replacement
     );
+    run_token_test_barrier(
+      phase == TOKEN_TEST_PHASE_TOKEN,
+      token,
+      mutation_column,
+      mutation_replacement
+    );
+
+    /*
+     * One allocation-free pass over the retained cells: re-admit every leaf
+     * and copy its payload into the destination allocated for it. Because
+     * nothing between the first and the last copy can allocate, the admitted
+     * fields always come from one generation.
+     */
     for (R_xlen_t index = 0; index < size; ++index) {
-      SEXP element = PROTECT(snapshot_parameter_leaf(
-        VECTOR_ELT(stable_content, index)
-      ));
-      /* Ordinary R arithmetic and subsetting commonly attach a name to a
-       * scalar.  Bounds and logscale admit that representation, but their
-       * owned snapshot is canonical.  The optional aggregation callback is
-       * deliberately opaque and must retain its identity and attributes. */
-      if (index < layout.representation_scalar_count &&
-          element != R_NilValue) {
-        Rf_setAttrib(element, R_NamesSymbol, R_NilValue);
+      SEXP element = VECTOR_ELT(stable_content, index);
+      if (index >= layout.representation_scalar_count) {
+        /* The optional aggregation callback is deliberately opaque and must
+         * retain its identity and attributes. */
+        if (Rf_isS4(element) || !Rf_isFunction(element)) {
+          UNPROTECT(5);
+          Rf_error("Malformed TuneToken content");
+        }
+        SET_VECTOR_ELT(stable_content, index, element);
+        continue;
       }
-      SET_VECTOR_ELT(stable_content, index, element);
-      UNPROTECT(1);
+      const int logscale_slot = layout.range ? index == 2 : index == 0;
+      if (logscale_slot
+          ? (!plain_token_logical(element) ||
+            (layout.internal && LOGICAL_ELT(element, 0) != FALSE))
+          : !token_number_or_null(element)) {
+        UNPROTECT(5);
+        Rf_error("Malformed TuneToken content");
+      }
+      if ((SEXPTYPE) TYPEOF(element) != destination_types[index]) {
+        UNPROTECT(5);
+        Rf_error("TuneToken changed while its exact snapshot was constructed");
+      }
+      /* Ordinary R arithmetic and subsetting commonly attach a name to a
+       * scalar.  Bounds and logscale admit that representation, but the owned
+       * destination is canonical and therefore attribute-free by
+       * construction. */
+      SEXP destination = VECTOR_ELT(destinations, index);
+      switch (destination_types[index]) {
+      case NILSXP:
+        break;
+      case REALSXP:
+        SET_REAL_ELT(destination, 0, REAL_ELT(element, 0));
+        break;
+      case INTSXP:
+        SET_INTEGER_ELT(destination, 0, INTEGER_ELT(element, 0));
+        break;
+      case LGLSXP:
+        SET_LOGICAL_ELT(destination, 0, LOGICAL_ELT(element, 0));
+        break;
+      default:
+        UNPROTECT(5);
+        Rf_error("Malformed TuneToken content");
+      }
+      SET_VECTOR_ELT(stable_content, index, destination);
     }
+    UNPROTECT(2);
   }
-  SEXP stable_call = PROTECT(Rf_duplicate(call));
+  SEXP stable_call = PROTECT(Rf_allocVector(STRSXP, 1));
   SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  SEXP result_names = PROTECT(owned_token_names());
+  SEXP result_class = PROTECT(owned_token_class(kind));
+  Rf_setAttrib(result, R_NamesSymbol, result_names);
+  Rf_setAttrib(result, R_ClassSymbol, result_class);
+  /*
+   * Terminal, allocation-free.  The snapshot owns its shell metadata, so this
+   * barrier compares the live token instead of re-reading a class vector the
+   * caller would still share; a replacement of that attribute is now visible
+   * where the shared-pointer form could not see it.
+   */
+  validate_token_call(call);
+  SET_STRING_ELT(stable_call, 0, STRING_ELT(call, 0));
   SET_VECTOR_ELT(result, 0, stable_content);
   SET_VECTOR_ELT(result, 1, stable_call);
-  SHALLOW_DUPLICATE_ATTRIB(result, token);
-  /* Exact admission is about the owned snapshot, not a live source that may
-   * have changed while an allocation ran a pending finalizer. Revalidating the
-   * final detached root closes that interval without a parallel R validator. */
-  const token_snapshot_kind_t stable_kind = exact_token_kind(result);
-  if (stable_kind != kind) {
-    UNPROTECT(5);
+  token_snapshot_kind_t observed_kind = TOKEN_SNAPSHOT_FULL;
+  if (exact_token_claim(token, &observed_kind) != TOKEN_CLAIM_EXACT ||
+      observed_kind != kind) {
+    UNPROTECT(7);
     Rf_error("TuneToken changed while its exact snapshot was constructed");
   }
-  validate_token_call(VECTOR_ELT(result, 1));
-  validate_token_content(VECTOR_ELT(result, 0), stable_kind);
-  UNPROTECT(5);
+  validate_token_content(VECTOR_ELT(result, 0), kind);
+  UNPROTECT(7);
   return result;
 }
 
 static SEXP snapshot_tune_token(SEXP token) {
-  return snapshot_tune_token_impl(token, R_NilValue, R_NilValue);
+  return snapshot_tune_token_impl(
+    token,
+    TOKEN_TEST_PHASE_NONE,
+    R_NilValue,
+    R_NilValue
+  );
+}
+
+static int test_token_phase(SEXP phase) {
+  if (phase == R_NilValue) return TOKEN_TEST_PHASE_CONTENT;
+  if (TYPEOF(phase) != STRSXP || XLENGTH(phase) != 1 ||
+      STRING_ELT(phase, 0) == NA_STRING) {
+    Rf_error("Invalid TuneToken GC-mutation test fixture phase");
+  }
+  const char *selected = CHAR(STRING_ELT(phase, 0));
+  if (strcmp(selected, "content") == 0) return TOKEN_TEST_PHASE_CONTENT;
+  if (strcmp(selected, "token") == 0) return TOKEN_TEST_PHASE_TOKEN;
+  if (strcmp(selected, "selection") == 0) return TOKEN_TEST_PHASE_SELECTION;
+  Rf_error("Invalid TuneToken GC-mutation test fixture phase");
+  return TOKEN_TEST_PHASE_NONE;
 }
 
 SEXP paradox_test_tune_token_gc_mutation_snapshot(
-    SEXP token, SEXP column, SEXP replacement) {
+    SEXP token, SEXP column, SEXP replacement, SEXP phase) {
+  const int selected_phase = test_token_phase(phase);
   if (TYPEOF(token) != VECSXP || ALTREP(token) || XLENGTH(token) < 1) {
     Rf_error("Invalid TuneToken GC-mutation test fixture token");
   }
   if (!Rf_inherits(token, "TuneToken")) {
     SEXP stable_values = PROTECT(snapshot_search_space_value_carrier(token));
-    run_test_gc_column_mutation(token, column, replacement);
+    run_token_test_barrier(
+      selected_phase == TOKEN_TEST_PHASE_CONTENT,
+      token,
+      column,
+      replacement
+    );
     SEXP value_names = R_NilValue;
-    SEXP result = PROTECT(snapshot_tune_tokens_from_value_carrier(
+    SEXP result = PROTECT(snapshot_tune_tokens_from_value_carrier_impl(
       stable_values,
-      &value_names
+      &value_names,
+      selected_phase,
+      selected_phase == TOKEN_TEST_PHASE_SELECTION ? column : R_NilValue,
+      replacement
     ));
     UNPROTECT(2);
     return result;
@@ -3006,11 +3208,16 @@ SEXP paradox_test_tune_token_gc_mutation_snapshot(
   if (TYPEOF(content) != VECSXP || ALTREP(content)) {
     Rf_error("Invalid TuneToken GC-mutation test fixture content");
   }
-  return snapshot_tune_token_impl(token, column, replacement);
+  return snapshot_tune_token_impl(
+    token,
+    selected_phase,
+    column,
+    replacement
+  );
 }
 
 static SEXP snapshot_parameter_value(SEXP value) {
-  if (Rf_inherits(value, "TuneToken")) {
+  if (value_is_tune_token(value)) {
     return snapshot_tune_token(value);
   }
   return snapshot_parameter_leaf(value);
@@ -3025,7 +3232,7 @@ static SEXP snapshot_value_for_spec(
    * ordinary atomic object.  TuneTokens remain semantic syntax regardless of
    * the target Domain and therefore retain their one canonical snapshot.
    */
-  if (Rf_inherits(value, "TuneToken")) {
+  if (value_is_tune_token(value)) {
     return snapshot_tune_token(value);
   }
   return spec->kind == VALUE_UTY
@@ -3184,11 +3391,23 @@ static SEXP snapshot_search_space_value_carrier(SEXP values) {
   return stable_values;
 }
 
+/* One byte per value: 0 is an ordinary value, 1 a malformed token claim, and
+ * `2 + kind` an exact token of that kind. Retaining the kind makes the
+ * terminal pass reject a same-object kind change as well as a token/non-token
+ * change, at no extra cost. */
+static unsigned char token_selection_code(token_claim_t claim,
+    token_snapshot_kind_t kind) {
+  if (claim == TOKEN_CLAIM_NONE) return 0U;
+  if (claim == TOKEN_CLAIM_MALFORMED) return 1U;
+  return (unsigned char) (2U + (unsigned int) kind);
+}
+
 /* Publishes the complete admitted name vector through `value_names` beside the
  * TuneToken subset it returns. Both cross the return boundary unrooted, so the
  * caller must root them before anything that can allocate. */
-static SEXP snapshot_tune_tokens_from_value_carrier(
-    SEXP stable_values, SEXP *value_names) {
+static SEXP snapshot_tune_tokens_from_value_carrier_impl(
+    SEXP stable_values, SEXP *value_names, int phase,
+    SEXP mutation_column, SEXP mutation_replacement) {
   const R_xlen_t size = XLENGTH(stable_values);
   SEXP stable_names = PROTECT(Rf_getAttrib(
     stable_values,
@@ -3200,12 +3419,20 @@ static SEXP snapshot_tune_tokens_from_value_carrier(
     sizeof(*selected)
   );
   for (R_xlen_t index = 0; index < size; ++index) {
-    const int is_token = Rf_inherits(
-      VECTOR_ELT(stable_values, index), "TuneToken"
-    ) != FALSE;
-    selected[index] = is_token ? 1U : 0U;
+    token_snapshot_kind_t kind = TOKEN_SNAPSHOT_FULL;
+    const token_claim_t claim = exact_token_claim(
+      VECTOR_ELT(stable_values, index),
+      &kind
+    );
+    selected[index] = token_selection_code(claim, kind);
     token_count += selected[index] != 0;
   }
+  run_token_test_barrier(
+    phase == TOKEN_TEST_PHASE_SELECTION,
+    stable_values,
+    mutation_column,
+    mutation_replacement
+  );
   SEXP result = PROTECT(Rf_allocVector(VECSXP, token_count));
   SEXP result_names = PROTECT(Rf_allocVector(STRSXP, token_count));
   R_xlen_t output = 0;
@@ -3220,9 +3447,41 @@ static SEXP snapshot_tune_tokens_from_value_carrier(
     UNPROTECT(1);
   }
   Rf_setAttrib(result, R_NamesSymbol, result_names);
+  /*
+   * Terminal, allocation-free: reclassify every retained value. Selection
+   * precedes both result carriers and every per-token snapshot, all of which
+   * allocate; an in-place class rewrite of a value that was not selected
+   * would otherwise omit that parameter from the search space with no
+   * diagnostic at all.
+   */
+  for (R_xlen_t index = 0; index < size; ++index) {
+    token_snapshot_kind_t kind = TOKEN_SNAPSHOT_FULL;
+    const token_claim_t claim = exact_token_claim(
+      VECTOR_ELT(stable_values, index),
+      &kind
+    );
+    if (token_selection_code(claim, kind) != selected[index]) {
+      UNPROTECT(3);
+      Rf_error(
+        "Search-space values changed while their TuneToken snapshot was "
+        "constructed"
+      );
+    }
+  }
   *value_names = stable_names;
   UNPROTECT(3);
   return result;
+}
+
+static SEXP snapshot_tune_tokens_from_value_carrier(
+    SEXP stable_values, SEXP *value_names) {
+  return snapshot_tune_tokens_from_value_carrier_impl(
+    stable_values,
+    value_names,
+    TOKEN_TEST_PHASE_NONE,
+    R_NilValue,
+    R_NilValue
+  );
 }
 
 static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {

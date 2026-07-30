@@ -50,6 +50,8 @@ test_that("collection constructor routines have fixed registered interfaces", {
   expect_s3_class(add, "NativeSymbolInfo")
   expect_identical(add$numParameters, 6L)
   expect_identical(affix_probe$numParameters, 2L)
+  add_reentry = collection2_symbol("test_param_set_collection_add_reentry")
+  expect_identical(add_reentry$numParameters, 8L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
   expect_error(
     .Call("param_set_collection_construct", PACKAGE = "paradox"),
@@ -617,4 +619,224 @@ test_that("collection construction remains rooted under forced collection", {
   expect_identical(collection$ids(), expected)
   expect_identical(collection$sets[[1L]], collection$sets[[3L]])
   expect_identical(collection$params$.init[[2L]], marker)
+})
+
+# The exact package-private Shadow refresh signature. `$add()` retains it for
+# every node of both topology walks, so an in-place rewrite of the carrier or
+# of one of its entries is a graph change the terminal barrier must see.
+collection2_shadow_signature = function(shadow) {
+  attr(
+    collection2_private(shadow)$.core,
+    ".paradox.shadow.snapshot.v1",
+    exact = TRUE
+  )
+}
+
+# A fresh carrier holding the identical entries: this isolates the carrier
+# identity comparison from the per-entry comparison.
+collection2_reforge_signature = function(shadow) {
+  core = collection2_private(shadow)$.core
+  signature = attr(core, ".paradox.shadow.snapshot.v1", exact = TRUE)
+  forged = vector("list", length(signature))
+  for (index in seq_along(signature)) forged[[index]] = signature[[index]]
+  data.table::setattr(core, ".paradox.shadow.snapshot.v1", forged)
+  invisible(NULL)
+}
+
+collection2_add_reentry = function(collection, child, n = "",
+    tag_sets = FALSE, tag_params = FALSE, graph_hook = NULL,
+    topology_hook = NULL) {
+  .Call(
+    collection2_symbol("test_param_set_collection_add_reentry"),
+    collection2_private(collection),
+    collection,
+    child,
+    n,
+    tag_sets,
+    tag_params,
+    graph_hook,
+    topology_hook
+  )
+}
+
+test_that("collection add retains every Shadow refresh signature", {
+  # A Shadow's `.core` external pointer stays pointer-identical while its
+  # package-private signature attribute moves, so the shell/private/core
+  # topology receipt alone cannot see the change.
+  origin = ps(x = p_int(), hidden = p_lgl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  collection = ParamSetCollection$new(list(existing = ps(y = p_int())))
+  collection$ids()
+  shadow$ids()
+  before = data.table::address(collection2_state(collection))
+  before_core = collection2_private(shadow)$.core
+
+  fired = 0L
+  expect_error(
+    collection2_add_reentry(collection, shadow, "child",
+      topology_hook = function() {
+        fired <<- fired + 1L
+        collection2_reforge_signature(shadow)
+      }),
+    "ParamSet capsule graph changed during collection add",
+    fixed = TRUE
+  )
+  expect_identical(fired, 1L)
+  expect_identical(data.table::address(collection2_state(collection)), before)
+  expect_named(collection$sets, "existing")
+  expect_identical(collection2_private(shadow)$.core, before_core)
+
+  # A single entry replaced in place is the same defect at finer grain.
+  other = ParamSetShadow$new(ps(z = p_int(), hidden = p_lgl()), "hidden")
+  other$ids()
+  signature = collection2_shadow_signature(shadow)
+  original_entry = signature[[2L]]
+  on.exit(.Call(
+    collection2_symbol("test_gc_column_mutator"),
+    signature, 1L, original_entry
+  ), add = TRUE)
+  expect_error(
+    collection2_add_reentry(collection, shadow, "child",
+      topology_hook = function() {
+        pointer = .Call(
+          collection2_symbol("test_gc_column_mutator"),
+          signature,
+          1L,
+          collection2_private(other)$.core
+        )
+        rm(pointer)
+        gc(full = TRUE)
+      }),
+    "ParamSet capsule graph changed during collection add",
+    fixed = TRUE
+  )
+  expect_identical(data.table::address(collection2_state(collection)), before)
+  expect_named(collection$sets, "existing")
+})
+
+test_that("collection add receipts cover every reachable Shadow", {
+  # A Shadow that is already an edge of the receiving collection is retained
+  # by the flattened graph as well as by the topology walk, so both scans must
+  # reject the mutation.
+  origin = ps(x = p_int(), hidden = p_lgl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  receiver = ParamSetCollection$new(list(layer = shadow))
+  receiver$ids()
+  before = data.table::address(collection2_state(receiver))
+  for (phase in c("graph", "topology")) {
+    hook = function() collection2_reforge_signature(shadow)
+    expect_error(
+      collection2_add_reentry(receiver, ps(z = p_int()), "extra",
+        graph_hook = if (phase == "graph") hook,
+        topology_hook = if (phase == "topology") hook),
+      "ParamSet capsule graph changed during collection add",
+      fixed = TRUE,
+      info = phase
+    )
+    expect_identical(
+      data.table::address(collection2_state(receiver)),
+      before,
+      info = phase
+    )
+  }
+
+  # A Shadow below the added child Collection is only in the child graph and
+  # the child topology walk.
+  nested = ParamSetShadow$new(ps(a = p_int(), hidden = p_lgl()), "hidden")
+  child = ParamSetCollection$new(list(layer = nested))
+  child$ids()
+  child_ids = child$ids()
+  child_core = collection2_private(child)$.core
+  plain = ParamSetCollection$new(list(existing = ps(y = p_int())))
+  plain$ids()
+  plain_before = data.table::address(collection2_state(plain))
+  for (phase in c("graph", "topology")) {
+    hook = function() collection2_reforge_signature(nested)
+    expect_error(
+      collection2_add_reentry(plain, child, "kid",
+        graph_hook = if (phase == "graph") hook,
+        topology_hook = if (phase == "topology") hook),
+      "ParamSet capsule graph changed during collection add",
+      fixed = TRUE,
+      info = phase
+    )
+    expect_identical(
+      data.table::address(collection2_state(plain)),
+      plain_before,
+      info = phase
+    )
+    expect_identical(collection2_private(child)$.core, child_core, info = phase)
+    expect_identical(child$ids(), child_ids, info = phase)
+  }
+
+  # A Shadow reachable only by descending another Shadow's origin edge is
+  # invisible to both flattened graphs; the topology walk is its only receipt.
+  base = ps(b = p_int(), hidden2 = p_lgl())
+  inner_shadow = ParamSetShadow$new(base, "hidden2")
+  inner = ParamSetCollection$new(list(inner = inner_shadow))
+  outer_shadow = ParamSetShadow$new(inner, character())
+  deep = ParamSetCollection$new(list(layer = outer_shadow))
+  deep$ids()
+  deep_before = data.table::address(collection2_state(deep))
+  expect_error(
+    collection2_add_reentry(deep, ps(z = p_int()), "extra",
+      topology_hook = function() collection2_reforge_signature(inner_shadow)),
+    "ParamSet capsule graph changed during collection add",
+    fixed = TRUE
+  )
+  expect_identical(data.table::address(collection2_state(deep)), deep_before)
+  expect_named(deep$sets, "layer")
+
+  # A shared Shadow occurrence is deduplicated by the topology walk and still
+  # rejected.
+  shared = ParamSetShadow$new(ps(s = p_int(), hidden = p_lgl()), "hidden")
+  wrapper = ParamSetCollection$new(list(one = shared))
+  dag = ParamSetCollection$new(list(nested = wrapper, direct = shared))
+  dag$ids()
+  dag_before = data.table::address(collection2_state(dag))
+  expect_error(
+    collection2_add_reentry(dag, ps(z = p_int()), "extra",
+      topology_hook = function() collection2_reforge_signature(shared)),
+    "ParamSet capsule graph changed during collection add",
+    fixed = TRUE
+  )
+  expect_identical(data.table::address(collection2_state(dag)), dag_before)
+})
+
+test_that("the collection add reentry seam is inert without a hook", {
+  shadow = ParamSetShadow$new(ps(x = p_int(), hidden = p_lgl()), "hidden")
+  collection = ParamSetCollection$new(list(layer = shadow))
+  expect_identical(
+    collection2_add_reentry(collection, ps(z = p_dbl()), "extra",
+      tag_sets = TRUE),
+    collection
+  )
+  expect_named(collection$sets, c("layer", "extra"))
+  expect_identical(collection$ids(), c("layer.x", "extra.z"))
+  expect_identical(collection$tags[["extra.z"]], "set_extra")
+
+  # A hook that observes without mutating must not produce a false positive
+  # across the ordinary allocation storm of the append itself.
+  quiet = ParamSetCollection$new(list(
+    layer = ParamSetShadow$new(ps(x = p_int(), hidden = p_lgl()), "hidden")
+  ))
+  observed = 0L
+  expect_silent(collection2_add_reentry(quiet, ps(z = p_dbl()), "extra",
+    graph_hook = function() observed <<- observed + 1L,
+    topology_hook = function() observed <<- observed + 1L))
+  expect_identical(observed, 2L)
+  expect_identical(quiet$ids(), c("layer.x", "extra.z"))
+
+  # And the public entry point remains equivalent to the seam.
+  public = ParamSetCollection$new(list(
+    layer = ParamSetShadow$new(ps(x = p_int(), hidden = p_lgl()), "hidden")
+  ))
+  public$add(ps(z = p_dbl()), "extra")
+  expect_identical(public$ids(), quiet$ids())
+  expect_named(public$sets, names(quiet$sets))
+
+  expect_error(
+    collection2_add_reentry(public, ps(w = p_int()), "bad", graph_hook = 1L),
+    "reentry test hook must be a function"
+  )
 })

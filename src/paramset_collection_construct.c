@@ -8,6 +8,7 @@
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "paramset_params_internal.h"
+#include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 #include "core_state.h"
@@ -1144,6 +1145,12 @@ typedef struct {
   SEXP *shells;
   SEXP *private_environments;
   SEXP *cores;
+  /* A SHADOW's ordinary metadata attribute is the one mutable carrier outside
+   * its immutable capsule payload, so the exact carrier and its entries are
+   * retained beside the capsule.  Both are `R_NilValue` on every other node
+   * kind, which the terminal scan requires as well. */
+  SEXP *shadow_signatures;
+  SEXP *shadow_signature_contents;
   R_xlen_t count;
   R_xlen_t capacity;
 } add_graph_snapshot_t;
@@ -1191,6 +1198,14 @@ static void reserve_add_snapshot(add_graph_snapshot_t *snapshot,
     sizeof(*private_environments)
   );
   SEXP *cores = paradox_temporary_alloc(capacity, sizeof(*cores));
+  SEXP *shadow_signatures = paradox_temporary_alloc(
+    capacity,
+    sizeof(*shadow_signatures)
+  );
+  SEXP *shadow_signature_contents = paradox_temporary_alloc(
+    capacity,
+    sizeof(*shadow_signature_contents)
+  );
   memcpy(
     shells,
     snapshot->shells,
@@ -1206,9 +1221,21 @@ static void reserve_add_snapshot(add_graph_snapshot_t *snapshot,
     snapshot->cores,
     (size_t) snapshot->count * sizeof(*cores)
   );
+  memcpy(
+    shadow_signatures,
+    snapshot->shadow_signatures,
+    (size_t) snapshot->count * sizeof(*shadow_signatures)
+  );
+  memcpy(
+    shadow_signature_contents,
+    snapshot->shadow_signature_contents,
+    (size_t) snapshot->count * sizeof(*shadow_signature_contents)
+  );
   snapshot->shells = shells;
   snapshot->private_environments = private_environments;
   snapshot->cores = cores;
+  snapshot->shadow_signatures = shadow_signatures;
+  snapshot->shadow_signature_contents = shadow_signature_contents;
   snapshot->capacity = capacity;
 }
 
@@ -1243,6 +1270,14 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
   snapshot->cores = paradox_temporary_alloc(
     snapshot->capacity,
     sizeof(*snapshot->cores)
+  );
+  snapshot->shadow_signatures = paradox_temporary_alloc(
+    snapshot->capacity,
+    sizeof(*snapshot->shadow_signatures)
+  );
+  snapshot->shadow_signature_contents = paradox_temporary_alloc(
+    snapshot->capacity,
+    sizeof(*snapshot->shadow_signature_contents)
   );
 
   R_xlen_t frame_capacity = 8;
@@ -1300,6 +1335,34 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
       retain_add_graph_root(core, roots, roots_index);
 
       const paradox_core_kind_t kind = paradox_core_kind(core);
+      /*
+       * Select the exact refresh signature before the content snapshot below
+       * allocates. A callback that runs during that allocation then either
+       * swaps entries -- which the captured entry list records -- or replaces
+       * the carrier itself, which the terminal carrier comparison rejects.
+       * Selecting it after the refresh above is required: a refreshed SHADOW
+       * installs a new capsule with a new signature, and the receipt must own
+       * the generation this walk actually descended.
+       */
+      SEXP shadow_signature = R_NilValue;
+      SEXP shadow_signature_content = R_NilValue;
+      if (kind == PARADOX_CORE_SHADOW) {
+        shadow_signature = PROTECT(paradox_shadow_metadata_signature(core));
+        if (shadow_signature == R_UnboundValue) {
+          UNPROTECT(3);
+          Rf_error("Cannot add corrupt SHADOW refresh signature");
+        }
+        retain_add_graph_root(shadow_signature, roots, roots_index);
+        shadow_signature_content = PROTECT(
+          paradox_shadow_signature_content_snapshot(shadow_signature)
+        );
+        if (shadow_signature_content == R_NilValue) {
+          UNPROTECT(4);
+          Rf_error("Cannot add corrupt SHADOW refresh signature");
+        }
+        retain_add_graph_root(shadow_signature_content, roots, roots_index);
+        UNPROTECT(2);
+      }
       SEXP state = paradox_core_payload(core);
       SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
       if (kind == PARADOX_CORE_BASE) {
@@ -1337,6 +1400,9 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
       snapshot->shells[snapshot->count] = frame->self;
       snapshot->private_environments[snapshot->count] = private_environment;
       snapshot->cores[snapshot->count] = core;
+      snapshot->shadow_signatures[snapshot->count] = shadow_signature;
+      snapshot->shadow_signature_contents[snapshot->count] =
+        shadow_signature_content;
       ++snapshot->count;
       UNPROTECT(2);
     }
@@ -1392,11 +1458,22 @@ static int add_graph_snapshot_is_current(
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < snapshot->count; ++index) {
     paradox_account_work(work_since_interrupt);
+    const int is_shadow =
+      paradox_core_kind(snapshot->cores[index]) == PARADOX_CORE_SHADOW;
     if (paradox_domain_required_private_environment(
           snapshot->shells[index]
         ) != snapshot->private_environments[index] ||
         paradox_core_from_private(snapshot->private_environments[index]) !=
-        snapshot->cores[index]) {
+        snapshot->cores[index] ||
+        is_shadow != (snapshot->shadow_signatures[index] != R_NilValue) ||
+        is_shadow != (
+          snapshot->shadow_signature_contents[index] != R_NilValue
+        ) ||
+        (is_shadow && !paradox_shadow_signature_receipt_is_current(
+          snapshot->cores[index],
+          snapshot->shadow_signatures[index],
+          snapshot->shadow_signature_contents[index]
+        ))) {
       return FALSE;
     }
   }
@@ -1463,8 +1540,20 @@ static SEXP append_collection_table(SEXP left, R_xlen_t left_rows,
   return result;
 }
 
-SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
-    SEXP child, SEXP name, SEXP tag_sets_sexp, SEXP tag_params_sexp) {
+/* Evaluate one test-only reentry hook at an exact snapshot boundary. The
+ * production entry point supplies `R_NilValue`, so the accepted path pays one
+ * pointer comparison inside a transaction that already allocates. */
+static void run_add_test_hook(SEXP hook) {
+  if (hook == R_NilValue) return;
+  SEXP call = PROTECT(Rf_lang1(hook));
+  SEXP ignored = PROTECT(Rf_eval(call, R_BaseEnv));
+  (void) ignored;
+  UNPROTECT(2);
+}
+
+static SEXP param_set_collection_add_impl(SEXP private_environment, SEXP self,
+    SEXP child, SEXP name, SEXP tag_sets_sexp, SEXP tag_params_sexp,
+    SEXP graph_hook, SEXP topology_hook) {
   PROTECT(private_environment);
   PROTECT(self);
   PROTECT(child);
@@ -1492,7 +1581,10 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
     &current_graph_roots_index
   );
   paradox_collection_graph_t current_graph;
-  paradox_collection_graph_build(
+  /* Both flattened graphs are retained across the complete append, so both
+   * take the receipted admission: a SHADOW leaf's exact metadata carrier is
+   * the one part of its selected generation that can still move afterwards. */
+  paradox_collection_graph_build_receipted(
     private_environment,
     self,
     &current_graph,
@@ -1572,7 +1664,7 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
     Rf_error("Cannot add unsupported or corrupt ParamSet child state");
   }
   if (paradox_core_kind(child_core) == PARADOX_CORE_COLLECTION) {
-    paradox_collection_graph_build(
+    paradox_collection_graph_build_receipted(
       child_private,
       child,
       &child_graph,
@@ -1591,6 +1683,7 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
     );
   }
   UNPROTECT(2);
+  run_add_test_hook(graph_hook);
 
   PROTECT_INDEX current_topology_roots_index;
   SEXP current_topology_roots;
@@ -1622,6 +1715,7 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
     child_topology_roots_index,
     &work_since_interrupt
   );
+  run_add_test_hook(topology_hook);
 
   SEXP old_params = VECTOR_ELT(old_state, PARADOX_CORE_PARAMS);
   SEXP old_tags = VECTOR_ELT(old_state, PARADOX_CORE_TAGS);
@@ -1789,14 +1883,24 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
     fields
   ));
 
+  /* The two scans are complementary, not redundant: the local one re-selects
+   * every live shell/private/capsule binding, while the shared one proves that
+   * each retained generation -- including a SHADOW leaf's exact metadata
+   * carrier and entries -- is still the one this append was derived from. */
   if (paradox_core_from_private(private_environment) != old_core ||
       !collection_graph_snapshot_is_current(
         &current_graph,
         &work_since_interrupt
-      ) || (child_graph_built && !collection_graph_snapshot_is_current(
+      ) || !paradox_collection_graph_snapshot_is_intact(
+        &current_graph,
+        &work_since_interrupt
+      ) || (child_graph_built && (!collection_graph_snapshot_is_current(
         &child_graph,
         &work_since_interrupt
-      )) || !add_graph_snapshot_is_current(
+      ) || !paradox_collection_graph_snapshot_is_intact(
+        &child_graph,
+        &work_since_interrupt
+      ))) || !add_graph_snapshot_is_current(
         &current_topology,
         &work_since_interrupt
       ) || !add_graph_snapshot_is_current(
@@ -1813,6 +1917,39 @@ SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
   Rf_defineVar(Rf_install(".core"), replacement, private_environment);
   UNPROTECT(28);
   return self;
+}
+
+SEXP paradox_param_set_collection_add(SEXP private_environment, SEXP self,
+    SEXP child, SEXP name, SEXP tag_sets_sexp, SEXP tag_params_sexp) {
+  return param_set_collection_add_impl(
+    private_environment,
+    self,
+    child,
+    name,
+    tag_sets_sexp,
+    tag_params_sexp,
+    R_NilValue,
+    R_NilValue
+  );
+}
+
+SEXP paradox_test_param_set_collection_add_reentry(SEXP private_environment,
+    SEXP self, SEXP child, SEXP name, SEXP tag_sets_sexp,
+    SEXP tag_params_sexp, SEXP graph_hook, SEXP topology_hook) {
+  if ((graph_hook != R_NilValue && !Rf_isFunction(graph_hook)) ||
+      (topology_hook != R_NilValue && !Rf_isFunction(topology_hook))) {
+    Rf_error("Collection add reentry test hook must be a function or NULL");
+  }
+  return param_set_collection_add_impl(
+    private_environment,
+    self,
+    child,
+    name,
+    tag_sets_sexp,
+    tag_params_sexp,
+    graph_hook,
+    topology_hook
+  );
 }
 
 SEXP paradox_collection_reflatten(SEXP private_environment, SEXP core,

@@ -185,7 +185,11 @@ static const R_CallMethodDef call_methods[] = {
   {"test_gc_column_mutator",
     (DL_FUNC) &paradox_test_gc_column_mutator, 3},
   {"test_tune_token_gc_mutation_snapshot",
-    (DL_FUNC) &paradox_test_tune_token_gc_mutation_snapshot, 3},
+    (DL_FUNC) &paradox_test_tune_token_gc_mutation_snapshot, 4},
+  {"test_gc_attribute_mutator",
+    (DL_FUNC) &paradox_test_gc_attribute_mutator, 3},
+  {"test_param_set_collection_add_reentry",
+    (DL_FUNC) &paradox_test_param_set_collection_add_reentry, 8},
 #if defined(PARADOX_TEST_CORE_GRAPH_ROOTS)
   {"test_core_graph_root_barrier_counts",
     (DL_FUNC) &paradox_test_core_graph_root_barrier_counts, 1},

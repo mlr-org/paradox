@@ -449,6 +449,45 @@ static void mutate_column_at_gc(SEXP pointer) {
   R_ClearExternalPtr(pointer);
 }
 
+static void mutate_attribute_at_gc(SEXP pointer) {
+  if (R_ExternalPtrAddr(pointer) == NULL) {
+    return;
+  }
+  SEXP state = R_ExternalPtrProtected(pointer);
+  if (TYPEOF(state) == VECSXP && XLENGTH(state) == 3) {
+    SEXP target = VECTOR_ELT(state, 0);
+    SEXP name = VECTOR_ELT(state, 1);
+    SEXP value = VECTOR_ELT(state, 2);
+    if (TYPEOF(name) == STRSXP && XLENGTH(name) == 1 &&
+        STRING_ELT(name, 0) != NA_STRING) {
+      Rf_setAttrib(target, Rf_install(CHAR(STRING_ELT(name, 0))), value);
+    }
+  }
+  R_ClearExternalPtr(pointer);
+}
+
+/* The by-reference attribute setter of the supported mutation model, armed as
+ * a finalizer: it rewrites one attribute of an object the caller still holds,
+ * without replacing the object itself. */
+SEXP paradox_test_gc_attribute_mutator(SEXP target, SEXP name, SEXP value) {
+  if (TYPEOF(name) != STRSXP || ALTREP(name) || XLENGTH(name) != 1 ||
+      STRING_ELT(name, 0) == NA_STRING) {
+    Rf_error("Invalid GC attribute-mutator test fixture arguments");
+  }
+  SEXP state = PROTECT(Rf_allocVector(VECSXP, 3));
+  SET_VECTOR_ELT(state, 0, target);
+  SET_VECTOR_ELT(state, 1, name);
+  SET_VECTOR_ELT(state, 2, value);
+  SEXP pointer = PROTECT(R_MakeExternalPtr(
+    (void *) target,
+    R_NilValue,
+    state
+  ));
+  R_RegisterCFinalizerEx(pointer, mutate_attribute_at_gc, FALSE);
+  UNPROTECT(2);
+  return pointer;
+}
+
 SEXP paradox_test_gc_column_mutator(SEXP table, SEXP column,
     SEXP replacement) {
   if (TYPEOF(table) != VECSXP || ALTREP(table) ||

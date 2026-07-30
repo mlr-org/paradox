@@ -96,6 +96,16 @@ attribute_hidden SEXP paradox_param_set_collection_add(
   SEXP tag_sets,
   SEXP tag_params
 );
+attribute_hidden SEXP paradox_test_param_set_collection_add_reentry(
+  SEXP private_environment,
+  SEXP self,
+  SEXP child,
+  SEXP name,
+  SEXP tag_sets,
+  SEXP tag_params,
+  SEXP graph_hook,
+  SEXP topology_hook
+);
 attribute_hidden SEXP paradox_param_set_collection_detach_plan(
   SEXP private_environment,
   SEXP self,
@@ -531,7 +541,13 @@ attribute_hidden SEXP paradox_test_gc_column_mutator(
 attribute_hidden SEXP paradox_test_tune_token_gc_mutation_snapshot(
   SEXP token,
   SEXP column,
-  SEXP replacement
+  SEXP replacement,
+  SEXP phase
+);
+attribute_hidden SEXP paradox_test_gc_attribute_mutator(
+  SEXP target,
+  SEXP name,
+  SEXP value
 );
 attribute_hidden void paradox_test_altrep_initialize(DllInfo *dll);
 

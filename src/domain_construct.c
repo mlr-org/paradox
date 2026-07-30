@@ -101,6 +101,17 @@ static int checkmate_list(SEXP value) {
     !Rf_isS4(value) && !Rf_isObject(value);
 }
 
+/*
+ * Duplicate detection over a canonical string vector. `Rf_any_duplicated()`
+ * builds a hash table, which is real per-row cost for the vectors admitted
+ * here -- tags and levels are usually empty or a single element. Answering
+ * those two lengths directly is exactly the same predicate with no allocation.
+ */
+static int strings_have_duplicates(SEXP values) {
+  if (XLENGTH(values) < 2) return FALSE;
+  return Rf_any_duplicated(values, FALSE) != 0;
+}
+
 static int unique_nonmissing_strings(SEXP values, int require_names) {
   if (TYPEOF(values) != STRSXP || ALTREP(values) || Rf_isS4(values)) {
     return FALSE;
@@ -121,7 +132,7 @@ static int unique_nonmissing_strings(SEXP values, int require_names) {
     }
   }
   if (valid) {
-    valid = Rf_any_duplicated(values, FALSE) == 0;
+    valid = !strings_have_duplicates(values);
   }
   UNPROTECT(1);
   return valid;
@@ -824,30 +835,27 @@ int paradox_prepare_builtin_special_values(SEXP cls, SEXP storage,
   return TRUE;
 }
 
-int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
+/*
+ * The schema half of canonical row admission: identity, closed kind, grouping,
+ * tags, cargo, transformation, special values, bounds, and levels. It is the
+ * complete rule set for the fields an operation on an existing Domain
+ * interprets, and `paradox_admit_builtin_domain_row()` below is its only
+ * extension -- the default/requirement/initialization rules a constructor
+ * additionally owns. Splitting the owner here keeps one implementation of
+ * every rule; it does not create a second admission mode.
+ */
+int paradox_admit_builtin_domain_schema_row(SEXP id, SEXP cls, SEXP grouping,
     SEXP cargo, SEXP lower, SEXP upper, SEXP tolerance, SEXP levels,
-    SEXP special_values, SEXP default_value, SEXP storage, SEXP tags,
-    SEXP trafo, SEXP requirements, SEXP init_given, SEXP init_value,
+    SEXP special_values, SEXP storage, SEXP tags, SEXP trafo,
     const paradox_special_values_receipt_t *special_receipt,
-    paradox_builtin_domain_kind_t *kind, paradox_domain_field_t *failure,
-    paradox_builtin_value_result_t *value_failure,
-    R_xlen_t *work_since_interrupt) {
+    paradox_builtin_domain_kind_t *kind, double *admitted_bounds,
+    paradox_domain_field_t *failure, R_xlen_t *work_since_interrupt) {
 #define REJECT_DOMAIN_FIELD(field_) do { \
   *failure = (field_); \
   return FALSE; \
 } while (0)
   *kind = PARADOX_BUILTIN_DOMAIN_UNKNOWN;
   *failure = PARADOX_DOMAIN_FIELD_NONE;
-  if (value_failure != NULL) {
-    const paradox_builtin_value_result_t valid = {
-      PARADOX_BUILTIN_VALUE_OK,
-      NA_REAL,
-      NA_REAL,
-      NA_REAL,
-      FALSE
-    };
-    *value_failure = valid;
-  }
   if (id != R_NilValue &&
       (!scalar_string(id) || CHAR(STRING_ELT(id, 0))[0] == '\0')) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_ID);
@@ -875,7 +883,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS);
     }
   }
-  if (Rf_any_duplicated(tags, FALSE) != 0) {
+  if (strings_have_duplicates(tags)) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS_DUPLICATE);
   }
   {
@@ -929,7 +937,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     if (private_kind == DOMAIN_KIND_FCT && TYPEOF(levels) == STRSXP &&
         !ALTREP(levels) && !Rf_isS4(levels) && !Rf_isObject(levels) &&
         paradox_api_has_no_attributes(levels) && XLENGTH(levels) != 0 &&
-        Rf_any_duplicated(levels, FALSE) != 0) {
+        strings_have_duplicates(levels)) {
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_LEVELS_DUPLICATE);
     }
     if (!levels_are_canonical(private_kind, levels) || (levels != R_NilValue &&
@@ -938,6 +946,66 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_LEVELS);
     }
   }
+  /* Publish the values this admission actually accepted. Re-reading the
+   * caller's scalars afterwards would reopen the window the tags and levels
+   * hash tables above leave for a pending finalizer. */
+  if (admitted_bounds != NULL) {
+    admitted_bounds[0] = admitted_lower;
+    admitted_bounds[1] = admitted_upper;
+    admitted_bounds[2] = admitted_tolerance;
+  }
+  return TRUE;
+#undef REJECT_DOMAIN_FIELD
+}
+
+int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
+    SEXP cargo, SEXP lower, SEXP upper, SEXP tolerance, SEXP levels,
+    SEXP special_values, SEXP default_value, SEXP storage, SEXP tags,
+    SEXP trafo, SEXP requirements, SEXP init_given, SEXP init_value,
+    const paradox_special_values_receipt_t *special_receipt,
+    paradox_builtin_domain_kind_t *kind, paradox_domain_field_t *failure,
+    paradox_builtin_value_result_t *value_failure,
+    R_xlen_t *work_since_interrupt) {
+#define REJECT_DOMAIN_FIELD(field_) do { \
+  *failure = (field_); \
+  return FALSE; \
+} while (0)
+  if (value_failure != NULL) {
+    const paradox_builtin_value_result_t valid = {
+      PARADOX_BUILTIN_VALUE_OK,
+      NA_REAL,
+      NA_REAL,
+      NA_REAL,
+      FALSE
+    };
+    *value_failure = valid;
+  }
+  double admitted_bounds[3] = {NA_REAL, NA_REAL, NA_REAL};
+  if (!paradox_admit_builtin_domain_schema_row(
+      id,
+      cls,
+      grouping,
+      cargo,
+      lower,
+      upper,
+      tolerance,
+      levels,
+      special_values,
+      storage,
+      tags,
+      trafo,
+      special_receipt,
+      kind,
+      admitted_bounds,
+      failure,
+      work_since_interrupt
+    )) {
+    return FALSE;
+  }
+  const domain_kind_t private_kind = domain_kind(cls, storage);
+  const double admitted_lower = admitted_bounds[0];
+  const double admitted_upper = admitted_bounds[1];
+  const double admitted_tolerance = admitted_bounds[2];
 
   if (default_value == R_MissingArg || default_value == R_UnboundValue ||
       Rf_inherits(default_value, "TuneToken")) {

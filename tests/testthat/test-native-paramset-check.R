@@ -42,7 +42,7 @@ test_that("the unified check operations are registered and forced", {
   routines = list(
     param_set_check_builtin = 7L,
     tune_token_snapshot_list = 3L,
-    test_tune_token_gc_mutation_snapshot = 3L,
+    test_tune_token_gc_mutation_snapshot = 4L,
     param_set_check_dependencies_builtin = 3L,
     param_set_test_constraint_builtin = 4L,
     param_set_test_constraint_dt_builtin = 4L,

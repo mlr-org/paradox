@@ -1280,6 +1280,15 @@ main <- function() {
         )
       )
     },
+    direct_upgrade_class_snapshot = function() {
+      check(
+        identical(
+          .Call(symbol("upgrade_class_snapshot"), structure(list(), class = c("a", "b"))),
+          c("a", "b")
+        ) &&
+          is.null(.Call(symbol("upgrade_class_snapshot"), 1L)),
+        "ordinary class snapshot differs")
+    },
     direct_upgrade_structural_list_exact = function() {
       source <- list(value = 1L)
       observations <- 0L
@@ -1885,11 +1894,45 @@ main <- function() {
         symbol("test_tune_token_gc_mutation_snapshot"),
         token,
         0L,
-        0.25
+        0.25,
+        "content"
       )
+      # The fixture replaces the live token's content cell at the exact
+      # snapshot boundary. The retained cells were already selected, so the
+      # snapshot keeps the coherent older generation while the mutation wins
+      # on the source.
       observed <- result$content$lower
-      check(inherits(result, "RangeTuneToken") && identical(observed, 0.25),
+      check(inherits(result, "RangeTuneToken") && identical(observed, 0) &&
+        identical(token$content$lower, 0.25),
         "TuneToken GC-mutation snapshot fixture differs")
+    },
+    direct_test_gc_attribute_mutator = function() {
+      target <- list(x = 1L)
+      pointer <- .Call(symbol("test_gc_attribute_mutator"), target, "class",
+        "later")
+      check(typeof(pointer) == "externalptr",
+        "GC attribute mutator did not return an external pointer")
+      rm(pointer)
+      gc(full = TRUE)
+      check(identical(class(target), "later"),
+        "GC attribute mutator did not rewrite the live attribute")
+    },
+    direct_test_param_set_collection_add_reentry = function() {
+      collection <- ParamSetCollection$new(list(existing = ps(x = p_int())))
+      result <- .Call(
+        symbol("test_param_set_collection_add_reentry"),
+        collection$.__enclos_env__$private,
+        collection,
+        ps(y = p_int()),
+        "added",
+        FALSE,
+        FALSE,
+        NULL,
+        NULL
+      )
+      check(identical(result, collection) &&
+        identical(collection$ids(), c("existing.x", "added.y")),
+        "collection add reentry fixture differs")
     }
   )
 

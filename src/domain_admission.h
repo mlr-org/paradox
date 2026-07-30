@@ -62,6 +62,38 @@ attribute_hidden int paradox_prepare_builtin_special_values(
   R_xlen_t *work_since_interrupt
 );
 
+/* Canonical semantic admission of the schema half of one built-in Domain row:
+ * identity, closed kind, grouping, tags, cargo, transformation, special
+ * values, bounds, and levels. This is the complete rule set for the fields an
+ * operation on an existing Domain interprets. A constructor additionally owns
+ * the default/requirement/initialization rules and therefore calls
+ * `paradox_admit_builtin_domain_row()`, which is this function plus that
+ * remainder -- never a second implementation of these rules. `id` may be
+ * `R_NilValue` only while the native constructor is building the row which
+ * Domain() names later. */
+attribute_hidden int paradox_admit_builtin_domain_schema_row(
+  SEXP id,
+  SEXP cls,
+  SEXP grouping,
+  SEXP cargo,
+  SEXP lower,
+  SEXP upper,
+  SEXP tolerance,
+  SEXP levels,
+  SEXP special_values,
+  SEXP storage,
+  SEXP tags,
+  SEXP trafo,
+  const paradox_special_values_receipt_t *special_receipt,
+  paradox_builtin_domain_kind_t *kind,
+  /* Optional three-element output: the exact numeric bounds and tolerance
+   * this admission accepted, so a caller never rereads the caller-owned
+   * scalars after the hash tables above could have run a finalizer. */
+  double *admitted_bounds,
+  paradox_domain_field_t *failure,
+  R_xlen_t *work_since_interrupt
+);
+
 /* Sole canonical semantic admission for one built-in Domain row. Opaque
  * default/init/special-value leaves retain identity; only their Paradox-owned
  * containers and marker state are interpreted. `special_receipt` must have
@@ -121,6 +153,53 @@ attribute_hidden SEXP paradox_snapshot_domain_nested(
 attribute_hidden SEXP paradox_snapshot_builtin_domain(
   SEXP domain,
   paradox_domain_field_t *failed_field
+);
+
+/* Interpreted per-row fields retained by the public Domain-operation adapter
+ * below, in the order the owner receives them. */
+enum paradox_admitted_domain_row_field {
+  PARADOX_ADMITTED_LEVELS = 0,
+  PARADOX_ADMITTED_SPECIAL_VALS,
+  PARADOX_ADMITTED_CARGO,
+  PARADOX_ADMITTED_TAGS,
+  PARADOX_ADMITTED_TRAFO,
+  PARADOX_ADMITTED_ROW_STRIDE
+};
+
+typedef struct {
+  /* Single rooted carrier for everything below; the caller protects it. */
+  SEXP bundle;
+  /* The exact selected columns, indexed by `enum paradox_domain_column`. */
+  SEXP columns;
+  /* `PARADOX_ADMITTED_ROW_STRIDE` interpreted fields per admitted row. */
+  SEXP rows;
+  /* Admitted numeric schema, already widened and validated by the owner. */
+  const double *lower;
+  const double *upper;
+  const double *tolerance;
+  R_xlen_t row_count;
+} paradox_admitted_domain_table_t;
+
+static inline SEXP paradox_admitted_domain_field(
+    const paradox_admitted_domain_table_t *table, R_xlen_t row,
+    enum paradox_admitted_domain_row_field field) {
+  return VECTOR_ELT(
+    table->rows,
+    row * PARADOX_ADMITTED_ROW_STRIDE + field
+  );
+}
+
+/* Route one public built-in Domain table through the canonical row owner.
+ * The adapter validates only the outward column container and then admits
+ * every row; it restates no semantic rule. The returned bundle must be
+ * protected by the caller, which then reads the admitted columns, rows, and
+ * numeric schema instead of reselecting them from the live table. */
+attribute_hidden SEXP paradox_admit_public_domain_table(
+  SEXP domain,
+  paradox_builtin_domain_kind_t kind,
+  R_xlen_t row_count,
+  paradox_admitted_domain_table_t *table,
+  R_xlen_t *work_since_interrupt
 );
 
 #endif
