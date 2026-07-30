@@ -140,6 +140,22 @@ test_that("tags are admitted once and stored as an owned canonical table", {
     { set$tags = list(first = NA_character_, second = character()) },
     "missing"
   )
+  # The permutation contract names its offender: an unknown name gets the
+  # standard unavailable-parameter diagnostic, a repeated one is named too.
+  expect_error(
+    { set$tags = list(first = character(), sceond = character()) },
+    "Parameter 'sceond' not available. Did you mean 'second'?",
+    fixed = TRUE
+  )
+  expect_error(
+    { set$tags = setNames(list(character(), character()), c("first", "first")) },
+    "'first' appears more than once"
+  )
+  expect_error(
+    { set$tags = setNames(list(character(), character()), c("first", NA)) },
+    "`tags` names may not be missing or bytes-encoded",
+    fixed = TRUE
+  )
 })
 
 test_that("dependency setters snapshot structure while add_dep checks feasibility", {

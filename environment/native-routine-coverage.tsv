@@ -37,7 +37,7 @@ param_set_test_constraint_builtin	4	production	production-dynamic	direct_param_s
 param_set_test_constraint_dt_builtin	4	production	production-dynamic	direct_param_set_test_constraint_dt_builtin	Direct two-phase tabular constraint-only evaluation through one immutable graph snapshot
 param_set_check_dt_builtin	6	production	production-dynamic	direct_param_set_check_dt_builtin	Direct unified tabular validation against a BASE capsule
 condition_test_builtin	2	production	production-dynamic	direct_condition_test_builtin	Direct vector comparison for one exact closed built-in Condition kind
-param_set_ids	5	production	production-dynamic	direct_param_set_ids	Direct class and tag filter call over canonical capsule tables
+param_set_ids	5	production	production-dynamic	direct_param_set_ids	Direct class and tag filter call over canonical capsule tables; the registration serves only direct probes and tests, while production reaches the same kernel through param_set_ids_lazy and the internal get_values call
 param_set_ids_lazy	3	production	production-dynamic	direct_param_set_ids_lazy	Direct namespace-parented lazy frame call
 param_set_get_values	3	production	production-dynamic	direct_param_set_get_values	Direct namespace-parented values frame call
 param_set_values_merge	4	production	production-dynamic	direct_param_set_values_merge,hazard_altrep_snapshot_reentry	Direct merge and changing ALTREP snapshot with native reentry

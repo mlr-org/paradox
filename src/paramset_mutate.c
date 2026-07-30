@@ -6,6 +6,7 @@
 
 #include "builtin_condition.h"
 #include "core_state.h"
+#include "parameter_suggestion.h"
 #include "paramset_domain_common.h"
 #include "paramset_shadow.h"
 #include "r_api_compat.h"
@@ -438,6 +439,22 @@ SEXP paradox_param_set_get_tags(SEXP private_environment, SEXP self) {
   return result;
 }
 
+static void tags_name_repeated(SEXP id) {
+  PROTECT(id);
+  /* An id whose bytes are not valid UTF-8 in this locale is escaped rather
+   * than failing the message builder with an internal error. */
+  SEXP safe_id = PROTECT(paradox_diagnostic_charsxp(id));
+  const paradox_utf8_piece_t pieces[] = {
+    paradox_utf8_ascii_piece(
+      "`tags` must name every parameter exactly once, but '"
+    ),
+    paradox_utf8_charsxp_piece(safe_id),
+    paradox_utf8_ascii_piece("' appears more than once")
+  };
+  SEXP message = PROTECT(paradox_utf8_message(pieces, 3));
+  paradox_error_from_scalar_string(message);
+}
+
 SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
     SEXP tags) {
   R_xlen_t work_since_interrupt = 0;
@@ -483,12 +500,29 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
     }
     for (R_xlen_t parameter = 0; parameter < input_count; ++parameter) {
       SEXP id = STRING_ELT(input_names, parameter);
-      const R_xlen_t row = paradox_charsxp_is_ordinary(id)
-        ? paradox_domain_find_string(params.ids, id, &work_since_interrupt)
-        : R_XLEN_T_MAX;
-      if (row == R_XLEN_T_MAX || seen[row]) {
+      /* The count check above makes this a permutation requirement, so a
+       * rejected name is either no parameter ID or a repeated one.  Paradox
+       * 1's assertion enumerated the offenders; name them here as well
+       * instead of restating the contract anonymously. */
+      if (!paradox_charsxp_is_ordinary(id)) {
         UNPROTECT(4);
-        Rf_error("`tags` names must be a permutation of parameter IDs");
+        Rf_error("`tags` names may not be missing or bytes-encoded");
+      }
+      const R_xlen_t row = paradox_domain_find_string(
+        params.ids,
+        id,
+        &work_since_interrupt
+      );
+      if (row == R_XLEN_T_MAX) {
+        SEXP message = PROTECT(paradox_parameter_unavailable_diagnostic(
+          id,
+          params.ids,
+          ""
+        ));
+        paradox_error_from_scalar_string(message);
+      }
+      if (seen[row]) {
+        tags_name_repeated(id);
       }
       seen[row] = 1;
       SET_STRING_ELT(stable_names, parameter, id);

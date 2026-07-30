@@ -917,7 +917,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
     check_graph_t *graph,
     check_node_t *node, SEXP *root_plan, PROTECT_INDEX root_plan_index,
     R_xlen_t *work_since_interrupt, SEXP selected_core,
-    int refresh_shadows) {
+    int heal) {
   node->roots = append_node_roots(
     root_plan, root_plan_index, self, private_environment
   );
@@ -937,7 +937,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
   }
   SEXP classes = R_NilValue;
   paradox_core_kind_t class_kind = 0;
-  if (!refresh_shadows) {
+  if (!heal) {
     class_kind = paradox_param_set_class_kind_raw(self, &classes);
     if (class_kind == 0) {
       Rf_error("Corrupt ParamSet graph: invalid ParamSet-family R6 class");
@@ -968,7 +968,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
     Rf_error("Corrupt ParamSet shell ownership");
   }
 
-  if (!refresh_shadows) {
+  if (!heal) {
     SEXP assert_values = paradox_api_plain_binding_snapshot(
       self,
       check_assert_values_symbol
@@ -999,14 +999,14 @@ static void initialize_node(SEXP self, SEXP private_environment,
       node->kind != PARADOX_CORE_SHADOW) {
     Rf_error("Corrupt ParamSet state: unknown core node kind");
   }
-  if (!refresh_shadows && node->kind != class_kind) {
+  if (!heal && node->kind != class_kind) {
     Rf_error("Corrupt ParamSet state: capsule kind disagrees with shell class");
   }
   if (node->kind == PARADOX_CORE_SHADOW &&
       !paradox_shadow_metadata_is_exact(core)) {
     Rf_error("Corrupt ParamSetShadow native snapshot metadata");
   }
-  if (!refresh_shadows && paradox_collection_flatten_is_stale(core)) {
+  if (!heal && paradox_collection_flatten_is_stale(core)) {
     /* Migration preflight may not install anything into a current shell, so
      * it cannot re-flatten this node the way every ordinary read does. Say
      * what is actually wrong rather than reporting the mismatch downstream as
@@ -1017,7 +1017,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
     );
   }
   if (node->kind == PARADOX_CORE_SHADOW) {
-    if (refresh_shadows) {
+    if (heal) {
       /* A shadow's visible schema, effective values, dependencies, and
        * constraint are all a package-owned live view of its origin. Refresh
        * exactly once at an ordinary operation boundary, before snapshotting or
@@ -1189,13 +1189,13 @@ static void barren_registry_add(barren_registry_t *registry, SEXP shell) {
 
 static void build_graph(SEXP private_environment, SEXP self,
     check_graph_t *graph, SEXP *root_plan, PROTECT_INDEX root_plan_index,
-    int refresh_shadows, SEXP selected_root_core) {
+    int heal, SEXP selected_root_core) {
   initialize_check_binding_symbols();
   /* Heal before the first snapshot: this traversal validates every cached
    * flatten against its children, so an ancestor of a set that grew must be
    * brought up to date first. Migration preflight installs nothing and is
    * excluded, as is a caller that pinned an exact generation. */
-  if (refresh_shadows && selected_root_core == R_NilValue) {
+  if (heal && selected_root_core == R_NilValue) {
     SEXP selected = paradox_core_from_private(private_environment);
     if (selected != R_UnboundValue && !paradox_core_is_verified(selected)) {
       (void) paradox_core_refresh(self, private_environment);
@@ -1206,7 +1206,7 @@ static void build_graph(SEXP private_environment, SEXP self,
   initialize_node(
     self, private_environment, R_XLEN_T_MAX, R_XLEN_T_MAX, TRUE, graph,
     &graph->nodes[0], root_plan, root_plan_index, &work_since_interrupt,
-    selected_root_core, refresh_shadows
+    selected_root_core, heal
   );
   graph->count = 1;
   graph->path[0] = 0;
@@ -1255,7 +1255,7 @@ static void build_graph(SEXP private_environment, SEXP self,
         node->kind == PARADOX_CORE_COLLECTION ? node->semantic : FALSE,
         graph,
         &graph->nodes[child_index], root_plan, root_plan_index,
-        &work_since_interrupt, R_NilValue, refresh_shadows
+        &work_since_interrupt, R_NilValue, heal
       );
       UNPROTECT(2);
       ++graph->nodes[node_index].next_child;
@@ -2380,6 +2380,20 @@ static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
   return result;
 }
 
+static void search_space_parameter_unavailable(SEXP id, SEXP candidate_ids) {
+  PROTECT(id);
+  if (Rf_getCharCE(id) == CE_BYTES) {
+    UNPROTECT(1);
+    Rf_error("Search-space values name an unknown bytes-encoded parameter ID");
+  }
+  SEXP message = PROTECT(paradox_parameter_unavailable_diagnostic(
+    id,
+    candidate_ids,
+    ""
+  ));
+  paradox_error_from_scalar_string(message);
+}
+
 static SEXP select_tune_target_domains(SEXP all_domains, SEXP value_names,
     SEXP token_names, R_xlen_t *work_since_interrupt) {
   if (TYPEOF(all_domains) != VECSXP) {
@@ -2405,7 +2419,9 @@ static SEXP select_tune_target_domains(SEXP all_domains, SEXP value_names,
     initialize_id_map(all_names, &parameter_ids);
     /* Paradox 1 asserted `names(values)` to be a subset of `$ids()`.  Without
      * it a misspelled entry that is not a TuneToken is silently dropped and
-     * the caller receives an empty search space instead of an error. */
+     * the caller receives an empty search space instead of an error.  The
+     * assertion named the offending entry, so the replacement diagnostic
+     * names it as well. */
     for (R_xlen_t index = 0; index < value_count; ++index) {
       R_xlen_t found = R_XLEN_T_MAX;
       if (!find_id(
@@ -2414,8 +2430,10 @@ static SEXP select_tune_target_domains(SEXP all_domains, SEXP value_names,
           &found,
           work_since_interrupt
         )) {
-        UNPROTECT(3);
-        Rf_error("Search-space values contain an unknown parameter ID");
+        search_space_parameter_unavailable(
+          STRING_ELT(value_names, index),
+          all_names
+        );
       }
     }
     for (R_xlen_t output = 0; output < size; ++output) {
@@ -2426,8 +2444,10 @@ static SEXP select_tune_target_domains(SEXP all_domains, SEXP value_names,
           &found,
           work_since_interrupt
         )) {
-        UNPROTECT(3);
-        Rf_error("Search-space values contain an unknown parameter ID");
+        search_space_parameter_unavailable(
+          STRING_ELT(token_names, output),
+          all_names
+        );
       }
       SET_VECTOR_ELT(result, output, VECTOR_ELT(all_domains, found));
     }

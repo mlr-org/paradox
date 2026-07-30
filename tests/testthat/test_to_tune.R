@@ -92,7 +92,7 @@ test_that("$check() works on TuneToken", {
 
   expect_error(
     pars$search_space(list(xxx = to_tune())),
-    "unknown parameter ID"
+    "Parameter 'xxx' not available"
   )
 })
 
@@ -1348,19 +1348,20 @@ test_that("tuning the whole parameter does not fix its own current value", {
 
 test_that("search_space() rejects values naming an unknown parameter", {
   # Paradox 1 asserted names(values) to be a subset of $ids(); without that a
-  # misspelled non-token entry silently produced an empty search space.
+  # misspelled non-token entry silently produced an empty search space. Like
+  # that assertion, the diagnostic names the offending entry.
   set = ps(a = p_dbl(0, 1))
   expect_error(
     set$search_space(values = list(zzz = 1)),
-    "unknown parameter ID"
+    "Parameter 'zzz' not available"
   )
   expect_error(
     set$search_space(values = list(zzz = to_tune(0, 1))),
-    "unknown parameter ID"
+    "Parameter 'zzz' not available"
   )
   expect_error(
     set$search_space(values = list(a = to_tune(0, 1), zzz = 1)),
-    "unknown parameter ID"
+    "Parameter 'zzz' not available"
   )
   expect_equal(set$search_space(values = list(a = to_tune(0, 1)))$ids(), "a")
   expect_equal(length(set$search_space(values = list())$ids()), 0L)
@@ -1369,7 +1370,8 @@ test_that("search_space() rejects values naming an unknown parameter", {
   collection = ParamSetCollection$new(list(g = ps(a = p_dbl(0, 1))))
   expect_error(
     collection$search_space(values = list(a = 1)),
-    "unknown parameter ID"
+    "Parameter 'a' not available. Did you mean 'g.a'?",
+    fixed = TRUE
   )
   expect_equal(
     collection$search_space(values = list(g.a = to_tune(0, 1)))$ids(),
