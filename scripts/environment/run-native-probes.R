@@ -210,6 +210,33 @@ main <- function() {
         1L
       ), "BASE capsule kind differs")
     },
+    direct_param_set_deep_clone_receipt = function() {
+      set <- ps(x = p_int())
+      private <- private_of(set)
+      core <- private$.core
+      result <- .Call(
+        symbol("param_set_deep_clone_receipt"),
+        list(set),
+        list(private),
+        list(core),
+        list(set$assert_values),
+        list(NULL)
+      )
+      check(is.null(result), "BASE deep-clone generation receipt differs")
+    },
+    direct_param_set_deep_clone_shadow_receipt = function() {
+      origin <- ps(hidden = p_lgl(), x = p_int())
+      shadow <- ParamSetShadow$new(origin, "hidden")
+      result <- .Call(
+        symbol("param_set_deep_clone_shadow_receipt"),
+        private_of(shadow)$.core
+      )
+      check(
+        is.list(result) && length(result) == 2L &&
+          is.list(result[[1L]]) && is.list(result[[2L]]),
+        "Shadow deep-clone signature receipt differs"
+      )
+    },
     direct_param_set_shadow_core_new = function() {
       origin <- ps(hidden = p_int(), x = p_dbl(0, 1))
       shadow <- ParamSetShadow$new(origin, "hidden")
@@ -234,6 +261,19 @@ main <- function() {
       state <- .Call(symbol("param_set_core_state"), result, NULL)
       check(typeof(result) == "externalptr" && identical(state$.params$id, "x"),
         "native Shadow schema construction differs")
+    },
+    direct_param_set_shadow_origin = function() {
+      origin <- ps(hidden = p_int(), x = p_dbl(0, 1))
+      shadow <- ParamSetShadow$new(origin, "hidden")
+      result <- .Call(
+        symbol("param_set_shadow_origin"),
+        private_of(shadow),
+        shadow
+      )
+      check(
+        identical(result, origin),
+        "native current Shadow origin selection differs"
+      )
     },
     direct_param_set_core_refresh = function() {
       origin <- ps(hidden = p_int(), x = p_dbl(0, 1))
@@ -282,8 +322,16 @@ main <- function() {
       )
       result <- .Call(symbol("design_dependency_plan"), data, set)
       check(identical(result, list(
-        rows = list(2L), columns = "child", values = list(NA_integer_)
+        fixed_columns = character(),
+        fixed_values = list(),
+        fixed_plain = logical(),
+        rows = list(2L), columns = "child", values = list(NA_integer_),
+        receipt = result$receipt
       )), "dependency plan differs")
+      check(is.null(.Call(
+        symbol("param_set_generation_receipt"),
+        result$receipt
+      )), "dependency plan generation receipt differs")
     },
     direct_finalize_data_table = function() {
       input <- plain_table()
@@ -316,6 +364,17 @@ main <- function() {
         identical(.Call(symbol("domain_uty_check_result"), FALSE), FALSE),
         "utility-check result admission differs")
     },
+    direct_domain_uty_validate_custom_check = function() {
+      callback <- function(x) identical(x, 1)
+      result <- .Call(
+        symbol("domain_uty_validate_custom_check"),
+        callback
+      )
+      check(
+        identical(result, callback),
+        "utility callback validation changed callback identity"
+      )
+    },
     direct_domain_simple_repr_id = function() {
       check(identical(.Call(symbol("domain_simple_repr_id"), quote(p_dbl())),
           "p_dbl()") &&
@@ -330,7 +389,11 @@ main <- function() {
       check(identical(.Call(symbol("domain_sanitize_builtin"), p_dbl(0, 1, tolerance = .1), list(-.05, 1.05)), list(0, 1)), "domain sanitize differs")
     },
     direct_param_set_construct = function() {
-      result <- .Call(symbol("param_set_construct"), list(x = p_int(0L, 2L), y = p_lgl()))
+      result <- .Call(
+        symbol("param_set_construct"),
+        list(x = p_int(0L, 2L), y = p_lgl()),
+        FALSE
+      )
       check(identical(result$params$id, c("x", "y")), "ParamSet construction differs")
     },
     direct_param_set_collection_construct = function() {
@@ -432,7 +495,7 @@ main <- function() {
       child <- ps(x = p_int(), y = p_int())
       token <- .Call(
         symbol("param_set_collection_owner_subset_state"),
-        function(x, param_set) x, child, "x"
+        function(x, param_set) x, private_of(child)$.core, "x"
       )
       owner <- ParamSet$new(token)
       check(identical(owner$ids(), "x") &&
@@ -466,12 +529,65 @@ main <- function() {
       origin$values <- list(hidden = 1L, visible = 0.5)
       result <- .Call(
         symbol("param_set_validate_current_roots"),
-        list(first, shadow)
+        list(first, shadow),
+        NULL
       )
       check(
         isTRUE(result) &&
           identical(data.table::address(private$.core), before),
         "joint current-root validation mutated a stale Shadow"
+      )
+    },
+    direct_param_set_internal_tuning_snapshot = function() {
+      set <- ps(x = p_int(init = 1L))
+      result <- .Call(
+        symbol("param_set_internal_tuning_snapshot"),
+        private_of(set),
+        set,
+        "x",
+        TRUE
+      )
+      check(
+        identical(result$id, "x") &&
+          identical(result$original_id, "x") &&
+          identical(result$route_index, 1L) &&
+          identical(result$owner_ps_index, 1L) &&
+          identical(result$owners, list(set)) &&
+          identical(result$root_values, list(x = 1L)) &&
+          is.list(result$receipt) && length(result$receipt) == 1L,
+        "internal-tuning graph snapshot differs"
+      )
+    },
+    direct_param_set_internal_tuning_receipt = function() {
+      set <- ps(x = p_int(init = 1L))
+      plan <- .Call(
+        symbol("param_set_internal_tuning_snapshot"),
+        private_of(set),
+        set,
+        "x",
+        FALSE
+      )
+      check(
+        is.null(.Call(
+          symbol("param_set_internal_tuning_receipt"),
+          plan$receipt
+        )),
+        "internal-tuning generation receipt differs"
+      )
+    },
+    direct_param_set_generation_receipt = function() {
+      set <- ps(x = p_int(0L, 1L))
+      plan <- .Call(
+        symbol("design_dependency_plan"),
+        data.table::data.table(x = 0L),
+        set
+      )
+      check(
+        is.null(.Call(
+          symbol("param_set_generation_receipt"),
+          plan$receipt
+        )),
+        "deferred-operation generation receipt differs"
       )
     },
     direct_param_set_check_builtin = function() {
@@ -502,6 +618,22 @@ main <- function() {
         is.null(names(result$tokens$x$content$upper)) &&
         is.null(names(result$tokens$x$content$logscale)),
         "closed TuneToken structural snapshot differs")
+    },
+    direct_tune_token_snapshot_current = function() {
+      set <- ps(x = p_dbl(0, 1), fixed = p_lgl())
+      set$values <- list(x = to_tune(), fixed = TRUE)
+      result <- .Call(
+        symbol("tune_token_snapshot_current"),
+        private_of(set),
+        set
+      )
+      check(
+        identical(names(result), c("tokens", "targets")) &&
+          identical(names(result$tokens), "x") &&
+          identical(names(result$targets), "x") &&
+          identical(result$targets$x$id, "x"),
+        "current-value TuneToken/Domain snapshot differs"
+      )
     },
     direct_param_set_check_dependencies_builtin = function() {
       set <- ps(on = p_lgl(), x = p_int(depends = on == TRUE))
@@ -573,6 +705,37 @@ main <- function() {
       result <- .Call(symbol("param_set_values_merge"), list(a = 1L), list(b = 2L), NULL, FALSE)
       check(identical(result, list(a = 1L, b = 2L)), "values merge differs")
     },
+    direct_param_set_set_values = function() {
+      set <- ps(a = p_int(), b = p_int())
+      set$values <- list(a = 1L)
+      result <- .Call(
+        symbol("param_set_set_values"),
+        private_of(set),
+        set,
+        list(b = 2),
+        list(),
+        TRUE
+      )
+      check(
+        identical(result, list(a = 1L, b = 2L)) &&
+          identical(set$values, list(a = 1L, b = 2L)),
+        "transactional set_values merge differs"
+      )
+    },
+    direct_param_set_assign_values = function() {
+      set <- ps(x = p_int(0L, 2L))
+      result <- .Call(
+        symbol("param_set_assign_values"),
+        private_of(set),
+        set,
+        list(x = 1)
+      )
+      check(
+        identical(result, list(x = 1L)) &&
+          identical(set$values, list(x = 1L)),
+        "policy-selected assignment differs"
+      )
+    },
     direct_param_set_store_values = function() {
       set <- ps(a = p_int(), b = p_int())
       private <- private_of(set)
@@ -583,6 +746,50 @@ main <- function() {
       set <- ps(x = p_int(0L, 2L))
       result <- .Call(symbol("param_set_assign_values_checked"), private_of(set), set, list(x = 1))
       check(identical(result, list(x = 1L)), "checked assignment differs")
+    },
+    direct_param_set_internal_tuning_store = function() {
+      set <- ps(x = p_int(0L, 2L))
+      plan <- .Call(
+        symbol("param_set_internal_tuning_snapshot"),
+        private_of(set),
+        set,
+        "x",
+        TRUE
+      )
+      result <- .Call(
+        symbol("param_set_internal_tuning_store"),
+        private_of(set),
+        set,
+        list(x = 2L),
+        TRUE,
+        list(plan$receipt)
+      )
+      check(
+        identical(result, list(x = 2L)) &&
+          identical(set$values, list(x = 2L)),
+        "internal-tuning value transaction differs"
+      )
+    },
+    direct_param_set_internal_tuning_store_owners = function() {
+      set <- ps(x = p_int(0L, 2L))
+      plan <- .Call(
+        symbol("param_set_internal_tuning_snapshot"),
+        private_of(set),
+        set,
+        "x",
+        FALSE
+      )
+      result <- .Call(
+        symbol("param_set_internal_tuning_store_owners"),
+        plan$owners,
+        list(list(x = 1L)),
+        TRUE,
+        list(plan$receipt)
+      )
+      check(
+        isTRUE(result) && identical(set$values, list(x = 1L)),
+        "internal-tuning ultimate-owner transaction differs"
+      )
     },
     direct_param_set_set_tags = function() {
       set <- ps(x = p_int(), y = p_lgl())
@@ -653,6 +860,23 @@ main <- function() {
           base = TRUE, collection = TRUE, shadow = TRUE
         )),
         "scalar dependency presence differs"
+      )
+    },
+    direct_param_set_assertion_state = function() {
+      child <- ps(parent = p_lgl(), child = p_int(
+        depends = parent == TRUE
+      ))
+      collection <- ParamSetCollection$new(list(owner = child))
+      result <- .Call(
+        symbol("param_set_assertion_state"),
+        private_of(collection),
+        collection
+      )
+      check(
+        identical(result$params$id, c("owner.parent", "owner.child")) &&
+          identical(result$params$cls, c("ParamLgl", "ParamInt")) &&
+          identical(result$has_deps, TRUE),
+        "atomic assertion state differs"
       )
     },
     direct_param_set_set_dependencies = function() {
@@ -745,9 +969,7 @@ main <- function() {
       set <- ps(x = p_dbl(0, 1), y = p_int(0L, 4L))
       result <- .Call(
         symbol("sampler_unif_subspace_handoffs"),
-        set,
-        set$ids(),
-        set$extra_trafo
+        set
       )
       valid <- identical(names(result), c("x", "y")) &&
         identical(length(result), 2L) &&
@@ -763,18 +985,26 @@ main <- function() {
       set <- ps(x = p_dbl(0, 1))
       carrier <- .Call(
         symbol("sampler_unif_subspace_handoffs"),
-        set,
-        "x",
-        set$extra_trafo
+        set
       )[[1L]]
-      token <- .Call(symbol("sampler_unif_take_subspace"), carrier)
-      adopted <- .Call(symbol("param_set_adopt_subset_state"), NULL, token)
+      bundle <- .Call(symbol("sampler_unif_take_subspace"), carrier)
+      adopted <- .Call(
+        symbol("param_set_adopt_subset_state"),
+        NULL,
+        bundle$token
+      )
       reused <- tryCatch(
         .Call(symbol("sampler_unif_take_subspace"), carrier),
         error = identity
       )
       check(
-        typeof(token) == "externalptr" &&
+        identical(names(bundle), c(
+          "token", "detach", "keep_constraint", "keep_trafo"
+        )) &&
+          typeof(bundle$token) == "externalptr" &&
+          is.null(bundle$detach) &&
+          identical(bundle$keep_constraint, FALSE) &&
+          identical(bundle$keep_trafo, TRUE) &&
           identical(adopted, TRUE) &&
           inherits(reused, "error") &&
           grepl(
@@ -791,9 +1021,21 @@ main <- function() {
         symbol("generate_design_grid_builtin"),
         private_of(set),
         set,
-        c(y = 3, x = 3),
+        list(
+          resolution = NULL,
+          param_resolutions = c(y = 3L, x = 3L)
+        ),
         NULL
       )
+      check(
+        is.list(result) && length(result) == 2L &&
+          is.null(.Call(
+            symbol("param_set_generation_receipt"),
+            result[[2L]]
+          )),
+        "one-shot grid generation receipt differs"
+      )
+      result <- result[[1L]]
       check(
         identical(names(result), c("y", "x")) &&
           identical(result$y, rep(c(0, .5, 1), each = 3L)) &&
@@ -815,11 +1057,15 @@ main <- function() {
         symbol("generate_design_grid_builtin"),
         private_of(dependent),
         dependent,
-        c(gate = 2, value = 100),
+        list(
+          resolution = NULL,
+          param_resolutions = c(value = 100L)
+        ),
         NULL
       )
+      dependent_result <- dependent_result[[1L]]
       check(
-        identical(names(dependent_result), c("gate", "value")) &&
+        identical(names(dependent_result), c("value", "gate")) &&
           identical(dependent_result$gate, c(TRUE, FALSE)) &&
           identical(dependent_result$value, list("special", NA)) &&
           data.table:::selfrefok(
@@ -834,7 +1080,10 @@ main <- function() {
           symbol("generate_design_grid_builtin"),
           private_of(dense),
           dense,
-          c(y = 50000, x = 50000),
+          list(
+            resolution = NULL,
+            param_resolutions = c(y = 50000L, x = 50000L)
+          ),
           NULL
         ),
         error = identity
@@ -889,35 +1138,99 @@ main <- function() {
     direct_param_set_subset_state = function() {
       set <- ps(x = p_int(), y = p_dbl(trafo = exp))
       set$extra_trafo <- function(x, param_set) x
-      token <- .Call(
+      bundle <- .Call(
         symbol("param_set_subset_state"),
-        private_of(set), set, "y", FALSE, TRUE,
-        set$constraint, set$extra_trafo, FALSE
+        private_of(set), set, "y", FALSE, TRUE, FALSE
       )
       target <- subset_private()
-      adopted <- .Call(symbol("param_set_adopt_subset_state"), target, token)
+      adopted <- .Call(
+        symbol("param_set_adopt_subset_state"),
+        target,
+        bundle$token
+      )
       result <- .Call(symbol("param_set_core_state"), target, NULL)
       check(isTRUE(adopted) && nrow(result$.trafos) == 0L &&
         is.null(result$.extra_trafo), "stripped subset capsule transaction differs")
     },
+    direct_param_set_flatten_state = function() {
+      set <- ParamSetCollection$new(list(
+        first = ps(x = p_int()),
+        second = ps(y = p_lgl())
+      ))
+      bundle <- .Call(
+        symbol("param_set_flatten_state"),
+        private_of(set),
+        set
+      )
+      target <- subset_private()
+      adopted <- .Call(
+        symbol("param_set_adopt_subset_state"),
+        target,
+        bundle$token
+      )
+      result <- .Call(symbol("param_set_core_state"), target, NULL)
+      check(
+        isTRUE(adopted) &&
+          identical(result$.params$id, c("first.x", "second.y")),
+        "all-ID flatten capsule transaction differs"
+      )
+    },
+    direct_test_param_set_subset_reentry = function() {
+      set <- ps(x = p_int(), y = p_lgl())
+      bundle <- .Call(
+        symbol("test_param_set_subset_reentry"),
+        private_of(set),
+        set,
+        "x",
+        FALSE,
+        TRUE,
+        TRUE,
+        function() NULL
+      )
+      check(
+        is.list(bundle) && typeof(bundle$token) == "externalptr",
+        "subset reentry fixture result differs"
+      )
+    },
     direct_param_set_subspace_states = function() {
       set <- ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
       result <- .Call(symbol("param_set_subspace_states"), private_of(set),
-        set, c("x", "y"), set$extra_trafo)
+        set, c("x", "y"))
       check(identical(names(result), c("x", "y")) &&
-        all(vapply(result, function(core) {
-          typeof(core) == "externalptr"
+        all(vapply(result, function(bundle) {
+          is.list(bundle) && typeof(bundle$token) == "externalptr"
         }, logical(1L))), "bulk subspace capsule transactions differ")
+    },
+    direct_param_set_all_subspace_states = function() {
+      set <- ParamSetCollection$new(list(
+        first = ps(x = p_int(init = 1L)),
+        second = ps(y = p_lgl(init = TRUE))
+      ))
+      result <- .Call(
+        symbol("param_set_all_subspace_states"),
+        private_of(set),
+        set
+      )
+      check(
+        identical(names(result), c("first.x", "second.y")) &&
+          all(vapply(result, function(bundle) {
+            is.list(bundle) && typeof(bundle$token) == "externalptr"
+          }, logical(1L))),
+        "all-current-ID subspace capsule transactions differ"
+      )
     },
     direct_param_set_adopt_subset_state = function() {
       set <- ps(x = p_int(), y = p_lgl())
-      plan <- .Call(
+      bundle <- .Call(
         symbol("param_set_subset_state"),
-        private_of(set), set, "y", FALSE, TRUE,
-        set$constraint, set$extra_trafo, TRUE
+        private_of(set), set, "y", FALSE, TRUE, TRUE
       )
       target <- subset_private()
-      check(isTRUE(.Call(symbol("param_set_adopt_subset_state"), target, plan)),
+      check(isTRUE(.Call(
+        symbol("param_set_adopt_subset_state"),
+        target,
+        bundle$token
+      )),
         "subset adoption failed")
       adopted <- .Call(symbol("param_set_core_state"), target, NULL)
       check(identical(adopted$.params$id, "y"), "adopted subset differs")
@@ -967,6 +1280,54 @@ main <- function() {
         )
       )
     },
+    direct_upgrade_structural_list_exact = function() {
+      source <- list(value = 1L)
+      observations <- 0L
+      hostile_altrep <- stateful(
+        source,
+        source,
+        callback = function() {
+          observations <<- observations + 1L
+        }
+      )
+      .Call(symbol("test_stateful_altrep_rearm"), hostile_altrep, 0L)
+      check(
+        identical(
+          .Call(symbol("upgrade_structural_list_exact"), source),
+          TRUE
+        ) &&
+          identical(
+            .Call(
+              symbol("upgrade_structural_list_exact"),
+              structure(source, class = "legacy_condition")
+            ),
+            TRUE
+          ) &&
+          identical(
+            .Call(
+              symbol("upgrade_structural_list_exact"),
+              pairlist(value = 1L)
+            ),
+            FALSE
+          ) &&
+          identical(
+            .Call(
+              symbol("upgrade_structural_list_exact"),
+              asS4(source)
+            ),
+            FALSE
+          ) &&
+          identical(
+            .Call(
+              symbol("upgrade_structural_list_exact"),
+              hostile_altrep
+            ),
+            FALSE
+          ) &&
+          identical(observations, 0L),
+        "legacy structural-list representation admission differs"
+      )
+    },
     direct_upgrade_carrier_list_snapshot = function() {
       marker <- new.env(parent = emptyenv())
       source <- list(left = marker, right = NULL)
@@ -1010,6 +1371,148 @@ main <- function() {
           "ordinary callback-carrier snapshot or inert rejection of",
           "classed/ALTREP carrier shells differs"
         )
+      )
+    },
+    direct_upgrade_table_list_snapshot = function() {
+      marker <- new.env(parent = emptyenv())
+      representation <- new.env(parent = emptyenv())
+      source <- structure(
+        list(left = list(marker)),
+        row.names = 1L,
+        class = c("data.table", "data.frame"),
+        repr = representation
+      )
+      snapshot <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        source,
+        c("data.table", "data.frame"),
+        TRUE
+      )
+      forged <- source
+      attr(forged, "unsupported") <- TRUE
+      forged_result <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        forged,
+        c("data.table", "data.frame"),
+        TRUE
+      )
+      wrong_class_result <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        source,
+        c("data.frame"),
+        TRUE
+      )
+      wrong_rows <- data.table::copy(source)
+      data.table::setattr(
+        wrong_rows,
+        "row.names",
+        c(NA_integer_, -2L)
+      )
+      wrong_rows_result <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        wrong_rows,
+        c("data.table", "data.frame"),
+        TRUE
+      )
+      empty_rows <- structure(
+        list(left = list()),
+        class = c("data.table", "data.frame")
+      )
+      empty_rows_result <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        empty_rows,
+        c("data.table", "data.frame"),
+        FALSE
+      )
+      missing_nonempty_rows <- source
+      attr(missing_nonempty_rows, "row.names") <- NULL
+      missing_nonempty_rows_result <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        missing_nonempty_rows,
+        c("data.table", "data.frame"),
+        TRUE
+      )
+
+      check(
+        identical(names(snapshot), c("table", "repr")) &&
+          identical(names(snapshot$table), "left") &&
+          identical(snapshot$table[[1L]], source[[1L]]) &&
+          identical(snapshot$repr, representation) &&
+          is.null(forged_result) &&
+          is.null(wrong_class_result) &&
+          is.null(wrong_rows_result) &&
+          identical(empty_rows_result$table$left, list()) &&
+          is.null(missing_nonempty_rows_result),
+        paste(
+          "legacy table snapshot generation, class, rows, repr, or",
+          "unsupported attribute admission differs"
+        )
+      )
+    },
+    direct_upgrade_public_binding_receipts = function() {
+      owner <- new.env(parent = emptyenv())
+      marker <- new.env(parent = emptyenv())
+      replacement <- new.env(parent = emptyenv())
+      active <- function(value) marker
+      makeActiveBinding("active", active, owner)
+      assign("plain", marker, envir = owner)
+      lockBinding("plain", owner)
+      class(owner) <- "migration_receipt_probe"
+      lockEnvironment(owner, bindings = FALSE)
+      receipt <- unname(list(
+        owner,
+        attr(owner, "class", exact = TRUE),
+        list(as.name("active"), as.name("plain")),
+        list(active, marker),
+        c(TRUE, FALSE),
+        c(FALSE, TRUE),
+        TRUE
+      ))
+      if (getRversion() < "4.0.0") {
+        rejected <- tryCatch(
+          {
+            .Call(
+              symbol("upgrade_public_binding_receipts"),
+              list(receipt)
+            )
+            FALSE
+          },
+          error = function(error) TRUE
+        )
+        check(
+          rejected,
+          paste(
+            "R 3.6 migration public receipt did not fail closed without",
+            "active-binding function inspection"
+          )
+        )
+        return(invisible(NULL))
+      }
+      accepted <- .Call(
+        symbol("upgrade_public_binding_receipts"),
+        list(receipt)
+      )
+
+      unlockBinding("plain", owner)
+      lock_rejected <- tryCatch(
+        {
+          .Call(symbol("upgrade_public_binding_receipts"), list(receipt))
+          FALSE
+        },
+        error = function(error) TRUE
+      )
+      assign("plain", replacement, envir = owner)
+      lockBinding("plain", owner)
+      value_rejected <- tryCatch(
+        {
+          .Call(symbol("upgrade_public_binding_receipts"), list(receipt))
+          FALSE
+        },
+        error = function(error) TRUE
+      )
+      check(
+        is.null(accepted) && lock_rejected && value_rejected,
+        "legacy transplant public-binding terminal receipt differs"
       )
     },
     direct_plain_binding_snapshot = function() {

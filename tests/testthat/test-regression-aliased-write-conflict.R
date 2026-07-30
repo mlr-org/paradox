@@ -16,15 +16,25 @@ test_that("conflicting values through two aliases warn", {
   expect_identical(collection$values, list(a.z = 0.9, b.z = 0.9))
 })
 
-test_that("assigning through only one alias warns instead of losing the value", {
+test_that("shared aliases follow exact depth-first last-owner order", {
   child = ps(z = p_dbl(0, 1))
   collection = ParamSetCollection$new(list(a = child, b = child))
 
-  # The plan for `b` is an empty complete replacement, so it wipes the value
-  # `a` asked for. This dropped the assignment with no diagnostic at all.
+  # `b` is the later owner. Its empty complete replacement therefore wins over
+  # a value supplied only through `a`.
   expect_warning(collection$values <- list(a.z = 0.5), "more than one path")
   expect_identical(collection$values, named_list())
   expect_identical(child$values, named_list())
+
+  # The converse must not also clear: touched/untouched sorting used to run the
+  # omitted `a` path after explicitly assigned `b`, contradicting last-owner
+  # graph order and making both asymmetric spellings end empty.
+  expect_warning(collection$values <- list(b.z = 0.75), "more than one path")
+  expect_identical(
+    collection$values,
+    list(a.z = 0.75, b.z = 0.75)
+  )
+  expect_identical(child$values, list(z = 0.75))
 })
 
 test_that("agreeing plans through two aliases do not warn", {
@@ -66,8 +76,32 @@ test_that("a shadow next to its own origin is the same conflict", {
   expect_identical(collection$ids(), c("s.z", "d.z"))
 
   expect_warning(collection$values <- list(s.z = 0.4), "more than one path")
+  expect_warning(collection$values <- list(d.z = 0.6), "more than one path")
+  expect_identical(origin$values, list(z = 0.6))
   expect_silent(collection$values <- list(s.z = 0.4, d.z = 0.4))
   expect_identical(origin$values, list(z = 0.4))
+})
+
+test_that("last-owner order remains depth-first in a nested shared DAG", {
+  shared = ps(z = p_dbl(0, 1))
+  nested = ParamSetCollection$new(list(leaf = shared))
+  collection = ParamSetCollection$new(list(early = nested, late = shared))
+
+  expect_warning(
+    collection$values <- list(early.leaf.z = 0.25),
+    "more than one path"
+  )
+  expect_identical(shared$values, named_list())
+
+  expect_warning(
+    collection$values <- list(late.z = 0.75),
+    "more than one path"
+  )
+  expect_identical(shared$values, list(z = 0.75))
+  expect_identical(
+    collection$values,
+    list(early.leaf.z = 0.75, late.z = 0.75)
+  )
 })
 
 test_that("an ordinary graph never reports a conflict", {

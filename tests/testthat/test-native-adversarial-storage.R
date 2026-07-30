@@ -183,19 +183,26 @@ test_that("native construction gates fail closed on malformed shapes", {
   construct_param_set = native_adversarial_symbol("param_set_construct")
   construct_domain = native_adversarial_symbol("domain_construct")
 
-  expect_error(.Call(construct_param_set, 1L), "ordinary named list")
   expect_error(
-    .Call(construct_param_set, list(p_dbl(0, 1))),
+    .Call(construct_param_set, 1L, FALSE),
+    "ordinary named list"
+  )
+  expect_error(
+    .Call(construct_param_set, list(p_dbl(0, 1)), FALSE),
     "ordinary character names"
   )
   expect_error(
-    .Call(construct_param_set, setNames(list(list()), "x")),
+    .Call(
+      construct_param_set,
+      setNames(list(list()), "x"),
+      FALSE
+    ),
     "canonical built-in Domain"
   )
 
   bad_domain = native_adversarial_replace(p_dbl(0, 1), "lower", numeric())
   expect_error(
-    .Call(construct_param_set, list(x = bad_domain)),
+    .Call(construct_param_set, list(x = bad_domain), FALSE),
     "noncanonical field.*lower/upper/tolerance"
   )
 

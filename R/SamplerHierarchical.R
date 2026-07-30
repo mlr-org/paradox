@@ -24,14 +24,22 @@ SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
     #' @param samplers (`list()`)\cr
     #'   List of [`Sampler1D`] objects that gives a Sampler for each dimension in the `param_set`.
     initialize = function(param_set, samplers) {
-      assert_param_set(param_set, no_untyped = TRUE)
+      assert_r6(param_set, "ParamSet")
+      # Own the source generation before consulting arbitrary Sampler
+      # subclasses. A custom `$param` binding may allocate or run user code;
+      # validating IDs first and cloning afterward could otherwise install a
+      # later, incompatible ParamSet generation.
       assert_list(samplers, types = "Sampler1D")
-      ids1 = param_set$ids()
+      owned = param_set$clone(deep = TRUE)
+      assert_param_set(owned, no_untyped = TRUE)
+      ids1 = owned$ids()
       ids2 = map_chr(samplers, function(s) s$param$ids())
-      if (!setequal(ids1, ids2)) {
+      if (length(ids1) != length(ids2) ||
+          anyDuplicated(ids2) != 0L ||
+          !setequal(ids1, ids2)) {
         stop("IDs of params in samplers do not correspond to IDs of params in set!")
       }
-      super$initialize(param_set)
+      self$param_set = owned
       self$samplers = samplers
     }
   ),

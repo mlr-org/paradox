@@ -295,20 +295,65 @@ void paradox_api_map_stored_attributes(
 #endif
 }
 
+int paradox_api_ordinary_class_snapshot(SEXP value, SEXP *classes) {
+  if (classes == NULL) {
+    Rf_error("Internal error: missing class snapshot destination");
+  }
+  *classes = paradox_api_raw_attribute(value, R_ClassSymbol);
+  if (*classes == R_NilValue) {
+    return TRUE;
+  }
+  if (TYPEOF(*classes) != STRSXP || ALTREP(*classes) ||
+      Rf_isS4(*classes) || !paradox_api_has_no_attributes(*classes)) {
+    return FALSE;
+  }
+  const R_xlen_t size = XLENGTH(*classes);
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SEXP label = STRING_ELT(*classes, index);
+    if (label == NA_STRING || Rf_getCharCE(label) == CE_BYTES ||
+        CHAR(label)[0] == '\0') {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+int paradox_api_ordinary_class_contains(SEXP classes, const char *label) {
+  if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
+      Rf_isS4(classes) || label == NULL) {
+    return FALSE;
+  }
+  const R_xlen_t size = XLENGTH(classes);
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SEXP candidate = STRING_ELT(classes, index);
+    if (candidate != NA_STRING && Rf_getCharCE(candidate) != CE_BYTES &&
+        strcmp(CHAR(candidate), label) == 0) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 static int valid_binding_request(SEXP environment, SEXP symbol) {
-  return TYPEOF(environment) == ENVSXP && !Rf_isS4(environment) &&
-    TYPEOF(symbol) == SYMSXP &&
-    /*
-     * R_ObjectTable environments route binding APIs through callbacks. More
-     * importantly, old R_HasFancyBindings() assumes the ordinary HASHTAB
-     * layout and is not valid for their external-pointer-backed table.
-     * R itself recognizes this exact class through the same public
-     * inheritance predicate. Reject it before every binding operation. The
-     * object-bit guard leaves ordinary unclassed private environments on a
-     * single flag-test fast path.
-     */
-    (!Rf_isObject(environment) ||
-      !Rf_inherits(environment, "UserDefinedDatabase"));
+  if (TYPEOF(environment) != ENVSXP || Rf_isS4(environment) ||
+      TYPEOF(symbol) != SYMSXP) {
+    return FALSE;
+  }
+  if (!Rf_isObject(environment)) {
+    return TRUE;
+  }
+
+  /*
+   * R_ObjectTable environments route binding APIs through callbacks. More
+   * importantly, old R_HasFancyBindings() assumes the ordinary HASHTAB layout
+   * and is not valid for their external-pointer-backed table. Never use
+   * Rf_inherits() here: an arbitrary environment may carry callback-capable
+   * ALTREP class metadata. Exact inert class inspection both recognizes the
+   * object-table boundary and fails closed on malformed object metadata.
+   */
+  SEXP classes;
+  return paradox_api_ordinary_class_snapshot(environment, &classes) &&
+    !paradox_api_ordinary_class_contains(classes, "UserDefinedDatabase");
 }
 
 #if R_VERSION < R_Version(4, 2, 0)

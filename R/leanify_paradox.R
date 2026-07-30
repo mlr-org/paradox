@@ -37,10 +37,36 @@
 
   arguments = lapply(names(formals(method)), as.name)
   names(arguments) = names(formals(method))
+  target_call = as.call(c(list(as.name(target_name)), arguments))
+  # Keep the established public default expressions for reflection/source
+  # compatibility while letting current targets distinguish omission from an
+  # explicit container. Ordinary forwarding forces a default before the
+  # target sees it. These two cold operations need omission to select current
+  # values/IDs inside one native graph transaction.
+  missing_argument = if (
+      identical(member, "subspaces") &&
+      generator$classname %in% c("ParamSet", "ParamSetShadow")
+  ) {
+    "ids"
+  } else if (
+      identical(member, "search_space") &&
+      identical(generator$classname, "ParamSet")
+  ) {
+    "values"
+  }
+  if (!is.null(missing_argument)) {
+    omitted_arguments = arguments[names(arguments) != missing_argument]
+    target_call = call(
+      "if",
+      call("missing", as.name(missing_argument)),
+      as.call(c(list(as.name(target_name)), omitted_arguments)),
+      target_call
+    )
+  }
   stub = eval(call(
     "function",
     original_formals,
-    as.call(c(list(as.name(target_name)), arguments))
+    target_call
   ))
   environment(stub) = environment(method)
   original_attributes$srcref = NULL
@@ -159,28 +185,122 @@
   )
 }
 
+.paradox_legacy_gateway_context = function(self, old_name, gateway_kind) {
+  context = .paradox_gateway_current_context(self, gateway_kind)
+  if (!isTRUE(context$ok)) {
+    if (!identical(.paradox_legacy_action(), "upgrade")) {
+      .paradox_legacy_use_error(old_name)
+    }
+    # This hook performs an identity-preserving graph migration and rewires
+    # every R6 enclosure slice, then returns one authenticated current context
+    # snapshot. The still-lazy legacy `private` and `super` promises are never
+    # evaluated.
+    context = .paradox_upgrade_legacy_first_use(self, gateway_kind)
+  }
+  context
+}
+
+.paradox_legacy_gateway_target = function(
+    old_name,
+    current_name,
+    namespace) {
+  if (is.null(current_name)) {
+    .paradox_retired_target_error(old_name)
+  }
+  get(current_name, envir = namespace, inherits = FALSE)
+}
+
+.paradox_legacy_stub_argument_missing = function(frame, argument) {
+  # Historical lean stubs always pass every formal to their unversioned
+  # namespace target, so ordinary forwarding loses whether the caller omitted
+  # a default. `missing()` can inspect the still-active stub call frame without
+  # forcing that default promise. A direct call to the package-private gateway
+  # has no such formal and therefore takes the explicit path.
+  tryCatch(
+    isTRUE(eval(call("missing", as.name(argument)), envir = frame)),
+    error = function(...) FALSE
+  )
+}
+
 .paradox_make_legacy_gateway = function(
     old_name,
     current_name,
     namespace,
-    gateway_kind) {
+    gateway_kind,
+    missing_argument = NULL) {
   force(old_name)
   force(current_name)
   force(namespace)
   force(gateway_kind)
-  function(self, private, super, ...) {
-    context = .paradox_gateway_current_context(self, gateway_kind)
-    if (!isTRUE(context$ok)) {
-      if (!identical(.paradox_legacy_action(), "upgrade")) {
-        .paradox_legacy_use_error(old_name)
-      }
-      # This hook performs an identity-preserving graph migration and rewires
-      # every R6 enclosure slice, then returns one authenticated current
-      # context snapshot. The still-lazy legacy `private` and `super` promises
-      # are never evaluated.
-      context = .paradox_upgrade_legacy_first_use(self, gateway_kind)
-    }
+  force(missing_argument)
 
+  if (identical(missing_argument, "ids")) {
+    return(function(self, private, super, ids, ...) {
+      omitted = .paradox_legacy_stub_argument_missing(parent.frame(), "ids")
+      context = .paradox_legacy_gateway_context(
+        self,
+        old_name,
+        gateway_kind
+      )
+      private = context$private
+      super = context$super
+      target = .paradox_legacy_gateway_target(
+        old_name,
+        current_name,
+        namespace
+      )
+      if (omitted) {
+        target(self = self, private = private, super = super, ...)
+      } else {
+        target(
+          self = self,
+          private = private,
+          super = super,
+          ids = ids,
+          ...
+        )
+      }
+    })
+  }
+
+  if (identical(missing_argument, "values")) {
+    return(function(self, private, super, values, ...) {
+      omitted = .paradox_legacy_stub_argument_missing(
+        parent.frame(),
+        "values"
+      )
+      context = .paradox_legacy_gateway_context(
+        self,
+        old_name,
+        gateway_kind
+      )
+      private = context$private
+      super = context$super
+      target = .paradox_legacy_gateway_target(
+        old_name,
+        current_name,
+        namespace
+      )
+      if (omitted) {
+        target(self = self, private = private, super = super, ...)
+      } else {
+        target(
+          self = self,
+          private = private,
+          super = super,
+          values = values,
+          ...
+        )
+      }
+    })
+  }
+
+  function(self, private, super, ...) {
+    context = .paradox_legacy_gateway_context(
+      self,
+      old_name,
+      gateway_kind
+    )
     # Never forward the `private` and `super` promises supplied by the old
     # currently executing stub.  An identity-preserving migration replaces the
     # shell's enclosure slices; the detached old slice is intentionally left
@@ -188,29 +308,46 @@
     # snapshot instead of rereading the shell after authentication.
     private = context$private
     super = context$super
-
-    if (is.null(current_name)) {
-      .paradox_retired_target_error(old_name)
-    }
-    target = get(current_name, envir = namespace, inherits = FALSE)
+    target = .paradox_legacy_gateway_target(
+      old_name,
+      current_name,
+      namespace
+    )
     target(self = self, private = private, super = super, ...)
   }
 }
 
-# Only serialized shells resolve the unversioned `.__Design__transpose`
-# target: current Designs are leanified to the versioned name. The Design
-# shell itself is layout-compatible with Paradox 1, but `transpose()` hands
-# `self$param_set` to a native entry directly, so without this gateway a
-# legacy ParamSet inside a serialized Design surfaced as a capsule-corruption
-# error instead of the actionable first-use flow, and
-# `paradox.legacy_object_action = "upgrade"` was never consulted. A
-# graph-healed Design keeps calling this name forever -- its serialized stubs
-# are never rewritten -- so the current-shell forward below is load-bearing,
-# exactly as in the ParamSet-family gateways. The check deliberately gates
-# every `transpose()` call, including `trafo = FALSE` whose data-only path
-# used to work on an unupgraded shell: first use of a serialized legacy
-# object triggers the flow, matching the ParamSet-family contract.
-.paradox_make_design_transpose_gateway = function(
+# Serialized Design and Sampler stubs can hand an embedded Paradox-1 ParamSet
+# to current code before any method on that ParamSet reaches a family gateway.
+# Select the ordinary public field inertly: a malformed historical wrapper must
+# not execute an active binding merely to choose the default diagnostic.
+.paradox_legacy_embedded_param_set = function(self, old_name) {
+  snapshot = .paradox_plain_binding_snapshot(self, "param_set")
+  param_set = if (isTRUE(snapshot$ok)) snapshot$value
+  if (!.paradox_gateway_current_core(param_set)) {
+    if (!identical(.paradox_legacy_action(), "upgrade")) {
+      .paradox_legacy_use_error(old_name)
+    }
+    upgrade_paradox_object_graph(self)
+    snapshot = .paradox_plain_binding_snapshot(self, "param_set")
+    param_set = if (isTRUE(snapshot$ok)) snapshot$value
+    if (!.paradox_gateway_current_core(param_set)) {
+      stop(
+        "Legacy Paradox first-use migration did not produce a current ParamSet shell.",
+        call. = FALSE
+      )
+    }
+  }
+  param_set
+}
+
+# Current shells call their versioned target directly; only the historical
+# unversioned names enter this cold bridge. The containing Design/Sampler
+# layout is compatible and does not need a transplant, while graph migration
+# upgrades every nested ParamSet in place. A graph-healed historical shell
+# keeps calling its unversioned name forever, so forwarding an already-current
+# embedded graph is load-bearing.
+.paradox_make_embedded_paramset_gateway = function(
     old_name,
     current_name,
     namespace) {
@@ -218,22 +355,99 @@
   force(current_name)
   force(namespace)
   function(self, private, super, ...) {
-    param_set = if (is.environment(self)) self$param_set
-    if (!.paradox_gateway_current_core(param_set)) {
-      if (!identical(.paradox_legacy_action(), "upgrade")) {
-        .paradox_legacy_use_error(old_name)
+    .paradox_legacy_embedded_param_set(self, old_name)
+    target = get(current_name, envir = namespace, inherits = FALSE)
+    target(self = self, private = private, super = super, ...)
+  }
+}
+
+# Paradox 1 serialized the formals of every R6 stub. The current
+# Sampler1DRfun/Sampler1DCateg private sampling bodies pass the selected Domain
+# fields to `Sampler1D$as_dt_col()` and, for rejection sampling, to
+# `Sampler1DRfun$sample_truncated()`. Calling those operations through a
+# historical shell would fail before namespace dispatch because the old stubs
+# accept only `x` and `n, rfun`, respectively. These two unversioned targets
+# therefore replay the current algorithms while calling the versioned
+# lower-level targets directly. Current samplers call their versioned `.sample`
+# targets and never pay for this bridge.
+.paradox_make_legacy_sampler_1d_gateway = function(
+    old_name,
+    sampler_kind,
+    namespace) {
+  force(old_name)
+  force(sampler_kind)
+  force(namespace)
+  as_dt_col = get(
+    .paradox_lean_target_name("Sampler1D", "as_dt_col"),
+    envir = namespace,
+    inherits = FALSE
+  )
+  sample_truncated = if (identical(sampler_kind, "rfun")) {
+    get(
+      .paradox_lean_target_name("Sampler1DRfun", "sample_truncated"),
+      envir = namespace,
+      inherits = FALSE
+    )
+  }
+
+  function(self, private, super, n) {
+    param = .paradox_legacy_embedded_param_set(self, old_name)
+    domain = .Call(
+      C_param_set_domains,
+      get_private(param),
+      param
+    )[[1L]]
+    storage_type = domain$storage_type[[1L]]
+    id = domain$id[[1L]]
+
+    if (identical(sampler_kind, "rfun")) {
+      lower = domain$lower[[1L]]
+      upper = domain$upper[[1L]]
+      rfun = self$rfun
+      trunc = self$trunc
+      sampled = if (n == 0L) {
+        numeric()
+      } else if (trunc) {
+        sample_truncated(
+          self = self,
+          private = private,
+          super = super,
+          n = n,
+          rfun = rfun,
+          lower = lower,
+          upper = upper
+        )
+      } else {
+        rfun(n = n)
       }
-      upgrade_paradox_object_graph(self)
-      param_set = if (is.environment(self)) self$param_set
-      if (!.paradox_gateway_current_core(param_set)) {
-        stop(
-          "Legacy Paradox first-use migration did not produce a current ParamSet shell.",
-          call. = FALSE
+    } else {
+      levels = domain$levels[[1L]]
+      if (!length(levels)) {
+        if (n != 0L) {
+          stop(
+            "Cannot sample a factor parameter with no levels",
+            call. = FALSE
+          )
+        }
+        sampled = character()
+      } else {
+        sampled = sample(
+          levels,
+          n,
+          replace = TRUE,
+          prob = self$prob
         )
       }
     }
-    target = get(current_name, envir = namespace, inherits = FALSE)
-    target(self = self, private = private, super = super, ...)
+
+    as_dt_col(
+      self = self,
+      private = private,
+      super = super,
+      x = sampled,
+      storage_type = storage_type,
+      id = id
+    )
   }
 }
 
@@ -247,13 +461,23 @@
     old_name = .paradox_old_target_name(classname, member)
     current_name = unname(targets[old_name])
     if (!length(current_name) || is.na(current_name)) current_name = NULL
+    missing_argument = if (
+        identical(member, "subspaces") &&
+        classname %in% c("ParamSet", "ParamSetShadow")) {
+      "ids"
+    } else if (
+        identical(member, "search_space") &&
+        identical(classname, "ParamSet")) {
+      "values"
+    }
     assign(
       old_name,
       .paradox_make_legacy_gateway(
         old_name,
         current_name,
         namespace,
-        gateway_kind
+        gateway_kind,
+        missing_argument
       ),
       envir = namespace
     )
@@ -282,18 +506,36 @@
     ".__ParamSetCollection__",
     ".__ParamSetShadow__"
   )
-  design_transpose_old_name = .paradox_old_target_name("Design", "transpose")
+  embedded_paramset_gateways = c(
+    .paradox_old_target_name("Design", "transpose"),
+    .paradox_old_target_name("Sampler", "sample")
+  )
+  legacy_sampler_1d_gateways = c(
+    ".__Sampler1DRfun__.sample" = "rfun",
+    ".__Sampler1DCateg__.sample" = "categ"
+  )
   for (old_name in names(targets)) {
     if (!any(startsWith(old_name, family_old_prefixes))) {
-      if (identical(old_name, design_transpose_old_name)) {
-        # Design$transpose() is the one non-ParamSet-family method that hands
-        # its embedded `param_set` to a native entry directly, so its old
-        # name gets a dedicated first-use gateway instead of the plain alias.
+      if (old_name %in% embedded_paramset_gateways) {
+        # These non-ParamSet-family operations can reach native code without
+        # first invoking a method on their embedded ParamSet.
         assign(
           old_name,
-          .paradox_make_design_transpose_gateway(
+          .paradox_make_embedded_paramset_gateway(
             old_name,
             targets[[old_name]],
+            namespace
+          ),
+          envir = namespace
+        )
+        next
+      }
+      if (old_name %in% names(legacy_sampler_1d_gateways)) {
+        assign(
+          old_name,
+          .paradox_make_legacy_sampler_1d_gateway(
+            old_name,
+            legacy_sampler_1d_gateways[[old_name]],
             namespace
           ),
           envir = namespace
@@ -304,10 +546,9 @@
       # migration.  Their old stubs can call the current implementation
       # directly, without entering a migration gateway: the public field
       # layout of Design and the Sampler family is unchanged since Paradox 1,
-      # so today's method bodies read a serialized Paradox 1 shell correctly,
-      # and the legacy `param_set` such a shell carries trips the ParamSet
-      # gateways above as soon as a method touches it through an R6 accessor
-      # (every Sampler path does).
+      # so today's remaining method bodies read a serialized Paradox 1 shell
+      # correctly. The two operations that can cross directly into native code
+      # before touching that ParamSet were intercepted above.
       assign(
         old_name,
         get(targets[[old_name]], envir = namespace, inherits = FALSE),

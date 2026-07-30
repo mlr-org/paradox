@@ -422,6 +422,177 @@ test_that("replacement owners preserve assert_values in pure and graph migration
   })
 })
 
+test_that("replacement owner results must be fresh before graph commit", {
+  skip_if_no_active_binding_inspection()
+  with_replacement_owner_upgrader({
+    inspector = function(x) {
+      private = mlr3misc::get_private(x)
+      list(
+        state = list(shadowed = private$.shadowed),
+        dependencies = list(origin = private$.set)
+      )
+    }
+
+    left = replacement_owner_legacy()
+    right = replacement_owner_legacy()
+    left_before = serialize(left, NULL)
+    right_before = serialize(right, NULL)
+    left_enclosure = left$.__enclos_env__
+    right_enclosure = right$.__enclos_env__
+    shared_result = NULL
+    shared_resolver = function(entry, which) {
+      if (identical(which, "inspector")) return(inspector)
+      function(base, state, dependencies) {
+        if (is.null(shared_result)) {
+          shared_result <<- ParamSetShadow$new(
+            dependencies$origin,
+            state$shadowed
+          )
+        }
+        shared_result
+      }
+    }
+
+    expect_error(
+      testthat::with_mocked_bindings(
+        upgrade_paradox_object_graph(list(left = left, right = right)),
+        .paradox_object_upgrader_resolve = shared_resolver,
+        .package = "paradox"
+      ),
+      "must return a fresh shell.*prepared node"
+    )
+    expect_identical(left$.__enclos_env__, left_enclosure)
+    expect_identical(right$.__enclos_env__, right_enclosure)
+    expect_identical(serialize(left, NULL), left_before)
+    expect_identical(serialize(right, NULL), right_before)
+    expect_false(exists(
+      ".core",
+      envir = mlr3misc::get_private(left),
+      inherits = FALSE
+    ))
+    expect_false(exists(
+      ".core",
+      envir = mlr3misc::get_private(right),
+      inherits = FALSE
+    ))
+
+    legacy = replacement_owner_legacy()
+    current = ParamSetShadow$new(
+      ps(visible = p_dbl(0, 1), hidden = p_lgl()),
+      "hidden"
+    )
+    legacy_before = serialize(legacy, NULL)
+    current_before = serialize(current, NULL)
+    legacy_enclosure = legacy$.__enclos_env__
+    current_core = mlr3misc::get_private(current)$.core
+    current_resolver = function(entry, which) {
+      if (identical(which, "inspector")) return(inspector)
+      function(base, state, dependencies) current
+    }
+
+    expect_error(
+      testthat::with_mocked_bindings(
+        upgrade_paradox_object_graph(list(
+          legacy = legacy,
+          current = current
+        )),
+        .paradox_object_upgrader_resolve = current_resolver,
+        .package = "paradox"
+      ),
+      "must return a fresh shell.*session node"
+    )
+    expect_identical(legacy$.__enclos_env__, legacy_enclosure)
+    expect_identical(serialize(legacy, NULL), legacy_before)
+    expect_identical(mlr3misc::get_private(current)$.core, current_core)
+    expect_true(current$assert_values)
+    expect_identical(serialize(current, NULL), current_before)
+
+    borrowed_legacy = replacement_owner_legacy()
+    borrowed_current = ParamSetShadow$new(
+      ps(current_visible = p_int(), current_hidden = p_lgl()),
+      "current_hidden"
+    )
+    borrowed_legacy_before = serialize(borrowed_legacy, NULL)
+    borrowed_current_before = serialize(borrowed_current, NULL)
+    borrowed_legacy_enclosure = borrowed_legacy$.__enclos_env__
+    borrowed_private = mlr3misc::get_private(borrowed_current)
+    borrowed_resolver = function(entry, which) {
+      if (identical(which, "inspector")) return(inspector)
+      function(base, state, dependencies) {
+        result = ParamSetShadow$new(
+          dependencies$origin,
+          state$shadowed
+        )
+        enclosing = result$.__enclos_env__
+        repeat {
+          assign("private", borrowed_private, envir = enclosing)
+          super = get0("super", envir = enclosing, inherits = FALSE)
+          if (!is.environment(super)) break
+          enclosing = get(
+            ".__enclos_env__",
+            envir = super,
+            inherits = FALSE
+          )
+        }
+        result
+      }
+    }
+
+    expect_error(
+      testthat::with_mocked_bindings(
+        upgrade_paradox_object_graph(list(
+          legacy = borrowed_legacy,
+          current = borrowed_current
+        )),
+        .paradox_object_upgrader_resolve = borrowed_resolver,
+        .package = "paradox"
+      ),
+      "must return a fresh shell.*private environment.*session node"
+    )
+    expect_identical(
+      borrowed_legacy$.__enclos_env__,
+      borrowed_legacy_enclosure
+    )
+    expect_identical(
+      serialize(borrowed_legacy, NULL),
+      borrowed_legacy_before
+    )
+    expect_identical(
+      serialize(borrowed_current, NULL),
+      borrowed_current_before
+    )
+  })
+})
+
+test_that("owner freshness preflight preserves valid shared topology", {
+  skip_if_no_active_binding_inspection()
+  with_replacement_owner_upgrader({
+    origin = ps(visible = p_dbl(0, 1), hidden = p_lgl())
+    left = replacement_owner_legacy()
+    right = replacement_owner_legacy()
+    left_private = mlr3misc::get_private(left)
+    right_private = mlr3misc::get_private(right)
+    left_private$.set = origin
+    right_private$.set = origin
+    host = list(left = left, right = right, origin = origin)
+
+    expect_identical(upgrade_paradox_object_graph(host), host)
+    expect_identical(left$origin, origin)
+    expect_identical(right$origin, origin)
+    expect_false(identical(left, right))
+    expect_false(left$assert_values)
+    expect_false(right$assert_values)
+
+    current = ParamSetShadow$new(origin, "hidden")
+    current_host = list(first = current, second = current)
+    expect_identical(
+      upgrade_paradox_object_graph(current_host),
+      current_host
+    )
+    expect_identical(current_host$first, current_host$second)
+  })
+})
+
 test_that("legacy package provenance requires exact namespace identity", {
   namespace_spec = new.env(parent = emptyenv())
   namespace_spec$spec = "paradox"
@@ -1176,6 +1347,32 @@ test_that("legacy callback carrier shells reject ALTREP", {
   expect_identical(altrep_observations, 0L)
 })
 
+test_that("legacy interpreted structural lists reject ALTREP inertly", {
+  skip_if_no_active_binding_inspection()
+  skip_if_no_list_altrep()
+
+  observations = 0L
+  values = native_stateful_altrep(
+    list(x = 0.5),
+    list(x = 0.5),
+    callback = function() {
+      observations <<- observations + 1L
+    },
+    callback_after = 0L
+  )
+  legacy = legacy_base_from_current(ps(x = p_dbl()))
+  legacy_private = mlr3misc::get_private(legacy)
+  legacy_private$.values = values
+  native_stateful_altrep_rearm(values, callback_after = 0L)
+
+  expect_error(
+    upgrade_paradox_object(legacy),
+    "legacy values must be a plain list",
+    fixed = TRUE
+  )
+  expect_identical(observations, 0L)
+})
+
 test_that("legacy collection sharing is preserved and cycles are rejected", {
   skip_if_no_active_binding_inspection()
   child = ps(x = p_int(0, 4, tags = "shared"))
@@ -1391,6 +1588,52 @@ test_that("legacy extensions, replacements, and malformed state fail closed", {
   )
   expect_identical(observed, 0L)
 
+  pairlist_values = legacy_base_from_current(ps(x = p_dbl()))
+  pairlist_private = mlr3misc::get_private(pairlist_values)
+  pairlist_private$.values = pairlist(x = 0.5)
+  expect_error(
+    upgrade_paradox_object(pairlist_values),
+    "legacy values must be a plain list",
+    fixed = TRUE
+  )
+
+  attributed_values = legacy_base_from_current(ps(x = p_dbl()))
+  attributed_private = mlr3misc::get_private(attributed_values)
+  attr(attributed_private$.values, "forged") = TRUE
+  expect_error(
+    upgrade_paradox_object(attributed_values),
+    "legacy values must be a plain list",
+    fixed = TRUE
+  )
+
+  attributed_column = legacy_base_from_current(ps(x = p_dbl()))
+  attributed_column_private = mlr3misc::get_private(attributed_column)
+  data.table::setattr(
+    attributed_column_private$.params[["cargo"]],
+    "forged",
+    TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(attributed_column),
+    "table column `cargo` has unsupported attributes",
+    fixed = TRUE
+  )
+
+  pairlist_condition = as.pairlist(unclass(CondEqual(1L)))
+  class(pairlist_condition) = c("CondEqual", "Condition")
+  expect_error(
+    upgrade_paradox_object(pairlist_condition),
+    "malformed legacy Condition",
+    fixed = TRUE
+  )
+  attributed_condition = CondEqual(1L)
+  attr(attributed_condition, "forged") = TRUE
+  expect_error(
+    upgrade_paradox_object(attributed_condition),
+    "malformed legacy Condition",
+    fixed = TRUE
+  )
+
   literal_values = list(
     logical = TRUE,
     null = NULL,
@@ -1583,6 +1826,114 @@ test_that("post-transplant validation detects external mutation without rollback
   )
 })
 
+test_that("terminal transplant receipt rejects public-method replacement", {
+  skip_if_no_active_binding_inspection()
+  legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
+  old_enclosure = legacy$.__enclos_env__
+  session = paradox:::.upgrade_paradox_prepare_session(list(legacy), "legacy")
+
+  namespace = asNamespace("paradox")
+  binding = ".upgrade_paradox_transplant"
+  original = get(binding, envir = namespace, inherits = FALSE)
+  was_locked = bindingIsLocked(binding, namespace)
+  if (was_locked) unlockBinding(binding, namespace)
+  on.exit({
+    if (bindingIsLocked(binding, namespace)) {
+      unlockBinding(binding, namespace)
+    }
+    assign(binding, original, envir = namespace)
+    if (was_locked) lockBinding(binding, namespace)
+  }, add = TRUE)
+  assign(
+    binding,
+    function(plan) {
+      result = original(plan)
+      unlockBinding("ids", plan$legacy)
+      assign("ids", function(...) "hostile", envir = plan$legacy)
+      lockBinding("ids", plan$legacy)
+      result
+    },
+    envir = namespace
+  )
+  if (was_locked) lockBinding(binding, namespace)
+
+  expect_error(
+    paradox:::.upgrade_paradox_commit_session(session),
+    "public shell changed during commit",
+    fixed = TRUE
+  )
+  # The enclosure swap completed before the deliberately external mutation;
+  # commit reports the race rather than claiming that this is a valid upgrade.
+  expect_false(identical(legacy$.__enclos_env__, old_enclosure))
+  expect_identical(legacy$ids(), "hostile")
+  expect_identical(
+    .Call(
+      paradox:::C_param_set_core_kind,
+      mlr3misc::get_private(legacy)
+    ),
+    1L
+  )
+})
+
+test_that("complete public receipts require a locked shell inventory", {
+  unlocked = new.env(parent = emptyenv())
+  assign("method", function() NULL, envir = unlocked)
+  expect_error(
+    paradox:::.upgrade_paradox_public_binding_snapshot(unlocked, "unlocked"),
+    "current public R6 shell must be locked",
+    fixed = TRUE
+  )
+})
+
+test_that("terminal transplant receipt also covers selected current shells", {
+  skip_if_no_active_binding_inspection()
+  legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
+  current = ps(y = p_int())
+  session = paradox:::.upgrade_paradox_prepare_session(
+    list(legacy, current),
+    c("legacy", "current")
+  )
+
+  namespace = asNamespace("paradox")
+  binding = ".upgrade_paradox_transplant"
+  original = get(binding, envir = namespace, inherits = FALSE)
+  was_locked = bindingIsLocked(binding, namespace)
+  if (was_locked) unlockBinding(binding, namespace)
+  on.exit({
+    if (bindingIsLocked(binding, namespace)) {
+      unlockBinding(binding, namespace)
+    }
+    assign(binding, original, envir = namespace)
+    if (was_locked) lockBinding(binding, namespace)
+  }, add = TRUE)
+  assign(
+    binding,
+    function(plan) {
+      result = original(plan)
+      unlockBinding("ids", current)
+      assign("ids", function(...) "hostile-current", envir = current)
+      lockBinding("ids", current)
+      result
+    },
+    envir = namespace
+  )
+  if (was_locked) lockBinding(binding, namespace)
+
+  expect_error(
+    paradox:::.upgrade_paradox_commit_session(session),
+    "public shell changed during commit",
+    fixed = TRUE
+  )
+  expect_identical(current$ids(), "hostile-current")
+  expect_identical(
+    .Call(
+      paradox:::C_param_set_core_kind,
+      mlr3misc::get_private(legacy)
+    ),
+    1L
+  )
+})
+
 test_that("corrupt current roots abort graph preflight before legacy mutation", {
   skip_if_no_active_binding_inspection()
   legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
@@ -1678,6 +2029,7 @@ test_that("upgrading a Domain without depends is shape-preserving", {
 })
 
 test_that("upgraded collections keep generating the tags Paradox 1 recorded", {
+  skip_if_no_active_binding_inspection()
   child = ps(x = p_int(), y = p_lgl())
   other = ps(z = p_dbl())
   current = ParamSetCollection$new(

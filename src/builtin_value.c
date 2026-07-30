@@ -358,19 +358,23 @@ static SEXP factor_text_charsxp(SEXP string) {
   }
   static const char hex[] = "0123456789abcdef";
   const int bytes_encoding = Rf_getCharCE(string) == CE_BYTES;
-  const unsigned char *source = (const unsigned char *) (
-    bytes_encoding ? CHAR(string) : Rf_translateCharUTF8(string)
-  );
-  const size_t source_size = strlen((const char *) source);
+  size_t source_size;
+  const unsigned char *source;
+  if (bytes_encoding) {
+    source = (const unsigned char *) CHAR(string);
+    source_size = strlen((const char *) source);
+  } else {
+    source = (const unsigned char *) paradox_temporary_utf8_copy(
+      string,
+      &source_size
+    );
+  }
   if (source_size > (size_t) INT_MAX / 4U) {
     Rf_error("Factor diagnostic text exceeds R's string limit");
   }
   char *output = paradox_temporary_alloc(
     (R_xlen_t) (source_size * 4U) + 1,
     sizeof(*output)
-  );
-  source = (const unsigned char *) (
-    bytes_encoding ? CHAR(string) : Rf_translateCharUTF8(string)
   );
   size_t output_size = 0;
   for (size_t index = 0; index < source_size; ++index) {

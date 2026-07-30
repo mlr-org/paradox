@@ -84,6 +84,23 @@ test_that("native static properties cover the five maintained Domain kinds", {
   }
 })
 
+test_that("equal infinite integer bounds expose empty level sets", {
+  positive = p_int(Inf, Inf)
+  negative = p_int(-Inf, -Inf)
+  parameter_set = ps(positive = positive, negative = negative)
+
+  expect_identical(domain_nlevels(positive), 0)
+  expect_identical(domain_nlevels(negative), 0)
+  expect_identical(
+    parameter_set$nlevels,
+    c(positive = 0, negative = 0)
+  )
+  expect_identical(
+    parameter_set$is_bounded,
+    c(positive = FALSE, negative = FALSE)
+  )
+})
+
 test_that("numeric factor levels are materialized once at admission", {
   parameter_set = ps(value = p_fct(c(1, 2, 2.5)))
   levels = property_params(parameter_set)$levels[[1L]]
@@ -159,12 +176,76 @@ test_that("static properties reject corrupt state instead of dispatching", {
     fixed = TRUE
   )
 
-  for (selector in list(0, NA_integer_, -1L, 4L, 0:1)) {
+  for (selector in list(0, NA_integer_, -1L, 11L, 0:1)) {
     expect_error(
       .Call(symbol, valid, selector),
       "invalid ParamSet property selector",
       fixed = TRUE
     )
+  }
+})
+
+test_that("static properties reject S4 and attributed column shells", {
+  valid = list(
+    id = "x",
+    cls = "ParamInt",
+    lower = 0,
+    upper = 2,
+    levels = list(NULL)
+  )
+  symbol = property_symbol()
+
+  expect_error(
+    .Call(symbol, asS4(valid), 0L),
+    "`.params` must be a list",
+    fixed = TRUE
+  )
+  malformed_names = valid
+  attr(malformed_names, "names") = asS4(names(malformed_names))
+  expect_error(
+    .Call(symbol, malformed_names, 0L),
+    "`.params` must be a named list",
+    fixed = TRUE
+  )
+
+  for (column in names(valid)) {
+    malformed = valid
+    malformed[[column]] = asS4(malformed[[column]])
+    expect_error(
+      .Call(symbol, malformed, 0L),
+      "ordinary",
+      fixed = TRUE,
+      info = paste("S4", column)
+    )
+
+    attributed = valid
+    attr(attributed[[column]], "rogue") = TRUE
+    expect_error(
+      .Call(symbol, attributed, 0L),
+      "ordinary",
+      fixed = TRUE,
+      info = paste("attributed", column)
+    )
+  }
+
+  # Exercise the public active bindings as well as the direct kernel. A
+  # forged capsule must fail closed for every property selector.
+  for (column in c("id", "cls", "lower", "upper", "levels")) {
+    set = ps(x = p_int(0L, 2L))
+    private = set$.__enclos_env__$private
+    state = unserialize(serialize(
+      paradox:::param_set_core_state(private),
+      NULL
+    ))
+    state$.params[[column]] = asS4(state$.params[[column]])
+    private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
+    for (property in c("nlevels", "is_number", "is_categ", "is_bounded")) {
+      expect_error(
+        set[[property]],
+        "Corrupt ParamSet",
+        info = paste(column, property)
+      )
+    }
   }
 })
 

@@ -189,6 +189,28 @@ test_that("check_dependencies rejects corrupt capsule dependency state", {
   )
 })
 
+test_that("stored semantic list validation retains deep shared descendants", {
+  shared = list(payload = 1L)
+  nested = shared
+  for (index in seq_len(64L)) {
+    nested = list(previous = nested, shared = shared)
+  }
+
+  param_set = ps(value = p_int())
+  private = native_check_private(param_set)
+  state = unserialize(serialize(
+    paradox:::param_set_core_state(private),
+    NULL
+  ))
+  state$.values = list(value = nested)
+  private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
+
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+  expect_identical(param_set$check(list()), TRUE)
+  gctorture(previous)
+})
+
 test_that("BASE checking validates and sanitizes all built-in kinds", {
   param_set = native_check_space()
   values = list(
@@ -448,6 +470,26 @@ test_that("callback and table state is snapshotted without replay", {
   expect_identical(error_calls, 1L)
 })
 
+test_that("ParamSet observes a character custom-check diagnostic exactly once", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  answer = NULL
+  param_set = ps(value = p_uty(custom_check = function(value) {
+    if (is.null(answer)) TRUE else answer
+  }))
+  answer = native_stateful_altrep(
+    structure("first reason", class = "paradox_custom_check_probe"),
+    structure("second reason", class = "paradox_custom_check_probe"),
+    elt_switch_after = 1L
+  )
+
+  observed = param_set$check(list(value = 1L))
+  expect_match(observed, "first reason", fixed = TRUE)
+  expect_false(grepl("second reason", observed, fixed = TRUE))
+})
+
 test_that("opaque ParamUty leaves retain identity and are not inspected", {
   altrep_accesses = 0L
   nested = native_stateful_altrep(
@@ -475,6 +517,39 @@ test_that("opaque ParamUty leaves retain identity and are not inspected", {
   expect_identical(altrep_accesses, 0L)
   expect_identical(param_set$values$value$nested, nested)
   expect_identical(altrep_accesses, 0L)
+
+  direct_accesses = 0L
+  direct = native_stateful_altrep(
+    c(11L, 12L, 13L),
+    c(21L, 22L, 23L),
+    callback = function() direct_accesses <<- direct_accesses + 1L,
+    callback_after = c(NA_integer_, 0L)
+  )
+  seen = NULL
+  direct_set = ps(value = p_uty(custom_check = function(value) {
+    seen <<- value
+    TRUE
+  }))
+
+  direct_accesses = 0L
+  expect_true(direct_set$check(list(value = direct)))
+  expect_identical(direct_accesses, 0L)
+  expect_identical(data.table::address(seen), data.table::address(direct))
+
+  native_stateful_altrep_rearm(direct, c(NA_integer_, 0L))
+  direct_accesses = 0L
+  direct_set$values = list(value = direct)
+  expect_identical(direct_accesses, 0L)
+  expect_identical(
+    data.table::address(direct_set$values$value),
+    data.table::address(direct)
+  )
+
+  native_stateful_altrep_rearm(direct, c(NA_integer_, 0L))
+  direct_accesses = 0L
+  expect_true(direct_set$check_dt(data.frame(value = I(list(direct)))))
+  expect_identical(direct_accesses, 0L)
+  expect_identical(data.table::address(seen), data.table::address(direct))
 })
 
 test_that("check_dt uses the scalar row kernel and snapshots its columns", {

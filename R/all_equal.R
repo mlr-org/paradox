@@ -4,6 +4,16 @@
 # ParamSet reader for a ParamSetCollection and is not a meaningful semantic
 # comparison in any case.
 param_set_equality_view = function(param_set) {
+  # Equality is cold, but its answer still has to describe one possible
+  # generation. Active bindings below are intentionally convenient
+  # presentation readers, not a multi-field transaction: reading them from a
+  # caller-owned graph directly could combine fields around a pending
+  # finalizer or a callback reached while a derived node heals. The deep-clone
+  # transaction already owns the exact graph/policy/Shadow receipt needed
+  # here. Traverse that isolated graph so the view remains coherent without
+  # adding any work to ordinary ParamSet reads.
+  param_set = param_set$clone(deep = TRUE)
+
   objects = list(param_set)
   states = 0L  # 0 = undiscovered, 1 = active path, 2 = complete
   edges = list()
@@ -101,6 +111,13 @@ all.equal.ParamSet = function(target, current, ...) {
       "'current' is not a ParamSet, but %s",
       paste(class(current), collapse = "/")
     ))
+  }
+  if (identical(target, current)) {
+    # Snapshot one object once. Apart from avoiding duplicate cold work, this
+    # keeps reflexivity meaningful when cloning an opaque utility value has a
+    # documented callback which mutates its source.
+    view = param_set_equality_view(target)
+    return(all.equal(view, view, ...))
   }
   all.equal(
     param_set_equality_view(target),

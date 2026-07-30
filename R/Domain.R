@@ -403,6 +403,7 @@ parse_depends = function(depends_expr, evalenv) {
 
     # recurse on `&&`: combine LHS and RHS
     if (identical(cur_expr[[1]], symbol_and)) {
+      if (length(cur_expr) != 3L) throw("`&&` must have exactly two operands")
       return(c(recurse_expression(cur_expr[[2]]), recurse_expression(cur_expr[[3]])))
     }
 
@@ -413,6 +414,9 @@ parse_depends = function(depends_expr, evalenv) {
       constructor = CondAnyOf
     } else {
       throw()
+    }
+    if (length(cur_expr) != 3L) {
+      throw("comparison operators must have exactly two operands")
     }
 
     # get value and referent

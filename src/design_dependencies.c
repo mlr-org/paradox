@@ -8,8 +8,10 @@
 #include "builtin_condition.h"
 #include "core_state.h"
 #include "dependency_graph.h"
+#include "generation_receipt.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
+#include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 
@@ -29,15 +31,24 @@
 typedef struct {
   SEXP params;
   SEXP dependencies;
+  SEXP values;
   SEXP columns;
   SEXP data_names;
   paradox_domain_params_t params_data;
   paradox_domain_dependencies_t dependencies_data;
+  paradox_domain_values_t values_data;
   R_xlen_t parameter_count;
   R_xlen_t dependency_count;
   R_xlen_t row_count;
   R_xlen_t *column_by_parameter;
+  R_xlen_t *fixed_by_parameter;
   paradox_dependency_graph_plan_t graph;
+  paradox_collection_graph_t collection_graph;
+  int has_collection_graph;
+  SEXP selected_private;
+  SEXP selected_core;
+  SEXP selected_shadow_signature;
+  SEXP selected_shadow_signature_content;
 } dependency_snapshot_t;
 
 static SEXP snapshot_string_vector(SEXP source,
@@ -59,6 +70,18 @@ static SEXP snapshot_string_vector(SEXP source,
   }
   UNPROTECT(1);
   return result;
+}
+
+static void validate_snapshot_names(SEXP names,
+    const char *description, R_xlen_t *work_since_interrupt) {
+  const R_xlen_t count = XLENGTH(names);
+  for (R_xlen_t index = 0; index < count; ++index) {
+    paradox_account_work(work_since_interrupt);
+    SEXP value = STRING_ELT(names, index);
+    if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES) {
+      Rf_error("%s contains an unsupported name", description);
+    }
+  }
 }
 
 static int ordinary_design_shell(SEXP data) {
@@ -121,12 +144,19 @@ static SEXP snapshot_column(SEXP source,
       type != STRSXP && type != VECSXP) {
     Rf_error("Design columns must be logical, integer, numeric, character, factor, or list vectors");
   }
-  if (Rf_isS4(source) || !ordinary_optional_classes(source)) {
-    Rf_error("Design columns must have ordinary class metadata");
-  }
-
   const R_xlen_t count = XLENGTH(source);
   SEXP result = PROTECT(Rf_allocVector(type, count));
+  /*
+   * The destination allocation may run a finalizer that changes the public
+   * column. Validate the exact post-allocation structure whose elements are
+   * copied below; otherwise unsupported class metadata from a later
+   * generation could bypass admission.
+   */
+  if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
+      XLENGTH(source) != count) {
+    UNPROTECT(1);
+    Rf_error("Design column changed while being snapshotted");
+  }
   for (R_xlen_t index = 0; index < count; ++index) {
     paradox_account_work(work_since_interrupt);
     switch (type) {
@@ -150,6 +180,17 @@ static SEXP snapshot_column(SEXP source,
       UNPROTECT(1);
       Rf_error("Internal error: unsupported Design column type");
     }
+  }
+  /*
+   * An ALTREP element method may replace the source class carrier. Admit the
+   * post-observation metadata used by factor handling below rather than a
+   * pre-callback class generation. Ordinary columns pay the same single class
+   * validation as before.
+   */
+  if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
+      XLENGTH(source) != count || !ordinary_optional_classes(source)) {
+    UNPROTECT(1);
+    Rf_error("Design columns must have ordinary class metadata");
   }
 
   if (Rf_inherits(source, "factor")) {
@@ -196,31 +237,51 @@ static void load_param_state(SEXP param_set, SEXP private,
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet state in Design dependency operation");
   }
-  if (!paradox_core_is_verified(core)) {
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  /*
+   * The complete collection graph builder owns its refresh/admission gate.
+   * Running the root gate here as well would duplicate a stale subtree walk
+   * and Shadow fingerprint before immediately selecting the graph again.
+   */
+  if (kind != PARADOX_CORE_COLLECTION &&
+      !paradox_core_is_verified(core)) {
     core = paradox_core_refresh(param_set, private);
+    kind = paradox_core_kind(core);
   }
-  const paradox_core_kind_t kind = paradox_core_kind(core);
+  snapshot->selected_private = private;
+  snapshot->selected_core = core;
+  SET_VECTOR_ELT(roots, 5, core);
 
   if (kind == PARADOX_CORE_COLLECTION) {
-    paradox_collection_graph_t graph;
-    paradox_collection_graph_build(
+    paradox_collection_graph_build_receipted(
       private,
       param_set,
-      &graph,
+      &snapshot->collection_graph,
       graph_roots,
       graph_roots_index,
       work_since_interrupt
     );
-    snapshot->params = graph.nodes[0].params.table;
+    snapshot->has_collection_graph = TRUE;
+    snapshot->selected_core =
+      snapshot->collection_graph.nodes[0].source_core;
+    SET_VECTOR_ELT(roots, 5, snapshot->selected_core);
+    snapshot->params = snapshot->collection_graph.nodes[0].params.table;
     snapshot->dependencies = PROTECT(
       paradox_collection_dependencies_from_graph(
-        &graph,
+        &snapshot->collection_graph,
+        work_since_interrupt
+      )
+    );
+    snapshot->values = PROTECT(
+      paradox_collection_values_from_graph(
+        &snapshot->collection_graph,
         work_since_interrupt
       )
     );
     SET_VECTOR_ELT(roots, 0, snapshot->params);
     SET_VECTOR_ELT(roots, 1, snapshot->dependencies);
-    UNPROTECT(2);
+    SET_VECTOR_ELT(roots, 4, snapshot->values);
+    UNPROTECT(3);
   } else if (kind == PARADOX_CORE_BASE || kind == PARADOX_CORE_SHADOW) {
     SEXP payload = paradox_core_payload(core);
     if (payload == R_UnboundValue) {
@@ -229,9 +290,41 @@ static void load_param_state(SEXP param_set, SEXP private,
     }
     snapshot->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
     snapshot->dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
+    snapshot->values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
     SET_VECTOR_ELT(roots, 0, snapshot->params);
     SET_VECTOR_ELT(roots, 1, snapshot->dependencies);
+    SET_VECTOR_ELT(roots, 4, snapshot->values);
     UNPROTECT(1);
+    if (kind == PARADOX_CORE_SHADOW) {
+      snapshot->selected_shadow_signature = PROTECT(
+        paradox_shadow_metadata_signature(core)
+      );
+      if (snapshot->selected_shadow_signature == R_UnboundValue) {
+        UNPROTECT(1);
+        Rf_error("Corrupt ParamSetShadow signature in Design operation");
+      }
+      snapshot->selected_shadow_signature_content = PROTECT(
+        paradox_shadow_signature_content_snapshot(
+          snapshot->selected_shadow_signature
+        )
+      );
+      if (snapshot->selected_shadow_signature_content == R_NilValue ||
+          !paradox_shadow_signature_receipt_is_current(
+            core,
+            snapshot->selected_shadow_signature,
+            snapshot->selected_shadow_signature_content
+          )) {
+        UNPROTECT(2);
+        Rf_error("ParamSetShadow changed during Design construction");
+      }
+      SET_VECTOR_ELT(roots, 6, snapshot->selected_shadow_signature);
+      SET_VECTOR_ELT(
+        roots,
+        7,
+        snapshot->selected_shadow_signature_content
+      );
+      UNPROTECT(2);
+    }
   } else {
     UNPROTECT(1);
     Rf_error("Unknown ParamSet node kind in Design dependency operation");
@@ -249,66 +342,114 @@ static void load_param_state(SEXP param_set, SEXP private,
       snapshot->dependencies,
       &snapshot->dependencies_data,
       work_since_interrupt
+    ) || !paradox_domain_validate_values(
+      snapshot->values,
+      &snapshot->values_data,
+      work_since_interrupt
     )) {
-    Rf_error("Corrupt ParamSet parameter or dependency capsule");
+    Rf_error("Corrupt ParamSet parameter, value, or dependency capsule");
   }
   snapshot->parameter_count = snapshot->params_data.row_count;
   snapshot->dependency_count = snapshot->dependencies_data.row_count;
+  snapshot->fixed_by_parameter = paradox_temporary_alloc(
+    snapshot->parameter_count,
+    sizeof(*snapshot->fixed_by_parameter)
+  );
+  for (R_xlen_t parameter = 0;
+      parameter < snapshot->parameter_count;
+      ++parameter) {
+    snapshot->fixed_by_parameter[parameter] = R_XLEN_T_MAX;
+  }
+  for (R_xlen_t value = 0;
+      value < snapshot->values_data.size;
+      ++value) {
+    R_xlen_t parameter = paradox_domain_find_string(
+      snapshot->params_data.ids,
+      STRING_ELT(snapshot->values_data.names, value),
+      work_since_interrupt
+    );
+    if (parameter == R_XLEN_T_MAX ||
+        snapshot->fixed_by_parameter[parameter] != R_XLEN_T_MAX) {
+      Rf_error("Corrupt ParamSet stored value IDs in Design operation");
+    }
+    snapshot->fixed_by_parameter[parameter] = value;
+  }
 }
 
-static void snapshot_design_data(SEXP data, dependency_snapshot_t *snapshot,
+static void snapshot_design_shell(SEXP data, dependency_snapshot_t *snapshot,
     SEXP roots, R_xlen_t *work_since_interrupt) {
   const R_xlen_t column_count = XLENGTH(data);
-  if (column_count != snapshot->parameter_count) {
-    Rf_error("Design$data must have one column for every parameter");
-  }
 
-  SEXP source_names = PROTECT(paradox_api_raw_attribute(
-    data,
-    R_NamesSymbol
-  ));
-  snapshot->data_names = PROTECT(snapshot_string_vector(
-    source_names,
-    "Design column names",
-    work_since_interrupt
-  ));
-  if (XLENGTH(snapshot->data_names) != column_count ||
-      Rf_any_duplicated(snapshot->data_names, FALSE) != 0) {
-    UNPROTECT(2);
-    Rf_error("Design$data must have unique column names");
-  }
+  snapshot->data_names = PROTECT(Rf_allocVector(STRSXP, column_count));
   snapshot->columns = PROTECT(Rf_allocVector(VECSXP, column_count));
   SET_VECTOR_ELT(roots, 2, snapshot->data_names);
   SET_VECTOR_ELT(roots, 3, snapshot->columns);
+  if (!ordinary_design_shell(data)) {
+    UNPROTECT(2);
+    Rf_error("Design$data must be a list-like data frame");
+  }
+  if (!paradox_capture_list_identities(
+      data,
+      snapshot->data_names,
+      snapshot->columns
+    )) {
+    UNPROTECT(2);
+    Rf_error("Design$data must have unique column names");
+  }
 
+  /*
+   * Freeze the dimension carrier in the same allocation-free observation
+   * window as the column names and identities.  Name validation and
+   * Rf_any_duplicated() below may allocate and run a pending finalizer; a
+   * later row.names read could otherwise combine a new table dimension with
+   * the already captured old columns.
+   */
   const int table_input = Rf_isObject(data) != FALSE;
   snapshot->row_count = 0;
   if (table_input &&
       !paradox_public_table_row_count(data, &snapshot->row_count)) {
-    UNPROTECT(3);
+    UNPROTECT(2);
     Rf_error("Design$data has invalid data.frame row names");
   }
-  for (R_xlen_t column = 0; column < column_count; ++column) {
+
+  validate_snapshot_names(
+    snapshot->data_names,
+    "Design column names",
+    work_since_interrupt
+  );
+  if (Rf_any_duplicated(snapshot->data_names, FALSE) != 0) {
+    UNPROTECT(2);
+    Rf_error("Design$data must have unique column names");
+  }
+
+  UNPROTECT(2);
+
+  if (snapshot->row_count > INT_MAX) {
+    Rf_error("Design dependency result exceeds data.frame row limits");
+  }
+}
+
+static void snapshot_design_columns(dependency_snapshot_t *snapshot,
+    R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t column = 0; column < XLENGTH(snapshot->columns); ++column) {
     paradox_account_work(work_since_interrupt);
-    SEXP source = PROTECT(VECTOR_ELT(data, column));
+    SEXP source = PROTECT(VECTOR_ELT(snapshot->columns, column));
     SEXP frozen = PROTECT(snapshot_column(source, work_since_interrupt));
-    const R_xlen_t rows = XLENGTH(frozen);
-    if (rows != snapshot->row_count && (table_input || column != 0)) {
-      UNPROTECT(5);
+    if (XLENGTH(frozen) != snapshot->row_count) {
+      UNPROTECT(2);
       Rf_error(column == 0
         ? "Design$data has invalid data.frame row names"
         : "Design$data columns have inconsistent lengths");
     }
-    if (!table_input && column == 0) {
-      snapshot->row_count = rows;
-    }
     SET_VECTOR_ELT(snapshot->columns, column, frozen);
     UNPROTECT(2);
   }
-  UNPROTECT(3);
+}
 
-  if (snapshot->row_count > INT_MAX) {
-    Rf_error("Design dependency result exceeds data.frame row limits");
+static void map_design_columns(dependency_snapshot_t *snapshot,
+    R_xlen_t *work_since_interrupt) {
+  if (XLENGTH(snapshot->columns) != snapshot->parameter_count) {
+    Rf_error("Design$data must have one column for every parameter");
   }
   snapshot->column_by_parameter = paradox_temporary_alloc(
     snapshot->parameter_count,
@@ -335,6 +476,50 @@ static int numeric_type(SEXPTYPE type) {
 
 static int factor_column(SEXP column) {
   return TYPEOF(column) == INTSXP && Rf_inherits(column, "factor");
+}
+
+static int fixed_value_is_plain(SEXP value, SEXP storage_type) {
+  if (paradox_domain_string_is(storage_type, "list") ||
+      !Rf_isVectorAtomic(value) || Rf_isObject(value) ||
+      XLENGTH(value) != 1 || !paradox_api_has_no_attributes(value)) {
+    return FALSE;
+  }
+  if (paradox_domain_string_is(storage_type, "numeric")) {
+    return TYPEOF(value) == REALSXP || TYPEOF(value) == INTSXP;
+  }
+  if (paradox_domain_string_is(storage_type, "integer")) {
+    return TYPEOF(value) == INTSXP;
+  }
+  if (paradox_domain_string_is(storage_type, "character")) {
+    return TYPEOF(value) == STRSXP;
+  }
+  if (paradox_domain_string_is(storage_type, "logical")) {
+    return TYPEOF(value) == LGLSXP;
+  }
+  return FALSE;
+}
+
+static SEXP fixed_value(const dependency_snapshot_t *snapshot,
+    R_xlen_t parameter) {
+  const R_xlen_t value = snapshot->fixed_by_parameter[parameter];
+  return value == R_XLEN_T_MAX
+    ? R_UnboundValue
+    : VECTOR_ELT(snapshot->values_data.values, value);
+}
+
+static int parameter_value_is_tune_token(
+    const dependency_snapshot_t *snapshot,
+    R_xlen_t parameter, R_xlen_t row) {
+  SEXP fixed = fixed_value(snapshot, parameter);
+  if (fixed != R_UnboundValue) {
+    return Rf_inherits(fixed, "TuneToken") != FALSE;
+  }
+  SEXP column = VECTOR_ELT(
+    snapshot->columns,
+    snapshot->column_by_parameter[parameter]
+  );
+  return TYPEOF(column) == VECSXP &&
+    Rf_inherits(VECTOR_ELT(column, row), "TuneToken");
 }
 
 static int rhs_matches_string(SEXP value, SEXP rhs,
@@ -405,6 +590,44 @@ static int condition_matches(const paradox_dependency_graph_edge_t *edge,
   );
 }
 
+static int parameter_condition_matches(
+    const dependency_snapshot_t *snapshot,
+    R_xlen_t parameter, R_xlen_t row,
+    const paradox_dependency_graph_edge_t *edge,
+    R_xlen_t *work_since_interrupt) {
+  SEXP fixed = fixed_value(snapshot, parameter);
+  if (fixed == R_UnboundValue) {
+    return condition_matches(
+      edge,
+      VECTOR_ELT(
+        snapshot->columns,
+        snapshot->column_by_parameter[parameter]
+      ),
+      row,
+      work_since_interrupt
+    );
+  }
+  SEXP storage_type = STRING_ELT(
+    VECTOR_ELT(snapshot->params, PARADOX_DOMAIN_STORAGE_TYPE),
+    parameter
+  );
+  if (!fixed_value_is_plain(fixed, storage_type)) {
+    if (Rf_inherits(fixed, "TuneToken")) {
+      return TRUE;
+    }
+    if (fixed == R_NilValue ||
+        !paradox_builtin_condition_scalar_supported(fixed, edge->rhs)) {
+      return FALSE;
+    }
+  }
+  return paradox_builtin_condition_element_matches(
+    fixed,
+    0,
+    edge->rhs,
+    work_since_interrupt
+  );
+}
+
 static int value_is_missing(SEXP column, R_xlen_t row) {
   switch (TYPEOF(column)) {
   case LGLSXP:
@@ -418,6 +641,28 @@ static int value_is_missing(SEXP column, R_xlen_t row) {
   default:
     return FALSE;
   }
+}
+
+static int parameter_value_is_missing(
+    const dependency_snapshot_t *snapshot,
+    R_xlen_t parameter, R_xlen_t row) {
+  SEXP fixed = fixed_value(snapshot, parameter);
+  if (fixed == R_UnboundValue) {
+    return value_is_missing(
+      VECTOR_ELT(
+        snapshot->columns,
+        snapshot->column_by_parameter[parameter]
+      ),
+      row
+    );
+  }
+  SEXP storage_type = STRING_ELT(
+    VECTOR_ELT(snapshot->params, PARADOX_DOMAIN_STORAGE_TYPE),
+    parameter
+  );
+  return fixed_value_is_plain(fixed, storage_type)
+    ? value_is_missing(fixed, 0)
+    : FALSE;
 }
 
 static size_t mask_offset(const dependency_snapshot_t *snapshot,
@@ -459,10 +704,13 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
     R_xlen_t *work_since_interrupt) {
   const R_xlen_t parameter_count = snapshot->parameter_count;
   const R_xlen_t row_count = snapshot->row_count;
-  if (parameter_count != 0 && row_count > R_XLEN_T_MAX / parameter_count) {
+  const R_xlen_t mask_rows =
+    snapshot->dependency_count == 0 ? 0 : row_count;
+  if (parameter_count != 0 &&
+      mask_rows > R_XLEN_T_MAX / parameter_count) {
     Rf_error("Design dependency mask is too large");
   }
-  const R_xlen_t bit_count = parameter_count * row_count;
+  const R_xlen_t bit_count = parameter_count * mask_rows;
   if ((uint64_t) bit_count > (uint64_t) SIZE_MAX - 7U) {
     Rf_error("Design dependency mask is too large");
   }
@@ -500,16 +748,11 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
        */
       paradox_account_work(work_since_interrupt);
       int child_inactive = FALSE;
-      SEXP child_column = VECTOR_ELT(
-        snapshot->columns,
-        snapshot->column_by_parameter[child]
-      );
       /*
        * TuneToken children skip all incoming edges, after the shared graph
        * planner above has already admitted topology and rejected cycles.
        */
-      if (TYPEOF(child_column) == VECSXP &&
-          Rf_inherits(VECTOR_ELT(child_column, row), "TuneToken")) {
+      if (parameter_value_is_tune_token(snapshot, child, row)) {
         continue;
       }
       for (R_xlen_t incoming = snapshot->graph.incoming_start[child];
@@ -527,19 +770,20 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
         if (dependency->parent >= parameter_count) {
           Rf_error("Corrupt ParamSet dependency topology");
         }
-        SEXP parent_column = VECTOR_ELT(
-          snapshot->columns,
-          snapshot->column_by_parameter[dependency->parent]
-        );
         child_inactive = mask_get(
           snapshot,
           inactive,
           dependency->parent,
           row
-        ) || value_is_missing(parent_column, row) || !condition_matches(
-          dependency,
-          parent_column,
+        ) || parameter_value_is_missing(
+          snapshot,
+          dependency->parent,
+          row
+        ) || !parameter_condition_matches(
+          snapshot,
+          dependency->parent,
           row,
+          dependency,
           work_since_interrupt
         );
       }
@@ -550,18 +794,64 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
     }
   }
 
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, 3));
-  SEXP result_names = PROTECT(Rf_allocVector(STRSXP, 3));
+  const R_xlen_t fixed_count = snapshot->values_data.size;
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 7));
+  SEXP result_names = PROTECT(Rf_allocVector(STRSXP, 7));
+  SEXP fixed_columns = PROTECT(Rf_allocVector(STRSXP, fixed_count));
+  SEXP fixed_values = PROTECT(Rf_allocVector(VECSXP, fixed_count));
+  SEXP fixed_plain = PROTECT(Rf_allocVector(LGLSXP, fixed_count));
   SEXP rows = PROTECT(Rf_allocVector(VECSXP, patch_count));
   SEXP columns = PROTECT(Rf_allocVector(STRSXP, patch_count));
   SEXP values = PROTECT(Rf_allocVector(VECSXP, patch_count));
-  SET_STRING_ELT(result_names, 0, Rf_mkChar("rows"));
-  SET_STRING_ELT(result_names, 1, Rf_mkChar("columns"));
-  SET_STRING_ELT(result_names, 2, Rf_mkChar("values"));
+  SET_STRING_ELT(result_names, 0, Rf_mkChar("fixed_columns"));
+  SET_STRING_ELT(result_names, 1, Rf_mkChar("fixed_values"));
+  SET_STRING_ELT(result_names, 2, Rf_mkChar("fixed_plain"));
+  SET_STRING_ELT(result_names, 3, Rf_mkChar("rows"));
+  SET_STRING_ELT(result_names, 4, Rf_mkChar("columns"));
+  SET_STRING_ELT(result_names, 5, Rf_mkChar("values"));
+  SET_STRING_ELT(result_names, 6, Rf_mkChar("receipt"));
   Rf_setAttrib(result, R_NamesSymbol, result_names);
-  SET_VECTOR_ELT(result, 0, rows);
-  SET_VECTOR_ELT(result, 1, columns);
-  SET_VECTOR_ELT(result, 2, values);
+  SET_VECTOR_ELT(result, 0, fixed_columns);
+  SET_VECTOR_ELT(result, 1, fixed_values);
+  SET_VECTOR_ELT(result, 2, fixed_plain);
+  SET_VECTOR_ELT(result, 3, rows);
+  SET_VECTOR_ELT(result, 4, columns);
+  SET_VECTOR_ELT(result, 5, values);
+
+  for (R_xlen_t value = 0; value < fixed_count; ++value) {
+    paradox_account_work(work_since_interrupt);
+    SEXP id = STRING_ELT(snapshot->values_data.names, value);
+    SEXP fixed = VECTOR_ELT(snapshot->values_data.values, value);
+    R_xlen_t parameter = paradox_domain_find_string(
+      snapshot->params_data.ids,
+      id,
+      work_since_interrupt
+    );
+    if (parameter == R_XLEN_T_MAX) {
+      UNPROTECT(8);
+      Rf_error("Corrupt ParamSet stored value ID in Design plan");
+    }
+    if (Rf_inherits(fixed, "TuneToken")) {
+      UNPROTECT(8);
+      Rf_error(
+        "Design generation cannot materialize the stored TuneToken value of parameter '%s'.",
+        CHAR(id)
+      );
+    }
+    SET_STRING_ELT(fixed_columns, value, id);
+    SET_VECTOR_ELT(fixed_values, value, fixed);
+    SET_LOGICAL_ELT(
+      fixed_plain,
+      value,
+      fixed_value_is_plain(
+        fixed,
+        STRING_ELT(
+          VECTOR_ELT(snapshot->params, PARADOX_DOMAIN_STORAGE_TYPE),
+          parameter
+        )
+      )
+    );
+  }
 
   R_xlen_t output = 0;
   for (R_xlen_t position = 0; position < parameter_count; ++position) {
@@ -597,35 +887,79 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
     UNPROTECT(2);
   }
   if (output != patch_count) {
-    UNPROTECT(5);
+    UNPROTECT(8);
     Rf_error("Internal error: incomplete Design dependency plan");
   }
-  UNPROTECT(5);
+  SEXP receipt = PROTECT(snapshot->has_collection_graph
+    ? paradox_generation_receipt_graph(&snapshot->collection_graph)
+    : paradox_generation_receipt_single(
+        snapshot->selected_private,
+        snapshot->selected_core,
+        paradox_core_kind(snapshot->selected_core) ==
+          PARADOX_CORE_SHADOW
+          ? snapshot->selected_shadow_signature
+          : R_NilValue,
+        paradox_core_kind(snapshot->selected_core) ==
+          PARADOX_CORE_SHADOW
+          ? snapshot->selected_shadow_signature_content
+          : R_NilValue
+      ));
+  SET_VECTOR_ELT(result, 6, receipt);
+  UNPROTECT(9);
   return result;
 }
 
-static SEXP empty_output(void) {
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, 3));
-  SEXP names = PROTECT(Rf_allocVector(STRSXP, 3));
-  SET_STRING_ELT(names, 0, Rf_mkChar("rows"));
-  SET_STRING_ELT(names, 1, Rf_mkChar("columns"));
-  SET_STRING_ELT(names, 2, Rf_mkChar("values"));
-  Rf_setAttrib(result, R_NamesSymbol, names);
-  SET_VECTOR_ELT(result, 0, Rf_allocVector(VECSXP, 0));
-  SET_VECTOR_ELT(result, 1, Rf_allocVector(STRSXP, 0));
-  SET_VECTOR_ELT(result, 2, Rf_allocVector(VECSXP, 0));
-  UNPROTECT(2);
-  return result;
+static void require_current_param_generation(
+    const dependency_snapshot_t *snapshot,
+    R_xlen_t *work_since_interrupt) {
+  if (!snapshot->has_collection_graph) {
+    if (paradox_core_from_private(snapshot->selected_private) !=
+        snapshot->selected_core ||
+        (paradox_core_kind(snapshot->selected_core) ==
+          PARADOX_CORE_SHADOW &&
+          !paradox_shadow_signature_receipt_is_current(
+            snapshot->selected_core,
+            snapshot->selected_shadow_signature,
+            snapshot->selected_shadow_signature_content
+          ))) {
+      Rf_error("ParamSet changed during Design construction");
+    }
+    return;
+  }
+  /*
+   * A rooted capsule generation is immutable under every supported public
+   * operation, but a Design keeps the live ParamSet shell after this plan
+   * returns. Require every selected shell still to name that exact generation
+   * in one allocation-free terminal wave. Unsupported in-place writes to
+   * private capsule tables are intentionally outside this boundary.
+   */
+  for (R_xlen_t index = 0;
+      index < snapshot->collection_graph.count;
+      ++index) {
+    paradox_account_work(work_since_interrupt);
+    const paradox_collection_graph_node_t *node =
+      &snapshot->collection_graph.nodes[index];
+    if (paradox_core_from_private(node->private_environment) !=
+        node->source_core) {
+      Rf_error("ParamSet graph changed during Design construction");
+    }
+  }
+  if (!paradox_collection_graph_snapshot_is_intact(
+      &snapshot->collection_graph,
+      work_since_interrupt
+    )) {
+    Rf_error("ParamSet graph changed during Design construction");
+  }
 }
 
 SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
   data = PROTECT(paradox_materialize_public_table_shell(data));
   PROTECT(param_set);
-  if (!ordinary_design_shell(data)) {
+  if (TYPEOF(data) != VECSXP || ALTREP(data) || Rf_isS4(data)) {
     UNPROTECT(2);
     Rf_error("Design$data must be a list-like data frame");
   }
-  SEXP roots = PROTECT(Rf_allocVector(VECSXP, 4));
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, 8));
   PROTECT_INDEX graph_roots_index;
   SEXP graph_roots;
   PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
@@ -633,6 +967,17 @@ SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
 
   dependency_snapshot_t snapshot = {0};
   R_xlen_t work_since_interrupt = 0;
+  /*
+   * Public columns may materialize ALTREP or execute class metadata methods.
+   * Settle and own that complete input before selecting the ParamSet graph, so
+   * supported reentry consistently chooses the post-callback generation.
+   */
+  snapshot_design_shell(
+    data,
+    &snapshot,
+    roots,
+    &work_since_interrupt
+  );
   load_param_state(
     param_set,
     private,
@@ -642,24 +987,13 @@ SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
     roots,
     &work_since_interrupt
   );
-  if (snapshot.dependency_count == 0) {
-    if (Rf_isObject(data)) {
-      R_xlen_t ignored_rows = 0;
-      if (!paradox_public_table_row_count(data, &ignored_rows)) {
-        UNPROTECT(5);
-        Rf_error("Design$data has invalid data.frame row names");
-      }
-    }
-    SEXP result = PROTECT(empty_output());
-    UNPROTECT(6);
-    return result;
+  map_design_columns(&snapshot, &work_since_interrupt);
+  if (snapshot.dependency_count != 0) {
+    snapshot_design_columns(
+      &snapshot,
+      &work_since_interrupt
+    );
   }
-  snapshot_design_data(
-    data,
-    &snapshot,
-    roots,
-    &work_since_interrupt
-  );
   paradox_dependency_graph_plan_build(
     snapshot.params_data.ids,
     &snapshot.dependencies_data,
@@ -670,6 +1004,10 @@ SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
     &snapshot,
     &work_since_interrupt
   ));
+  require_current_param_generation(
+    &snapshot,
+    &work_since_interrupt
+  );
   UNPROTECT(6);
   return result;
 }

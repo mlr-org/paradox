@@ -22,6 +22,14 @@ typedef struct {
    * binding and is therefore the generation used by mutation receipts. */
   SEXP core;
   SEXP source_core;
+  /* Exact package-private Shadow cache signature selected with source_core.
+   * The graph root carrier owns this value separately so an in-place
+   * attribute replacement cannot leave an unrooted pointer in native
+   * workspace while the operation allocates. */
+  SEXP shadow_signature;
+  /* Optional exact-entry receipt retained only by the receipted graph builder.
+   * Ordinary hot readers leave both receipt fields NULL to avoid allocation. */
+  SEXP shadow_signature_content;
   SEXP state;
   paradox_core_kind_t kind;
   paradox_domain_params_t params;
@@ -81,6 +89,19 @@ attribute_hidden void paradox_collection_graph_build(
   R_xlen_t *work_since_interrupt
 );
 
+/* The subset/subspace constructor performs substantial allocation after
+ * admitting a graph and therefore needs a terminal generation receipt. This
+ * variant roots exact Shadow metadata carriers for that receipt; ordinary
+ * readers avoid that otherwise-unused work. */
+attribute_hidden void paradox_collection_graph_build_receipted(
+  SEXP private_environment,
+  SEXP self,
+  paradox_collection_graph_t *graph,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
 /* Migration preflight uses the same complete graph admission while previewing
  * stale SHADOW children offside instead of installing their refreshed cores. */
 attribute_hidden void paradox_collection_graph_build_readonly(
@@ -89,6 +110,28 @@ attribute_hidden void paradox_collection_graph_build_readonly(
   paradox_collection_graph_t *graph,
   SEXP *roots,
   PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Cold Shadow preview combines the non-installing traversal above with the
+ * exact metadata receipt required before a newly assembled derived capsule
+ * can be trusted. */
+attribute_hidden void paradox_collection_graph_build_readonly_receipted(
+  SEXP private_environment,
+  SEXP self,
+  paradox_collection_graph_t *graph,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Allocation-free terminal integrity scan for one retained graph snapshot.
+ * Public shell/core replacement cannot invalidate a rooted immutable
+ * generation and is intentionally ignored. The scan detects mutation of the
+ * selected capsule itself and, for Shadows, the exact metadata carrier and
+ * every captured entry. */
+attribute_hidden int paradox_collection_graph_snapshot_is_intact(
+  const paradox_collection_graph_t *graph,
   R_xlen_t *work_since_interrupt
 );
 

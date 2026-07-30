@@ -58,7 +58,6 @@
 #' @export
 ps_union = function(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE) {
   assert_list(sets, types = "ParamSet")
-  if (!length(sets)) return(ParamSet$new())
   ParamSetCollection$new(sets, tag_sets = tag_sets, tag_params = tag_params, postfix_names = postfix_names)$flatten()
 }
 

@@ -25,6 +25,14 @@ attribute_hidden SEXP paradox_builtin_condition_admit(
   R_xlen_t *work_since_interrupt
 );
 
+/* Return a fully detached exact built-in Condition.  The result owns its
+ * list shell, names/classes/format metadata, and an ordinary snapshot of the
+ * RHS.  R_UnboundValue denotes malformed built-in structure. */
+attribute_hidden SEXP paradox_builtin_condition_snapshot(
+  SEXP condition,
+  R_xlen_t *work_since_interrupt
+);
+
 /* Scalar admission and element comparison are shared by the ParamSet
  * activity kernel (paramset_activity.c), the quantile/grid planner, and the
  * Design dependency planner. Mixed non-byte string encodings are compared

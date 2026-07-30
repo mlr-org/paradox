@@ -3,8 +3,11 @@ param_set_core_new	2	production	production-dynamic	direct_param_set_core_new	Dir
 param_set_core_state	2	production	production-dynamic	direct_param_set_core_state	Direct recovery of the canonical protected payload through its private owner, after the derived-schema gate
 param_set_core_replace	2	production	production-dynamic	direct_param_set_core_replace	Direct atomic replacement of one capsule field and generation
 param_set_core_kind	1	production	production-dynamic	direct_param_set_core_kind	Direct BASE node-kind recovery from a package-owned capsule
+param_set_deep_clone_receipt	5	production	production-dynamic	direct_param_set_deep_clone_receipt	Direct allocation-free terminal comparison of retained shell-policy/private-core/Shadow-signature generations before graph cloning
+param_set_deep_clone_shadow_receipt	1	production	production-dynamic	direct_param_set_deep_clone_shadow_receipt	Direct exact Shadow signature and content receipt construction for one retained clone source generation
 param_set_shadow_core_new	2	production	production-dynamic	direct_param_set_shadow_core_new	Direct authoritative Shadow capsule construction from one static template and exact origin graph
 param_set_shadow_construct	2	production	production-dynamic	direct_param_set_shadow_construct	Direct C construction of the fixed visible Shadow schema and first live origin snapshot
+param_set_shadow_origin	2	production	production-dynamic	direct_param_set_shadow_origin	Direct current origin selection from one refreshed SHADOW generation
 param_set_core_refresh	2	production	production-dynamic	direct_param_set_core_refresh	Direct generation-checked derived-schema refresh without evaluating an R synchronization method
 param_set_shadow_constraint	2	production	production-dynamic	direct_param_set_shadow_constraint	Direct hidden-first Shadow constraint merge and scalar callback admission from an exact immutable plan
 design_transpose	2	production	production-dynamic	direct_design_transpose	Direct valid Design row transposition
@@ -15,10 +18,11 @@ domain_check_builtin	3	production	production-dynamic	direct_domain_check_builtin
 domain_property_builtin	2	production	production-dynamic	direct_domain_property_builtin	Direct built-in level-count property call
 domain_construct	18	production	production-dynamic	direct_domain_construct	Direct one-call constructor admission, final ID/requirements/default/init ownership, numeric bounds/logscale normalization, and canonical row construction
 domain_uty_check_result	1	production	production-dynamic	direct_domain_uty_check_result	Direct utility-check result admission and rejection
+domain_uty_validate_custom_check	1	production	production-dynamic	direct_domain_uty_validate_custom_check	Exact utility callback probe retains the validated function identity
 domain_simple_repr_id	1	production	production-dynamic	direct_domain_simple_repr_id	Direct exact zero-argument built-in representation classification and closed-form rejection
 domain_qunif_builtin	2	production	production-dynamic	direct_domain_qunif_builtin,hazard_callback_reentry_rooting	Direct valid call and nested reentry target
 domain_sanitize_builtin	2	production	production-dynamic	direct_domain_sanitize_builtin	Direct valid tolerance-boundary call
-param_set_construct	1	production	production-dynamic	direct_param_set_construct	Direct construction from canonical built-in Domain objects
+param_set_construct	2	production	production-dynamic	direct_param_set_construct	Direct construction from canonical built-in Domain objects with unconditional dependency-policy admission
 param_set_collection_construct	4	production	production-dynamic	direct_param_set_collection_construct	Direct COLLECTION capsule plan from canonical ParamSet nodes
 param_set_collection_add	6	production	production-dynamic	direct_param_set_collection_add	Direct validated atomic COLLECTION generation replacement with one appended child edge
 param_set_collection_detach_plan	3	production	production-dynamic	direct_param_set_collection_detach_plan	Direct callback-detachment plan for a canonical collection child
@@ -29,9 +33,13 @@ param_set_collection_detached_extra_trafo	2	production	production-dynamic	direct
 param_set_collection_detached_constraint	2	production	production-dynamic	direct_param_set_collection_detached_constraint	Direct detached constraint evaluation from an ordinary immutable plan
 param_set_collection_owner_subset_state	3	production	production-dynamic	direct_param_set_collection_owner_subset_state	Direct package-owned two-argument callback-owner subset capability without public subset dispatch
 param_set_validate_current_graph	3	production	production-dynamic	direct_param_set_validate_current_graph	Direct generation-consistent read-only complete current capsule-graph validation by previewing rather than installing stale ParamSetShadow generations
-param_set_validate_current_roots	1	production	production-dynamic	direct_param_set_validate_current_roots	Joint generation-consistent read-only validation and final receipt scan for every prepared/current migration-session root
+param_set_validate_current_roots	2	production	production-dynamic	direct_param_set_validate_current_roots	Joint generation-consistent read-only validation and final receipt scan for every prepared/current migration-session root, optionally followed by the allocation-free complete public-shell migration receipt in the same native barrier
+param_set_internal_tuning_snapshot	4	production	production-dynamic	direct_param_set_internal_tuning_snapshot	Direct one-generation snapshot of internal-tuning routes, ultimate owners, values, metadata, and exact graph receipts
+param_set_internal_tuning_receipt	1	production	production-dynamic	direct_param_set_internal_tuning_receipt	Direct allocation-free terminal validation of one retained internal-tuning graph receipt
+param_set_generation_receipt	1	production	production-dynamic	direct_param_set_generation_receipt	Direct allocation-free terminal comparison of every admitted deferred-operation core binding and exact Shadow metadata receipt without replaying immutable capsule validation
 param_set_check_builtin	7	production	production-dynamic	direct_param_set_check_builtin	Direct unified scalar validation and sanitization against a BASE capsule
 tune_token_snapshot_list	3	production	production-dynamic	direct_tune_token_snapshot_list	Direct closed selection/admission of TuneTokens from a complete ordinary values list plus one detached target-Domain snapshot, without candidate callback execution or later target-graph rereads
+tune_token_snapshot_current	2	production	production-dynamic	direct_tune_token_snapshot_current	Direct same-generation current-value and target-Domain TuneToken snapshot for default search-space conversion
 param_set_check_dependencies_builtin	3	production	production-dynamic	direct_param_set_check_dependencies_builtin	Direct dependency-only validation through the shared graph snapshot and point kernel
 param_set_test_constraint_builtin	4	production	production-dynamic	direct_param_set_test_constraint_builtin	Direct scalar constraint-only evaluation through the shared graph snapshot and point kernel
 param_set_test_constraint_dt_builtin	4	production	production-dynamic	direct_param_set_test_constraint_dt_builtin	Direct two-phase tabular constraint-only evaluation through one immutable graph snapshot
@@ -41,20 +49,25 @@ param_set_ids	5	production	production-dynamic	direct_param_set_ids	Direct class 
 param_set_ids_lazy	3	production	production-dynamic	direct_param_set_ids_lazy	Direct namespace-parented lazy frame call
 param_set_get_values	3	production	production-dynamic	direct_param_set_get_values	Direct namespace-parented values frame call
 param_set_values_merge	4	production	production-dynamic	direct_param_set_values_merge,hazard_altrep_snapshot_reentry	Direct merge and changing ALTREP snapshot with native reentry
+param_set_set_values	5	production	production-dynamic	direct_param_set_set_values	Direct generation-consistent set_values merge, validation, and atomic graph commit
+param_set_assign_values	3	production	production-dynamic	direct_param_set_assign_values	Direct policy-selected assignment and atomic graph commit
 param_set_store_values	3	production	production-dynamic	direct_param_set_store_values	Direct canonical capsule value commit
 param_set_assign_values_checked	3	production	production-dynamic	direct_param_set_assign_values_checked	Direct checked canonical assignment
+param_set_internal_tuning_store	5	production	production-dynamic	direct_param_set_internal_tuning_store	Direct checked ultimate value transaction retaining the complete internal-tuning source receipt set through commit
+param_set_internal_tuning_store_owners	4	production	production-dynamic	direct_param_set_internal_tuning_store_owners	Direct atomic checked transaction over explicitly snapshotted ultimate internal-tuning owner shells
 param_set_set_tags	3	production	production-dynamic	direct_param_set_set_tags	Direct validated tag-table replacement through one owned capsule generation
 param_set_get_tags	2	production	production-dynamic	direct_param_set_get_tags	Direct ordered detached tag-list projection from canonical capsule state
 param_set_dependency_table_snapshot	1	production	production-dynamic	direct_param_set_dependency_table_snapshot	Direct immutable closed-Condition dependency-table snapshot
 param_set_dependencies	2	production	production-dynamic	direct_param_set_dependencies	Direct detached BASE or SHADOW dependency snapshot
 param_set_has_dependencies	2	production	production-dynamic	direct_param_set_has_dependencies	Direct scalar dependency-presence read across validated BASE, COLLECTION, and live SHADOW capsule state
+param_set_assertion_state	2	production	production-dynamic	direct_param_set_assertion_state	Direct atomic parameter/dependency assertion decision snapshot
 param_set_set_dependencies	3	production	production-dynamic	direct_param_set_set_dependencies	Direct validated atomic BASE dependency-table replacement
 param_set_add_dependency	6	production	production-dynamic	direct_param_set_add_dependency	Direct validated dependency append including native Shadow origin routing
 param_set_set_callback	4	production	production-dynamic	direct_param_set_set_callback	Direct BASE constraint or extra-transformation callback replacement
 param_set_property	2	production	production-dynamic	direct_param_set_property	Direct named-vector static property extraction
 param_set_qunif_builtin	3	production	production-dynamic	direct_param_set_qunif_builtin	Direct matrix/data.frame mapping from an owned current capsule; malformed inputs error without replay
 sampler_unif_sample_builtin	2	production	production-dynamic	direct_sampler_unif_sample_builtin	Direct capsule-driven whole-operation uniform sampling
-sampler_unif_subspace_handoffs	3	production	production-dynamic	direct_sampler_unif_subspace_handoffs	Direct issue of fresh sampler-specific single-use subspace ownership carriers
+sampler_unif_subspace_handoffs	1	production	production-dynamic	direct_sampler_unif_subspace_handoffs	Direct issue of fresh sampler-specific single-use subspace ownership carriers
 sampler_unif_take_subspace	1	production	production-dynamic	direct_sampler_unif_take_subspace	Direct one-time consumption of an authenticated sampler subspace ownership carrier
 generate_design_grid_builtin	4	production	production-dynamic	direct_generate_design_grid_builtin	Direct output-sensitive fixed/dependency-aware grid construction, including dependent list-valued inactive-row protection; malformed inputs and overflowing realized products error before allocation
 param_set_trafo	4	production	production-dynamic	direct_param_set_trafo	Direct single-row transformation through the shared capsule engine
@@ -63,12 +76,19 @@ param_set_domains	2	production	production-dynamic	direct_param_set_domains	Direc
 param_set_params	2	production	production-dynamic	direct_param_set_params	Direct public table recovery
 param_set_collection_params	2	production	production-dynamic	direct_param_set_collection_params	Direct collection parameter table recovery
 param_set_collection_deps	2	production	production-dynamic	direct_param_set_collection_deps	Direct collection dependency table recovery
-param_set_collection_values	2	production	production-dynamic	direct_param_set_collection_values	Direct collection values flattening
-param_set_subset_state	8	production	production-dynamic	direct_param_set_subset_state	Direct subset capsule transaction with independently retained or stripped constraint and transformation snapshots
-param_set_subspace_states	4	production	production-dynamic	direct_param_set_subspace_states	Direct atomic multi-subspace capsule planning
+param_set_collection_values	2	production	production-dynamic	direct_param_set_collection_values	Direct detached raw-value projection across BASE, COLLECTION, and SHADOW with typed atomic ownership and opaque ParamUty identity
+param_set_subset_state	6	production	production-dynamic	direct_param_set_subset_state	Direct subset capsule transaction with independently retained or stripped constraint and transformation snapshots
+param_set_flatten_state	2	production	production-dynamic	direct_param_set_flatten_state	Direct all-current-ID subset capsule transaction for callback-free Collection and Shadow flattening
+test_param_set_subset_reentry	7	fixture	fixture-dynamic	direct_test_param_set_subset_reentry	Internal callback fixture exercises the subset transaction's exact terminal source-generation receipt
+param_set_subspace_states	3	production	production-dynamic	direct_param_set_subspace_states	Direct atomic multi-subspace capsule planning
+param_set_all_subspace_states	2	production	production-dynamic	direct_param_set_all_subspace_states	Direct all-current-ID atomic multi-subspace capsule planning
 param_set_adopt_subset_state	2	production	production-dynamic	direct_param_set_adopt_subset_state	Direct single-use subset capsule adoption
 upgrade_graph_discover	1	production	production-dynamic	direct_upgrade_graph_discover	Direct iterative identity-deduplicated discovery of a ParamSet-family shell through ordinary and legally self-duplicating ALTREP carriers without entering the global environment boundary
+upgrade_class_snapshot	1	production	production-dynamic	direct_upgrade_class_snapshot	Direct owned snapshot of ordinary legacy class metadata without inheritance dispatch or structural ALTREP observation
+upgrade_structural_list_exact	1	production	production-dynamic	direct_upgrade_structural_list_exact	Direct inert representation-only admission of ordinary legacy VECSXP structure, rejecting pairlist, S4, and structural ALTREP shells without element observation
 upgrade_carrier_list_snapshot	1	production	production-dynamic	direct_upgrade_carrier_list_snapshot	Direct rejection of ALTREP, S4, or classed detached legacy callback-carrier shells before observation and shallow snapshot of an ordinary list with optional ordinary names
+upgrade_table_list_snapshot	3	production	production-dynamic	direct_upgrade_table_list_snapshot	Direct one-generation legacy table names/column snapshot with exact class and canonical matching row count, optional repr, and unsupported-attribute rejection
+upgrade_public_binding_receipts	1	production	production-dynamic	direct_upgrade_public_binding_receipts	Direct allocation-free terminal authentication of transplanted public binding values, kinds, lock bits, environment lock, and class generation; R 3.6 fails closed at its documented missing active-binding-function accessor
 plain_binding_snapshot	2	production	production-dynamic	direct_plain_binding_snapshot	Direct non-forcing distinction between an ordinary realized frame binding and absent, inherited, active, or delayed bindings
 gateway_context_snapshot	2	production	production-dynamic	direct_gateway_context_snapshot	Direct allocation-safe authenticated current shell and defining-family enclosure/private/super/core context snapshot with a final generation scan
 param_set_class_kind	1	production	production-dynamic	direct_param_set_class_kind	Direct inert exact ordinary ParamSet-family R6 class classification without ALTREP observation or inheritance dispatch

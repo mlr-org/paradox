@@ -4,6 +4,8 @@
 
 #include "paradox.h"
 
+#include "builtin_condition.h"
+#include "domain_admission.h"
 #include "paramset_domain_common.h"
 #include "paramset_params_internal.h"
 #include "r_api_compat.h"
@@ -47,34 +49,53 @@ int paradox_params_supported_table_attributes(SEXP table) {
 
 int paradox_params_exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
     R_xlen_t *work_since_interrupt) {
-  SEXP row_names = PROTECT(Rf_getAttrib(table, R_RowNamesSymbol));
-  /* The public getter intentionally expands data-frame compact row names
-   * (`c(NA, -n)`) to an ALTREP `1:n` vector. Row names do not participate in
-   * this kernel: the validated ordinary columns provide the row count and
-   * the result receives fresh compact row names. Never ask a callback-capable
-   * row-name facade for Length/Elt merely to validate unused metadata. */
+  SEXP row_names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_RowNamesSymbol
+  ));
+  /*
+   * Capsule tables are package-produced, not public ingress. Read the exact
+   * stored representation rather than Rf_getAttrib()'s expanded ALTREP
+   * facade. R may retain package-built row names as compact c(NA, +/-n) or as
+   * the ordinary explicit 1:n vector, depending on the producer/runtime; both
+   * are canonical. A wrong-length or callback-capable forged carrier is
+   * rejected before it can be observed.
+   */
   if (row_count > INT_MAX || TYPEOF(row_names) != INTSXP ||
+      ALTREP(row_names) || Rf_isS4(row_names) ||
+      Rf_isObject(row_names) ||
       !paradox_api_has_no_attributes(row_names)) {
     UNPROTECT(1);
     return FALSE;
   }
-  if (ALTREP(row_names)) {
+  if (row_count == 0) {
+    const int valid = XLENGTH(row_names) == 0;
     UNPROTECT(1);
-    return TRUE;
+    return valid;
   }
-  if (XLENGTH(row_names) != row_count) {
+  const R_xlen_t encoded_size = XLENGTH(row_names);
+  if (encoded_size == 2 &&
+      INTEGER_ELT(row_names, 0) == NA_INTEGER) {
+    const int encoded = INTEGER_ELT(row_names, 1);
+    const int expected = (int) row_count;
+    const int valid = encoded == expected || encoded == -expected;
+    UNPROTECT(1);
+    return valid;
+  }
+  if (encoded_size != row_count) {
     UNPROTECT(1);
     return FALSE;
   }
+  int valid = TRUE;
   for (R_xlen_t row = 0; row < row_count; ++row) {
     paradox_account_work(work_since_interrupt);
     if (INTEGER_ELT(row_names, row) != (int) row + 1) {
-      UNPROTECT(1);
-      return FALSE;
+      valid = FALSE;
+      break;
     }
   }
   UNPROTECT(1);
-  return TRUE;
+  return valid;
 }
 
 int paradox_params_names_are_only_attribute(SEXP value) {
@@ -222,6 +243,113 @@ static SEXP copy_vector(SEXP source,
     Rf_error("Internal error: unsupported ParamSet params column type");
   }
   UNPROTECT(1);
+  return result;
+}
+
+static int param_row_has_typed_values(
+    const paradox_domain_params_t *params, R_xlen_t row) {
+  return !paradox_domain_string_is(
+    STRING_ELT(params->classes, row),
+    "ParamUty"
+  );
+}
+
+/* A NoDefault object at the schema default/init position is package-
+ * interpreted marker structure, not a ParamUty value leaf. Everything else
+ * follows the closed kind's leaf policy: typed atomic values are owned
+ * coherently, while typed S4/non-atomic specials and ParamUty payloads preserve
+ * their contractual identity. Do not apply this marker interpretation to the
+ * general value store: an opaque ParamUty payload is allowed to have any
+ * class, including the outward NoDefault spelling. */
+static SEXP detach_domain_schema_value_leaf(SEXP value, int typed) {
+  if (Rf_inherits(value, "NoDefault")) {
+    return Rf_duplicate(value);
+  }
+  return typed ? paradox_snapshot_builtin_value_leaf(value) : value;
+}
+
+SEXP paradox_detach_stored_value_leaf(SEXP value, int typed) {
+  return typed ? paradox_snapshot_builtin_value_leaf(value) : value;
+}
+
+SEXP paradox_detach_domain_row_field(SEXP source,
+    enum paradox_domain_column column, int typed,
+    R_xlen_t *work_since_interrupt) {
+  if (column == PARADOX_DOMAIN_CARGO ||
+      column == PARADOX_DOMAIN_LEVELS ||
+      column == PARADOX_DOMAIN_SPECIAL_VALS ||
+      column == PARADOX_DOMAIN_REQUIREMENTS) {
+    SEXP result = PROTECT(paradox_snapshot_domain_nested(
+      source,
+      column,
+      work_since_interrupt
+    ));
+    if (result == R_UnboundValue) {
+      UNPROTECT(1);
+      return R_UnboundValue;
+    }
+    if (column == PARADOX_DOMAIN_SPECIAL_VALS && typed) {
+      paradox_own_builtin_special_value_leaves(result, TRUE);
+    }
+    UNPROTECT(1);
+    return result;
+  }
+  if (column == PARADOX_DOMAIN_DEFAULT ||
+      column == PARADOX_DOMAIN_INIT) {
+    return detach_domain_schema_value_leaf(source, typed);
+  }
+  return source;
+}
+
+SEXP paradox_detach_named_values(SEXP values,
+    const paradox_domain_params_t *params,
+    R_xlen_t *work_since_interrupt) {
+  paradox_domain_values_t parsed;
+  if (!paradox_domain_validate_values(
+      values,
+      &parsed,
+      work_since_interrupt
+    )) {
+    Rf_error("Corrupt ParamSet capsule: invalid value store");
+  }
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, parsed.size));
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, parsed.size));
+  SEXP owners = PROTECT(Rf_match(params->ids, parsed.names, 0));
+  const SEXPTYPE owner_type = (SEXPTYPE) TYPEOF(owners);
+  if ((owner_type != INTSXP && owner_type != REALSXP) ||
+      XLENGTH(owners) != parsed.size) {
+    UNPROTECT(3);
+    Rf_error("Internal error: invalid value-owner match result");
+  }
+  for (R_xlen_t index = 0; index < parsed.size; ++index) {
+    paradox_account_work(work_since_interrupt);
+    SEXP name = STRING_ELT(parsed.names, index);
+    R_xlen_t one_based = 0;
+    if (owner_type == INTSXP) {
+      const int owner = INTEGER_ELT(owners, index);
+      one_based = owner > 0 ? (R_xlen_t) owner : 0;
+    } else {
+      const double owner = REAL_ELT(owners, index);
+      one_based = R_FINITE(owner) && owner > 0.0 &&
+          owner <= (double) params->row_count
+        ? (R_xlen_t) owner
+        : 0;
+    }
+    if (one_based == 0 || one_based > params->row_count) {
+      UNPROTECT(3);
+      Rf_error("Corrupt ParamSet capsule: value owner is unknown");
+    }
+    const R_xlen_t row = one_based - 1;
+    SEXP detached = PROTECT(paradox_detach_stored_value_leaf(
+      VECTOR_ELT(parsed.values, index),
+      param_row_has_typed_values(params, row)
+    ));
+    SET_VECTOR_ELT(result, index, detached);
+    SET_STRING_ELT(names, index, name);
+    UNPROTECT(1);
+  }
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(3);
   return result;
 }
 
@@ -559,6 +687,29 @@ SEXP paradox_params_build_static(const paradox_params_state_t *state,
       source,
       work_since_interrupt
     ));
+    if (column == PARADOX_DOMAIN_CARGO ||
+        column == PARADOX_DOMAIN_LEVELS ||
+        column == PARADOX_DOMAIN_SPECIAL_VALS ||
+        column == PARADOX_DOMAIN_DEFAULT) {
+      for (R_xlen_t row = 0; row < params->row_count; ++row) {
+        paradox_account_work(work_since_interrupt);
+        SEXP detached = PROTECT(paradox_detach_domain_row_field(
+          VECTOR_ELT(output, row),
+          column,
+          param_row_has_typed_values(params, row),
+          work_since_interrupt
+        ));
+        if (detached == R_UnboundValue) {
+          UNPROTECT(4);
+          Rf_error(
+            "Corrupt ParamSet capsule: cannot detach public `%s` field",
+            paradox_domain_column_names[column]
+          );
+        }
+        SET_VECTOR_ELT(output, row, detached);
+        UNPROTECT(1);
+      }
+    }
     SET_VECTOR_ELT(result, column, output);
     UNPROTECT(2);
   }
@@ -664,10 +815,19 @@ int paradox_params_finish_dynamic(SEXP result,
     SET_VECTOR_ELT(
       requirement,
       1,
-      VECTOR_ELT(dependencies.conditions, dependency_row)
+      R_NilValue
     );
+    SEXP condition = PROTECT(paradox_builtin_condition_snapshot(
+      VECTOR_ELT(dependencies.conditions, dependency_row),
+      work_since_interrupt
+    ));
+    if (condition == R_UnboundValue) {
+      UNPROTECT(5);
+      return FALSE;
+    }
+    SET_VECTOR_ELT(requirement, 1, condition);
     SET_VECTOR_ELT(requirements_column, row, requirement);
-    UNPROTECT(2);
+    UNPROTECT(3);
   }
   SET_VECTOR_ELT(result, PARADOX_DOMAIN_REQUIREMENTS, requirements_column);
   UNPROTECT(1);
@@ -682,11 +842,18 @@ int paradox_params_finish_dynamic(SEXP result,
     const R_xlen_t selected = value_index[row];
     SET_LOGICAL_ELT(init_given_column, row, selected != 0);
     if (selected != 0) {
+      SEXP detached = PROTECT(paradox_detach_domain_row_field(
+        VECTOR_ELT(values.values, selected - 1),
+        PARADOX_DOMAIN_INIT,
+        param_row_has_typed_values(params, row),
+        work_since_interrupt
+      ));
       SET_VECTOR_ELT(
         init_column,
         row,
-        VECTOR_ELT(values.values, selected - 1)
+        detached
       );
+      UNPROTECT(1);
     }
   }
   SET_VECTOR_ELT(result, PARADOX_DOMAIN_INIT_GIVEN, init_given_column);

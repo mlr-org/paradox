@@ -31,13 +31,14 @@ static SEXP shadow_metadata_symbol(void) {
 
 static int ordinary_list(SEXP value, R_xlen_t size) {
   return TYPEOF(value) == VECSXP && !ALTREP(value) &&
-    !Rf_isObject(value) && XLENGTH(value) == size &&
+    !Rf_isS4(value) && !Rf_isObject(value) && XLENGTH(value) == size &&
     paradox_api_has_no_attributes(value);
 }
 
 static int exact_false(SEXP value) {
   return TYPEOF(value) == LGLSXP && !ALTREP(value) &&
-    XLENGTH(value) == 1 && paradox_api_has_no_attributes(value) &&
+    !Rf_isS4(value) && !Rf_isObject(value) && XLENGTH(value) == 1 &&
+    paradox_api_has_no_attributes(value) &&
     LOGICAL_ELT(value, 0) == FALSE;
 }
 
@@ -47,9 +48,12 @@ static int exact_shadow_constraint_plan(SEXP plan) {
   };
   R_xlen_t work_since_interrupt = 0;
   SEXP names = Rf_getAttrib(plan, R_NamesSymbol);
-  return TYPEOF(plan) == VECSXP && !ALTREP(plan) && !Rf_isObject(plan) &&
+  return TYPEOF(plan) == VECSXP && !ALTREP(plan) && !Rf_isS4(plan) &&
+    !Rf_isObject(plan) &&
     XLENGTH(plan) == SHADOW_CONSTRAINT_PLAN_FIELD_COUNT &&
     paradox_api_has_single_attribute(plan, "names") &&
+    TYPEOF(names) == STRSXP && !ALTREP(names) &&
+    !Rf_isS4(names) && !Rf_isObject(names) &&
     paradox_api_has_no_attributes(names) &&
     paradox_domain_exact_string_vector(
       names,
@@ -63,6 +67,7 @@ static int exact_optional_s3_class(SEXP value) {
   SEXP classes = Rf_getAttrib(value, R_ClassSymbol);
   if (classes == R_NilValue) return TRUE;
   if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
+      Rf_isS4(classes) || Rf_isObject(classes) ||
       !paradox_api_has_no_attributes(classes) || XLENGTH(classes) == 0) {
     return FALSE;
   }
@@ -178,6 +183,11 @@ SEXP paradox_param_set_shadow_constraint(SEXP plan, SEXP visible_values) {
 
   SEXP call = PROTECT(Rf_lang2(callback, combined));
   SEXP answer = PROTECT(Rf_eval(call, R_BaseEnv));
+  /*
+   * Callback results are semantic leaves, not interpreted structure. Preserve
+   * the established one-observation contract for stable logical ALTREP and
+   * attributed logical values, then return a fresh ordinary scalar below.
+   */
   if (TYPEOF(answer) != LGLSXP || XLENGTH(answer) != 1) {
     UNPROTECT(8);
     Rf_error(
@@ -194,6 +204,35 @@ SEXP paradox_param_set_shadow_constraint(SEXP plan, SEXP visible_values) {
   SEXP result = PROTECT(Rf_ScalarLogical(accepted));
   UNPROTECT(9);
   return result;
+}
+
+SEXP paradox_param_set_shadow_origin(SEXP private_environment, SEXP self) {
+  PROTECT(private_environment);
+  PROTECT(self);
+  if (TYPEOF(private_environment) != ENVSXP ||
+      TYPEOF(self) != ENVSXP ||
+      !paradox_domain_owns_private_environment(self, private_environment)) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSetShadow shell ownership");
+  }
+  /*
+   * Refresh owns every allocation and its terminal graph receipt. Everything
+   * after it returns is a borrowed read from the selected rooted generation,
+   * so no finalizer can splice a later origin between admission and return.
+   */
+  SEXP core = PROTECT(paradox_core_refresh(self, private_environment));
+  if (paradox_core_kind(core) != PARADOX_CORE_SHADOW) {
+    UNPROTECT(3);
+    Rf_error("Corrupt ParamSetShadow capsule kind");
+  }
+  SEXP origin = paradox_shadow_origin_from_core(core);
+  if (origin == R_UnboundValue || TYPEOF(origin) != ENVSXP ||
+      Rf_isS4(origin)) {
+    UNPROTECT(3);
+    Rf_error("Corrupt ParamSetShadow origin edge");
+  }
+  UNPROTECT(3);
+  return origin;
 }
 
 typedef struct {
@@ -280,12 +319,14 @@ static int related_ids_are_known(const shadow_id_index_t *parameter_ids,
 
 static int exact_signature(SEXP signature) {
   if (TYPEOF(signature) != VECSXP || ALTREP(signature) ||
+      Rf_isS4(signature) ||
       Rf_isObject(signature) || !paradox_api_has_no_attributes(signature) ||
       XLENGTH(signature) < 2 || XLENGTH(signature) % 2 != 0) {
     return FALSE;
   }
   for (R_xlen_t index = 0; index < XLENGTH(signature); index += 2) {
     if (TYPEOF(VECTOR_ELT(signature, index)) != ENVSXP ||
+        Rf_isS4(VECTOR_ELT(signature, index)) ||
         !paradox_core_is_canonical(VECTOR_ELT(signature, index + 1))) {
       return FALSE;
     }
@@ -304,6 +345,46 @@ static SEXP exact_metadata_signature(SEXP core) {
   return exact_signature(signature) ? signature : R_UnboundValue;
 }
 
+SEXP paradox_shadow_metadata_signature(SEXP core) {
+  return exact_metadata_signature(core);
+}
+
+SEXP paradox_shadow_signature_content_snapshot(SEXP signature) {
+  if (!exact_signature(signature)) {
+    return R_NilValue;
+  }
+  PROTECT(signature);
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, XLENGTH(signature)));
+  if (!paradox_capture_list_identities(
+      signature,
+      R_NilValue,
+      result
+    )) {
+    UNPROTECT(2);
+    return R_NilValue;
+  }
+  UNPROTECT(2);
+  return result;
+}
+
+int paradox_shadow_signature_receipt_is_current(SEXP core,
+    SEXP signature, SEXP content_snapshot) {
+  SEXP current = paradox_shadow_metadata_signature(core);
+  if (current == R_UnboundValue || current != signature ||
+      TYPEOF(content_snapshot) != VECSXP || ALTREP(content_snapshot) ||
+      Rf_isS4(content_snapshot) || Rf_isObject(content_snapshot) ||
+      !paradox_api_has_no_attributes(content_snapshot) ||
+      XLENGTH(content_snapshot) != XLENGTH(current)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(current); ++index) {
+    if (VECTOR_ELT(current, index) != VECTOR_ELT(content_snapshot, index)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
 void paradox_shadow_copy_metadata(SEXP source, SEXP target) {
   SEXP signature = PROTECT(Rf_getAttrib(source, shadow_metadata_symbol()));
   if (signature != R_NilValue) {
@@ -314,7 +395,7 @@ void paradox_shadow_copy_metadata(SEXP source, SEXP target) {
 
 int paradox_shadow_metadata_is_exact(SEXP core) {
   return paradox_core_kind(core) == PARADOX_CORE_SHADOW &&
-    exact_metadata_signature(core) != R_UnboundValue;
+    paradox_shadow_metadata_signature(core) != R_UnboundValue;
 }
 
 static SEXP fixed_factories(void) {
@@ -326,6 +407,7 @@ static SEXP fixed_factories(void) {
   SEXP package = PROTECT(Rf_mkString("paradox"));
   SEXP namespace_environment = PROTECT(R_FindNamespace(package));
   if (TYPEOF(namespace_environment) != ENVSXP ||
+      Rf_isS4(namespace_environment) ||
       !R_IsNamespaceEnv(namespace_environment)) {
     UNPROTECT(2);
     Rf_error("Internal error: unable to resolve the paradox namespace");
@@ -437,7 +519,7 @@ static SEXP validate_shadow_template(SEXP core, SEXP expected_origin,
   SEXP constraint = VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT);
   SEXP extra_trafo = VECTOR_ELT(state, PARADOX_CORE_EXTRA_TRAFO);
   if (!ordinary_list(sets, 1) || VECTOR_ELT(sets, 0) != expected_origin ||
-      TYPEOF(expected_origin) != ENVSXP ||
+      TYPEOF(expected_origin) != ENVSXP || Rf_isS4(expected_origin) ||
       VECTOR_ELT(state, PARADOX_CORE_TRANSLATION) != R_NilValue ||
       !exact_false(VECTOR_ELT(state, PARADOX_CORE_POSTFIX)) ||
       (constraint != R_NilValue && !Rf_isFunction(constraint)) ||
@@ -511,7 +593,8 @@ SEXP paradox_shadow_origin_from_core(SEXP core) {
   }
   SEXP state = paradox_core_payload(core);
   SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
-  return ordinary_list(sets, 1) && TYPEOF(VECTOR_ELT(sets, 0)) == ENVSXP
+  return ordinary_list(sets, 1) && TYPEOF(VECTOR_ELT(sets, 0)) == ENVSXP &&
+      !Rf_isS4(VECTOR_ELT(sets, 0))
     ? VECTOR_ELT(sets, 0)
     : R_UnboundValue;
 }
@@ -558,10 +641,25 @@ static int signature_matches_graph(SEXP signature,
 }
 
 static int graph_is_current(const paradox_collection_graph_t *graph) {
+  R_xlen_t integrity_work = 0;
+  if (!paradox_collection_graph_snapshot_is_intact(
+      graph,
+      &integrity_work
+    )) {
+    return FALSE;
+  }
   for (R_xlen_t index = 0; index < graph->count; ++index) {
     const paradox_collection_graph_node_t *node = &graph->nodes[index];
+    /*
+     * This is the terminal simultaneous-generation receipt.  In particular,
+     * it must not use the absence-tolerant shell reader: on R 3.6--4.1 that
+     * reader evaluates base::exists() and a pending finalizer can change an
+     * already scanned node before a later one is observed.  All graph nodes
+     * have already been admitted, so their linkage is required here and the
+     * required reader is the allocation-free operation on every supported R.
+     */
     SEXP private_environment = PROTECT(
-      paradox_domain_private_environment(node->self)
+      paradox_domain_required_private_environment(node->self)
     );
     const int current = private_environment == node->private_environment &&
       paradox_core_from_private(private_environment) == node->source_core;
@@ -575,8 +673,13 @@ static int graph_is_current(const paradox_collection_graph_t *graph) {
 
 static int base_is_current(SEXP origin, SEXP origin_private,
     SEXP origin_core) {
+  /*
+   * Keep the BASE receipt under the same allocation-free rule as the graph
+   * receipt above.  The origin was admitted before this terminal scan, so a
+   * missing linkage is corruption rather than an optional-shell result.
+   */
   SEXP selected_private = PROTECT(
-    paradox_domain_private_environment(origin)
+    paradox_domain_required_private_environment(origin)
   );
   const int current = selected_private == origin_private &&
     paradox_core_from_private(selected_private) == origin_core;
@@ -837,7 +940,10 @@ static void copy_param_element(SEXP target, R_xlen_t target_row,
 
 static SEXP visible_parameter_table(const paradox_domain_params_t *source,
     SEXP shadowed, int strict, R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(shadowed) != STRSXP || Rf_any_duplicated(shadowed, FALSE) != 0) {
+  if (TYPEOF(shadowed) != STRSXP || ALTREP(shadowed) ||
+      Rf_isS4(shadowed) || Rf_isObject(shadowed) ||
+      !paradox_api_has_no_attributes(shadowed) ||
+      Rf_any_duplicated(shadowed, FALSE) != 0) {
     Rf_error("`shadowed` must be a unique character vector");
   }
   for (R_xlen_t index = 0; index < XLENGTH(shadowed); ++index) {
@@ -1236,7 +1342,8 @@ static SEXP build_from_validated_base(SEXP template_state, SEXP state,
 }
 
 static SEXP collection_constraint_from_plan(SEXP plan, SEXP factories) {
-  if (TYPEOF(plan) != VECSXP || ALTREP(plan) ||
+  if (TYPEOF(plan) != VECSXP || ALTREP(plan) || Rf_isS4(plan) ||
+      Rf_isObject(plan) ||
       XLENGTH(plan) != PARADOX_COLLECTION_DETACH_FIELD_COUNT) {
     Rf_error("Corrupt ParamSetCollection callback detachment plan");
   }
@@ -1332,6 +1439,17 @@ static SEXP build_from_collection(SEXP template_state, SEXP origin,
     reused_trafos,
     work_since_interrupt
   ));
+  /*
+   * The factories above execute arbitrary R and assembly allocates.  A
+   * same-pointer rewrite of a child Shadow's cache signature advances no
+   * epoch and changes no live `.core` binding, so the earlier shell/core
+   * receipt alone cannot close this transaction.  Require the exact retained
+   * carrier and entry generation at the true terminal boundary.
+   */
+  if (!graph_is_current(graph)) {
+    UNPROTECT(6);
+    Rf_error("ParamSetShadow origin graph changed during refresh");
+  }
   UNPROTECT(6);
   return result;
 }
@@ -1434,6 +1552,21 @@ static SEXP shadow_refresh_template(SEXP current_core, SEXP template_state,
 SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
   PROTECT(origin);
   PROTECT(shadowed);
+  if (TYPEOF(origin) != ENVSXP || Rf_isS4(origin)) {
+    UNPROTECT(2);
+    Rf_error(
+      "Corrupt ParamSet node: `origin` must be an ordinary ParamSet environment"
+    );
+  }
+  if (TYPEOF(shadowed) != STRSXP || Rf_isS4(shadowed) ||
+      Rf_isObject(shadowed) ||
+      !paradox_api_has_no_attributes(shadowed)) {
+    UNPROTECT(2);
+    Rf_error(
+      "`shadowed` must be a character vector with an ordinary, "
+      "attribute-free representation"
+    );
+  }
   SEXP shadowed_snapshot = PROTECT(paradox_snapshot_semantic_vector(
     shadowed
   ));
@@ -1514,7 +1647,7 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
     SEXP roots;
     PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
     paradox_collection_graph_t graph;
-    paradox_collection_graph_build(
+    paradox_collection_graph_build_receipted(
       origin_private,
       origin,
       &graph,
@@ -1641,7 +1774,7 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
     SEXP roots;
     PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
     paradox_collection_graph_t graph;
-    paradox_collection_graph_build(
+    paradox_collection_graph_build_receipted(
       origin_private,
       origin,
       &graph,
@@ -1794,7 +1927,7 @@ static SEXP shadow_refresh_authoritative(SEXP self,
     PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
     paradox_collection_graph_t graph;
     if (commit) {
-      paradox_collection_graph_build(
+      paradox_collection_graph_build_receipted(
         origin_private,
         origin,
         &graph,
@@ -1803,7 +1936,7 @@ static SEXP shadow_refresh_authoritative(SEXP self,
         &work_since_interrupt
       );
     } else {
-      paradox_collection_graph_build_readonly(
+      paradox_collection_graph_build_readonly_receipted(
         origin_private,
         origin,
         &graph,

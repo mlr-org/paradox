@@ -315,9 +315,12 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   shells are preflight candidates as well as traversal carriers, so a corrupt
   current capsule anywhere in the selected graph aborts before any legacy
   mutation. Pending finalizers from unrelated user objects are explicitly
-  outside this atomicity promise: the post-transplant barrier detects a
-  selected-root mutation inside the R binding wave, but does not roll back a
-  completed transplant or promise retry of the externally corrupted graph.
+  outside this atomicity promise: when a transplant occurs, post-transplant
+  joint capsule scans plus one final allocation-free complete public-binding
+  receipt detect a selected-root mutation inside the R binding wave, but do not
+  roll back a completed transplant or promise retry of the externally corrupted
+  graph. An all-current graph has no binding wave and returns after joint
+  capsule validation, including on R 3.6.
 - Current R6 stubs call versioned namespace targets directly. Historical
   unversioned targets are cold first-use gateways: default error, or silent
   migration when `options(paradox.legacy_object_action = "upgrade")` is set.
@@ -326,11 +329,21 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   chain, requires exact `assert_values` and a canonical matching core, and
   ignores the serialized stub's `private`/`super` promises rather than
   replaying or rereading a top enclosure slice.
+  Historical Sampler1D private stub formals are part of the same serialized
+  boundary: the cold `Sampler1DRfun$.sample` (including Normal) and
+  `Sampler1DCateg$.sample` targets bypass the narrower Paradox-1
+  `as_dt_col`/`sample_truncated` stubs and invoke versioned lower-level targets
+  directly. Current versioned sampler targets remain gateway-free.
   The exact owner registry supports bbotk's additive legacy `Codomain` and
   miesmuschel's single-origin current-Shadow replacement/retired fields without
   S3 dispatch or serialized hook functions. Additive dependencies are empty,
   replacement dependencies are exactly `origin`, and owner R6 finalizers are
-  rejected; unknown subclasses fail closed.
+  rejected; unknown subclasses fail closed. Complete-session discovery now
+  precedes owner construction, and focused adversarial preflight rejects a
+  rebuilder result that shares any public, private, or enclosure environment
+  with an original/current session node or any distinct prepared node before
+  changing that result; valid shared origins and current identity reuse remain
+  accepted.
   Built-in and owner method provenance is checked against the exact currently
   loaded namespace environments; namespace names alone are not authority.
 - Stable/base ALTREP support is materialize-once in admitted semantic atomic

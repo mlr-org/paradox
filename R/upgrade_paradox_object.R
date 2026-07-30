@@ -134,7 +134,7 @@
     failure = "Cannot commit Paradox migration"
 ) {
   result = tryCatch(
-    .Call(C_param_set_validate_current_roots, roots),
+    .Call(C_param_set_validate_current_roots, roots, NULL),
     error = function(error) {
       stop(
         sprintf(
@@ -285,6 +285,27 @@
   x
 }
 
+.upgrade_paradox_class_snapshot = function(x, path) {
+  classes = .Call(C_upgrade_class_snapshot, x)
+  if (identical(classes, FALSE)) {
+    .upgrade_paradox_abort(path, "class metadata must be an ordinary vector")
+  }
+  classes
+}
+
+.upgrade_paradox_has_only_attributes = function(x, allowed) {
+  observed = attributes(x)
+  if (is.null(observed)) return(TRUE)
+  observed_names = names(observed)
+  !is.null(observed_names) &&
+    !anyDuplicated(observed_names) &&
+    all(observed_names %in% allowed)
+}
+
+.upgrade_paradox_is_ordinary_list = function(x) {
+  identical(.Call(C_upgrade_structural_list_exact, x), TRUE)
+}
+
 .upgrade_paradox_reject_owner_finalizer = function(
     x,
     shell,
@@ -355,19 +376,21 @@
 }
 
 .upgrade_paradox_copy_list = function(x) {
-  if (!is.list(x) || is.object(x)) return(x)
-  result = lapply(x, function(value) {
+  if (!.upgrade_paradox_is_ordinary_list(x) || is.object(x)) return(x)
+  stable = .Call(C_upgrade_carrier_list_snapshot, x)
+  if (is.null(stable)) {
+    stop("Legacy list changed while being snapshotted", call. = FALSE)
+  }
+  lapply(stable, function(value) {
     if (is.atomic(value)) .upgrade_paradox_materialize_atomic(value) else value
   })
-  names(result) = .upgrade_paradox_materialize_atomic(names(x))
-  result
 }
 
 .upgrade_paradox_materialize_columns = function(columns) {
   lapply(columns, function(column) {
     if (is.atomic(column)) {
       .upgrade_paradox_materialize_atomic(column)
-    } else if (is.list(column)) {
+    } else if (.upgrade_paradox_is_ordinary_list(column)) {
       .upgrade_paradox_copy_list(column)
     } else {
       column
@@ -381,29 +404,75 @@
     path,
     classes = c("data.table", "data.frame"),
     extra_attributes = character()) {
-  observed_names = .upgrade_paradox_materialize_atomic(
-    attr(x, "names", exact = TRUE)
+  allow_repr = identical(extra_attributes, "repr")
+  snapshot = tryCatch(
+    .Call(
+      C_upgrade_table_list_snapshot,
+      x,
+      classes,
+      allow_repr
+    ),
+    error = function(error) {
+      .upgrade_paradox_abort(
+        path,
+        "could not snapshot legacy table structure (%s)",
+        conditionMessage(error)
+      )
+    }
   )
-  observed_classes = .upgrade_paradox_materialize_atomic(
-    attr(x, "class", exact = TRUE)
-  )
-  if (!is.list(x) ||
-      !identical(observed_classes, classes) ||
-      !identical(observed_names, columns)) {
+  if (is.null(snapshot) ||
+      !identical(names(snapshot$table), columns)) {
     .upgrade_paradox_abort(
       path,
       "expected canonical data.table columns `%s`",
       paste(columns, collapse = "`, `")
     )
   }
-  materialized = lapply(seq_along(columns), function(index) {
-    .subset2(x, index)
-  })
+  materialized = unname(snapshot$table)
   names(materialized) = columns
-  materialized = .upgrade_paradox_materialize_columns(materialized)
-  lengths = lengths(materialized)
-  if (length(lengths) && any(lengths != lengths[[1L]])) {
-    .upgrade_paradox_abort(path, "table columns have inconsistent lengths")
+  invalid_list = vapply(
+    materialized,
+    function(column) {
+      is.list(column) && !.upgrade_paradox_is_ordinary_list(column)
+    },
+    logical(1L)
+  )
+  if (any(invalid_list)) {
+    .upgrade_paradox_abort(
+      path,
+      "table column `%s` has unsupported structural representation",
+      columns[which(invalid_list)[[1L]]]
+    )
+  }
+  invalid_list_attributes = vapply(
+    materialized,
+    function(column) {
+      is.list(column) &&
+        !.upgrade_paradox_has_only_attributes(column, "names")
+    },
+    logical(1L)
+  )
+  if (any(invalid_list_attributes)) {
+    .upgrade_paradox_abort(
+      path,
+      "table column `%s` has unsupported attributes",
+      columns[which(invalid_list_attributes)[[1L]]]
+    )
+  }
+  invalid_type = vapply(
+    materialized,
+    function(column) {
+      isS4(column) ||
+        !(is.atomic(column) || .upgrade_paradox_is_ordinary_list(column))
+    },
+    logical(1L)
+  )
+  if (any(invalid_type)) {
+    .upgrade_paradox_abort(
+      path,
+      "table column `%s` has unsupported structural representation",
+      columns[which(invalid_type)[[1L]]]
+    )
   }
   attributed = names(materialized)[vapply(
     materialized,
@@ -417,17 +486,13 @@
       attributed[[1L]]
     )
   }
-  allowed_attributes = c(
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index",
-    extra_attributes
-  )
-  unexpected = setdiff(names(attributes(x)), allowed_attributes)
-  if (length(unexpected)) {
-    .upgrade_paradox_abort(
-      path,
-      "table has unsupported attributes: %s",
-      paste(unexpected, collapse = ", ")
-    )
+  materialized = .upgrade_paradox_materialize_columns(materialized)
+  lengths = lengths(materialized)
+  if (length(lengths) && any(lengths != lengths[[1L]])) {
+    .upgrade_paradox_abort(path, "table columns have inconsistent lengths")
+  }
+  if (allow_repr) {
+    attr(materialized, ".paradox_upgrade_repr") = snapshot$repr
   }
   materialized
 }
@@ -441,10 +506,9 @@
 }
 
 .upgrade_paradox_condition = function(cond, path, allow_base = FALSE) {
-  classes = .upgrade_paradox_materialize_atomic(
-    attr(cond, "class", exact = TRUE)
-  )
-  if (!is.list(cond) || length(cond) != 2L ||
+  classes = .upgrade_paradox_class_snapshot(cond, path)
+  if (!.upgrade_paradox_is_ordinary_list(cond) || length(cond) != 2L ||
+      !.upgrade_paradox_has_only_attributes(cond, c("names", "class")) ||
       !identical(names(cond), c("rhs", "condition_format_string"))) {
     .upgrade_paradox_abort(path, "malformed legacy Condition")
   }
@@ -487,13 +551,17 @@
   # column, so an upgraded object was no longer `identical()` to a freshly
   # constructed one.
   if (is.null(requirements)) return(NULL)
-  if (!is.list(requirements) || is.object(requirements)) {
+  if (!.upgrade_paradox_is_ordinary_list(requirements) ||
+      is.object(requirements) ||
+      !.upgrade_paradox_has_only_attributes(requirements, character())) {
     .upgrade_paradox_abort(path, "Domain requirements must be a plain list")
   }
   lapply(seq_along(requirements), function(index) {
     requirement = requirements[[index]]
     requirement_path = sprintf("%s[[%d]]", path, index)
-    if (!is.list(requirement) || is.object(requirement) ||
+    if (!.upgrade_paradox_is_ordinary_list(requirement) ||
+        is.object(requirement) ||
+        !.upgrade_paradox_has_only_attributes(requirement, "names") ||
         !identical(names(requirement), c("on", "cond"))) {
       .upgrade_paradox_abort(requirement_path, "malformed Domain requirement")
     }
@@ -535,7 +603,7 @@
     }
   }
   for (name in list_columns) {
-    if (!is.list(columns[[name]])) {
+    if (!.upgrade_paradox_is_ordinary_list(columns[[name]])) {
       .upgrade_paradox_abort(path, "Domain column `%s` must be a list", name)
     }
   }
@@ -559,7 +627,9 @@
 
   for (index in seq_along(columns$cargo)) {
     cargo = columns$cargo[[index]]
-    if (!is.null(cargo) && (!is.list(cargo) || is.object(cargo))) {
+    if (!is.null(cargo) &&
+        (!.upgrade_paradox_is_ordinary_list(cargo) || is.object(cargo) ||
+          !.upgrade_paradox_has_only_attributes(cargo, "names"))) {
       .upgrade_paradox_abort(
         sprintf("%s$cargo[[%d]]", path, index),
         "unsupported Domain cargo"
@@ -705,7 +775,11 @@
 }
 
 .upgrade_paradox_strip_cargo_callbacks = function(cargo) {
-  if (is.null(cargo) || !is.list(cargo) || is.object(cargo)) return(cargo)
+  if (is.null(cargo) || !.upgrade_paradox_is_ordinary_list(cargo) ||
+      is.object(cargo) ||
+      !.upgrade_paradox_has_only_attributes(cargo, "names")) {
+    return(cargo)
+  }
   cargo_names = names(cargo)
   if (is.null(cargo_names)) return(cargo)
   callback_indices = which(
@@ -747,9 +821,7 @@
 }
 
 .upgrade_paradox_domain = function(domain, path) {
-  classes = .upgrade_paradox_materialize_atomic(
-    attr(domain, "class", exact = TRUE)
-  )
+  classes = .upgrade_paradox_class_snapshot(domain, path)
   supported = c("ParamDbl", "ParamInt", "ParamFct", "ParamLgl", "ParamUty")
   kind = if (length(classes)) classes[[1L]] else ""
   if (kind %nin% supported ||
@@ -767,14 +839,18 @@
     classes,
     extra_attributes = "repr"
   )
+  repr = attr(columns, ".paradox_upgrade_repr", exact = TRUE)
+  attr(columns, ".paradox_upgrade_repr") = NULL
   if (length(columns$id) != 1L || !identical(columns$cls, kind)) {
     .upgrade_paradox_abort(path, "Domain must contain one matching built-in row")
   }
   columns = .upgrade_paradox_validate_domain_columns(columns, path)
   if (!is.logical(columns$.init_given) || length(columns$.init_given) != 1L ||
-      is.na(columns$.init_given) || !is.list(columns$.init) ||
-      !is.list(columns$.tags) || !is.list(columns$.trafo) ||
-      !is.list(columns$.requirements)) {
+      is.na(columns$.init_given) ||
+      !.upgrade_paradox_is_ordinary_list(columns$.init) ||
+      !.upgrade_paradox_is_ordinary_list(columns$.tags) ||
+      !.upgrade_paradox_is_ordinary_list(columns$.trafo) ||
+      !.upgrade_paradox_is_ordinary_list(columns$.requirements)) {
     .upgrade_paradox_abort(path, "malformed transient Domain columns")
   }
   # Single-bracket list assignment, because the canonical value for a Domain
@@ -797,7 +873,6 @@
 
   result = .upgrade_paradox_domain_table(columns)
   class(result) = classes
-  repr = attr(domain, "repr", exact = TRUE)
   repr = .paradox_strip_srcref(repr)
   if (!is.null(repr)) attr(result, "repr") = repr
   result
@@ -845,7 +920,10 @@
     return(.paradox_strip_srcref(trafo))
   }
 
-  if (!(is.atomic(bindings$levels) || is.list(bindings$levels)) ||
+  if (!(is.atomic(bindings$levels) ||
+      .upgrade_paradox_is_ordinary_list(bindings$levels)) ||
+      (is.list(bindings$levels) &&
+        !.upgrade_paradox_has_only_attributes(bindings$levels, "names")) ||
       !identical(
         .upgrade_paradox_materialize_atomic(names(bindings$levels)),
         param_columns$levels[[param_index]]
@@ -889,7 +967,9 @@
     .upgrade_paradox_collection_extra_trafo_template
   )
   if (!is.null(collection_bindings) &&
-      typeof(collection_bindings$sets_with_trafos) == "list" &&
+      .upgrade_paradox_is_ordinary_list(
+        collection_bindings$sets_with_trafos
+      ) &&
       is.function(collection_bindings$psc_extra_trafo)) {
     collection_bindings$psc_extra_trafo = .paradox_strip_srcref(
       collection_bindings$psc_extra_trafo
@@ -913,7 +993,9 @@
     .upgrade_paradox_collection_constraint_template
   )
   if (!is.null(collection_bindings) &&
-      typeof(collection_bindings$sets_with_constraints) == "list" &&
+      .upgrade_paradox_is_ordinary_list(
+        collection_bindings$sets_with_constraints
+      ) &&
       is.function(collection_bindings$psc_constraint)) {
     collection_bindings$psc_constraint = .paradox_strip_srcref(
       collection_bindings$psc_constraint
@@ -959,15 +1041,14 @@
   } else {
     NULL
   }
-  # Recognition here must agree exactly with the rebuild predicate in
-  # .upgrade_paradox_strip_legacy_extra_trafo(): a wrapper counts as a carrier
-  # crate only when the strip helper has already rebuilt it with a fresh
-  # environment. Counting a wrapper the strip helper refused would make the
-  # later carrier rebind write the prepared children into the serialized
-  # object's own closure environment.
+  # A wrapper with the exact known crate shape remains a carrier candidate even
+  # when its carrier shell is malformed.  The stripping helper deliberately
+  # refuses to rebuild such a wrapper, but migration must reject it below
+  # rather than silently retain a callback that still closes over legacy
+  # children.  A valid carrier wrapper was rebuilt with a fresh environment, so
+  # the later rebind cannot mutate the serialized object's closure environment.
   if (!is.null(extra_bindings) &&
-      (typeof(extra_bindings$sets_with_trafos) != "list" ||
-        !is.function(extra_bindings$psc_extra_trafo))) {
+      !is.function(extra_bindings$psc_extra_trafo)) {
     extra_bindings = NULL
   }
   constraint_bindings = if (is.function(constraint)) {
@@ -983,8 +1064,7 @@
     NULL
   }
   if (!is.null(constraint_bindings) &&
-      (typeof(constraint_bindings$sets_with_constraints) != "list" ||
-        !is.function(constraint_bindings$psc_constraint))) {
+      !is.function(constraint_bindings$psc_constraint)) {
     constraint_bindings = NULL
   }
   list(
@@ -1065,7 +1145,7 @@
   trafo = columns$trafo
   ids = param_columns$id
   if (!is.character(id) || anyNA(id) || any(id %nin% ids) ||
-      anyDuplicated(id) || !is.list(trafo) ||
+      anyDuplicated(id) || !.upgrade_paradox_is_ordinary_list(trafo) ||
       any(!vapply(trafo, is.function, logical(1L)))) {
     .upgrade_paradox_abort(path, "malformed legacy transformation table")
   }
@@ -1084,7 +1164,8 @@
   id = columns$id
   on = columns$on
   cond = columns$cond
-  if (!is.character(id) || !is.character(on) || !is.list(cond) ||
+  if (!is.character(id) || !is.character(on) ||
+      !.upgrade_paradox_is_ordinary_list(cond) ||
       anyNA(id) || anyNA(on) || any(id %nin% ids)) {
     .upgrade_paradox_abort(path, "malformed legacy dependency table")
   }
@@ -1098,7 +1179,8 @@
 }
 
 .upgrade_paradox_values = function(values, ids, path) {
-  if (!is.list(values) || is.object(values)) {
+  if (!.upgrade_paradox_is_ordinary_list(values) || is.object(values) ||
+      !.upgrade_paradox_has_only_attributes(values, "names")) {
     .upgrade_paradox_abort(path, "legacy values must be a plain list")
   }
   value_names = .upgrade_paradox_materialize_atomic(names(values))
@@ -1365,7 +1447,8 @@
     .upgrade_paradox_abort(path, "legacy COLLECTION private state is incomplete")
   }
   sets = .upgrade_paradox_binding(private, ".sets", path)
-  if (!is.list(sets) || is.object(sets)) {
+  if (!.upgrade_paradox_is_ordinary_list(sets) || is.object(sets) ||
+      !.upgrade_paradox_has_only_attributes(sets, "names")) {
     .upgrade_paradox_abort(path, "legacy collection children must be a plain list")
   }
   sets = .upgrade_paradox_copy_list(sets)
@@ -1381,7 +1464,8 @@
   param_columns = .upgrade_paradox_params(params, paste0(path, "$private$.params"))
   ids = param_columns$id
   values = .upgrade_paradox_binding(private, ".values", path)
-  if (!is.list(values) || length(values)) {
+  if (!.upgrade_paradox_is_ordinary_list(values) || length(values) ||
+      !.upgrade_paradox_has_only_attributes(values, "names")) {
     .upgrade_paradox_abort(path, "legacy collection contains noncanonical local values")
   }
   extra_trafo = .upgrade_paradox_binding(private, ".extra_trafo", path)
@@ -1451,9 +1535,7 @@
   shell = .upgrade_paradox_shell(x, path)
   current = .upgrade_paradox_current(x, shell, path)
   if (!is.null(current)) return(list(kind = "current", value = current))
-  classes = .upgrade_paradox_materialize_atomic(
-    attr(x, "class", exact = TRUE)
-  )
+  classes = .upgrade_paradox_class_snapshot(x, path)
   if (identical(classes, c("ParamSet", "R6"))) {
     .upgrade_paradox_base_info(x, shell, path)
   } else if (identical(classes, c("ParamSetCollection", "ParamSet", "R6"))) {
@@ -1465,7 +1547,11 @@
 
 .upgrade_paradox_domain_from_row = function(info, index, path) {
   columns = lapply(info$param_columns, function(column) {
-    if (is.list(column)) list(column[[index]]) else column[index]
+    if (.upgrade_paradox_is_ordinary_list(column)) {
+      list(column[[index]])
+    } else {
+      column[index]
+    }
   })
   columns$.tags = list(info$tags_by_id[[index]])
   columns$.trafo = list(info$trafo_by_id[[index]])
@@ -1694,7 +1780,137 @@
   list(base = base, owner = owner)
 }
 
-.upgrade_paradox_build_owner = function(info, dependencies, path) {
+.upgrade_paradox_mutable_shell_environments = function(
+    x,
+    path,
+    qualifier
+) {
+  shell = .upgrade_paradox_shell(x, path)
+  result = list(
+    `public shell` = x,
+    `private environment` = shell$private,
+    `top enclosure` = shell$enclosing
+  )
+  enclosing = shell$enclosing
+  depth = 0L
+  repeat {
+    super = .upgrade_paradox_binding(
+      enclosing,
+      "super",
+      path,
+      required = FALSE
+    )
+    if (is.null(super)) break
+    if (!is.environment(super)) {
+      .upgrade_paradox_abort(
+        path,
+        "%s has a malformed R6 superclass proxy",
+        qualifier
+      )
+    }
+    next_enclosing = .upgrade_paradox_binding(
+      super,
+      ".__enclos_env__",
+      path
+    )
+    if (!is.environment(next_enclosing) ||
+        any(vapply(result, identical, logical(1L), y = next_enclosing)) ||
+        !identical(
+          .upgrade_paradox_binding(next_enclosing, "self", path),
+          x
+        ) ||
+        !identical(
+          .upgrade_paradox_binding(next_enclosing, "private", path),
+          shell$private
+        )) {
+      .upgrade_paradox_abort(
+        path,
+        "%s has a malformed R6 superclass enclosure",
+        qualifier
+      )
+    }
+    depth = depth + 1L
+    result[[sprintf("superclass enclosure %d", depth)]] = next_enclosing
+    enclosing = next_enclosing
+  }
+
+  # Every environment changed by owner preparation or transplant must be
+  # individually owned. A distinct public shell with an aliased private or
+  # enclosure environment is not fresh: installing `.core` or rebasing `self`
+  # would mutate another object just as surely as reusing its public shell.
+  if (length(result) > 1L) {
+    for (right in seq.int(2L, length(result))) {
+      for (left in seq_len(right - 1L)) {
+        if (identical(result[[left]], result[[right]])) {
+          .upgrade_paradox_abort(
+            path,
+            "%s aliases its `%s` and `%s`",
+            qualifier,
+            names(result)[[left]],
+            names(result)[[right]]
+          )
+        }
+      }
+    }
+  }
+  result
+}
+
+.upgrade_paradox_require_fresh_owner_result = function(
+    result,
+    forbidden_shells,
+    forbidden_paths,
+    path,
+    entry
+) {
+  if (!is.list(forbidden_shells) ||
+      !is.character(forbidden_paths) ||
+      length(forbidden_shells) != length(forbidden_paths)) {
+    .upgrade_paradox_abort(path, "internal owner-alias preflight mismatch")
+  }
+  result_environments = .upgrade_paradox_mutable_shell_environments(
+    result,
+    path,
+    "rebuilt owner shell"
+  )
+  for (index in seq_along(forbidden_shells)) {
+    forbidden_environments = .upgrade_paradox_mutable_shell_environments(
+      forbidden_shells[[index]],
+      path,
+      forbidden_paths[[index]]
+    )
+    for (result_position in seq_along(result_environments)) {
+      for (forbidden_position in seq_along(forbidden_environments)) {
+        if (identical(
+            result_environments[[result_position]],
+            forbidden_environments[[forbidden_position]]
+          )) {
+          .upgrade_paradox_abort(
+            path,
+            paste0(
+              "owner upgrader `%s::%s()` must return a fresh shell; ",
+              "its `%s` aliases %s's `%s`"
+            ),
+            entry$owner_package,
+            entry$rebuilder,
+            names(result_environments)[[result_position]],
+            forbidden_paths[[index]],
+            names(forbidden_environments)[[forbidden_position]]
+          )
+        }
+      }
+    }
+  }
+  invisible(NULL)
+}
+
+.upgrade_paradox_build_owner = function(
+    info,
+    dependencies,
+    path,
+    forbidden_shells,
+    forbidden_paths
+) {
   entry = info$owner
   dependencies = .upgrade_paradox_split_owner_dependencies(
     info,
@@ -1733,6 +1949,19 @@
       paste(expected_class, collapse = "/")
     )
   }
+  # A rebuilder result is modified below while it is still an off-side
+  # replacement.  Reject every identity already owned by this migration
+  # session before reading its shell or changing `.core`/`assert_values`.
+  # Distinct owners likewise cannot share one prepared shell: the first
+  # transplant would rebase that shell's enclosure and invalidate the second
+  # plan.
+  .upgrade_paradox_require_fresh_owner_result(
+    result,
+    forbidden_shells,
+    forbidden_paths,
+    path,
+    entry
+  )
   result_shell = .upgrade_paradox_shell(result, path)
   .upgrade_paradox_reject_owner_finalizer(
     result,
@@ -1785,7 +2014,13 @@
   result
 }
 
-.upgrade_paradox_build_prepared = function(info, dependencies, path) {
+.upgrade_paradox_build_prepared = function(
+    info,
+    dependencies,
+    path,
+    forbidden_shells = list(),
+    forbidden_paths = character()
+) {
   switch(
     info$kind,
     current = info$value,
@@ -1794,7 +2029,13 @@
       names(dependencies) = names(info$children)
       .upgrade_paradox_build_collection(info, dependencies, path)
     },
-    owner = .upgrade_paradox_build_owner(info, dependencies, path),
+    owner = .upgrade_paradox_build_owner(
+      info,
+      dependencies,
+      path,
+      forbidden_shells,
+      forbidden_paths
+    ),
     .upgrade_paradox_abort(path, "internal unknown migration node kind")
   )
 }
@@ -1813,7 +2054,8 @@
 }
 
 .upgrade_paradox_prepare_session = function(candidates, paths) {
-  if (!is.list(candidates) || !is.character(paths) ||
+  if (!.upgrade_paradox_is_ordinary_list(candidates) ||
+      !is.character(paths) ||
       length(candidates) != length(paths)) {
     stop("Internal error: malformed Paradox migration candidate set", call. = FALSE)
   }
@@ -1838,8 +2080,21 @@
     index
   }
 
-  for (root_position in seq_along(candidates)) {
-    root = add_node(candidates[[root_position]], paths[[root_position]])
+  # Register every host-graph root before running any owner rebuilder.  The
+  # discovery pass below then registers every recursive ParamSet dependency
+  # before the separate build pass starts.  Consequently an owner rebuilder
+  # cannot smuggle any original/current session node back as its supposedly
+  # fresh replacement, including a node reachable only below a later root.
+  roots = vapply(
+    seq_along(candidates),
+    function(root_position) {
+      add_node(candidates[[root_position]], paths[[root_position]])
+    },
+    integer(1L)
+  )
+  build_order = integer()
+
+  for (root in roots) {
     if (status[[root]] == 2L) next
     status[[root]] = 1L
     frames = list(list(index = root, next_dependency = 0L))
@@ -1911,26 +2166,54 @@
         next
       }
 
-      dependency_indices = vapply(dependencies, find_node, integer(1L))
-      if (length(dependency_indices) &&
-          (any(!dependency_indices) || any(status[dependency_indices] != 2L))) {
-        .upgrade_paradox_abort(
-          node_paths[[index]],
-          "internal graph traversal failure"
-        )
-      }
-      dependency_values = prepared[dependency_indices]
-      prepared[[index]] = .upgrade_paradox_build_prepared(
-        info,
-        dependency_values,
-        node_paths[[index]]
-      )
-      if (!identical(info$kind, "current")) {
-        commit_order = c(commit_order, index)
-      }
+      build_order = c(build_order, index)
       status[[index]] = 2L
       frames[[frame_position]] = NULL
     }
+  }
+
+  # The post-order discovery above makes every dependency precede its owner.
+  # Build off-side replacements only after the complete session identity set
+  # is known.  Owner outputs are additionally forbidden from aliasing an
+  # already prepared node, while ordinary shared dependencies and identity
+  # reuse by already-current nodes remain valid.
+  built = logical(length(nodes))
+  prepared_indices = integer()
+  for (index in build_order) {
+    info = infos[[index]]
+    dependencies = .upgrade_paradox_info_dependencies(info)
+    dependency_indices = vapply(dependencies, find_node, integer(1L))
+    if (length(dependency_indices) &&
+        (any(!dependency_indices) || any(!built[dependency_indices]))) {
+      .upgrade_paradox_abort(
+        node_paths[[index]],
+        "internal graph traversal failure"
+      )
+    }
+    forbidden_shells = list()
+    forbidden_paths = character()
+    if (identical(info$kind, "owner")) {
+      forbidden_shells = c(nodes, prepared[prepared_indices])
+      forbidden_paths = c(
+        sprintf("session node at %s", node_paths),
+        sprintf(
+          "prepared node for %s",
+          node_paths[prepared_indices]
+        )
+      )
+    }
+    prepared[[index]] = .upgrade_paradox_build_prepared(
+      info,
+      prepared[dependency_indices],
+      node_paths[[index]],
+      forbidden_shells,
+      forbidden_paths
+    )
+    prepared_indices = c(prepared_indices, index)
+    if (!identical(info$kind, "current")) {
+      commit_order = c(commit_order, index)
+    }
+    built[[index]] = TRUE
   }
 
   list(
@@ -1972,12 +2255,74 @@
   )
 }
 
+.upgrade_paradox_make_public_binding_receipt = function(
+    owner,
+    names,
+    values,
+    active,
+    locked,
+    selected_class = attr(owner, "class", exact = TRUE),
+    validate = FALSE
+) {
+  symbols = unname(lapply(names, as.name))
+  receipt = unname(list(
+    owner,
+    selected_class,
+    symbols,
+    unname(values),
+    unname(active),
+    unname(locked),
+    environmentIsLocked(owner)
+  ))
+  if (validate) {
+    .Call(C_upgrade_public_binding_receipts, list(receipt))
+  }
+  receipt
+}
+
+.upgrade_paradox_public_binding_snapshot = function(owner, path) {
+  # The selected inventory is complete only for a locked R6 object
+  # environment: R permits an unlocked binding in a locked environment to be
+  # replaced, but it cannot add or remove a binding. Genuine Paradox shells
+  # are locked at construction, so accepting an unlocked forged current shell
+  # would weaken the terminal receipt without preserving supported state.
+  if (!is.environment(owner) || !environmentIsLocked(owner)) {
+    .upgrade_paradox_abort(path, "current public R6 shell must be locked")
+  }
+  names = ls(owner, all.names = TRUE)
+  shape = .upgrade_paradox_binding_shape(owner, names)
+  values = lapply(seq_along(names), function(position) {
+    name = names[[position]]
+    if (shape$active[[position]]) {
+      .upgrade_paradox_active_binding_function(name, owner, path)
+    } else {
+      .upgrade_paradox_binding(owner, name, path)
+    }
+  })
+  .upgrade_paradox_make_public_binding_receipt(
+    owner,
+    names,
+    values,
+    shape$active,
+    shape$locked,
+    selected_class = attr(owner, "class", exact = TRUE),
+    validate = TRUE
+  )
+}
+
 .upgrade_paradox_transplant_plan = function(
     legacy,
     current,
     path,
     retired_bindings = character(),
     owner_package = "paradox") {
+  if (!is.environment(legacy) || !environmentIsLocked(legacy) ||
+      !is.environment(current) || !environmentIsLocked(current)) {
+    .upgrade_paradox_abort(
+      path,
+      "legacy and prepared current public R6 shells must be locked"
+    )
+  }
   legacy_names = ls(legacy, all.names = TRUE)
   current_names = ls(current, all.names = TRUE)
   retired_bindings = unique(as.character(retired_bindings))
@@ -2078,7 +2423,7 @@
       envir = top_enclosure,
       inherits = FALSE
     )
-    if (typeof(active_metadata) != "list" ||
+    if (!.upgrade_paradox_is_ordinary_list(active_metadata) ||
         is.null(names(active_metadata)) ||
         anyDuplicated(names(active_metadata))) {
       .upgrade_paradox_abort(
@@ -2093,6 +2438,46 @@
     )
   }
 
+  current_values = lapply(seq_along(current_names), function(position) {
+    name = current_names[[position]]
+    if (current_shape$active[[position]]) {
+      .upgrade_paradox_active_binding_function(name, current, path)
+    } else {
+      .upgrade_paradox_binding(current, name, path)
+    }
+  })
+  # All allocation-capable selection is complete. Authenticate the exact
+  # package-created public generation now; otherwise a pending finalizer could
+  # make the transplant plan itself combine method values or lock bits which
+  # never coexisted.
+  .upgrade_paradox_make_public_binding_receipt(
+    current,
+    current_names,
+    current_values,
+    current_shape$active,
+    current_shape$locked,
+    selected_class = attr(current, "class", exact = TRUE),
+    validate = TRUE
+  )
+  final_names = c(current_names, retired_bindings)
+  final_values = c(current_values, retired_values)
+  final_active = c(
+    current_shape$active,
+    rep(TRUE, length(retired_bindings))
+  )
+  final_locked = c(
+    current_shape$locked,
+    rep(FALSE, length(retired_bindings))
+  )
+  final_public_receipt = .upgrade_paradox_make_public_binding_receipt(
+    legacy,
+    final_names,
+    final_values,
+    final_active,
+    final_locked,
+    selected_class = attr(legacy, "class", exact = TRUE)
+  )
+
   list(
     legacy = legacy,
     current = current,
@@ -2101,19 +2486,13 @@
     current_names = current_names,
     current_shape = current_shape,
     enclosure_position = enclosure_position,
-    current_values = lapply(seq_along(current_names), function(position) {
-      name = current_names[[position]]
-      if (current_shape$active[[position]]) {
-        .upgrade_paradox_active_binding_function(name, current, path)
-      } else {
-        get(name, envir = current, inherits = FALSE)
-      }
-    }),
+    current_values = current_values,
     retired_bindings = retired_bindings,
     retired_values = retired_values,
     enclosures = enclosures,
     active_metadata = active_metadata,
-    active_metadata_locked = active_metadata_locked
+    active_metadata_locked = active_metadata_locked,
+    final_public_receipt = final_public_receipt
   )
 }
 
@@ -2323,6 +2702,15 @@
 }
 
 .upgrade_paradox_commit_session = function(session) {
+  if (!length(session$commit_order)) {
+    # A graph containing only current shells has no binding wave to protect.
+    # Keep this public no-op available on R 3.6, where active-binding
+    # functions cannot be retrieved through the public R API, and avoid
+    # constructing transplant-only public receipts on every current graph.
+    .upgrade_paradox_validate_current_roots(session$prepared)
+    return(invisible(NULL))
+  }
+
   plans = vector("list", length(session$commit_order))
   for (position in seq_along(session$commit_order)) {
     index = session$commit_order[[position]]
@@ -2357,6 +2745,16 @@
     logical(1L)
   ))
   committed_roots = session$nodes[current_indices]
+  current_public_receipts = lapply(current_indices, function(index) {
+    .upgrade_paradox_public_binding_snapshot(
+      session$nodes[[index]],
+      session$paths[[index]]
+    )
+  })
+  final_public_receipts = unname(c(
+    current_public_receipts,
+    lapply(plans, `[[`, "final_public_receipt")
+  ))
 
   # Commit is monotonic and post-order. Repoint each offside parent capsule only
   # after its original children are current. A rebase can allocate, and a
@@ -2371,7 +2769,8 @@
   # and proves that a successful return leaves the complete identity graph
   # current. R's `suspendInterrupts()` does not suppress pending finalizers: a
   # hostile external finalizer that mutates a selected root inside the R binding
-  # wave is detected by the post-transplant barrier, but that completed
+  # wave is detected by the post-transplant capsule barriers or the final
+  # allocation-free complete public-binding receipt, but that completed
   # transplant is not rolled back.
   for (position in seq_along(session$commit_order)) {
     index = session$commit_order[[position]]
@@ -2405,7 +2804,15 @@
       session$nodes[[index]]
     .upgrade_paradox_validate_current_roots(committed_roots)
   }
-  invisible(NULL)
+  # Keep graph and public-shell authentication in the same native operation.
+  # After its allocation-capable graph construction, both receipt waves are
+  # consecutive and allocation-free; this is the successful commit's terminal
+  # expression.
+  .Call(
+    C_param_set_validate_current_roots,
+    committed_roots,
+    final_public_receipts
+  )
 }
 
 #' Upgrade every legacy ParamSet in an object graph
@@ -2481,9 +2888,16 @@
 #' Ordinary inspection, rebuilding, and package-callback failures happen before
 #' mutation. Pending finalizers from unrelated user objects are not suspended by
 #' R's interrupt guard. If such a finalizer mutates a selected Paradox root
-#' during the binding wave, the post-transplant joint validation detects the
-#' change and errors, but a completed transplant is not rolled back and retry is
-#' not promised for the externally corrupted graph.
+#' during the binding wave, post-transplant joint capsule validation detects
+#' topology/state changes. After its last allocating validation, one
+#' allocation-free terminal receipt authenticates the exact complete public
+#' binding and lock surface of every transplanted and already-current selected
+#' shell whenever the graph contains a transplant. A graph containing only
+#' current shells has no binding wave and returns after joint capsule
+#' validation; this also keeps that no-op available on R 3.6, whose public API
+#' cannot retrieve active-binding functions. A receipt mismatch errors, but a
+#' completed transplant is not rolled back and retry is not promised for the
+#' externally corrupted graph.
 #'
 #' The default first use of an unupgraded Paradox 1 method gives an actionable
 #' error. Set `options(paradox.legacy_object_action = "upgrade")` to invoke
@@ -2515,9 +2929,9 @@
 #' }
 upgrade_paradox_object_graph = function(x) {
   discovery = .Call(C_upgrade_graph_discover, x)
-  if (!is.list(discovery) ||
+  if (!.upgrade_paradox_is_ordinary_list(discovery) ||
       !identical(names(discovery), c("objects", "paths")) ||
-      !is.list(discovery$objects) ||
+      !.upgrade_paradox_is_ordinary_list(discovery$objects) ||
       !is.character(discovery$paths) ||
       length(discovery$objects) != length(discovery$paths)) {
     stop("Internal error: malformed native Paradox graph discovery", call. = FALSE)
@@ -2592,11 +3006,13 @@ upgrade_paradox_object_graph = function(x) {
 #' # Only operate on `current`.
 #' }
 upgrade_paradox_object = function(x) {
-  classes = .upgrade_paradox_materialize_atomic(
-    attr(x, "class", exact = TRUE)
-  )
-  if (is.environment(x) && inherits(x, "ParamSet")) {
-    return(.upgrade_paradox_graph(x))
+  if (is.environment(x)) {
+    if (.Call(C_param_set_class_kind, x) %in% 1:3) {
+      return(.upgrade_paradox_graph(x))
+    }
+    classes = .upgrade_paradox_class_snapshot(x, "x")
+  } else {
+    classes = .upgrade_paradox_class_snapshot(x, "x")
   }
   if ("Domain" %in% classes) {
     return(.upgrade_paradox_domain(x, "x"))

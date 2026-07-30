@@ -3,6 +3,7 @@
 #include "builtin_condition.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
+#include "r_utils.h"
 
 static int exact_scalar_string(SEXP value, const char *expected) {
   return TYPEOF(value) == STRSXP && !ALTREP(value) && !Rf_isS4(value) &&
@@ -283,35 +284,6 @@ int paradox_builtin_condition_element_matches(SEXP values,
   return FALSE;
 }
 
-static SEXP materialize_atomic_vector(SEXP value) {
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
-  const R_xlen_t size = XLENGTH(value);
-  SEXP result = PROTECT(Rf_allocVector(type, size));
-  R_xlen_t work_since_interrupt = 0;
-  for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_account_work(&work_since_interrupt);
-    switch (type) {
-    case LGLSXP:
-      SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
-      break;
-    case INTSXP:
-      SET_INTEGER_ELT(result, index, INTEGER_ELT(value, index));
-      break;
-    case REALSXP:
-      SET_REAL_ELT(result, index, REAL_ELT(value, index));
-      break;
-    case STRSXP:
-      SET_STRING_ELT(result, index, STRING_ELT(value, index));
-      break;
-    default:
-      UNPROTECT(1);
-      Rf_error("Condition comparison requires a logical, integer, numeric, or character vector");
-    }
-  }
-  UNPROTECT(1);
-  return result;
-}
-
 static void condition_equal_vector(SEXP values, SEXP rhs, SEXP result,
     R_xlen_t *work_since_interrupt) {
   const SEXPTYPE value_type = (SEXPTYPE) TYPEOF(values);
@@ -389,7 +361,7 @@ SEXP paradox_builtin_condition_admit(SEXP condition,
     UNPROTECT(2);
     return R_NilValue;
   }
-  SEXP stable_rhs = PROTECT(materialize_atomic_vector(candidate_rhs));
+  SEXP stable_rhs = PROTECT(paradox_snapshot_semantic_vector(candidate_rhs));
   const int exact = condition_rhs_is_plain(
     stable_rhs,
     *kind,
@@ -397,6 +369,47 @@ SEXP paradox_builtin_condition_admit(SEXP condition,
   );
   UNPROTECT(3);
   return exact ? stable_rhs : R_NilValue;
+}
+
+SEXP paradox_builtin_condition_snapshot(SEXP condition,
+    R_xlen_t *work_since_interrupt) {
+  paradox_builtin_condition_kind_t kind;
+  PROTECT(condition);
+  SEXP stable_rhs = PROTECT(paradox_builtin_condition_admit(
+    condition,
+    &kind,
+    work_since_interrupt
+  ));
+  if (stable_rhs == R_NilValue) {
+    UNPROTECT(2);
+    return R_UnboundValue;
+  }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  SET_VECTOR_ELT(result, 0, stable_rhs);
+  SET_VECTOR_ELT(
+    result,
+    1,
+    Rf_mkString(kind == PARADOX_BUILTIN_CONDITION_EQUAL
+      ? "%s == %s"
+      : "%s %%in%% {%s}")
+  );
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
+  SET_STRING_ELT(names, 0, Rf_mkChar("rhs"));
+  SET_STRING_ELT(names, 1, Rf_mkChar("condition_format_string"));
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  SEXP classes = PROTECT(Rf_allocVector(STRSXP, 2));
+  SET_STRING_ELT(
+    classes,
+    0,
+    Rf_mkChar(kind == PARADOX_BUILTIN_CONDITION_EQUAL
+      ? "CondEqual"
+      : "CondAnyOf")
+  );
+  SET_STRING_ELT(classes, 1, Rf_mkChar("Condition"));
+  Rf_setAttrib(result, R_ClassSymbol, classes);
+  UNPROTECT(5);
+  return result;
 }
 
 SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
@@ -424,18 +437,48 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
     UNPROTECT(2);
     Rf_error("Condition comparison requires a plain atomic vector");
   }
+  const R_xlen_t initial_size = XLENGTH(x);
+  SEXP initial_names = paradox_api_raw_attribute(x, R_NamesSymbol);
+  if (initial_names != R_NilValue &&
+      (TYPEOF(initial_names) != STRSXP || ALTREP(initial_names) ||
+        Rf_isS4(initial_names) || Rf_isObject(initial_names) ||
+        XLENGTH(initial_names) != initial_size ||
+        !paradox_api_has_no_attributes(initial_names))) {
+    UNPROTECT(2);
+    Rf_error("Condition comparison names are malformed");
+  }
   /* A value whose type the right-hand side cannot equal simply does not
    * satisfy the Condition: this is an ordinary negative comparison result, not
    * a failure of the operation. Paradox 1 also never raised here, but it
    * compared through R's `==`, so `1 == "1"` coerced to TRUE; the closed
    * comparator deliberately does not reinterpret a value as another type. */
-  const int comparable = compatible_operand_types(
-    type, (SEXPTYPE) TYPEOF(stable_rhs)
+  /*
+   * Character comparison may allocate while translating mixed encodings.
+   * Own its complete vector before the first comparison so a pending finalizer
+   * cannot replace later elements or names halfway through the result. ALTREP
+   * operands of every admitted type require the same one-observation snapshot.
+   * Ordinary numeric/logical/integer input remains zero-copy: output allocation
+   * happens before its terminal structural receipt, and its comparison kernel
+   * is allocation-free.
+   */
+  const int owns_stable = ALTREP(x) || type == STRSXP;
+  SEXP stable = PROTECT(
+    owns_stable ? paradox_snapshot_semantic_vector(x) : x
   );
-
-  SEXP stable = PROTECT(ALTREP(x) ? materialize_atomic_vector(x) : x);
   const R_xlen_t size = XLENGTH(stable);
   SEXP result = PROTECT(Rf_allocVector(LGLSXP, size));
+  if (!owns_stable &&
+      ((SEXPTYPE) TYPEOF(x) != type || ALTREP(x) ||
+        Rf_isObject(x) || Rf_isS4(x) ||
+        XLENGTH(x) != initial_size || size != initial_size ||
+        !paradox_api_has_only_attributes(x, allowed_attributes, 1))) {
+    UNPROTECT(4);
+    Rf_error("Condition comparison input changed during native evaluation");
+  }
+  const int comparable = compatible_operand_types(
+    (SEXPTYPE) TYPEOF(stable),
+    (SEXPTYPE) TYPEOF(stable_rhs)
+  );
   if (!comparable) {
     for (R_xlen_t index = 0; index < size; ++index) {
       SET_LOGICAL_ELT(result, index, FALSE);
@@ -453,10 +496,14 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
       SET_LOGICAL_ELT(result, index, matches);
     }
   }
-  SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
+  SEXP names = PROTECT(paradox_api_raw_attribute(
+    stable,
+    R_NamesSymbol
+  ));
   if (names != R_NilValue) {
-    if (TYPEOF(names) != STRSXP || Rf_isS4(names) ||
-        XLENGTH(names) != size || !paradox_api_has_no_attributes(names)) {
+    if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+        Rf_isObject(names) || XLENGTH(names) != size ||
+        !paradox_api_has_no_attributes(names)) {
       UNPROTECT(5);
       Rf_error("Condition comparison names are malformed");
     }

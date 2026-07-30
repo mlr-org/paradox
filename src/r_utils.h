@@ -55,9 +55,10 @@ typedef struct {
  * returned value before a callback-capable observation. */
 attribute_hidden SEXP paradox_stored_attribute(SEXP object, SEXP symbol);
 
-/* Named-column lookup rejects ALTREP list/name shells and returns an exact
- * child without protecting it.  The caller must install that child in a
- * protected root before any operation that can allocate or re-enter R. */
+/* Named-column lookup rejects S4/ALTREP list shells and requires ordinary,
+ * attribute-free names. It returns an exact child without protecting it. The
+ * caller must install that child in a protected root before any operation
+ * that can allocate or re-enter R. */
 
 attribute_hidden SEXP paradox_get_named_column(
   SEXP table,
@@ -70,8 +71,9 @@ attribute_hidden SEXP paradox_get_named_column_checked(
   const char *storage_name,
   const char *column_name
 );
-/* Canonical table columns must use ordinary representations.  Validation
- * checks TYPEOF before ALTREP and rejects ALTREP before observing XLENGTH. */
+/* Canonical table columns must use ordinary unclassed, attribute-free
+ * representations. Validation checks TYPEOF before structural admission and
+ * rejects ALTREP/S4/object/attributes before observing XLENGTH. */
 attribute_hidden void paradox_require_column(
   SEXP column,
   SEXPTYPE type,
@@ -101,6 +103,19 @@ static inline double paradox_numeric_elt(SEXP column, R_xlen_t index) {
   const int value = INTEGER_ELT(column, index);
   return value == NA_INTEGER ? NA_REAL : (double) value;
 }
+
+/* Equal infinities are the two admitted empty-at-infinity intervals: no
+ * finite integer can equal either endpoint.  Every other interval with a
+ * non-finite endpoint is genuinely unbounded.  Spell this once inline because
+ * both Domain and ParamSet property readers are hot and must not drift. */
+static inline double paradox_integer_domain_nlevels(
+    double lower, double upper) {
+  if (R_FINITE(lower) && R_FINITE(upper)) {
+    return upper - lower + 1.0;
+  }
+  return lower == R_PosInf || upper == R_NegInf ? 0.0 : R_PosInf;
+}
+
 attribute_hidden double paradox_accepted_lower(
   double bound,
   double tolerance
@@ -130,6 +145,15 @@ attribute_hidden void paradox_require_character_argument(
 attribute_hidden void *paradox_temporary_alloc(
   R_xlen_t count,
   size_t element_size
+);
+
+/* Copy one CHARSXP's current UTF-8 translation into R_alloc() storage.
+ * Translation buffers themselves are transient and may be invalidated by the
+ * destination allocation.  This helper therefore measures, allocates,
+ * retranslates, verifies the byte count, and only then copies. */
+attribute_hidden char *paradox_temporary_utf8_copy(
+  SEXP string,
+  size_t *size
 );
 
 /* Build one marked UTF-8 scalar from alternating package-owned ASCII text and
@@ -175,12 +199,39 @@ attribute_hidden NORET void paradox_assertion_error(
   SEXP diagnostic
 );
 
-/* Return an independently owned, ordinary copy of an atomic or list vector.
- * Only the names attribute is semantic at this boundary; it is itself copied
- * to ordinary storage. List elements and other scalar leaves retain identity.
- * The result is unprotected and must be rooted by the caller before any
- * allocating operation. */
+/* Return an independently owned, ordinary copy of a non-S4 atomic or list
+ * vector. Only the names attribute is semantic at this boundary; it is itself
+ * copied to ordinary storage. List elements and other scalar leaves retain
+ * identity. A structural receipt rejects object/S4/attribute-count changes
+ * during destination allocation or ALTREP observation; together with the
+ * exact names receipt, this keeps an ordinary names-only caller admission
+ * from being laundered into the plain result. The result is unprotected and
+ * must be rooted by the caller before any allocating operation. */
 attribute_hidden SEXP paradox_snapshot_semantic_vector(SEXP value);
+/* Snapshot a built-in typed value leaf with one coherent payload/attribute
+ * generation. S4 and non-atomic opaque leaves retain exact identity. */
+attribute_hidden SEXP paradox_snapshot_builtin_value_leaf(SEXP value);
+/* Complete ownership of a freshly owned built-in `special_vals` list.
+ * Typed atomic leaves are detached; typed S4/non-atomic leaves and every
+ * ParamUty leaf retain identity. The input list shell itself must already be
+ * private to the caller. */
+attribute_hidden SEXP paradox_own_builtin_special_value_leaves(
+  SEXP special_values,
+  int typed
+);
+
+/* Capture an ordinary list's exact name/element pairing into already
+ * allocated carriers.  The scan is allocation-free and callback-free: once
+ * it succeeds, a later row-name ALTREP observation or pending finalizer may
+ * mutate the caller's shell without pairing names from one generation with
+ * leaves from another. `stable_names` is either an ordinary STRSXP of the
+ * same length or NULL when the source is required to be unnamed.
+ * `stable_values` is an ordinary VECSXP of the same length. */
+attribute_hidden int paradox_capture_list_identities(
+  SEXP source,
+  SEXP stable_names,
+  SEXP stable_values
+);
 
 typedef enum {
   PARADOX_PUBLIC_TABLE_NONE = 0,

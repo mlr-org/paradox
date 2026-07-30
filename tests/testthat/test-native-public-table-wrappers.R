@@ -44,14 +44,27 @@ expect_additive_public_table_ingresses = function(table, data_table) {
     .Call(public_table_native_symbol("design_transpose"), table, FALSE),
     lapply(table$x, function(x) list(x = x))
   )
-  expect_identical(
-    .Call(
-      public_table_native_symbol("design_dependency_plan"),
-      table,
-      param_set
-    ),
-    list(rows = list(), columns = character(), values = list())
+  plan = .Call(
+    public_table_native_symbol("design_dependency_plan"),
+    table,
+    param_set
   )
+  expect_identical(
+    plan,
+    list(
+      fixed_columns = character(),
+      fixed_values = list(),
+      fixed_plain = logical(),
+      rows = list(),
+      columns = character(),
+      values = list(),
+      receipt = plan$receipt
+    )
+  )
+  expect_null(.Call(
+    public_table_native_symbol("param_set_generation_receipt"),
+    plan$receipt
+  ))
 }
 
 test_that("additive data.table classes are inert across every table ingress", {
@@ -365,8 +378,20 @@ test_that("row-count mismatches reject only row-consuming table operations", {
   )
   expect_identical(
     empty_plan,
-    list(rows = list(), columns = character(), values = list())
+    list(
+      fixed_columns = character(),
+      fixed_values = list(),
+      fixed_plain = logical(),
+      rows = list(),
+      columns = character(),
+      values = list(),
+      receipt = empty_plan$receipt
+    )
   )
+  expect_null(.Call(
+    public_table_native_symbol("param_set_generation_receipt"),
+    empty_plan$receipt
+  ))
 })
 
 test_that("ignored data.table caches still have ordinary carrier metadata", {

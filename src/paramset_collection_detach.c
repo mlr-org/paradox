@@ -213,9 +213,14 @@ static int same_unit(const detach_unit_t *unit, R_xlen_t leaf,
 static SEXP make_affix(const detach_graph_t *graph,
     const R_xlen_t *collection_nodes, const R_xlen_t *owners,
     R_xlen_t depth, int prefix) {
+  size_t *measured = paradox_temporary_alloc(
+    depth == 0 ? 1 : depth,
+    sizeof(*measured)
+  );
   size_t bytes = 0;
   const void *vmax = vmaxget();
   for (R_xlen_t step = 0; step < depth; ++step) {
+    measured[step] = 0;
     const R_xlen_t path = prefix ? step : depth - step - 1;
     const detach_node_t *node = &graph->nodes[collection_nodes[path]];
     if (node->postfix == prefix) {
@@ -230,6 +235,7 @@ static SEXP make_affix(const detach_graph_t *graph,
       vmaxset(vmax);
       Rf_error("ParamSetCollection affix is too long");
     }
+    measured[step] = size;
     bytes += size + 1;
   }
   char *buffer = paradox_temporary_alloc(
@@ -249,6 +255,11 @@ static SEXP make_affix(const detach_graph_t *graph,
     }
     const char *text = Rf_translateCharUTF8(owner);
     const size_t size = strlen(text);
+    if (size != measured[step] || output >= bytes ||
+        size > bytes - output - 1U) {
+      vmaxset(vmax);
+      Rf_error("ParamSetCollection affix changed while being copied");
+    }
     if (prefix) {
       memcpy(buffer + output, text, size);
       output += size;
@@ -258,6 +269,10 @@ static SEXP make_affix(const detach_graph_t *graph,
       memcpy(buffer + output, text, size);
       output += size;
     }
+  }
+  if (output != bytes) {
+    vmaxset(vmax);
+    Rf_error("ParamSetCollection affix changed while being copied");
   }
   buffer[output] = '\0';
   SEXP result = Rf_mkCharLenCE(buffer, (int) output, CE_UTF8);
@@ -288,17 +303,27 @@ static int expected_root_id(SEXP root_id, SEXP prefix, SEXP local_id,
     (R_xlen_t) size + 1,
     sizeof(*buffer)
   );
-  memcpy(buffer, Rf_translateCharUTF8(prefix), prefix_size);
-  memcpy(
-    buffer + prefix_size,
-    Rf_translateCharUTF8(local_id),
-    local_size
-  );
-  memcpy(
-    buffer + prefix_size + local_size,
-    Rf_translateCharUTF8(suffix),
-    suffix_size
-  );
+  const char *translated = Rf_translateCharUTF8(prefix);
+  if (strlen(translated) != prefix_size) {
+    vmaxset(vmax);
+    UNPROTECT(4);
+    return FALSE;
+  }
+  memcpy(buffer, translated, prefix_size);
+  translated = Rf_translateCharUTF8(local_id);
+  if (strlen(translated) != local_size) {
+    vmaxset(vmax);
+    UNPROTECT(4);
+    return FALSE;
+  }
+  memcpy(buffer + prefix_size, translated, local_size);
+  translated = Rf_translateCharUTF8(suffix);
+  if (strlen(translated) != suffix_size) {
+    vmaxset(vmax);
+    UNPROTECT(4);
+    return FALSE;
+  }
+  memcpy(buffer + prefix_size + local_size, translated, suffix_size);
   buffer[size] = '\0';
   SEXP expected = PROTECT(Rf_mkCharLenCE(buffer, (int) size, CE_UTF8));
   const int equal = paradox_domain_strings_equal(root_id, expected);
@@ -382,7 +407,7 @@ static SEXP allocate_carriers(R_xlen_t size, const char *field,
     ));
     SET_STRING_ELT(carrier_names, 0, Rf_mkChar(field));
     if (include_source) {
-      SET_STRING_ELT(carrier_names, 1, Rf_mkChar(".source"));
+      SET_STRING_ELT(carrier_names, 1, Rf_mkChar(".core"));
     }
     Rf_setAttrib(carrier, R_NamesSymbol, carrier_names);
     SET_VECTOR_ELT(result, index, carrier);
@@ -650,7 +675,7 @@ static SEXP collection_detach_plan(SEXP requested,
       STRING_ELT(root->params.ids, root_row)
     );
     SET_STRING_ELT(output_original_ids, row, selected_local_ids[row]);
-    INTEGER(output_owners)[row] = (int) unit + 1;
+    INTEGER(output_owners)[row] = (int) (unit + 1);
     SET_STRING_ELT(output_owner_names, row, R_BlankString);
     SET_STRING_ELT(output_prefixes, row, units[unit].prefix);
     SET_STRING_ELT(output_suffixes, row, units[unit].suffix);
@@ -660,7 +685,7 @@ static SEXP collection_detach_plan(SEXP requested,
   R_xlen_t trafo_output = 0;
   for (R_xlen_t unit = 0; unit < unit_count; ++unit) {
     if (units[unit].constraint != R_NilValue) {
-      INTEGER(constraint_indices)[constraint_output] = (int) unit + 1;
+      INTEGER(constraint_indices)[constraint_output] = (int) (unit + 1);
       SET_VECTOR_ELT(
         VECTOR_ELT(constraint_sets, constraint_output),
         0,
@@ -669,10 +694,10 @@ static SEXP collection_detach_plan(SEXP requested,
       ++constraint_output;
     }
     if (units[unit].trafo != R_NilValue) {
-      INTEGER(trafo_indices)[trafo_output] = (int) unit + 1;
+      INTEGER(trafo_indices)[trafo_output] = (int) (unit + 1);
       SEXP carrier = VECTOR_ELT(trafo_sets, trafo_output);
       SET_VECTOR_ELT(carrier, 0, units[unit].trafo);
-      SET_VECTOR_ELT(carrier, 1, graph.nodes[units[unit].leaf].self);
+      SET_VECTOR_ELT(carrier, 1, graph.nodes[units[unit].leaf].core);
       ++trafo_output;
     }
   }

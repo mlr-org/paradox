@@ -85,3 +85,21 @@ test_that("all.equal includes public graph sharing semantics", {
     "reference|node|Length|Component"
   )
 })
+
+test_that("all.equal snapshots one coherent graph before presentation reads", {
+  source = ps(value = p_uty())
+  mutator = new.env(parent = emptyenv())
+  class(mutator) = c("paradox_equality_clone_mutator", "R6")
+  mutator$clone = function(deep = FALSE) {
+    source$values = list(value = "later")
+    new.env(parent = emptyenv())
+  }
+  source$values = list(value = mutator)
+
+  # A self-comparison takes one admitted snapshot. The opaque value's
+  # established R6 clone callback may mutate the source while that snapshot is
+  # being detached, but it cannot make one equality view combine the old
+  # schema/value with a later live field.
+  expect_true(isTRUE(all.equal(source, source)))
+  expect_identical(source$values, list(value = "later"))
+})

@@ -279,6 +279,213 @@ test_that("capsule tables must be rectangular before any consumer indexes them",
   }
 })
 
+test_that("capsule tables reject S4 structural shells and metadata when used", {
+  install_base_state = function(state, check = function(set) set$get_values()) {
+    set = ps(x = p_int())
+    assign(
+      ".core",
+      .Call(paradox:::C_param_set_core_new, 1L, state),
+      envir = core_private(set)
+    )
+    expect_error(check(set), "Corrupt")
+  }
+
+  fresh_base_state = function() {
+    unserialize(serialize(core_state(ps(x = p_int())), NULL))
+  }
+
+  for (field in c(".params", ".tags", ".deps")) {
+    state = fresh_base_state()
+    state[[field]] = asS4(state[[field]])
+    install_base_state(state)
+  }
+
+  state = fresh_base_state()
+  state$.trafos = asS4(state$.trafos)
+  install_base_state(state, function(set) set$params)
+
+  for (metadata in c("names", "class", "row.names")) {
+    state = fresh_base_state()
+    attr(state$.params, metadata) = asS4(
+      attr(state$.params, metadata, exact = TRUE)
+    )
+    install_base_state(state)
+  }
+
+  state = fresh_base_state()
+  state$.params[[1L]] = asS4(state$.params[[1L]])
+  install_base_state(state)
+
+  state = unserialize(serialize(
+    core_state(ps(x = p_fct(c("a", "b")))),
+    NULL
+  ))
+  state$.params$levels[[1L]] = asS4(state$.params$levels[[1L]])
+  install_base_state(state)
+
+  state = fresh_base_state()
+  state$.params$special_vals[[1L]] = asS4(
+    state$.params$special_vals[[1L]]
+  )
+  install_base_state(state)
+
+  state = fresh_base_state()
+  special_values = state$.params$special_vals[[1L]]
+  attr(special_values, "class") = asS4("rogue_special_values")
+  state$.params$special_vals[[1L]] = special_values
+  install_base_state(state)
+
+  state = fresh_base_state()
+  special_values = state$.params$special_vals[[1L]]
+  class(special_values) = "rogue_special_values"
+  state$.params$special_vals[[1L]] = special_values
+  install_base_state(state)
+
+  for (mutate in list(
+      function(state) {
+        state$.values = asS4(state$.values)
+        state
+      },
+      function(state) {
+        attr(state$.values, "names") = asS4(names(state$.values))
+        state
+      }
+    )) {
+    install_base_state(mutate(fresh_base_state()))
+  }
+
+  state = fresh_base_state()
+  state$.postfix = asS4(state$.postfix)
+  install_base_state(
+    state,
+    function(set) ParamSetCollection$new(list(child = set))
+  )
+
+  install_collection_state = function(mutate) {
+    collection = ParamSetCollection$new(list(child = ps(x = p_int())))
+    state = unserialize(serialize(core_state(collection), NULL))
+    state = mutate(state)
+    assign(
+      ".core",
+      .Call(paradox:::C_param_set_core_new, 2L, state),
+      envir = core_private(collection)
+    )
+    expect_error(collection$get_values(), "Corrupt ParamSetCollection")
+  }
+  for (mutate in list(
+      function(state) {
+        state$.translation = asS4(state$.translation)
+        state
+      },
+      function(state) {
+        state$.sets = asS4(state$.sets)
+        state
+      },
+      function(state) {
+        attr(state$.sets, "names") = asS4(names(state$.sets))
+        state
+      },
+      function(state) {
+        state$.postfix = asS4(state$.postfix)
+        state
+      }
+    )) {
+    install_collection_state(mutate)
+  }
+})
+
+test_that("$params rejects noncanonical stored row-name carriers unobserved", {
+  set = ps(x = p_int())
+  private = core_private(set)
+  state = unserialize(serialize(core_state(set), NULL))
+  callbacks = 0L
+  wrong_length = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      stop("row-name ALTREP was observed", call. = FALSE)
+    },
+    callback_after = 0L
+  )
+  data.table::setattr(state$.params, "row.names", wrong_length)
+  private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
+
+  expect_error(set$params, "Corrupt ParamSet parameter state capsule")
+  expect_identical(callbacks, 0L)
+
+  state = unserialize(serialize(core_state(ps(x = p_int())), NULL))
+  data.table::setattr(state$.params, "row.names", 2L)
+  private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
+  expect_error(set$params, "Corrupt ParamSet parameter state capsule")
+})
+
+test_that("capsule tables admit each exact ordinary row-name spelling", {
+  for (row_names in list(
+      c(1L, 2L),
+      c(NA_integer_, -2L),
+      c(NA_integer_, 2L)
+    )) {
+    set = ps(x = p_int(), y = p_int())
+    state = unserialize(serialize(core_state(set), NULL))
+    attr(state$.params, "row.names") = row_names
+    assign(
+      ".core",
+      .Call(paradox:::C_param_set_core_new, 1L, state),
+      envir = core_private(set)
+    )
+    expect_identical(set$get_values(), named_list())
+  }
+})
+
+test_that("strict capsule tables reject first-column ALTREP without observation", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  calls = 0L
+  set = ps(x = p_int(), y = p_int())
+  state = unserialize(serialize(core_state(set), NULL))
+  hostile = native_stateful_altrep(
+    state$.params[[1L]],
+    rev(state$.params[[1L]]),
+    callback = function() calls <<- calls + 1L
+  )
+  state$.params[[1L]] = hostile
+  native_stateful_altrep_rearm(hostile, c(NA_integer_, 0L))
+  calls = 0L
+  assign(
+    ".core",
+    .Call(paradox:::C_param_set_core_new, 1L, state),
+    envir = core_private(set)
+  )
+
+  expect_error(set$get_values(), "Corrupt ParamSet")
+  expect_identical(calls, 0L)
+
+  calls = 0L
+  set = ps(x = p_int(), y = p_int())
+  state = unserialize(serialize(core_state(set), NULL))
+  row_names = c(1L, 2L)
+  hostile = native_stateful_altrep(
+    row_names,
+    rev(row_names),
+    callback = function() calls <<- calls + 1L
+  )
+  attr(state$.params, "row.names") = hostile
+  native_stateful_altrep_rearm(hostile, c(NA_integer_, 0L))
+  calls = 0L
+  assign(
+    ".core",
+    .Call(paradox:::C_param_set_core_new, 1L, state),
+    envir = core_private(set)
+  )
+
+  expect_error(set$get_values(), "Corrupt ParamSet")
+  expect_identical(calls, 0L)
+})
+
 test_that("capsule table columns must use ordinary representations", {
   set = ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
   private = core_private(set)

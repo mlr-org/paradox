@@ -263,35 +263,34 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  if (!paradox_core_is_verified(core)) {
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  /* Collection graph admission owns its refresh and exact-generation
+   * selection below.  Pre-refreshing here would traverse a stale graph twice
+   * and, for a verified Shadow-containing graph, repeat its fingerprint scan
+   * without strengthening the receipt. */
+  if (kind != PARADOX_CORE_COLLECTION &&
+      !paradox_core_is_verified(core)) {
     core = paradox_core_refresh(self, private_environment);
+    kind = paradox_core_kind(core);
   }
-  const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
       kind != PARADOX_CORE_SHADOW) {
     Rf_error("Corrupt ParamSet state: unknown capsule kind");
   }
-  SET_VECTOR_ELT(roots, DOMAIN_ROOT_CORE, core);
-  SEXP payload = paradox_core_payload(core);
-  if (payload == R_UnboundValue) {
-    Rf_error("Corrupt ParamSet state capsule");
-  }
-  SET_VECTOR_ELT(roots, DOMAIN_ROOT_PAYLOAD, payload);
-
-  SEXP params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
-  SEXP tags = VECTOR_ELT(payload, PARADOX_CORE_TAGS);
-  SEXP trafos = VECTOR_ELT(payload, PARADOX_CORE_TRAFOS);
-  SEXP dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
-  SEXP values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
-  SET_VECTOR_ELT(roots, DOMAIN_ROOT_PARAMS, params);
-  SET_VECTOR_ELT(roots, DOMAIN_ROOT_TAGS, tags);
-  SET_VECTOR_ELT(roots, DOMAIN_ROOT_TRAFOS, trafos);
-
+  SEXP payload;
+  SEXP params;
+  SEXP tags;
+  SEXP trafos;
+  SEXP dependencies;
+  SEXP values;
   if (kind == PARADOX_CORE_COLLECTION) {
     /* Dynamic Domain fields must come from one graph generation.  Build the
      * collection graph once, then consume its two canonical internal
-     * projections directly; constructing a public dependency data.table only
-     * to copy it back to a plain data.frame adds no semantics. */
+     * projections directly.  Select the static fields from that graph's exact
+     * root generation as well: graph admission may allocate before selecting
+     * the live child generations, and an allocation-triggered finalizer may
+     * legitimately replace a child (and therefore refresh the root) after the
+     * preliminary kind check. */
     PROTECT_INDEX graph_roots_index;
     SEXP graph_roots;
     PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
@@ -305,6 +304,21 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
       work
     );
 
+    core = graph.nodes[0].core;
+    payload = paradox_core_payload(core);
+    if (payload == R_UnboundValue) {
+      UNPROTECT(1);
+      Rf_error("Corrupt ParamSet state capsule");
+    }
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_CORE, core);
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_PAYLOAD, payload);
+    params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
+    tags = VECTOR_ELT(payload, PARADOX_CORE_TAGS);
+    trafos = VECTOR_ELT(payload, PARADOX_CORE_TRAFOS);
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_PARAMS, params);
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_TAGS, tags);
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_TRAFOS, trafos);
+
     values = PROTECT(paradox_collection_values_from_graph(&graph, work));
     SET_VECTOR_ELT(roots, DOMAIN_ROOT_VALUES, values);
     UNPROTECT(1);
@@ -317,6 +331,20 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     /* The fixed operation roots now retain both results. */
     UNPROTECT(2);
   } else {
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_CORE, core);
+    payload = paradox_core_payload(core);
+    if (payload == R_UnboundValue) {
+      Rf_error("Corrupt ParamSet state capsule");
+    }
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_PAYLOAD, payload);
+    params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
+    tags = VECTOR_ELT(payload, PARADOX_CORE_TAGS);
+    trafos = VECTOR_ELT(payload, PARADOX_CORE_TRAFOS);
+    dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
+    values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_PARAMS, params);
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_TAGS, tags);
+    SET_VECTOR_ELT(roots, DOMAIN_ROOT_TRAFOS, trafos);
     SET_VECTOR_ELT(roots, DOMAIN_ROOT_VALUES, values);
     SET_VECTOR_ELT(roots, DOMAIN_ROOT_DEPENDENCIES, dependencies);
   }
@@ -601,6 +629,26 @@ SEXP paradox_param_set_domains(SEXP private_environment, SEXP self) {
     self,
     R_NilValue
   );
+}
+
+SEXP paradox_param_set_domains_and_values(
+    SEXP private_environment, SEXP self) {
+  /*
+   * `$search_space()` with its default value source needs the raw store and
+   * every target Domain from one capsule/graph generation. Returning both in
+   * one rooted carrier prevents an R-side `$values` read from being paired
+   * with Domains selected after an allocation finalizer moved `.core`.
+   */
+  R_xlen_t work = 0;
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, DOMAIN_ROOT_COUNT));
+  domain_snapshot_t snapshot;
+  load_snapshot(private_environment, self, roots, &snapshot, &work);
+  SEXP domains = PROTECT(build_all_domains(&snapshot, &work));
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  SET_VECTOR_ELT(result, 0, snapshot.values.values);
+  SET_VECTOR_ELT(result, 1, domains);
+  UNPROTECT(3);
+  return result;
 }
 
 /* `$domains` and `$get_domain()` deliberately share one capsule snapshot

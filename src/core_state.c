@@ -8,6 +8,7 @@
 #include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+#include "shell_auth.h"
 #if defined(PARADOX_TEST_CORE_GRAPH_ROOTS)
 # include <R_ext/Memory.h>
 #endif
@@ -127,12 +128,32 @@ static paradox_core_kind_t kind_from_tag(SEXP tag) {
 static uintptr_t core_schema_epoch = 1;
 static uintptr_t core_state_epoch = 1;
 
-static uintptr_t core_stamp_for(SEXP core, uintptr_t epoch) {
-  uint64_t bits = (uint64_t) (uintptr_t) core;
+/*
+ * Every xor-shift is invertible at the selected word width and every
+ * multiplier is odd, hence invertible modulo 2^N. Unlike mixing in uint64_t
+ * and truncating afterward, this is therefore a bijection over every possible
+ * uintptr_t on both supported pointer widths. In particular, two distinct
+ * 32-bit capsule addresses cannot acquire the same address component.
+ */
+static uintptr_t core_address_mix(uintptr_t bits) {
+#if UINTPTR_MAX == UINT64_MAX
   bits ^= bits >> 33;
-  bits *= UINT64_C(0xff51afd7ed558ccd);
+  bits *= (uintptr_t) UINT64_C(0xff51afd7ed558ccd);
   bits ^= bits >> 29;
-  return (uintptr_t) (bits ^ (uint64_t) epoch);
+#elif UINTPTR_MAX == UINT32_MAX
+  bits ^= bits >> 16;
+  bits *= (uintptr_t) UINT32_C(0x85ebca6b);
+  bits ^= bits >> 13;
+  bits *= (uintptr_t) UINT32_C(0xc2b2ae35);
+  bits ^= bits >> 16;
+#else
+# error "Paradox requires a 32-bit or 64-bit uintptr_t"
+#endif
+  return bits;
+}
+
+static uintptr_t core_stamp_for(SEXP core, uintptr_t epoch) {
+  return core_address_mix((uintptr_t) core) ^ epoch;
 }
 
 static uintptr_t core_kind_epoch(paradox_core_kind_t kind) {
@@ -145,9 +166,24 @@ void paradox_core_note_change(paradox_core_change_t change) {
   if (change == PARADOX_CORE_CHANGE_NONE) {
     return;
   }
-  /* Wrapping is unreachable on a 64-bit host and would at worst cost one
-   * redundant revalidation on a 32-bit one, so it is documented rather than
-   * engineered around; the counters must only never revisit 0. */
+#if UINTPTR_MAX == UINT32_MAX
+  /*
+   * Reusing an old odd epoch would make an old address-slot stamp current
+   * again. Refuse the 2^31st state or schema mutation in one R session rather
+   * than ever certify stale derived state. Every caller reaches this before
+   * its terminal, allocation-free capsule-install wave, so the error is
+   * atomic. The branch is absent from 64-bit builds, where exhaustion is not
+   * a realizable process lifetime.
+   */
+  if (core_state_epoch > UINTPTR_MAX - UINT32_C(2) ||
+      (change == PARADOX_CORE_CHANGE_SCHEMA &&
+       core_schema_epoch > UINTPTR_MAX - UINT32_C(2))) {
+    Rf_error(
+      "ParamSet mutation epoch exhausted; restart the R session before "
+      "modifying this object"
+    );
+  }
+#endif
   core_state_epoch += 2;
   if (change == PARADOX_CORE_CHANGE_SCHEMA) {
     core_schema_epoch += 2;
@@ -159,9 +195,57 @@ uintptr_t paradox_core_state_epoch_value(void) {
 }
 
 void paradox_core_stamp_verified(SEXP core) {
+  const paradox_core_kind_t kind =
+    kind_from_tag(R_ExternalPtrTag(core));
+  /*
+   * A Shadow's package-private signature is the sole mutable carrier outside
+   * the protected capsule payload. No finite address-slot fingerprint can
+   * prove exact identity of an arbitrarily rewritten ordinary list. Leave
+   * every Shadow unstamped so its next semantic entry performs the exact
+   * authoritative shell/generation comparison.
+   *
+   * The same rule propagates one edge at a time through collections. A child
+   * collection is stampable only after its own complete subtree acquired an
+   * exact no-Shadow proof, so inspecting direct children here is sufficient
+   * and costs nothing on the ordinary read path. BASE and proven no-Shadow
+   * COLLECTION reads retain their original one-comparison fast path.
+   */
+  if (kind == PARADOX_CORE_SHADOW) {
+    R_SetExternalPtrAddr(core, NULL);
+    return;
+  }
+  if (kind == PARADOX_CORE_COLLECTION) {
+    SEXP payload = paradox_core_payload(core);
+    if (payload == R_UnboundValue) {
+      R_SetExternalPtrAddr(core, NULL);
+      return;
+    }
+    SEXP sets = VECTOR_ELT(payload, PARADOX_CORE_SETS);
+    if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
+        Rf_isObject(sets)) {
+      R_SetExternalPtrAddr(core, NULL);
+      return;
+    }
+    for (R_xlen_t index = 0; index < XLENGTH(sets); ++index) {
+      SEXP child = VECTOR_ELT(sets, index);
+      SEXP private_environment =
+        paradox_domain_required_private_environment(child);
+      SEXP child_core = private_environment == R_UnboundValue
+        ? R_UnboundValue
+        : paradox_core_from_private(private_environment);
+      if (child_core == R_UnboundValue ||
+          !paradox_core_is_verified(child_core)) {
+        R_SetExternalPtrAddr(core, NULL);
+        return;
+      }
+    }
+  } else if (kind != PARADOX_CORE_BASE) {
+    R_SetExternalPtrAddr(core, NULL);
+    return;
+  }
   const uintptr_t stamp = core_stamp_for(
     core,
-    core_kind_epoch(kind_from_tag(R_ExternalPtrTag(core)))
+    core_kind_epoch(kind)
   );
   R_SetExternalPtrAddr(core, (void *) stamp);
 }
@@ -174,22 +258,22 @@ int paradox_core_is_verified(SEXP core) {
   if (kind == PARADOX_CORE_BASE) {
     return TRUE;
   }
-  if (kind == PARADOX_CORE_NONE) {
+  /*
+   * Shape is insufficient here: the mutable signature may retain its carrier
+   * identity while any entry changes. Exact reauthentication is performed by
+   * the authoritative refresh reached after this deliberate cache miss. Fold
+   * NONE and SHADOW into one branch so a proven no-Shadow COLLECTION retains
+   * the same two comparisons as the former hot path.
+   */
+  if (kind != PARADOX_CORE_COLLECTION) {
     return FALSE;
   }
   /* An empty slot is the fresh, restored, and cleared state and is never a
    * proof; a stamp that happens to mix to it merely revalidates once. */
   void *slot = R_ExternalPtrAddr(core);
   const uintptr_t stamp = (uintptr_t) slot;
-  if (stamp == 0 || stamp != core_stamp_for(core, core_kind_epoch(kind))) {
-    return FALSE;
-  }
-  /* The stamp proves that no capsule was installed since this generation was
-   * verified. It cannot prove that the derived-cache carrier itself was not
-   * rewritten in place, which is the one corruption an ordinary R attribute
-   * assignment can still produce, so a SHADOW reauthenticates its refresh
-   * signature before its cached projection is trusted. */
-  return kind != PARADOX_CORE_SHADOW || paradox_shadow_metadata_is_exact(core);
+  return stamp != 0 &&
+    stamp == core_stamp_for(core, core_kind_epoch(kind));
 }
 
 static int exact_payload(SEXP payload) {
@@ -1344,6 +1428,137 @@ SEXP paradox_param_set_core_kind(SEXP owner) {
   return Rf_ScalarInteger((int) kind);
 }
 
+SEXP paradox_param_set_deep_clone_shadow_receipt(SEXP core) {
+  if (!paradox_core_is_canonical(core)) {
+    Rf_error("Invalid ParamSet deep-clone capsule");
+  }
+  if (paradox_core_kind(core) != PARADOX_CORE_SHADOW) {
+    return R_NilValue;
+  }
+
+  /*
+   * Allocate the outward carrier before selecting the package-private
+   * signature. A finalizer run by that allocation is therefore part of the
+   * generation captured below, while replacement during the content snapshot
+   * is rejected by the terminal allocation-free comparison.
+   */
+  SEXP receipt = PROTECT(Rf_allocVector(VECSXP, 2));
+  SEXP signature = paradox_shadow_metadata_signature(core);
+  if (signature == R_UnboundValue) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSetShadow deep-clone signature");
+  }
+  PROTECT(signature);
+  SEXP content = PROTECT(
+    paradox_shadow_signature_content_snapshot(signature)
+  );
+  if (content == R_NilValue ||
+      !paradox_shadow_signature_receipt_is_current(
+        core,
+        signature,
+        content
+      )) {
+    UNPROTECT(3);
+    Rf_error("ParamSetShadow changed while preparing a deep clone");
+  }
+  SET_VECTOR_ELT(receipt, 0, signature);
+  SET_VECTOR_ELT(receipt, 1, content);
+  UNPROTECT(3);
+  return receipt;
+}
+
+SEXP paradox_param_set_deep_clone_receipt(SEXP shells,
+    SEXP private_environments, SEXP expected_cores,
+    SEXP expected_assert_values, SEXP expected_shadow_receipts) {
+  /*
+   * Deep-clone planning deliberately lives in cold R code, but its terminal
+   * generation barrier cannot: checking one binding at a time in R allocates
+   * between checks, allowing a finalizer to change an already checked node.
+   * All input carriers have been completely constructed before entry. Once
+   * the symbols are interned, the ordinary-binding scans below are allocation-,
+   * callback-, and forcing-free on every supported runtime. The shell policy
+   * belongs to the same selected generation as the capsule: otherwise an
+   * opaque ParamUty value's R6 clone callback could make a child clone combine
+   * the retained capsule with a later `assert_values` policy.
+   */
+  SEXP core_symbol = Rf_install(".core");
+  SEXP assert_values_symbol = Rf_install("assert_values");
+  SEXP enclosure_symbol = Rf_install(".__enclos_env__");
+  SEXP self_symbol = Rf_install("self");
+  SEXP private_symbol = Rf_install("private");
+  if (TYPEOF(shells) != VECSXP || ALTREP(shells) || Rf_isS4(shells) ||
+      Rf_isObject(shells) || !paradox_api_has_no_attributes(shells) ||
+      TYPEOF(private_environments) != VECSXP ||
+      ALTREP(private_environments) || Rf_isS4(private_environments) ||
+      Rf_isObject(private_environments) ||
+      !paradox_api_has_no_attributes(private_environments) ||
+      TYPEOF(expected_cores) != VECSXP || ALTREP(expected_cores) ||
+      Rf_isS4(expected_cores) || Rf_isObject(expected_cores) ||
+      !paradox_api_has_no_attributes(expected_cores) ||
+      TYPEOF(expected_assert_values) != VECSXP ||
+      ALTREP(expected_assert_values) ||
+      Rf_isS4(expected_assert_values) ||
+      Rf_isObject(expected_assert_values) ||
+      !paradox_api_has_no_attributes(expected_assert_values) ||
+      TYPEOF(expected_shadow_receipts) != VECSXP ||
+      ALTREP(expected_shadow_receipts) ||
+      Rf_isS4(expected_shadow_receipts) ||
+      Rf_isObject(expected_shadow_receipts) ||
+      !paradox_api_has_no_attributes(expected_shadow_receipts) ||
+      XLENGTH(shells) != XLENGTH(private_environments) ||
+      XLENGTH(private_environments) != XLENGTH(expected_cores) ||
+      XLENGTH(private_environments) != XLENGTH(expected_assert_values) ||
+      XLENGTH(private_environments) != XLENGTH(expected_shadow_receipts)) {
+    Rf_error("Invalid ParamSet deep-clone generation receipt");
+  }
+
+  for (R_xlen_t index = 0;
+      index < XLENGTH(private_environments);
+      ++index) {
+    SEXP shell = VECTOR_ELT(shells, index);
+    SEXP private_environment = VECTOR_ELT(private_environments, index);
+    SEXP expected_core = VECTOR_ELT(expected_cores, index);
+    SEXP expected_policy = VECTOR_ELT(expected_assert_values, index);
+    SEXP shadow_receipt = VECTOR_ELT(expected_shadow_receipts, index);
+    SEXP enclosure = paradox_api_plain_binding_scan(
+      shell,
+      enclosure_symbol
+    );
+    if (TYPEOF(shell) != ENVSXP || Rf_isS4(shell) ||
+        TYPEOF(private_environment) != ENVSXP ||
+        Rf_isS4(private_environment) ||
+        TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure) ||
+        paradox_api_plain_binding_scan(enclosure, self_symbol) != shell ||
+        paradox_api_plain_binding_scan(enclosure, private_symbol) !=
+          private_environment ||
+        !paradox_core_is_canonical(expected_core) ||
+        !paradox_param_set_assert_values_is_exact(expected_policy) ||
+        paradox_api_plain_binding_scan(
+          shell,
+          assert_values_symbol
+        ) != expected_policy ||
+        paradox_api_plain_binding_scan(
+          private_environment,
+          core_symbol
+        ) != expected_core ||
+        (paradox_core_kind(expected_core) == PARADOX_CORE_SHADOW
+          ? (TYPEOF(shadow_receipt) != VECSXP ||
+            ALTREP(shadow_receipt) || Rf_isS4(shadow_receipt) ||
+            Rf_isObject(shadow_receipt) ||
+            !paradox_api_has_no_attributes(shadow_receipt) ||
+            XLENGTH(shadow_receipt) != 2 ||
+            !paradox_shadow_signature_receipt_is_current(
+              expected_core,
+              VECTOR_ELT(shadow_receipt, 0),
+              VECTOR_ELT(shadow_receipt, 1)
+            ))
+          : shadow_receipt != R_NilValue)) {
+      Rf_error("ParamSet capsule graph changed during deep clone");
+    }
+  }
+  return R_NilValue;
+}
+
 SEXP paradox_param_set_core_replace(SEXP owner, SEXP updates) {
   if (TYPEOF(owner) != ENVSXP) {
     Rf_error("Internal error: ParamSet state owner must be an environment");
@@ -1402,6 +1617,19 @@ SEXP paradox_param_set_core_replace(SEXP owner, SEXP updates) {
   SEXP replacement = PROTECT(new_core(kind, payload));
   if (kind == PARADOX_CORE_SHADOW) {
     paradox_shadow_copy_metadata(old_core, replacement);
+  }
+  /*
+   * Everything needed by the replacement now exists.  This required-binding
+   * receipt is allocation- and callback-free on every supported R version;
+   * it is the transaction's terminal barrier.  Without it, a finalizer run by
+   * either allocation above could install a newer generation which this
+   * stale payload would silently overwrite.
+   */
+  if (paradox_core_from_private(owner) != old_core) {
+    UNPROTECT(4);
+    Rf_error(
+      "ParamSet changed while a native mutation was being constructed"
+    );
   }
   /* Constructing the replacement allocates, so a finalizer could have run and
    * installed a capsule of its own; carrying the old proof across that would

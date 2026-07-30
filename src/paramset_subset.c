@@ -7,6 +7,7 @@
 #include "core_state.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
+#include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 
@@ -45,6 +46,9 @@ typedef struct {
   row_groups_t dependency_groups;
   R_xlen_t *dependency_parents;
   R_xlen_t *values_by_parameter;
+  SEXP constraint;
+  SEXP extra_trafo;
+  paradox_core_kind_t kind;
 } subset_source_t;
 
 enum source_root {
@@ -55,7 +59,19 @@ enum source_root {
   SOURCE_TRAFOS,
   SOURCE_DEPS,
   SOURCE_VALUES,
+  SOURCE_CONSTRAINT,
+  SOURCE_EXTRA_TRAFO,
+  SOURCE_SHADOW_SIGNATURE,
+  SOURCE_SHADOW_SIGNATURE_CONTENT,
   SOURCE_ROOT_COUNT
+};
+
+enum subset_bundle_field {
+  SUBSET_BUNDLE_TOKEN = 0,
+  SUBSET_BUNDLE_DETACH,
+  SUBSET_BUNDLE_KEEP_CONSTRAINT,
+  SUBSET_BUNDLE_KEEP_TRAFO,
+  SUBSET_BUNDLE_FIELD_COUNT
 };
 
 static int scalar_flag(SEXP value, const char *name) {
@@ -322,68 +338,52 @@ static void validate_source_fields(SEXP params_table, SEXP tags_table,
   }
 }
 
-static void load_source(SEXP private_environment, SEXP self, SEXP roots,
-    subset_source_t *source) {
-  if (!paradox_domain_owns_private_environment(self, private_environment)) {
-    Rf_error("Corrupt ParamSet shell ownership");
-  }
-  SEXP core = paradox_core_from_private(private_environment);
-  if (core == R_UnboundValue) {
-    Rf_error("Corrupt ParamSet state: missing versioned core capsule");
-  }
-  if (!paradox_core_is_verified(core)) {
-    core = paradox_core_refresh(self, private_environment);
-  }
-  SET_VECTOR_ELT(roots, SOURCE_CORE, core);
+static void install_source_fields(SEXP core, SEXP state, SEXP roots,
+    SEXP values, SEXP dependencies, subset_source_t *source) {
   const paradox_core_kind_t kind = paradox_core_kind(core);
-  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
-      kind != PARADOX_CORE_SHADOW) {
-    Rf_error("Corrupt ParamSet state: unknown capsule node kind");
-  }
-  SEXP state = paradox_core_payload(core);
-  if (state == R_UnboundValue) {
-    Rf_error("Corrupt ParamSet state capsule");
-  }
+  SET_VECTOR_ELT(roots, SOURCE_CORE, core);
   SET_VECTOR_ELT(roots, SOURCE_STATE, state);
   SET_VECTOR_ELT(roots, SOURCE_PARAMS, VECTOR_ELT(state, PARADOX_CORE_PARAMS));
   SET_VECTOR_ELT(roots, SOURCE_TAGS, VECTOR_ELT(state, PARADOX_CORE_TAGS));
   SET_VECTOR_ELT(roots, SOURCE_TRAFOS, VECTOR_ELT(state, PARADOX_CORE_TRAFOS));
+  SET_VECTOR_ELT(roots, SOURCE_DEPS, dependencies);
+  SET_VECTOR_ELT(roots, SOURCE_VALUES, values);
+  SET_VECTOR_ELT(
+    roots,
+    SOURCE_CONSTRAINT,
+    VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT)
+  );
+  SET_VECTOR_ELT(
+    roots,
+    SOURCE_EXTRA_TRAFO,
+    VECTOR_ELT(state, PARADOX_CORE_EXTRA_TRAFO)
+  );
 
-  if (kind == PARADOX_CORE_COLLECTION) {
-    /* Values and dependencies are two projections of the same live graph.
-     * Admit that graph once so shared Shadows refresh once and both
-     * projections retain exactly the same capsule generations; the dependency
-     * emitter already returns the canonical internal plain data.frame. */
-    R_xlen_t work_since_interrupt = 0;
-    PROTECT_INDEX graph_roots_index;
-    SEXP graph_roots;
-    PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
-    paradox_collection_graph_t graph;
-    paradox_collection_graph_build(
-      private_environment,
-      self,
-      &graph,
-      &graph_roots,
-      graph_roots_index,
-      &work_since_interrupt
+  source->kind = kind;
+  source->constraint = VECTOR_ELT(roots, SOURCE_CONSTRAINT);
+  source->extra_trafo = VECTOR_ELT(roots, SOURCE_EXTRA_TRAFO);
+  require_callback(source->constraint, "constraint");
+  require_callback(source->extra_trafo, "extra_trafo");
+  if (kind == PARADOX_CORE_COLLECTION &&
+      (source->constraint != R_NilValue ||
+       source->extra_trafo != R_NilValue)) {
+    Rf_error("Corrupt ParamSetCollection stored aggregate callback");
+  }
+  if (kind == PARADOX_CORE_SHADOW) {
+    SEXP signature = paradox_shadow_metadata_signature(core);
+    if (signature == R_UnboundValue) {
+      Rf_error("Corrupt ParamSetShadow native snapshot metadata");
+    }
+    SET_VECTOR_ELT(roots, SOURCE_SHADOW_SIGNATURE, signature);
+    SEXP content = PROTECT(
+      paradox_shadow_signature_content_snapshot(signature)
     );
-    SEXP values = PROTECT(paradox_collection_values_from_graph(
-      &graph,
-      &work_since_interrupt
-    ));
-    SET_VECTOR_ELT(roots, SOURCE_VALUES, values);
+    if (content == R_NilValue) {
+      UNPROTECT(1);
+      Rf_error("Corrupt ParamSetShadow native snapshot metadata");
+    }
+    SET_VECTOR_ELT(roots, SOURCE_SHADOW_SIGNATURE_CONTENT, content);
     UNPROTECT(1);
-    SEXP dependencies = PROTECT(paradox_collection_dependencies_from_graph(
-      &graph,
-      &work_since_interrupt
-    ));
-    SET_VECTOR_ELT(roots, SOURCE_DEPS, dependencies);
-    /* `roots` now owns both projections; release the temporary result and
-     * the graph capsule-root chain together. */
-    UNPROTECT(2);
-  } else {
-    SET_VECTOR_ELT(roots, SOURCE_DEPS, VECTOR_ELT(state, PARADOX_CORE_DEPS));
-    SET_VECTOR_ELT(roots, SOURCE_VALUES, VECTOR_ELT(state, PARADOX_CORE_VALUES));
   }
 
   validate_source_fields(
@@ -394,6 +394,171 @@ static void load_source(SEXP private_environment, SEXP self, SEXP roots,
     VECTOR_ELT(roots, SOURCE_VALUES),
     source
   );
+}
+
+static void load_source(SEXP private_environment, SEXP self, SEXP roots,
+    subset_source_t *source, paradox_collection_graph_t *graph,
+    SEXP *graph_roots, PROTECT_INDEX graph_roots_index, int *has_graph) {
+  if (!paradox_domain_owns_private_environment(self, private_environment)) {
+    Rf_error("Corrupt ParamSet shell ownership");
+  }
+  PROTECT_INDEX core_index;
+  SEXP core;
+  PROTECT_WITH_INDEX(
+    core = paradox_core_from_private(private_environment),
+    &core_index
+  );
+  if (core == R_UnboundValue) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet state: missing versioned core capsule");
+  }
+  const paradox_core_kind_t initial_kind = paradox_core_kind(core);
+  if (initial_kind == PARADOX_CORE_COLLECTION) {
+    R_xlen_t work_since_interrupt = 0;
+    paradox_collection_graph_build_receipted(
+      private_environment,
+      self,
+      graph,
+      graph_roots,
+      graph_roots_index,
+      &work_since_interrupt
+    );
+    *has_graph = TRUE;
+    core = graph->nodes[0].core;
+  } else {
+    if (!paradox_core_is_verified(core)) {
+      REPROTECT(
+        core = paradox_core_refresh(self, private_environment),
+        core_index
+      );
+    }
+    *has_graph = FALSE;
+  }
+  const paradox_core_kind_t kind = paradox_core_kind(core);
+  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
+      kind != PARADOX_CORE_SHADOW) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet state: unknown capsule node kind");
+  }
+  SEXP state = paradox_core_payload(core);
+  if (state == R_UnboundValue) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet state capsule");
+  }
+
+  if (kind == PARADOX_CORE_COLLECTION) {
+    if (!*has_graph || graph->nodes[0].state != state) {
+      UNPROTECT(1);
+      Rf_error("Corrupt ParamSetCollection subset snapshot");
+    }
+    /* Values, dependencies, static schema, callbacks, and detachment all
+     * consume this one admitted graph. */
+    R_xlen_t work_since_interrupt = 0;
+    SEXP values = PROTECT(paradox_collection_values_from_graph(
+      graph,
+      &work_since_interrupt
+    ));
+    SEXP dependencies = PROTECT(paradox_collection_dependencies_from_graph(
+      graph,
+      &work_since_interrupt
+    ));
+    install_source_fields(
+      core,
+      state,
+      roots,
+      values,
+      dependencies,
+      source
+    );
+    UNPROTECT(2);
+  } else {
+    install_source_fields(
+      core,
+      state,
+      roots,
+      VECTOR_ELT(state, PARADOX_CORE_VALUES),
+      VECTOR_ELT(state, PARADOX_CORE_DEPS),
+      source
+    );
+  }
+  UNPROTECT(1);
+}
+
+static int source_snapshot_is_intact(
+    SEXP roots, const paradox_collection_graph_t *graph, int has_graph,
+    R_xlen_t *work_since_interrupt) {
+  if (has_graph &&
+      !paradox_collection_graph_snapshot_is_intact(
+        graph,
+        work_since_interrupt
+      )) {
+    return FALSE;
+  }
+  SEXP core = VECTOR_ELT(roots, SOURCE_CORE);
+  SEXP state = VECTOR_ELT(roots, SOURCE_STATE);
+  const paradox_core_kind_t kind = paradox_core_kind(core);
+  return paradox_core_payload(core) == state &&
+    VECTOR_ELT(state, PARADOX_CORE_PARAMS) ==
+      VECTOR_ELT(roots, SOURCE_PARAMS) &&
+    VECTOR_ELT(state, PARADOX_CORE_TAGS) ==
+      VECTOR_ELT(roots, SOURCE_TAGS) &&
+    VECTOR_ELT(state, PARADOX_CORE_TRAFOS) ==
+      VECTOR_ELT(roots, SOURCE_TRAFOS) &&
+    VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT) ==
+      VECTOR_ELT(roots, SOURCE_CONSTRAINT) &&
+    VECTOR_ELT(state, PARADOX_CORE_EXTRA_TRAFO) ==
+      VECTOR_ELT(roots, SOURCE_EXTRA_TRAFO) &&
+    (kind == PARADOX_CORE_COLLECTION ||
+      (VECTOR_ELT(state, PARADOX_CORE_DEPS) ==
+          VECTOR_ELT(roots, SOURCE_DEPS) &&
+        VECTOR_ELT(state, PARADOX_CORE_VALUES) ==
+          VECTOR_ELT(roots, SOURCE_VALUES))) &&
+    (kind != PARADOX_CORE_SHADOW ||
+      paradox_shadow_signature_receipt_is_current(
+        core,
+        VECTOR_ELT(roots, SOURCE_SHADOW_SIGNATURE),
+        VECTOR_ELT(roots, SOURCE_SHADOW_SIGNATURE_CONTENT)
+      ));
+}
+
+static int graph_has_callback(const paradox_collection_graph_t *graph,
+    int field) {
+  for (R_xlen_t index = 0; index < graph->count; ++index) {
+    if (VECTOR_ELT(graph->nodes[index].state, field) != R_NilValue) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+static SEXP new_subset_bundle(SEXP token, SEXP detach,
+    int keep_constraint, int keep_trafo) {
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, SUBSET_BUNDLE_FIELD_COUNT));
+  SEXP names = PROTECT(Rf_allocVector(
+    STRSXP,
+    SUBSET_BUNDLE_FIELD_COUNT
+  ));
+  static const char *const field_names[] = {
+    "token", "detach", "keep_constraint", "keep_trafo"
+  };
+  SET_VECTOR_ELT(result, SUBSET_BUNDLE_TOKEN, token);
+  SET_VECTOR_ELT(result, SUBSET_BUNDLE_DETACH, detach);
+  SET_VECTOR_ELT(
+    result,
+    SUBSET_BUNDLE_KEEP_CONSTRAINT,
+    Rf_ScalarLogical(keep_constraint)
+  );
+  SET_VECTOR_ELT(
+    result,
+    SUBSET_BUNDLE_KEEP_TRAFO,
+    Rf_ScalarLogical(keep_trafo)
+  );
+  for (int field = 0; field < SUBSET_BUNDLE_FIELD_COUNT; ++field) {
+    SET_STRING_ELT(names, field, Rf_mkChar(field_names[field]));
+  }
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(2);
+  return result;
 }
 
 static SEXP subset_column(SEXP source, const R_xlen_t *rows,
@@ -649,29 +814,47 @@ static R_xlen_t *requested_parameters(const subset_source_t *source,
   return parameters;
 }
 
-SEXP paradox_param_set_subset_state(SEXP private_environment, SEXP self,
+static SEXP param_set_subset_state_impl(SEXP private_environment, SEXP self,
     SEXP requested_ids, SEXP allow_dangling_dependencies,
-    SEXP keep_constraint, SEXP constraint, SEXP extra_trafo,
-    SEXP keep_trafo) {
+    SEXP keep_constraint, SEXP keep_trafo, SEXP test_hook,
+    int select_all) {
   const int allow_dangling = scalar_flag(
     allow_dangling_dependencies,
     "allow_dangling_dependencies"
   );
   const int keep = scalar_flag(keep_constraint, "keep_constraint");
   const int keep_transformations = scalar_flag(keep_trafo, "keep_trafo");
-  require_callback(extra_trafo, "extra_trafo");
-  if (keep) {
-    require_callback(constraint, "constraint");
-  }
 
-  SEXP ids = PROTECT(snapshot_ids(requested_ids));
-  if (Rf_any_duplicated(ids, FALSE) != 0) {
+  PROTECT_INDEX ids_index;
+  SEXP ids;
+  PROTECT_WITH_INDEX(
+    ids = select_all ? R_NilValue : snapshot_ids(requested_ids),
+    &ids_index
+  );
+  if (!select_all && Rf_any_duplicated(ids, FALSE) != 0) {
     UNPROTECT(1);
     Rf_error("`ids` must not contain duplicates when creating a subset");
   }
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, SOURCE_ROOT_COUNT));
+  PROTECT_INDEX graph_roots_index;
+  SEXP graph_roots;
+  PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+  paradox_collection_graph_t graph;
+  int has_graph = FALSE;
   subset_source_t source;
-  load_source(private_environment, self, roots, &source);
+  load_source(
+    private_environment,
+    self,
+    roots,
+    &source,
+    &graph,
+    &graph_roots,
+    graph_roots_index,
+    &has_graph
+  );
+  if (select_all) {
+    REPROTECT(ids = snapshot_ids(source.params.ids), ids_index);
+  }
   R_xlen_t *parameters = requested_parameters(&source, ids);
   SEXP token = PROTECT(build_token(
     &source,
@@ -680,25 +863,137 @@ SEXP paradox_param_set_subset_state(SEXP private_environment, SEXP self,
     TRUE,
     allow_dangling,
     keep_transformations,
-    keep ? constraint : R_NilValue,
-    keep_transformations ? extra_trafo : R_NilValue
+    keep && !has_graph ? source.constraint : R_NilValue,
+    keep_transformations && !has_graph
+      ? source.extra_trafo
+      : R_NilValue
   ));
-  UNPROTECT(3);
-  return token;
+  const int detach_constraint = has_graph && keep &&
+    graph_has_callback(&graph, PARADOX_CORE_CONSTRAINT);
+  const int detach_trafo = has_graph && keep_transformations &&
+    graph_has_callback(&graph, PARADOX_CORE_EXTRA_TRAFO);
+  SEXP detach = PROTECT(
+    detach_constraint || detach_trafo
+      ? paradox_param_set_collection_detach_plan_from_graph(&graph, ids)
+      : R_NilValue
+  );
+  SEXP result = PROTECT(new_subset_bundle(
+    token,
+    detach,
+    keep,
+    keep_transformations
+  ));
+  if (test_hook != R_NilValue) {
+    SEXP call = PROTECT(Rf_lang1(test_hook));
+    SEXP ignored = PROTECT(Rf_eval(call, R_BaseEnv));
+    (void) ignored;
+    UNPROTECT(2);
+  }
+  R_xlen_t work_since_interrupt = 0;
+  if (!source_snapshot_is_intact(
+      roots,
+      &graph,
+      has_graph,
+      &work_since_interrupt
+    )) {
+    UNPROTECT(6);
+    Rf_error("ParamSet changed while constructing a subset");
+  }
+  UNPROTECT(6);
+  return result;
 }
 
-SEXP paradox_param_set_subspace_states(SEXP private_environment, SEXP self,
-    SEXP requested_ids, SEXP extra_trafo) {
-  require_callback(extra_trafo, "extra_trafo");
-  SEXP ids = PROTECT(snapshot_ids(requested_ids));
+SEXP paradox_param_set_subset_state(SEXP private_environment, SEXP self,
+    SEXP requested_ids, SEXP allow_dangling_dependencies,
+    SEXP keep_constraint, SEXP keep_trafo) {
+  return param_set_subset_state_impl(
+    private_environment,
+    self,
+    requested_ids,
+    allow_dangling_dependencies,
+    keep_constraint,
+    keep_trafo,
+    R_NilValue,
+    FALSE
+  );
+}
+
+SEXP paradox_param_set_flatten_state(
+    SEXP private_environment, SEXP self) {
+  /*
+   * Select every root ID only after load_source() has admitted one complete
+   * BASE/COLLECTION/SHADOW generation. This is the callback-free flatten path:
+   * an R-side ID read followed by an ordinary subset could otherwise omit a
+   * parameter exposed by a derived-schema refresh between those operations.
+   */
+  SEXP flag = PROTECT(Rf_ScalarLogical(TRUE));
+  SEXP result = PROTECT(param_set_subset_state_impl(
+    private_environment,
+    self,
+    R_NilValue,
+    flag,
+    flag,
+    flag,
+    R_NilValue,
+    TRUE
+  ));
+  UNPROTECT(2);
+  return result;
+}
+
+SEXP paradox_test_param_set_subset_reentry(SEXP private_environment,
+    SEXP self, SEXP requested_ids, SEXP allow_dangling_dependencies,
+    SEXP keep_constraint, SEXP keep_trafo, SEXP hook) {
+  if (!Rf_isFunction(hook)) {
+    Rf_error("Subset reentry test hook must be a function");
+  }
+  return param_set_subset_state_impl(
+    private_environment,
+    self,
+    requested_ids,
+    allow_dangling_dependencies,
+    keep_constraint,
+    keep_trafo,
+    hook,
+    FALSE
+  );
+}
+
+static SEXP param_set_subspace_states_impl(SEXP private_environment,
+    SEXP self, SEXP requested_ids, int select_all) {
+  PROTECT_INDEX ids_index;
+  SEXP ids;
+  PROTECT_WITH_INDEX(
+    ids = select_all ? R_NilValue : snapshot_ids(requested_ids),
+    &ids_index
+  );
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, SOURCE_ROOT_COUNT));
+  PROTECT_INDEX graph_roots_index;
+  SEXP graph_roots;
+  PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+  paradox_collection_graph_t graph;
+  int has_graph = FALSE;
   subset_source_t source;
-  load_source(private_environment, self, roots, &source);
+  load_source(
+    private_environment,
+    self,
+    roots,
+    &source,
+    &graph,
+    &graph_roots,
+    graph_roots_index,
+    &has_graph
+  );
+  if (select_all) {
+    REPROTECT(ids = snapshot_ids(source.params.ids), ids_index);
+  }
   R_xlen_t *parameters = requested_parameters(&source, ids);
   const R_xlen_t size = XLENGTH(ids);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
   SEXP names = PROTECT(Rf_duplicate(ids));
   Rf_setAttrib(result, R_NamesSymbol, names);
+  const int detach_trafo = has_graph &&
+    graph_has_callback(&graph, PARADOX_CORE_EXTRA_TRAFO);
   for (R_xlen_t request = 0; request < size; ++request) {
     SEXP token = PROTECT(build_token(
       &source,
@@ -708,27 +1003,148 @@ SEXP paradox_param_set_subspace_states(SEXP private_environment, SEXP self,
       TRUE,
       TRUE,
       R_NilValue,
-      extra_trafo
+      has_graph ? R_NilValue : source.extra_trafo
     ));
-    SET_VECTOR_ELT(result, request, token);
-    UNPROTECT(1);
+    SEXP selected = PROTECT(Rf_allocVector(STRSXP, 1));
+    SET_STRING_ELT(selected, 0, STRING_ELT(ids, request));
+    SEXP detach = PROTECT(
+      detach_trafo
+        ? paradox_param_set_collection_detach_plan_from_graph(
+            &graph,
+            selected
+          )
+        : R_NilValue
+    );
+    SEXP bundle = PROTECT(new_subset_bundle(
+      token,
+      detach,
+      FALSE,
+      TRUE
+    ));
+    SET_VECTOR_ELT(result, request, bundle);
+    UNPROTECT(4);
   }
-  UNPROTECT(4);
+  R_xlen_t work_since_interrupt = 0;
+  if (!source_snapshot_is_intact(
+      roots,
+      &graph,
+      has_graph,
+      &work_since_interrupt
+    )) {
+    UNPROTECT(5);
+    Rf_error("ParamSet changed while constructing subspaces");
+  }
+  UNPROTECT(5);
   return result;
+}
+
+SEXP paradox_param_set_subspace_states(SEXP private_environment, SEXP self,
+    SEXP requested_ids) {
+  return param_set_subspace_states_impl(
+    private_environment,
+    self,
+    requested_ids,
+    FALSE
+  );
+}
+
+SEXP paradox_param_set_all_subspace_states(SEXP private_environment,
+    SEXP self) {
+  return param_set_subspace_states_impl(
+    private_environment,
+    self,
+    R_NilValue,
+    TRUE
+  );
+}
+
+SEXP paradox_param_set_callback_owner_subset_state(SEXP core, SEXP ids) {
+  if (!paradox_core_is_canonical(core) ||
+      (paradox_core_kind(core) != PARADOX_CORE_BASE &&
+       paradox_core_kind(core) != PARADOX_CORE_SHADOW)) {
+    Rf_error("Corrupt ParamSetCollection callback owner capsule");
+  }
+  SEXP stable_ids = PROTECT(snapshot_ids(ids));
+  if (Rf_any_duplicated(stable_ids, FALSE) != 0) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSetCollection callback owner IDs");
+  }
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, SOURCE_ROOT_COUNT));
+  SEXP state = paradox_core_payload(core);
+  if (state == R_UnboundValue) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSetCollection callback owner state");
+  }
+  subset_source_t source;
+  install_source_fields(
+    core,
+    state,
+    roots,
+    VECTOR_ELT(state, PARADOX_CORE_VALUES),
+    VECTOR_ELT(state, PARADOX_CORE_DEPS),
+    &source
+  );
+  R_xlen_t *parameters = requested_parameters(&source, stable_ids);
+  SEXP token = PROTECT(build_token(
+    &source,
+    parameters,
+    XLENGTH(stable_ids),
+    TRUE,
+    TRUE,
+    TRUE,
+    R_NilValue,
+    R_NilValue
+  ));
+  if (paradox_core_payload(core) != state ||
+      VECTOR_ELT(state, PARADOX_CORE_PARAMS) !=
+        VECTOR_ELT(roots, SOURCE_PARAMS) ||
+      VECTOR_ELT(state, PARADOX_CORE_TAGS) !=
+        VECTOR_ELT(roots, SOURCE_TAGS) ||
+      VECTOR_ELT(state, PARADOX_CORE_TRAFOS) !=
+        VECTOR_ELT(roots, SOURCE_TRAFOS) ||
+      VECTOR_ELT(state, PARADOX_CORE_DEPS) !=
+        VECTOR_ELT(roots, SOURCE_DEPS) ||
+      VECTOR_ELT(state, PARADOX_CORE_VALUES) !=
+        VECTOR_ELT(roots, SOURCE_VALUES) ||
+      (source.kind == PARADOX_CORE_SHADOW &&
+        !paradox_shadow_signature_receipt_is_current(
+          core,
+          VECTOR_ELT(roots, SOURCE_SHADOW_SIGNATURE),
+          VECTOR_ELT(roots, SOURCE_SHADOW_SIGNATURE_CONTENT)
+        ))) {
+    UNPROTECT(3);
+    Rf_error("ParamSet callback owner changed while constructing a subset");
+  }
+  UNPROTECT(3);
+  return token;
 }
 
 SEXP paradox_param_set_base_snapshot_state(SEXP private_environment,
     SEXP self) {
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, SOURCE_ROOT_COUNT));
+  PROTECT_INDEX graph_roots_index;
+  SEXP graph_roots;
+  PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+  paradox_collection_graph_t graph;
+  int has_graph = FALSE;
   subset_source_t source;
-  load_source(private_environment, self, roots, &source);
+  load_source(
+    private_environment,
+    self,
+    roots,
+    &source,
+    &graph,
+    &graph_roots,
+    graph_roots_index,
+    &has_graph
+  );
   if (paradox_core_kind(VECTOR_ELT(roots, SOURCE_CORE)) !=
       PARADOX_CORE_BASE) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     Rf_error("ObjectTuneToken ParamSet content must be an exact BASE ParamSet");
   }
   if (source.params.row_count == 0) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     Rf_error("ObjectTuneToken ParamSet content must be nonempty and bounded");
   }
   SEXP storage = VECTOR_ELT(
@@ -766,7 +1182,7 @@ SEXP paradox_param_set_base_snapshot_state(SEXP private_environment,
     }
     if (!discrete && (!numeric || !R_FINITE(lower_value) ||
         !R_FINITE(upper_value))) {
-      UNPROTECT(1);
+      UNPROTECT(2);
       Rf_error("ObjectTuneToken ParamSet content must be nonempty and bounded");
     }
   }
@@ -777,7 +1193,6 @@ SEXP paradox_param_set_base_snapshot_state(SEXP private_environment,
   for (R_xlen_t row = 0; row < source.params.row_count; ++row) {
     parameters[row] = row;
   }
-  SEXP state = VECTOR_ELT(roots, SOURCE_STATE);
   SEXP token = PROTECT(build_token(
     &source,
     parameters,
@@ -785,10 +1200,20 @@ SEXP paradox_param_set_base_snapshot_state(SEXP private_environment,
     TRUE,
     TRUE,
     TRUE,
-    VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT),
-    VECTOR_ELT(state, PARADOX_CORE_EXTRA_TRAFO)
+    source.constraint,
+    source.extra_trafo
   ));
-  UNPROTECT(2);
+  R_xlen_t work_since_interrupt = 0;
+  if (!source_snapshot_is_intact(
+      roots,
+      &graph,
+      has_graph,
+      &work_since_interrupt
+    )) {
+    UNPROTECT(3);
+    Rf_error("ParamSet changed while constructing a snapshot");
+  }
+  UNPROTECT(3);
   return token;
 }
 

@@ -127,6 +127,26 @@ test_that("ParamUty is the supported custom validation callback", {
   )
 })
 
+test_that("ParamUty observes a character callback diagnostic exactly once", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  answer = NULL
+  utility = p_uty(custom_check = function(value) {
+    if (is.null(answer)) TRUE else answer
+  })
+  answer = native_stateful_altrep(
+    structure("first reason", class = "paradox_custom_check_probe"),
+    structure("second reason", class = "paradox_custom_check_probe"),
+    elt_switch_after = 1L
+  )
+
+  observed = domain_check(utility, list(1L))
+  expect_match(observed, "first reason", fixed = TRUE)
+  expect_false(grepl("second reason", observed, fixed = TRUE))
+})
+
 test_that("translated ParamUty diagnostics survive forced collection", {
   skip_on_cran()
   utf8_reason = enc2utf8("caf\u00e9 required")
@@ -340,6 +360,29 @@ test_that("third-party Domain seams are closed", {
     envir = asNamespace("paradox")
   )
   expect_error(domain_check(forged, list(0.5)), "Unsupported Domain class")
+})
+
+test_that("Domain kernels reject S4 structural tables and metadata", {
+  domain = p_int(0L, 2L)
+  operations = list(
+    function(value) domain_check(value, list(1L)),
+    function(value) domain_nlevels(value),
+    function(value) domain_is_bounded(value),
+    function(value) domain_is_number(value),
+    function(value) domain_qunif(value, 0.5),
+    function(value) domain_sanitize(value, list(1L))
+  )
+  for (operation in operations) {
+    expect_error(operation(asS4(domain)), "Unsupported Domain class")
+  }
+
+  malformed_class = data.table::copy(domain)
+  data.table::setattr(
+    malformed_class,
+    "class",
+    asS4(class(malformed_class))
+  )
+  expect_error(domain_nlevels(malformed_class), "Unsupported Domain class")
 })
 
 test_that("malformed built-in Domains error instead of restarting in R", {

@@ -277,50 +277,21 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
   }
   SET_VECTOR_ELT(result, GATEWAY_CONTEXT_PRIVATE, private_environment);
 
-  SEXP assert_values = paradox_api_optional_plain_binding_snapshot(
-    self,
-    assert_values_symbol
-  );
-  if (!paradox_param_set_assert_values_is_exact(assert_values)) {
+  if (expected_kind != 0 && expected_kind != PARADOX_CORE_BASE &&
+      expected_kind != class_kind) {
     clear_gateway_context(result, false_value);
     UNPROTECT(4);
     return result;
   }
-  SET_VECTOR_ELT(
-    result,
-    GATEWAY_CONTEXT_ASSERT_VALUES,
-    assert_values
-  );
-
-  SEXP core = paradox_api_optional_plain_binding_snapshot(
-    private_environment,
-    core_symbol
-  );
-  if (!paradox_core_is_canonical(core)) {
-    clear_gateway_context(result, false_value);
-    UNPROTECT(4);
-    return result;
-  }
-  SET_VECTOR_ELT(result, GATEWAY_CONTEXT_CORE, core);
-  const paradox_core_kind_t core_kind = paradox_core_kind(core);
-  if (core_kind != class_kind ||
-      (expected_kind != 0 && expected_kind != PARADOX_CORE_BASE &&
-        expected_kind != core_kind) ||
-      (core_kind == PARADOX_CORE_SHADOW &&
-        !paradox_shadow_metadata_is_exact(core))) {
-    clear_gateway_context(result, false_value);
-    UNPROTECT(4);
-    return result;
-  }
-  if (expected_kind == 0) expected_kind = core_kind;
+  if (expected_kind == 0) expected_kind = class_kind;
 
   const R_xlen_t family_marker_count =
-    core_kind == PARADOX_CORE_BASE ? 0 : 1;
+    class_kind == PARADOX_CORE_BASE ? 0 : 1;
   const R_xlen_t additive_count =
     XLENGTH(classes) - 2 - family_marker_count;
   const R_xlen_t steps = additive_count +
     (expected_kind == PARADOX_CORE_BASE &&
-      core_kind != PARADOX_CORE_BASE);
+      class_kind != PARADOX_CORE_BASE);
   SEXP enclosure = gateway_enclosure_at(
     top_enclosure,
     self,
@@ -353,6 +324,61 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
   }
   SET_VECTOR_ELT(result, GATEWAY_CONTEXT_ENCLOSURE, enclosure);
   SET_VECTOR_ELT(result, GATEWAY_CONTEXT_SUPER, super);
+
+  /*
+   * On R 3.6--4.1 an optional binding lookup evaluates base::exists(). Finish
+   * every allocation-capable topology read before selecting either state
+   * carrier, then perform both required existence probes before the two
+   * allocation-free snapshots. Otherwise a pending finalizer can mutate the
+   * already selected policy or capsule in place during the other lookup and
+   * defeat terminal pointer equality. Newer runtimes' optional snapshots are
+   * already allocation-free and keep their single-read spelling.
+   */
+#if R_VERSION < R_Version(4, 2, 0)
+  if (!paradox_api_frame_has_binding(self, assert_values_symbol) ||
+      !paradox_api_frame_has_binding(private_environment, core_symbol)) {
+    clear_gateway_context(result, false_value);
+    UNPROTECT(4);
+    return result;
+  }
+  SEXP assert_values = paradox_api_plain_binding_scan(
+    self,
+    assert_values_symbol
+  );
+  SEXP core = paradox_api_plain_binding_scan(
+    private_environment,
+    core_symbol
+  );
+#else
+  SEXP assert_values = paradox_api_optional_plain_binding_snapshot(
+    self,
+    assert_values_symbol
+  );
+  SEXP core = paradox_api_optional_plain_binding_snapshot(
+    private_environment,
+    core_symbol
+  );
+#endif
+  if (!paradox_param_set_assert_values_is_exact(assert_values) ||
+      !paradox_core_is_canonical(core)) {
+    clear_gateway_context(result, false_value);
+    UNPROTECT(4);
+    return result;
+  }
+  SET_VECTOR_ELT(
+    result,
+    GATEWAY_CONTEXT_ASSERT_VALUES,
+    assert_values
+  );
+  SET_VECTOR_ELT(result, GATEWAY_CONTEXT_CORE, core);
+  const paradox_core_kind_t core_kind = paradox_core_kind(core);
+  if (core_kind != class_kind ||
+      (core_kind == PARADOX_CORE_SHADOW &&
+        !paradox_shadow_metadata_is_exact(core))) {
+    clear_gateway_context(result, false_value);
+    UNPROTECT(4);
+    return result;
+  }
 
   SEXP scanned_enclosure = gateway_enclosure_at(
     top_enclosure,

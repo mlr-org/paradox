@@ -13,19 +13,39 @@
 #' @export
 assert_param_set = function(param_set, cl = NULL, no_untyped = FALSE, must_bounded = FALSE, no_deps = FALSE) {
   assert_r6(param_set, "ParamSet")
+  private = get_private(param_set)
+  state = .Call(C_param_set_assertion_state, private, param_set)
+  classes = set_names(state$params$cls, state$params$id)
   if (!is.null(cl)) {
-    if (!all(param_set$class %in% cl)) stopf("Only classes %s allowed", str_collapse(cl))
+    if (!all(classes %in% cl)) stopf("Only classes %s allowed", str_collapse(cl))
   }
-  if (no_untyped && !all(param_set$class %in% c("ParamLgl", "ParamInt", "ParamFct", "ParamDbl"))) {
+  if (no_untyped && !all(classes %in% c("ParamLgl", "ParamInt", "ParamFct", "ParamDbl"))) {
     stop("ParamSet contains untyped params!")
   }
-  if (must_bounded && !all(param_set$is_bounded)) {
+  if (must_bounded && !all(.Call(
+      C_param_set_property,
+      state$params,
+      3L
+    ))) {
     stop("ParamSet contains unbounded params!")
   }
-  if (no_deps && param_set$has_deps) {
+  if (no_deps && state$has_deps) {
     stop("ParamSet contains dependencies!")
   }
   invisible(param_set)
+}
+
+assert_positive_quantile_rows = function(param_set, n) {
+  if (n > 0L && any(
+      param_set$class == "ParamFct" & param_set$nlevels == 0L,
+      na.rm = TRUE
+  )) {
+    stop(
+      "Cannot map quantiles for a factor parameter with no levels",
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
 }
 
 #' @title Assert Python Packages

@@ -68,8 +68,20 @@ attribute_hidden SEXP paradox_domain_construct(
   SEXP requirements
 );
 attribute_hidden SEXP paradox_domain_uty_check_result(SEXP result);
+attribute_hidden SEXP paradox_domain_uty_validate_custom_check(SEXP callback);
 attribute_hidden SEXP paradox_domain_simple_repr_id(SEXP representation);
-attribute_hidden SEXP paradox_param_set_construct(SEXP domains);
+attribute_hidden SEXP paradox_param_set_construct(
+  SEXP domains,
+  SEXP allow_dangling_dependencies
+);
+attribute_hidden SEXP paradox_param_set_deep_clone_receipt(
+  SEXP shells,
+  SEXP private_environments,
+  SEXP expected_cores,
+  SEXP expected_assert_values,
+  SEXP expected_shadow_receipts
+);
+attribute_hidden SEXP paradox_param_set_deep_clone_shadow_receipt(SEXP core);
 attribute_hidden SEXP paradox_param_set_collection_construct(
   SEXP sets,
   SEXP tag_sets,
@@ -114,7 +126,7 @@ attribute_hidden SEXP paradox_param_set_collection_detached_constraint(
 );
 attribute_hidden SEXP paradox_param_set_collection_owner_subset_state(
   SEXP callback,
-  SEXP source,
+  SEXP core,
   SEXP ids
 );
 attribute_hidden SEXP paradox_param_set_ids(
@@ -140,6 +152,18 @@ attribute_hidden SEXP paradox_param_set_values_merge(
   SEXP current,
   SEXP insert
 );
+attribute_hidden SEXP paradox_param_set_set_values(
+  SEXP private_environment,
+  SEXP self,
+  SEXP dots,
+  SEXP values,
+  SEXP insert
+);
+attribute_hidden SEXP paradox_param_set_assign_values(
+  SEXP private_environment,
+  SEXP self,
+  SEXP values
+);
 attribute_hidden SEXP paradox_param_set_store_values(
   SEXP private_environment,
   SEXP self,
@@ -149,6 +173,19 @@ attribute_hidden SEXP paradox_param_set_assign_values_checked(
   SEXP private_environment,
   SEXP self,
   SEXP values
+);
+attribute_hidden SEXP paradox_param_set_internal_tuning_store(
+  SEXP private_environment,
+  SEXP self,
+  SEXP values,
+  SEXP validate,
+  SEXP receipts
+);
+attribute_hidden SEXP paradox_param_set_internal_tuning_store_owners(
+  SEXP owners,
+  SEXP values,
+  SEXP validate,
+  SEXP receipts
 );
 attribute_hidden SEXP paradox_param_set_set_tags(
   SEXP private_environment,
@@ -170,6 +207,10 @@ attribute_hidden SEXP paradox_param_set_dependencies(
   SEXP self
 );
 attribute_hidden SEXP paradox_param_set_has_dependencies(
+  SEXP private_environment,
+  SEXP self
+);
+attribute_hidden SEXP paradox_param_set_assertion_state(
   SEXP private_environment,
   SEXP self
 );
@@ -251,7 +292,42 @@ attribute_hidden SEXP paradox_param_set_validate_current_graph(
   SEXP self,
   SEXP selected_core
 );
-attribute_hidden SEXP paradox_param_set_validate_current_roots(SEXP selves);
+attribute_hidden SEXP paradox_param_set_validate_current_roots(
+  SEXP selves,
+  SEXP public_receipts
+);
+typedef enum {
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_ID = 0,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_ORIGINAL_ID,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_ROUTE_INDEX,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNER_INDEX,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNERS,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNER_VALUES,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNER_IDS,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_ROOT_VALUES,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_CARGO,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_TAG,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_HAS_CONSTRAINT,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_ASSERT_VALUES,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_RECEIPT,
+  PARADOX_INTERNAL_TUNING_SNAPSHOT_COUNT
+} paradox_internal_tuning_snapshot_field_t;
+attribute_hidden SEXP paradox_param_set_internal_tuning_snapshot(
+  SEXP private_environment,
+  SEXP self,
+  SEXP ids,
+  SEXP include_root_values
+);
+attribute_hidden SEXP paradox_param_set_internal_tuning_receipt(SEXP receipt);
+attribute_hidden SEXP paradox_param_set_generation_receipt(SEXP receipt);
+/* Allocation-free generation barriers shared with the package-private
+ * internal-tuning value transaction. */
+attribute_hidden void paradox_param_set_scan_internal_tuning_receipt(
+  SEXP receipt
+);
+attribute_hidden void paradox_param_set_scan_internal_tuning_receipts(
+  SEXP receipts
+);
 /* Internal checked-assignment entry: the semantic result is identical to the
  * registered operation, while successful live ObjectTuneToken admissions are
  * returned as rooted shell/private/core generation receipts. */
@@ -273,6 +349,10 @@ attribute_hidden SEXP paradox_tune_token_snapshot_list(
   SEXP private_environment,
   SEXP self,
   SEXP values
+);
+attribute_hidden SEXP paradox_tune_token_snapshot_current(
+  SEXP private_environment,
+  SEXP self
 );
 attribute_hidden SEXP paradox_param_set_check_dependencies_builtin(
   SEXP private_environment,
@@ -310,9 +390,7 @@ attribute_hidden SEXP paradox_sampler_unif_sample_builtin(
   SEXP n
 );
 attribute_hidden SEXP paradox_sampler_unif_subspace_handoffs(
-  SEXP param_set,
-  SEXP requested_ids,
-  SEXP extra_trafo
+  SEXP param_set
 );
 attribute_hidden SEXP paradox_sampler_unif_take_subspace(SEXP handoff);
 attribute_hidden SEXP paradox_design_dependency_plan(
@@ -337,6 +415,10 @@ attribute_hidden SEXP paradox_param_set_get_domain(
   SEXP id
 );
 attribute_hidden SEXP paradox_param_set_domains(
+  SEXP private_environment,
+  SEXP self
+);
+attribute_hidden SEXP paradox_param_set_domains_and_values(
   SEXP private_environment,
   SEXP self
 );
@@ -367,15 +449,33 @@ attribute_hidden SEXP paradox_param_set_subset_state(
   SEXP requested_ids,
   SEXP allow_dangling_dependencies,
   SEXP keep_constraint,
-  SEXP constraint,
-  SEXP extra_trafo,
   SEXP keep_trafo
+);
+attribute_hidden SEXP paradox_param_set_flatten_state(
+  SEXP private_environment,
+  SEXP self
+);
+attribute_hidden SEXP paradox_test_param_set_subset_reentry(
+  SEXP private_environment,
+  SEXP self,
+  SEXP requested_ids,
+  SEXP allow_dangling_dependencies,
+  SEXP keep_constraint,
+  SEXP keep_trafo,
+  SEXP hook
 );
 attribute_hidden SEXP paradox_param_set_subspace_states(
   SEXP private_environment,
   SEXP self,
-  SEXP requested_ids,
-  SEXP extra_trafo
+  SEXP requested_ids
+);
+attribute_hidden SEXP paradox_param_set_all_subspace_states(
+  SEXP private_environment,
+  SEXP self
+);
+attribute_hidden SEXP paradox_param_set_callback_owner_subset_state(
+  SEXP core,
+  SEXP ids
 );
 attribute_hidden SEXP paradox_param_set_base_snapshot_state(
   SEXP private_environment,
@@ -389,6 +489,7 @@ attribute_hidden SEXP paradox_plain_binding_snapshot(
   SEXP environment,
   SEXP name
 );
+attribute_hidden SEXP paradox_upgrade_class_snapshot(SEXP value);
 attribute_hidden SEXP paradox_gateway_context_snapshot(
   SEXP self,
   SEXP expected_kind

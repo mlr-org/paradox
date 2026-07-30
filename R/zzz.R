@@ -31,10 +31,11 @@
 # data.table NSE column entries are gone with the data.table internals; the
 # one remaining data.table NSE site uses the local `on = NULL` idiom instead.
 utils::globalVariables(c(
-  "children_with_constraints", "children_with_trafos", "in_tune_fn",
-  "pname", "postfix", "prefix", "prefixed_set_ids", "psc_constraint",
-  "psc_extra_trafo", "sets_with_constraints", "sets_with_trafos", "trafo",
-  "translation"
+  "children_with_constraints", "children_with_trafos", "hidden_values",
+  "in_tune_fn", "original_ids", "pname", "postfix", "prefix",
+  "prefixed_set_ids", "psc_constraint", "psc_extra_trafo",
+  "sets_with_constraints", "sets_with_trafos", "trafo", "translation",
+  "visible_ids"
 ))
 
 .onLoad = function(libname, pkgname) { # nolint

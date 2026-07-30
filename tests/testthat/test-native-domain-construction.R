@@ -97,6 +97,7 @@ test_that("Domain construction uses fixed registered native interfaces", {
   arities = c(
     domain_construct = 18L,
     domain_uty_check_result = 1L,
+    domain_uty_validate_custom_check = 1L,
     domain_simple_repr_id = 1L
   )
   for (name in names(arities)) {
@@ -452,6 +453,206 @@ test_that("semantic Domain atomic vectors materialize once before admission", {
   expect_true(all(vapply(as.list(nested), inherits, logical(1L), "ParamLgl")))
 })
 
+test_that("typed ALTREP specials reject before aliased value leaves are observed", {
+  skip_if_not(
+    domain2_altrep_helpers_available(),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  for (field in c("default_value", "init_value")) {
+    callbacks = 0L
+    hostile = native_stateful_altrep(
+      0.5,
+      0.5,
+      callback = function() callbacks <<- callbacks + 1L,
+      callback_after = 0L
+    )
+    arguments = domain2_args(p_dbl(0, 1))
+    arguments$special_vals = list(hostile)
+    arguments[[field]] = hostile
+    if (field == "init_value") {
+      arguments$init_given = TRUE
+    }
+
+    invoke = function() do.call(domain2_construct, arguments)
+    expect_error(
+      invoke(),
+      "special_vals",
+      fixed = TRUE,
+      info = field
+    )
+    expect_identical(callbacks, 0L, info = field)
+  }
+
+  callbacks = 0L
+  hostile_levels = native_stateful_altrep(
+    c("a", "b"),
+    c("a", "b"),
+    callback = function() callbacks <<- callbacks + 1L,
+    callback_after = 0L
+  )
+  arguments = domain2_args(p_fct(c("a", "b")))
+  arguments$special_vals = list(hostile_levels)
+  arguments$levels = hostile_levels
+  invoke = function() do.call(domain2_construct, arguments)
+  expect_error(invoke(), "special_vals", fixed = TRUE)
+  expect_identical(callbacks, 0L)
+})
+
+test_that("semantic snapshots do not launder structure added by ALTREP reentry", {
+  skip_on_cran()
+  skip_if_not(
+    domain2_altrep_helpers_available(),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  exercise = function(attribute, replacement) {
+    state = new.env(parent = emptyenv())
+    state$callbacks = 0L
+    state$value = native_stateful_altrep(
+      "tag",
+      "tag",
+      callback = function() {
+        state$callbacks = state$callbacks + 1L
+        data.table::setattr(state$value, attribute, replacement)
+      },
+      callback_after = c(0L, NA_integer_)
+    )
+    arguments = domain2_replace(
+      domain2_args(p_dbl()),
+      "tags",
+      state$value
+    )
+    expect_error(
+      do.call(domain2_construct, arguments),
+      "Semantic vector structure changed while being snapshotted",
+      fixed = TRUE,
+      info = attribute
+    )
+    expect_identical(state$callbacks, 1L)
+  }
+
+  exercise("class", "hostile_semantic_shell")
+  exercise("probe", TRUE)
+
+  state = new.env(parent = emptyenv())
+  state$callbacks = 0L
+  state$tags = "tag"
+  state$cls = native_stateful_altrep(
+    "ParamDbl",
+    "ParamDbl",
+    callback = function() {
+      state$callbacks = state$callbacks + 1L
+      data.table::setattr(state$tags, "probe", TRUE)
+    },
+    callback_after = c(0L, NA_integer_)
+  )
+  arguments = domain2_args(p_dbl())
+  arguments = domain2_replace(arguments, "cls", state$cls)
+  arguments = domain2_replace(arguments, "tags", state$tags)
+  expect_error(
+    do.call(domain2_construct, arguments),
+    "structural constructor fields may carry at most",
+    fixed = TRUE
+  )
+  expect_identical(state$callbacks, 1L)
+})
+
+test_that("Domain requirements retain rows and row fields before RHS reentry", {
+  skip_on_cran()
+  skip_if_not(
+    domain2_altrep_helpers_available(),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  state = new.env(parent = emptyenv())
+  state$callbacks = character()
+  mutate_at_gc = function(target, index, replacement) {
+    pointer = .Call(
+      get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+      target,
+      as.integer(index - 1L),
+      replacement
+    )
+    rm(pointer)
+    for (iteration in 1:3) {
+      invisible(gc(full = TRUE))
+    }
+  }
+
+  deferred_rhs = native_stateful_altrep(
+    FALSE,
+    FALSE,
+    callback = function() {
+      state$callbacks = c(state$callbacks, "outer-row")
+      mutate_at_gc(
+        state$requirements,
+        2L,
+        list(on = "mutated_parent", cond = CondEqual(FALSE))
+      )
+    },
+    callback_after = c(0L, NA_integer_)
+  )
+  original_condition = CondEqual(FALSE)
+  original_condition[[1L]] = deferred_rhs
+  deferred_on = native_stateful_altrep(
+    "first_parent",
+    "first_parent",
+    callback = function() {
+      state$callbacks = c(state$callbacks, "within-row")
+      mutate_at_gc(
+        state$requirements[[1L]],
+        2L,
+        CondEqual(TRUE)
+      )
+    },
+    callback_after = c(0L, NA_integer_)
+  )
+  state$requirements = list(
+    list(on = deferred_on, cond = original_condition),
+    list(on = "second_parent", cond = CondEqual(TRUE))
+  )
+
+  arguments = domain2_replace(
+    domain2_args(p_int()),
+    "requirements",
+    state$requirements
+  )
+  observed = do.call(domain2_construct, arguments)
+  requirements = observed$.requirements[[1L]]
+
+  expect_identical(state$callbacks, c("within-row", "outer-row"))
+  expect_identical(
+    vapply(requirements, `[[`, character(1L), "on"),
+    c("first_parent", "second_parent")
+  )
+  expect_identical(
+    lapply(requirements, function(requirement) requirement$cond$rhs),
+    list(FALSE, TRUE)
+  )
+  expect_identical(
+    state$requirements[[1L]]$cond$rhs,
+    TRUE
+  )
+  expect_identical(state$requirements[[2L]]$on, "mutated_parent")
+})
+
+test_that("Domain requirement parent IDs cannot launder attributes", {
+  arguments = domain2_args(p_int())
+  requirement = list(
+    on = structure("parent", probe = TRUE),
+    cond = CondEqual(TRUE)
+  )
+  expect_error(
+    do.call(
+      domain2_construct,
+      domain2_replace(arguments, "requirements", list(requirement))
+    ),
+    "Invalid built-in Domain requirements",
+    fixed = TRUE
+  )
+})
+
 test_that("interpreted Domain list shells reject ALTREP without observation", {
   skip_if_no_list_altrep()
 
@@ -505,6 +706,38 @@ test_that("interpreted Domain list shells reject ALTREP without observation", {
     fixed = TRUE
   )
   expect_identical(callbacks, 0L)
+})
+
+test_that("interpreted Domain cargo cannot launder noncanonical attributes", {
+  utility = domain2_args(p_uty())
+
+  malformed_repr = utility$cargo
+  attr(malformed_repr$repr, "probe") = TRUE
+  expect_error(
+    do.call(
+      domain2_construct,
+      domain2_replace(utility, "cargo", malformed_repr)
+    ),
+    "interpreted cargo entries must use canonical attributes",
+    fixed = TRUE
+  )
+
+  tuned = domain2_args(p_uty(
+    tags = "internal_tuning",
+    aggr = function(x) x[[1L]],
+    in_tune_fn = function(domain, param_vals) TRUE,
+    disable_in_tune = list(blocked = TRUE)
+  ))
+  malformed_disable = tuned$cargo
+  attr(malformed_disable$disable_in_tune, "probe") = TRUE
+  expect_error(
+    do.call(
+      domain2_construct,
+      domain2_replace(tuned, "cargo", malformed_disable)
+    ),
+    "interpreted cargo entries must use canonical attributes",
+    fixed = TRUE
+  )
 })
 
 test_that("state-changing ALTREP representation capture is a safe non-contract", {
@@ -707,6 +940,57 @@ test_that("a snapshotted value leaf keeps its own materialized names", {
   stored = set$params$default[[1L]]
   expect_identical(length(stored), 1L)
   expect_identical(length(attr(stored, "names", exact = TRUE)), 1L)
+})
+
+test_that("built-in value snapshots own payload and arbitrary attributes", {
+  marker = new.env(parent = emptyenv())
+  replacement = new.env(parent = emptyenv())
+  value = structure(0.5, names = "selected", marker = marker)
+
+  domain = p_dbl(0, 1, default = value, init = value)
+  value[[1L]] = 0.75
+  data.table::setattr(value, "names", "changed")
+  data.table::setattr(value, "marker", replacement)
+
+  expect_identical(domain$default[[1L]], structure(
+    0.5,
+    names = "selected",
+    marker = marker
+  ))
+  expect_identical(domain$.init[[1L]], structure(
+    0.5,
+    names = "selected",
+    marker = marker
+  ))
+})
+
+test_that("ALTREP value snapshots reject an attribute-generation tear", {
+  skip_on_cran()
+  namespace = asNamespace("paradox")
+  skip_if_not(
+    exists("C_test_stateful_altrep", namespace, inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  state = new.env(parent = emptyenv())
+  state$before = new.env(parent = emptyenv())
+  state$after = new.env(parent = emptyenv())
+  state$value = native_stateful_altrep(
+    0.5,
+    0.5,
+    callback = function() {
+      data.table::setattr(state$value, "marker", state$after)
+    },
+    callback_after = 0L
+  )
+  data.table::setattr(state$value, "marker", state$before)
+  native_stateful_altrep_rearm(state$value, 0L)
+
+  expect_error(
+    p_dbl(0, 1, default = state$value),
+    "Built-in value attributes changed while being snapshotted",
+    fixed = TRUE
+  )
 })
 
 test_that("a non-finite tolerance is reported as a `tolerance` argument error", {

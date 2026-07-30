@@ -4,6 +4,8 @@
 #include <R_ext/Arith.h>
 #include <R_ext/Utils.h>
 
+#include "paramset_domain_common.h"
+#include "paramset_params_internal.h"
 #include "r_utils.h"
 
 typedef enum {
@@ -14,6 +16,17 @@ typedef enum {
   PARAM_CLASS_LGL,
   PARAM_CLASS_UTY
 } param_class_t;
+
+enum public_property_selector {
+  PUBLIC_PROPERTY_CLASS = PARADOX_PROPERTY_COUNT,
+  PUBLIC_PROPERTY_LOWER,
+  PUBLIC_PROPERTY_UPPER,
+  PUBLIC_PROPERTY_LEVELS,
+  PUBLIC_PROPERTY_STORAGE_TYPE,
+  PUBLIC_PROPERTY_SPECIAL_VALS,
+  PUBLIC_PROPERTY_DEFAULT,
+  PUBLIC_PROPERTY_COUNT
+};
 
 enum property_root_slot {
   PROPERTY_ROOT_IDS = 0,
@@ -57,7 +70,7 @@ static double param_nlevels(param_class_t cls, double lower, double upper,
     }
     return lower == upper ? 1.0 : R_PosInf;
   case PARAM_CLASS_INT:
-    return upper - lower + 1.0;
+    return paradox_integer_domain_nlevels(lower, upper);
   case PARAM_CLASS_FCT: {
     /* Keep the function result in its native type before conversion.  This is
      * equivalent but also satisfies GCC's useful -Wbad-function-cast audit. */
@@ -97,6 +110,71 @@ static int param_is_bounded(param_class_t cls, double lower, double upper) {
   return FALSE;
 }
 
+static enum paradox_domain_column public_property_column(int selector) {
+  switch (selector) {
+  case PUBLIC_PROPERTY_CLASS: return PARADOX_DOMAIN_CLS;
+  case PUBLIC_PROPERTY_LOWER: return PARADOX_DOMAIN_LOWER;
+  case PUBLIC_PROPERTY_UPPER: return PARADOX_DOMAIN_UPPER;
+  case PUBLIC_PROPERTY_LEVELS: return PARADOX_DOMAIN_LEVELS;
+  case PUBLIC_PROPERTY_STORAGE_TYPE: return PARADOX_DOMAIN_STORAGE_TYPE;
+  case PUBLIC_PROPERTY_SPECIAL_VALS: return PARADOX_DOMAIN_SPECIAL_VALS;
+  case PUBLIC_PROPERTY_DEFAULT: return PARADOX_DOMAIN_DEFAULT;
+  default:
+    Rf_error("Internal error: invalid detached property selector");
+  }
+  return PARADOX_DOMAIN_ID;
+}
+
+static SEXP detached_public_property(SEXP params, int selector) {
+  R_xlen_t work_since_interrupt = 0;
+  paradox_domain_params_t parsed;
+  R_xlen_t unused_row = 0;
+  if (!paradox_domain_validate_params(
+      params,
+      R_NilValue,
+      TRUE,
+      &parsed,
+      &unused_row,
+      &work_since_interrupt
+    )) {
+    Rf_error("Corrupt ParamSet storage: invalid canonical `.params` table");
+  }
+  const enum paradox_domain_column column =
+    public_property_column(selector);
+  SEXP source = VECTOR_ELT(params, column);
+  SEXP result;
+  if (column == PARADOX_DOMAIN_LEVELS ||
+      column == PARADOX_DOMAIN_SPECIAL_VALS ||
+      column == PARADOX_DOMAIN_DEFAULT) {
+    result = PROTECT(Rf_allocVector(VECSXP, parsed.row_count));
+    for (R_xlen_t row = 0; row < parsed.row_count; ++row) {
+      paradox_account_work(&work_since_interrupt);
+      const int typed = !paradox_domain_string_is(
+        STRING_ELT(parsed.classes, row),
+        "ParamUty"
+      );
+      SEXP detached = PROTECT(paradox_detach_domain_row_field(
+        VECTOR_ELT(source, row),
+        column,
+        typed,
+        &work_since_interrupt
+      ));
+      if (detached == R_UnboundValue) {
+        UNPROTECT(2);
+        Rf_error("Corrupt ParamSet storage: cannot detach public property");
+      }
+      SET_VECTOR_ELT(result, row, detached);
+      UNPROTECT(1);
+    }
+  } else {
+    result = PROTECT(paradox_snapshot_semantic_vector(source));
+  }
+  SEXP names = PROTECT(paradox_snapshot_semantic_vector(parsed.ids));
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(2);
+  return result;
+}
+
 SEXP paradox_param_set_property(SEXP params, SEXP property) {
   if (TYPEOF(params) != VECSXP) {
     Rf_error("Corrupt ParamSet storage: `.params` must be a list");
@@ -105,11 +183,14 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
       XLENGTH(property) != 1 ||
       INTEGER_ELT(property, 0) == NA_INTEGER ||
       INTEGER_ELT(property, 0) < 0 ||
-      INTEGER_ELT(property, 0) >= PARADOX_PROPERTY_COUNT) {
+      INTEGER_ELT(property, 0) >= PUBLIC_PROPERTY_COUNT) {
     Rf_error("Internal error: invalid ParamSet property selector");
   }
 
   const int selector = INTEGER_ELT(property, 0);
+  if (selector >= PARADOX_PROPERTY_COUNT) {
+    return detached_public_property(params, selector);
+  }
   const paradox_property_t selected = (paradox_property_t) selector;
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, PROPERTY_ROOT_COUNT));
   SEXP ids = paradox_get_named_column(params, ".params", "id");
@@ -212,12 +293,10 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
     UNPROTECT(1);
   }
 
-  /* The capsule `id` column doubles as the result's names, exactly like the
-   * R-side `set_names(<column>, id)` property bindings. Base `names<-`
-   * semantics copy before mutating, so this shares only immutable state;
-   * by-reference attribute surgery on accessor results is unsupported
-   * everywhere. */
-  Rf_setAttrib(value, R_NamesSymbol, ids);
-  UNPROTECT(2);
+  /* Attribute vectors are mutable under data.table::setattr(), so even the
+   * outward names carrier must not alias the capsule's `id` column. */
+  SEXP names = PROTECT(paradox_snapshot_semantic_vector(ids));
+  Rf_setAttrib(value, R_NamesSymbol, names);
+  UNPROTECT(3);
   return value;
 }

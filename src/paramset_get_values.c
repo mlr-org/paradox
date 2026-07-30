@@ -9,6 +9,7 @@
 #include "paramset_activity.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
+#include "paramset_params_internal.h"
 #include "r_utils.h"
 
 typedef enum {
@@ -298,32 +299,29 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  if (!paradox_core_is_verified(core)) {
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  /* Collection graph admission below is the sole refresh/selection gate for
+   * this operation. Avoid traversing stale graphs twice and avoid a redundant
+   * Shadow-signature fingerprint scan on already verified graphs. */
+  if (kind != PARADOX_CORE_COLLECTION &&
+      !paradox_core_is_verified(core)) {
     core = paradox_core_refresh(self, private_environment);
+    kind = paradox_core_kind(core);
   }
-  const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
       kind != PARADOX_CORE_SHADOW) {
     Rf_error("Corrupt ParamSet state: unknown core node kind");
   }
-  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_CORE, core);
-
-  SEXP payload = paradox_core_payload(core);
-  if (payload == R_UnboundValue) {
-    Rf_error("Corrupt ParamSet state capsule");
-  }
-  snapshot->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
-  snapshot->tags = VECTOR_ELT(payload, PARADOX_CORE_TAGS);
-  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_PARAMS, snapshot->params);
-  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_TAGS, snapshot->tags);
-
   if (kind == PARADOX_CORE_COLLECTION) {
     /* Values and dependencies are two projections of the same live graph.
      * Admit that graph once so shared Shadows are refreshed once and both
      * projections retain exactly the same capsule generations.  The dependency
      * emitter already returns the canonical internal plain data.frame, so an
      * outward data.table facade and immediate plain-table copy would be both
-     * wasteful and a less coherent snapshot. */
+     * wasteful and a less coherent snapshot.  Read the static root fields from
+     * that admitted graph too: its initial allocation may run a finalizer that
+     * replaces a live child and refreshes the collection after the preliminary
+     * kind check. */
     PROTECT_INDEX graph_roots_index;
     SEXP graph_roots;
     PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
@@ -336,6 +334,18 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
       graph_roots_index,
       work_since_interrupt
     );
+
+    core = graph.nodes[0].core;
+    SEXP payload = paradox_core_payload(core);
+    if (payload == R_UnboundValue) {
+      UNPROTECT(1);
+      Rf_error("Corrupt ParamSet state capsule");
+    }
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_CORE, core);
+    snapshot->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
+    snapshot->tags = VECTOR_ELT(payload, PARADOX_CORE_TAGS);
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_PARAMS, snapshot->params);
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_TAGS, snapshot->tags);
 
     SEXP values = PROTECT(paradox_collection_values_from_graph(
       &graph,
@@ -364,6 +374,15 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
      * graph capsule-root chain together. */
     UNPROTECT(2);
   } else {
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_CORE, core);
+    SEXP payload = paradox_core_payload(core);
+    if (payload == R_UnboundValue) {
+      Rf_error("Corrupt ParamSet state capsule");
+    }
+    snapshot->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
+    snapshot->tags = VECTOR_ELT(payload, PARADOX_CORE_TAGS);
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_PARAMS, snapshot->params);
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_TAGS, snapshot->tags);
     snapshot->values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
     SET_VECTOR_ELT(roots, GET_VALUES_ROOT_VALUES, snapshot->values);
     admit_values(
@@ -635,11 +654,15 @@ static SEXP build_result(const get_values_snapshot_t *snapshot,
       ++selected;
       continue;
     }
-    SET_VECTOR_ELT(
-      result,
-      output,
-      VECTOR_ELT(snapshot->values_data.values, value)
+    const int typed = !paradox_domain_string_is(
+      STRING_ELT(snapshot->params_data.classes, parameter),
+      "ParamUty"
     );
+    SEXP detached = PROTECT(paradox_detach_stored_value_leaf(
+      VECTOR_ELT(snapshot->values_data.values, value),
+      typed
+    ));
+    SET_VECTOR_ELT(result, output, detached);
     SET_STRING_ELT(
       names,
       output,
@@ -647,6 +670,7 @@ static SEXP build_result(const get_values_snapshot_t *snapshot,
     );
     ++output;
     ++selected;
+    UNPROTECT(1);
   }
   Rf_setAttrib(result, R_NamesSymbol, names);
   UNPROTECT(2);

@@ -51,15 +51,40 @@
 #' @export
 paramset_to_configspace = function(param_set, name = NULL) {
   assert_python_packages("ConfigSpace")
-  assert_param_set(param_set, no_untyped = TRUE)
+  assert_r6(param_set, "ParamSet")
 
-  # assert that numeric params must have lower & upper
-  upper = param_set$upper[param_set$is_number]
+  # Conversion can execute arbitrary Python code while hyperparameters and
+  # conditions are being constructed.  Select the complete ParamSet graph only
+  # once, before the first Python callback: `$domains` is the native detached
+  # snapshot that already owns each parameter's tags, stored/default value,
+  # transformation metadata, and dependency Conditions.  Reading `$params`,
+  # `$deps`, `$class`, and the bound vectors independently would allow a
+  # finalizer or a reticulate callback to combine different capsule
+  # generations in one ConfigurationSpace.
+  domains = .Call(
+    C_param_set_domains,
+    get_private(param_set),
+    param_set
+  )
+  ids = names(domains)
+  classes = vapply(domains, function(domain) domain$cls[[1L]], character(1L))
+  names(classes) = ids
+  supported = classes %in% c("ParamLgl", "ParamInt", "ParamFct", "ParamDbl")
+  if (!all(supported)) {
+    stop("ParamSet contains untyped params!")
+  }
+
+  is_number = classes %in% c("ParamInt", "ParamDbl")
+  upper = vapply(domains[is_number], function(domain) {
+    domain$upper[[1L]]
+  }, numeric(1L))
   if (anyInfinite(upper)) {
     stopf("Numeric parameters must have both lower and upper bounds. Missing upper bounds for: %s", str_collapse(names(upper)[is.infinite(upper)]))
   }
 
-  lower = param_set$lower[param_set$is_number]
+  lower = vapply(domains[is_number], function(domain) {
+    domain$lower[[1L]]
+  }, numeric(1L))
   if (anyInfinite(lower)) {
     stopf("Numeric parameters must have both lower and upper bounds. Missing lower bounds for: %s", str_collapse(names(lower)[is.infinite(lower)]))
   }
@@ -74,12 +99,18 @@ paramset_to_configspace = function(param_set, name = NULL) {
     !reticulate::py_has_attr(ConfigSpace, "Categorical")
 
   # add parameters
-  pwalk(param_set$params, function(id, cls, lower, upper, levels, default, .tags, ...) {
+  for (id in ids) {
+    domain = domains[[id]]
+    cls = domain$cls[[1L]]
     meta = list(
       # A length-1 character vector reaches Python as a scalar `str`, so the
       # exported metadata type would otherwise depend on the number of tags.
-      tags = as.list(.tags)
+      tags = as.list(domain$.tags[[1L]])
     )
+    lower = domain$lower[[1L]]
+    upper = domain$upper[[1L]]
+    levels = domain$levels[[1L]]
+    default = domain$default[[1L]]
 
     if (cls == "ParamDbl") {
       add_hp(cs, build_float(ConfigSpace, id, lower, upper, default, meta, old_cs_version))
@@ -92,22 +123,43 @@ paramset_to_configspace = function(param_set, name = NULL) {
     } else {
       stopf("Unsupported parameter class '%s' for parameter '%s'.", cls, id)
     }
-  })
+  }
 
   # add dependencies
-  if (nrow(param_set$deps)) {
-    parent_classes = param_set$class
+  dependencies = list()
+  for (id in ids) {
+    requirements = domains[[id]]$.requirements[[1L]]
+    if (is.null(requirements)) next
+    for (requirement in requirements) {
+      dependencies[[length(dependencies) + 1L]] = list(
+        id = id,
+        on = requirement$on[[1L]],
+        cond = requirement$cond
+      )
+    }
+  }
+  if (length(dependencies)) {
+    parent_classes = classes
     # A dangling dependency has no parent hyperparameter to condition on, so
     # ConfigSpace cannot represent it at all. Say which one before the
     # right-hand side is spelled from a parent class that does not exist.
-    dangling = setdiff(param_set$deps$on, names(parent_classes))
+    dangling = setdiff(
+      vapply(dependencies, `[[`, character(1L), "on"),
+      names(parent_classes)
+    )
     if (length(dangling)) {
       stopf("Cannot export dangling dependencies. No such parameter: %s", str_collapse(dangling))
     }
-    deps_grouped = split(param_set$deps, by = "id")
+    deps_grouped = split(
+      dependencies,
+      vapply(dependencies, `[[`, character(1L), "id")
+    )
 
     walk(deps_grouped, function(deps) {
-      conditions = pmap(deps, function(id, on, cond) {
+      conditions = lapply(deps, function(dependency) {
+        id = dependency$id
+        on = dependency$on
+        cond = dependency$cond
         # `p_lgl` is exported as a Categorical over the strings "TRUE"/"FALSE",
         # so a logical right-hand side has to be spelled the same way.
         rhs = if (identical(parent_classes[[on]], "ParamLgl")) as.character(cond$rhs) else cond$rhs
@@ -211,4 +263,3 @@ build_bool = function(ConfigSpace, id, default, meta, old_cs_version) {
 
   build_cat(ConfigSpace, id, c("TRUE", "FALSE"), default, meta, old_cs_version)
 }
-

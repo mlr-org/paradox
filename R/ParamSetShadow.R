@@ -133,7 +133,29 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     #' @description
     #' Creates detached one-dimensional ParamSets from the synchronized view.
     subspaces = function(ids = self$ids()) {
-      super$subspaces(ids)
+      if (missing(ids)) super$subspaces() else super$subspaces(ids)
+    },
+
+    #' @description
+    #' Set the origin values that disable internal tuning for visible
+    #' parameters. Hidden control parameters remain writable through the
+    #' authenticated origin without becoming part of the Shadow schema.
+    disable_internal_tuning = function(ids) {
+      param_set_shadow_disable_internal_tuning(self, ids)
+    },
+
+    #' @description
+    #' Convert the internal search space using the exact ultimate owner
+    #' context, including values hidden by this view.
+    convert_internal_search_space = function(search_space) {
+      param_set_internal_tuning_convert(self, private, search_space)
+    },
+
+    #' @description
+    #' Create a detached ParamSet whose internal-tuning callbacks use exact
+    #' graph translations and a snapshot of hidden origin values.
+    flatten = function() {
+      param_set_shadow_flatten(self)
     }
   ),
 
@@ -216,21 +238,14 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     .origin = function() {
       # `$origin` and every origin-directed mutation are semantic Shadow reads.
       # Admit the complete metadata signature and live origin graph before
-      # exposing the edge or executing any operation through it.
-      invisible(.Call(C_param_set_core_refresh, self, private))
-      if (!identical(.Call(C_param_set_core_kind, private), 3L)) {
-        stop("Corrupt ParamSetShadow capsule kind", call. = FALSE)
-      }
-      sets = private$.state()$.sets
-      if (!is.list(sets) || length(sets) != 1L ||
-          !inherits(sets[[1L]], "ParamSet") || !is.environment(sets[[1L]])) {
-        stop("Corrupt ParamSetShadow origin edge", call. = FALSE)
-      }
-      sets[[1L]]
+      # exposing the edge or executing any operation through it. The native
+      # operation consumes the exact refreshed generation immediately; it
+      # does not discard that generation and perform two later graph reads.
+      .Call(C_param_set_shadow_origin, private, self)
     },
 
     .get_values = function() {
-      private$.state()$.values
+      .Call(C_param_set_collection_values, private, self)
     },
 
     deep_clone = function(name, value) {

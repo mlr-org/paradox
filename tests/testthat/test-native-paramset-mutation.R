@@ -472,3 +472,32 @@ test_that("Shadow add_dep routes natively and never crosses its bounds", {
   )
   expect_identical(nrow(origin$deps), 1L)
 })
+
+test_that("Shadow add_dep keeps its origin selection through Condition admission", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  origin = ps(parent = p_int(), child = p_int())
+  shadow = ParamSetShadow$new(origin, character())
+  rhs = native_stateful_altrep(
+    1L,
+    1L,
+    callback = function() origin$values = list(parent = 1L),
+    callback_after = NA_integer_
+  )
+  condition = structure(
+    list(rhs = rhs, condition_format_string = "%s == %s"),
+    class = c("CondEqual", "Condition")
+  )
+  native_stateful_altrep_rearm(rhs, 0L)
+
+  expect_error(
+    shadow$add_dep("child", "parent", condition),
+    "origin changed while a dependency was being constructed",
+    fixed = TRUE
+  )
+  expect_identical(origin$values, list(parent = 1L))
+  expect_false(shadow$has_deps)
+})

@@ -16,6 +16,41 @@ same_environment_set = function(actual, expected) {
     }, logical(1L)))
 }
 
+read_base64_serialized_fixture = function(path) {
+  encoded = paste(readLines(path, warn = FALSE), collapse = "")
+  characters = strsplit(encoded, "", fixed = TRUE)[[1L]]
+  alphabet = strsplit(
+    paste0(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "abcdefghijklmnopqrstuvwxyz",
+      "0123456789+/"
+    ),
+    "",
+    fixed = TRUE
+  )[[1L]]
+  padding = sum(characters == "=")
+  characters[characters == "="] = "A"
+  values = match(characters, alphabet) - 1L
+  stopifnot(
+    length(values) %% 4L == 0L,
+    !anyNA(values),
+    padding %in% 0:2
+  )
+  groups = matrix(values, ncol = 4L, byrow = TRUE)
+  decoded = cbind(
+    groups[, 1L] * 4L + groups[, 2L] %/% 16L,
+    (groups[, 2L] %% 16L) * 16L + groups[, 3L] %/% 4L,
+    (groups[, 3L] %% 4L) * 64L + groups[, 4L]
+  )
+  bytes = as.integer(t(decoded))
+  if (padding) {
+    bytes = head(bytes, -padding)
+  }
+  connection = gzcon(rawConnection(as.raw(bytes), open = "rb"))
+  on.exit(close(connection), add = TRUE)
+  unserialize(connection)
+}
+
 test_that("recursive discovery traverses a directly reached bytecode object", {
   candidate = graph_candidate("bytecode-expression")
   bytecode = compiler::compile(call("identity", candidate))
@@ -123,9 +158,135 @@ test_that("current ParamSet stubs bypass historical migration gateways", {
   )
   expect_match(
     paste(deparse(body(gateway)), collapse = "\n"),
-    ".paradox_upgrade_legacy_first_use",
+    ".paradox_legacy_gateway_context",
     fixed = TRUE
   )
+})
+
+test_that("legacy gateways preserve omitted snapshot defaults", {
+  namespace = asNamespace("paradox")
+  parameter_set = ps(
+    tune = p_dbl(0, 1),
+    fixed = p_lgl()
+  )
+  parameter_set$values = list(
+    tune = to_tune(),
+    fixed = TRUE
+  )
+  private_forced = FALSE
+  super_forced = FALSE
+
+  search_gateway = get(
+    ".__ParamSet__search_space",
+    envir = namespace,
+    inherits = FALSE
+  )
+  old_search_stub = function(values = self$values) {
+    search_gateway(
+      self = self,
+      private = {
+        private_forced = TRUE
+        stop("detached private promise was forced")
+      },
+      super = {
+        super_forced = TRUE
+        stop("detached super promise was forced")
+      },
+      values = values
+    )
+  }
+  environment(old_search_stub) = list2env(
+    list(self = parameter_set, search_gateway = search_gateway),
+    parent = environment()
+  )
+  search_missing = testthat::with_mocked_bindings(
+    old_search_stub(),
+    `.__paradox2_ParamSet__search_space` =
+      function(self, private, super, values) missing(values),
+    .package = "paradox"
+  )
+  search_explicit = testthat::with_mocked_bindings(
+    old_search_stub(parameter_set$values),
+    `.__paradox2_ParamSet__search_space` =
+      function(self, private, super, values) missing(values),
+    .package = "paradox"
+  )
+  expect_true(search_missing)
+  expect_false(search_explicit)
+
+  subspaces_gateway = get(
+    ".__ParamSet__subspaces",
+    envir = namespace,
+    inherits = FALSE
+  )
+  old_subspaces_stub = function(ids = self$ids()) {
+    subspaces_gateway(
+      self = self,
+      private = {
+        private_forced = TRUE
+        stop("detached private promise was forced")
+      },
+      super = {
+        super_forced = TRUE
+        stop("detached super promise was forced")
+      },
+      ids = ids
+    )
+  }
+  environment(old_subspaces_stub) = list2env(
+    list(self = parameter_set, subspaces_gateway = subspaces_gateway),
+    parent = environment()
+  )
+  subspaces_missing = testthat::with_mocked_bindings(
+    old_subspaces_stub(),
+    `.__paradox2_ParamSet__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  )
+  subspaces_explicit = testthat::with_mocked_bindings(
+    old_subspaces_stub("fixed"),
+    `.__paradox2_ParamSet__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  )
+  expect_true(subspaces_missing)
+  expect_false(subspaces_explicit)
+
+  shadow = ParamSetShadow$new(
+    ps(visible = p_int(), hidden = p_lgl()),
+    "hidden"
+  )
+  shadow_gateway = get(
+    ".__ParamSetShadow__subspaces",
+    envir = namespace,
+    inherits = FALSE
+  )
+  old_shadow_stub = function(ids = self$ids()) {
+    shadow_gateway(
+      self = self,
+      private = stop("detached Shadow private promise was forced"),
+      super = stop("detached Shadow super promise was forced"),
+      ids = ids
+    )
+  }
+  environment(old_shadow_stub) = list2env(
+    list(self = shadow, shadow_gateway = shadow_gateway),
+    parent = environment()
+  )
+  expect_true(testthat::with_mocked_bindings(
+    old_shadow_stub(),
+    `.__paradox2_ParamSetShadow__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  ))
+  expect_false(testthat::with_mocked_bindings(
+    old_shadow_stub("visible"),
+    `.__paradox2_ParamSetShadow__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  ))
+  expect_false(private_forced)
+  expect_false(super_forced)
 })
 
 test_that("pre-release Shadow gateways directly replay current capsules", {
@@ -1004,7 +1165,7 @@ test_that("current Design stubs bypass the transpose gateway", {
   ))
   expect_match(
     paste(deparse(body(gateway)), collapse = "\n"),
-    "upgrade_paradox_object_graph",
+    ".paradox_legacy_embedded_param_set",
     fixed = TRUE
   )
 })
@@ -1086,4 +1247,330 @@ test_that("serialized Design transpose gets the first-use gateway", {
   options(paradox.legacy_object_action = "error")
   rows = gateway(self = design, private = NULL, super = NULL, trafo = FALSE)
   expect_identical(rows, list(list(x = 0.25), list(x = 0.75)))
+})
+
+test_that("serialized Paradox 1 Samplers gate nested ParamSets before sampling", {
+  sampler = read_base64_serialized_fixture(testthat::test_path(
+    "fixtures",
+    "paradox-1.0.1-sampler-unif.rds.b64"
+  ))
+  expect_identical(
+    class(sampler),
+    c("SamplerUnif", "SamplerHierarchical", "Sampler", "R6")
+  )
+  top_param_set = sampler$param_set
+  child_param_sets = lapply(sampler$samplers, `[[`, "param_set")
+  expect_false(paradox:::.paradox_gateway_current_core(top_param_set))
+  expect_false(any(vapply(
+    child_param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+
+  namespace = asNamespace("paradox")
+  gateway = get(".__Sampler__sample", envir = namespace, inherits = FALSE)
+  expect_false(identical(
+    gateway,
+    get(".__paradox2_Sampler__sample", envir = namespace, inherits = FALSE)
+  ))
+  expect_match(
+    paste(deparse(body(gateway)), collapse = "\n"),
+    ".paradox_legacy_embedded_param_set",
+    fixed = TRUE
+  )
+
+  old = options(paradox.legacy_object_action = "error")
+  on.exit(options(old), add = TRUE)
+  expect_error(
+    sampler$sample(1L),
+    "A serialized Paradox 1 object tried to call `.__Sampler__sample`",
+    fixed = TRUE
+  )
+  expect_identical(sampler$param_set, top_param_set)
+  expect_identical(
+    lapply(sampler$samplers, `[[`, "param_set"),
+    child_param_sets
+  )
+  expect_false(paradox:::.paradox_gateway_current_core(top_param_set))
+
+  options(paradox.legacy_object_action = "upgrade")
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      sampler$sample(1L),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+    expect_false(paradox:::.paradox_gateway_current_core(top_param_set))
+    return()
+  }
+  set.seed(1L)
+  design = sampler$sample(4L)
+  expect_s3_class(design, "Design")
+  expect_identical(nrow(design$data), 4L)
+  expect_true(all(design$data$x >= 0 & design$data$x <= 1))
+  expect_identical(sampler$param_set, top_param_set)
+  expect_identical(
+    lapply(sampler$samplers, `[[`, "param_set"),
+    child_param_sets
+  )
+  expect_true(paradox:::.paradox_gateway_current_core(top_param_set))
+  expect_true(all(vapply(
+    child_param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+
+  # Historical Sampler stubs remain unversioned after graph healing and after
+  # another serialization round-trip. Their current-graph branch must replay
+  # without consulting the opt-in option again.
+  options(paradox.legacy_object_action = "error")
+  restored = unserialize(serialize(sampler, NULL))
+  expect_s3_class(restored$sample(1L), "Design")
+
+  current = SamplerUnif$new(ps(x = p_dbl(0, 1)))
+  current_stub = paste(deparse(body(current$sample)), collapse = "\n")
+  expect_match(current_stub, ".__paradox2_Sampler__sample", fixed = TRUE)
+  expect_false(grepl(".__Sampler__sample", current_stub, fixed = TRUE))
+})
+
+test_that("serialized Paradox 1 Sampler1D stubs replay changed private formals", {
+  samplers = read_base64_serialized_fixture(testthat::test_path(
+    "fixtures",
+    "paradox-1.0.1-sampler-1d-legacy-formals.rds.b64"
+  ))
+  expect_identical(names(samplers), c("rfun", "categ", "normal"))
+  expect_identical(
+    lapply(samplers, class),
+    list(
+      rfun = c("Sampler1DRfun", "Sampler1D", "Sampler", "R6"),
+      categ = c("Sampler1DCateg", "Sampler1D", "Sampler", "R6"),
+      normal = c(
+        "Sampler1DNormal", "Sampler1DRfun", "Sampler1D", "Sampler", "R6"
+      )
+    )
+  )
+  param_sets = lapply(samplers, `[[`, "param_set")
+  expect_false(any(vapply(
+    param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+
+  namespace = asNamespace("paradox")
+  for (target in c(
+      ".__Sampler1DRfun__.sample",
+      ".__Sampler1DCateg__.sample")) {
+    legacy = get(target, envir = namespace, inherits = FALSE)
+    expect_match(
+      paste(deparse(body(legacy)), collapse = "\n"),
+      ".paradox_legacy_embedded_param_set",
+      fixed = TRUE
+    )
+  }
+
+  old = options(paradox.legacy_object_action = "error")
+  on.exit(options(old), add = TRUE)
+  for (index in seq_along(samplers)) {
+    expect_error(
+      samplers[[index]]$sample(1L),
+      "A serialized Paradox 1 object tried to call `.__Sampler__sample`",
+      fixed = TRUE
+    )
+    expect_false(paradox:::.paradox_gateway_current_core(
+      param_sets[[index]]
+    ))
+  }
+
+  options(paradox.legacy_object_action = "upgrade")
+  if (getRversion() < "4.0.0") {
+    for (index in seq_along(samplers)) {
+      expect_error(
+        samplers[[index]]$sample(1L),
+        "cannot inspect an active binding on R 3.6",
+        fixed = TRUE
+      )
+      expect_false(paradox:::.paradox_gateway_current_core(
+        param_sets[[index]]
+      ))
+    }
+    return()
+  }
+
+  results = lapply(seq_along(samplers), function(index) {
+    set.seed(index)
+    samplers[[index]]$sample(4L)
+  })
+  expect_true(all(vapply(results, inherits, logical(1L), "Design")))
+  expect_identical(vapply(results, function(x) nrow(x$data), integer(1L)),
+    c(4L, 4L, 4L))
+  expect_identical(names(results[[1L]]$data), "x")
+  expect_identical(names(results[[2L]]$data), "f")
+  expect_identical(names(results[[3L]]$data), "x")
+  expect_true(all(results[[1L]]$data$x >= 0 & results[[1L]]$data$x <= 1))
+  expect_true(all(results[[2L]]$data$f %in% c("a", "b")))
+  expect_true(all(results[[3L]]$data$x >= 0 & results[[3L]]$data$x <= 1))
+  expect_true(all(vapply(
+    param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+  expect_identical(lapply(samplers, `[[`, "param_set"), param_sets)
+
+  # The historical stubs remain unversioned after healing and serialization,
+  # while current objects never enter the compatibility targets.
+  options(paradox.legacy_object_action = "error")
+  restored = unserialize(serialize(samplers, NULL))
+  expect_true(all(vapply(restored, function(sampler) {
+    inherits(sampler$sample(1L), "Design")
+  }, logical(1L))))
+
+  current_stubs = list(
+    Sampler1DRfun$private_methods$.sample,
+    Sampler1DCateg$private_methods$.sample
+  )
+  expect_true(all(vapply(current_stubs, function(stub) {
+    body = paste(deparse(body(stub)), collapse = "\n")
+    grepl(".__paradox2_", body, fixed = TRUE) &&
+      !grepl(".__Sampler1D", body, fixed = TRUE)
+  }, logical(1L))))
+})
+
+test_that("legacy callback-carrier snapshots keep names paired with elements", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = new.env(parent = emptyenv())
+  state$new = new.env(parent = emptyenv())
+  state$carrier = list(old = state$old)
+  state$fired = FALSE
+  snapshot_carrier = get(
+    "C_upgrade_carrier_list_snapshot",
+    envir = asNamespace("paradox")
+  )
+  carrier = state$carrier
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    # data.table's by-reference setters provide the deliberate hostile
+    # in-place mutation that ordinary R copy-on-write assignment cannot.
+    data.table::setattr(state$carrier, "class", "data.frame")
+    data.table::setattr(state$carrier, "row.names", integer())
+    data.table::set(state$carrier, j = 1L, value = list(state$new))
+    data.table::setnames(state$carrier, "old", "new")
+    data.table::setattr(state$carrier, "class", NULL)
+    data.table::setattr(state$carrier, "row.names", NULL)
+  })
+  trigger = NULL
+  # Arrange the pending finalizer only after the native symbol and argument
+  # have been resolved.  The first allocation should therefore be one of the
+  # two destination-carrier allocations inside the native snapshot.
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  snapshot = .Call(snapshot_carrier, carrier)
+  gctorture(previous)
+
+  # R versions differ in whether an allocation-triggered collection executes
+  # a weak-reference finalizer immediately or leaves it pending until an
+  # explicit top-level collection. Either linearization is valid; a mixed
+  # name/element generation is not.
+  expect_true(
+    (identical(names(snapshot), "old") &&
+      identical(snapshot[[1L]], state$old)) ||
+    (identical(names(snapshot), "new") &&
+      identical(snapshot[[1L]], state$new))
+  )
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("legacy table snapshots keep names, columns, and attributes together", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = new.env(parent = emptyenv())
+  state$new = new.env(parent = emptyenv())
+  state$table = data.table::data.table(old = list(state$old))
+  state$fired = FALSE
+  snapshot_table = get(
+    "C_upgrade_table_list_snapshot",
+    envir = asNamespace("paradox")
+  )
+  table = state$table
+  expected_classes = c("data.table", "data.frame")
+  allow_repr = FALSE
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    # Replace the column and its meaning by reference. A table snapshot must
+    # either reject a concurrent generation change or return one generation;
+    # it must never pair `old` with the new column (or conversely).
+    data.table::set(state$table, j = 1L, value = list(state$new))
+    data.table::setnames(state$table, "old", "new")
+  })
+  trigger = NULL
+  # Resolve every R-side input before arming allocation-triggered finalizers.
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  snapshot = .Call(
+    snapshot_table,
+    table,
+    expected_classes,
+    allow_repr
+  )
+  gctorture(previous)
+
+  fired_at_return = state$fired
+  if (is.null(snapshot)) {
+    # A mutation after column capture but before the terminal receipt is
+    # deliberately rejected.
+    expect_true(fired_at_return)
+  } else {
+    expect_true(
+      (identical(names(snapshot$table), "old") &&
+        identical(snapshot$table[[1L]][[1L]], state$old)) ||
+      (identical(names(snapshot$table), "new") &&
+        identical(snapshot$table[[1L]][[1L]], state$new))
+    )
+    expect_null(snapshot$repr)
+  }
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("legacy table snapshots admit only coherent historical row metadata", {
+  empty = data.table::data.table(value = integer())
+  data.table::setattr(empty, "row.names", NULL)
+  empty_snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    empty,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_identical(empty_snapshot$table$value, integer())
+
+  table = data.table::data.table(value = 1:2)
+  data.table::setattr(
+    table,
+    "row.names",
+    c(NA_integer_, -1L)
+  )
+  expect_null(.Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    table,
+    c("data.table", "data.frame"),
+    FALSE
+  ))
+
+  missing = data.table::copy(table)
+  data.table::setattr(missing, "row.names", NULL)
+  expect_null(.Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    missing,
+    c("data.table", "data.frame"),
+    FALSE
+  ))
 })

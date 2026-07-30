@@ -51,7 +51,7 @@ test_that("ALTREP-sensitive native routines use their current fixed arities", {
     domain_check_builtin = 3L,
     domain_qunif_builtin = 2L,
     domain_sanitize_builtin = 2L,
-    param_set_construct = 1L,
+    param_set_construct = 2L,
     param_set_check_builtin = 7L,
     param_set_test_constraint_builtin = 4L,
     param_set_test_constraint_dt_builtin = 4L,
@@ -59,10 +59,14 @@ test_that("ALTREP-sensitive native routines use their current fixed arities", {
     condition_test_builtin = 2L,
     param_set_qunif_builtin = 3L,
     generate_design_grid_builtin = 4L,
+    design_dependency_plan = 2L,
+    param_set_generation_receipt = 1L,
     design_transpose = 2L,
     design_transpose_trafos = 2L,
     param_set_trafo = 4L,
-    param_set_values_merge = 4L
+    param_set_values_merge = 4L,
+    param_set_set_values = 5L,
+    param_set_assign_values = 3L
   )
   for (name in names(routines)) {
     symbol = altrep2_symbol(name)
@@ -104,9 +108,9 @@ test_that("ordinary compact sequences work at every applicable boundary", {
     altrep2_symbol("generate_design_grid_builtin"),
     altrep2_private(grid_set),
     grid_set,
-    resolutions,
+    list(resolution = NULL, param_resolutions = resolutions),
     NULL
-  )
+  )[[1L]]
   expect_identical(as.list(grid), list(a = c(0L, 0L), b = c(0L, 1L)))
 
   transposed = .Call(altrep2_symbol("design_transpose"), list(x = 1:3), FALSE)
@@ -172,7 +176,7 @@ test_that("Domain vectors materialize once and constructor shells stay structura
   )
   callbacks_before = callbacks
   expect_error(
-    .Call(altrep2_symbol("param_set_construct"), domains),
+    .Call(altrep2_symbol("param_set_construct"), domains, FALSE),
     "ordinary named list",
     fixed = TRUE
   )
@@ -202,7 +206,11 @@ test_that("constructor rejects ALTREP nested structure before observation", {
   native_stateful_altrep_rearm(domain$cargo[[1L]], 0L)
   callbacks = 0L
   expect_error(
-    .Call(altrep2_symbol("param_set_construct"), list(x = domain)),
+    .Call(
+      altrep2_symbol("param_set_construct"),
+      list(x = domain),
+      FALSE
+    ),
     "cargo",
     fixed = TRUE
   )
@@ -222,7 +230,11 @@ test_that("constructor rejects ALTREP nested structure before observation", {
   native_stateful_altrep_rearm(domain$cargo[[1L]]$logscale, 0L)
   callbacks = 0L
   expect_error(
-    .Call(altrep2_symbol("param_set_construct"), list(x = domain)),
+    .Call(
+      altrep2_symbol("param_set_construct"),
+      list(x = domain),
+      FALSE
+    ),
     "cargo",
     fixed = TRUE
   )
@@ -242,7 +254,11 @@ test_that("constructor rejects ALTREP nested structure before observation", {
   native_stateful_altrep_rearm(domain$special_vals[[1L]], 0L)
   callbacks = 0L
   expect_error(
-    .Call(altrep2_symbol("param_set_construct"), list(x = domain)),
+    .Call(
+      altrep2_symbol("param_set_construct"),
+      list(x = domain),
+      FALSE
+    ),
     "special",
     fixed = TRUE
   )
@@ -322,7 +338,7 @@ test_that("check rejects structural ALTREP before selecting capsule state", {
   named_domains = list(p_dbl())
   attr(named_domains, "names") = hostile_names
   expect_error(
-    .Call(altrep2_symbol("param_set_construct"), named_domains),
+    .Call(altrep2_symbol("param_set_construct"), named_domains, FALSE),
     "ordinary character names",
     fixed = TRUE
   )
@@ -466,6 +482,60 @@ test_that("Design columns materialize while trafo shells stay structural", {
   )
 })
 
+test_that("Design column metadata is admitted after ALTREP observation", {
+  altrep2_skip_without_helpers()
+
+  transpose_column = NULL
+  transpose_column = native_stateful_altrep(
+    c(1, 2),
+    c(1, 2),
+    callback = function() {
+      data.table::setattr(
+        transpose_column,
+        "paradox_unsupported_attribute",
+        TRUE
+      )
+    },
+    callback_after = 0L
+  )
+  expect_error(
+    .Call(
+      altrep2_symbol("design_transpose"),
+      list(x = transpose_column),
+      FALSE
+    ),
+    "unsupported structural attributes",
+    fixed = TRUE
+  )
+
+  dependent = ps(parent = p_lgl(), child = p_int())
+  dependent$add_dep("child", "parent", CondEqual(TRUE))
+  parent_column = NULL
+  malformed_class = structure("adversarial", marker = TRUE)
+  parent_column = native_stateful_altrep(
+    c(TRUE, FALSE),
+    c(TRUE, FALSE),
+    callback = function() {
+      data.table::setattr(parent_column, "class", malformed_class)
+    },
+    callback_after = 0L
+  )
+  data = structure(
+    list(parent = parent_column, child = c(1L, 2L)),
+    class = "data.frame",
+    row.names = c(NA_integer_, -2L)
+  )
+  expect_error(
+    .Call(
+      altrep2_symbol("design_dependency_plan"),
+      data,
+      dependent
+    ),
+    "ordinary class metadata",
+    fixed = TRUE
+  )
+})
+
 test_that("public tables snapshot ALTREP shells while other shells reject", {
   skip_if_no_list_altrep()
 
@@ -574,14 +644,20 @@ test_that("structural shells reject S4 while table prefixes stay inert", {
   )
 
   expect_error(
-    .Call(altrep2_symbol("param_set_construct"),
-      asS4(list(x = p_dbl()))),
+    .Call(
+      altrep2_symbol("param_set_construct"),
+      asS4(list(x = p_dbl())),
+      FALSE
+    ),
     "ordinary named list",
     fixed = TRUE
   )
   expect_error(
-    .Call(altrep2_symbol("param_set_construct"),
-      structure(list(x = p_dbl()), class = "custom")),
+    .Call(
+      altrep2_symbol("param_set_construct"),
+      structure(list(x = p_dbl()), class = "custom"),
+      FALSE
+    ),
     "ordinary named list",
     fixed = TRUE
   )
@@ -675,10 +751,27 @@ test_that("structural shells reject S4 while table prefixes stay inert", {
     .Call(altrep2_symbol("design_transpose"), subclass, FALSE),
     list(list(x = 0.5))
   )
-  expect_identical(
-    .Call(altrep2_symbol("design_dependency_plan"), subclass, param_set),
-    list(rows = list(), columns = character(), values = list())
+  plan = .Call(
+    altrep2_symbol("design_dependency_plan"),
+    subclass,
+    param_set
   )
+  expect_identical(
+    plan,
+    list(
+      fixed_columns = character(),
+      fixed_values = list(),
+      fixed_plain = logical(),
+      rows = list(),
+      columns = character(),
+      values = list(),
+      receipt = plan$receipt
+    )
+  )
+  expect_null(.Call(
+    altrep2_symbol("param_set_generation_receipt"),
+    plan$receipt
+  ))
   expect_error(
     param_set$test_constraint_dt(subclass),
     "Must be a data.table",
@@ -692,6 +785,31 @@ test_that("structural shells reject S4 while table prefixes stay inert", {
     param_set$check_dt(zero_columns),
     "Invalid data.frame row names"
   )
+})
+
+test_that("deferred receipts reject list ALTREP before any observation", {
+  skip_if_no_list_altrep()
+  altrep2_skip_without_helpers()
+
+  callbacks = 0L
+  hostile = native_stateful_altrep(
+    rep(list(NULL), 4L),
+    rep(list(NULL), 8L),
+    callback = function() callbacks <<- callbacks + 1L,
+    callback_after = c(0L, 0L)
+  )
+  native_stateful_altrep_rearm(hostile, c(0L, 0L))
+  callbacks = 0L
+
+  expect_error(
+    .Call(
+      altrep2_symbol("param_set_generation_receipt"),
+      hostile
+    ),
+    "malformed ParamSet generation receipt",
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 0L)
 })
 
 test_that("value merge alone snapshots shells while preserving opaque leaves", {
@@ -794,9 +912,9 @@ test_that("exotic ALTREP state is rejected before dispatch", {
     altrep2_symbol("generate_design_grid_builtin"),
     altrep2_private(grid_set),
     grid_set,
-    resolutions,
+    list(resolution = NULL, param_resolutions = resolutions),
     NULL
-  ), "ordinary named numeric vector", fixed = TRUE)
+  ), "named numeric vector", fixed = TRUE)
   expect_identical(callbacks, 0L)
 })
 

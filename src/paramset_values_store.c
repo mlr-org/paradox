@@ -11,6 +11,9 @@
 #include "r_api_compat.h"
 #include "r_utils.h"
 #include "core_state.h"
+#include "generation_receipt.h"
+#include "paramset_collection_readers.h"
+#include "paramset_shadow.h"
 
 typedef struct {
   SEXP params;
@@ -19,17 +22,23 @@ typedef struct {
 } value_param_state_t;
 
 static SEXP value_core_symbol = NULL;
+static SEXP value_assert_values_symbol = NULL;
 
 static SEXP initialize_value_core_symbol(void) {
   if (value_core_symbol == NULL) value_core_symbol = Rf_install(".core");
+  if (value_assert_values_symbol == NULL) {
+    value_assert_values_symbol = Rf_install("assert_values");
+  }
   return value_core_symbol;
 }
 
 static SEXP run_value_transaction(SEXP private_environment, SEXP self,
-  SEXP values, int validate);
+  SEXP values, int validate, SEXP internal_tuning_receipts,
+  SEXP expected_root_core, SEXP expected_policy);
 
 static int exact_flag(SEXP value, int *result) {
-  if (TYPEOF(value) != LGLSXP || ALTREP(value) || XLENGTH(value) != 1 ||
+  if (TYPEOF(value) != LGLSXP || ALTREP(value) || Rf_isS4(value) ||
+      Rf_isObject(value) || XLENGTH(value) != 1 ||
       !paradox_api_has_no_attributes(value)) {
     return FALSE;
   }
@@ -69,6 +78,7 @@ static int plain_list(SEXP value, SEXP *names, R_xlen_t *size) {
   *names = observed_names;
   int plain = observed_class == R_NilValue ||
     (TYPEOF(observed_class) == STRSXP && !ALTREP(observed_class) &&
+      !Rf_isS4(observed_class) && !Rf_isObject(observed_class) &&
       paradox_api_has_no_attributes(observed_class));
   if (plain && observed_names == R_NilValue) {
     static const char *const allowed[] = {"class"};
@@ -94,52 +104,11 @@ static int ordinary_plain_list(SEXP value, SEXP *names, R_xlen_t *size) {
   return *names == R_NilValue || !ALTREP(*names);
 }
 
-static SEXP materialize_altrep_value(SEXP value,
-    R_xlen_t *work_since_interrupt) {
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
-  const R_xlen_t size = XLENGTH(value);
-  SEXP result = PROTECT(Rf_allocVector(type, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_account_work(work_since_interrupt);
-    switch (type) {
-    case LGLSXP:
-      SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
-      break;
-    case INTSXP:
-      SET_INTEGER_ELT(result, index, INTEGER_ELT(value, index));
-      break;
-    case REALSXP:
-      SET_REAL_ELT(result, index, REAL_ELT(value, index));
-      break;
-    case CPLXSXP:
-      paradox_api_set_complex_elt(
-        result,
-        index,
-        COMPLEX_ELT(value, index)
-      );
-      break;
-    case STRSXP:
-      SET_STRING_ELT(result, index, STRING_ELT(value, index));
-      break;
-    case RAWSXP:
-      paradox_api_set_raw_elt(result, index, RAW_ELT(value, index));
-      break;
-    case VECSXP:
-      SET_VECTOR_ELT(result, index, VECTOR_ELT(value, index));
-      break;
-    default:
-      UNPROTECT(1);
-      Rf_error("Unsupported ALTREP parameter value type");
-    }
-  }
-  SHALLOW_DUPLICATE_ATTRIB(result, value);
-  UNPROTECT(1);
-  return result;
-}
-
 /* Materialize an ordinary list shell and names vector. The copied shell is a
  * stable decision source for multi-pass merge/store planning and independently
- * roots every element returned by an ALTREP list method. */
+ * roots every element returned by an ALTREP list method. Leaves remain opaque
+ * here: the checked engine snapshots typed values only after selecting their
+ * exact Domain, while unchecked assignment is deliberately structural-only. */
 static SEXP snapshot_plain_list(SEXP value, SEXP names, R_xlen_t size,
     R_xlen_t *work_since_interrupt) {
   if (TYPEOF(value) != VECSXP ||
@@ -154,14 +123,25 @@ static SEXP snapshot_plain_list(SEXP value, SEXP names, R_xlen_t size,
     stable_names = PROTECT(Rf_allocVector(STRSXP, size));
     ++protected_count;
   }
+  SEXP current_names = ALTREP(value)
+    ? paradox_stored_attribute(value, R_NamesSymbol)
+    : Rf_getAttrib(value, R_NamesSymbol);
+  if ((names == R_NilValue) != (current_names == R_NilValue) ||
+      (current_names != R_NilValue &&
+        (TYPEOF(current_names) != STRSXP ||
+          ALTREP(current_names) || Rf_isS4(current_names) ||
+          Rf_isObject(current_names) ||
+          !paradox_api_has_no_attributes(current_names) ||
+          XLENGTH(current_names) != size))) {
+    UNPROTECT(protected_count);
+    return R_NilValue;
+  }
+  names = current_names;
   for (R_xlen_t index = 0; index < size; ++index) {
     paradox_account_work(work_since_interrupt);
     SEXP element = PROTECT(VECTOR_ELT(value, index));
-    SEXP stable_element = PROTECT(ALTREP(element)
-      ? materialize_altrep_value(element, work_since_interrupt)
-      : element);
-    SET_VECTOR_ELT(result, index, stable_element);
-    UNPROTECT(2);
+    SET_VECTOR_ELT(result, index, element);
+    UNPROTECT(1);
     if (stable_names != R_NilValue) {
       SET_STRING_ELT(stable_names, index, STRING_ELT(names, index));
     }
@@ -279,8 +259,10 @@ static SEXP ordered_values(SEXP ids, SEXP values,
   const R_xlen_t original_size = XLENGTH(values);
   SEXP value_names = Rf_getAttrib(values, R_NamesSymbol);
   PROTECT(value_names);
-  if (ALTREP(values) || Rf_isObject(values) ||
+  if (ALTREP(values) || Rf_isS4(values) || Rf_isObject(values) ||
       TYPEOF(value_names) != STRSXP || ALTREP(value_names) ||
+      Rf_isS4(value_names) || Rf_isObject(value_names) ||
+      !paradox_api_has_no_attributes(value_names) ||
       XLENGTH(value_names) != original_size || original_size > INT_MAX) {
     UNPROTECT(1);
     Rf_error("Internal error: unstable ParamSet value write plan");
@@ -568,14 +550,181 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
   return result;
 }
 
+SEXP paradox_param_set_set_values(SEXP private_environment, SEXP self,
+    SEXP dots, SEXP values, SEXP insert_sexp) {
+  /*
+   * `set_values()` is one read/merge/write transaction.  In particular, an
+   * inserting update must not read an old raw store, allocate while merging,
+   * and then begin a fresh assignment transaction which silently overwrites a
+   * mutation run by that allocation's pending finalizer.
+   *
+   * BASE keeps its selected core directly.  COLLECTION/SHADOW need a receipt
+   * for every ultimate owner because their root core does not change for a
+   * child's value-only mutation.  The existing internal-tuning snapshot is
+   * the operation-local all-node receipt and raw translated-value owner; this
+   * cold graph path replaces the separate collection `$values` read that the
+   * R implementation previously performed.
+   */
+  (void) initialize_value_core_symbol();
+  int insert = FALSE;
+  if (!exact_flag(insert_sexp, &insert)) {
+    Rf_error("`.insert` must be TRUE or FALSE");
+  }
+  if (TYPEOF(private_environment) != ENVSXP ||
+      TYPEOF(self) != ENVSXP ||
+      !paradox_domain_owns_private_environment(self, private_environment)) {
+    Rf_error("Corrupt ParamSet shell ownership");
+  }
+
+  SEXP policy = PROTECT(paradox_api_plain_binding_snapshot(
+    self,
+    value_assert_values_symbol
+  ));
+  int validate = FALSE;
+  if (!exact_flag(policy, &validate)) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet assert_values policy");
+  }
+  SEXP selected_core = PROTECT(paradox_core_from_private(private_environment));
+  if (selected_core == R_UnboundValue) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSet state: missing versioned core capsule");
+  }
+  const paradox_core_kind_t kind = paradox_core_kind(selected_core);
+  SEXP current = R_NilValue;
+  SEXP expected_root_core = R_NilValue;
+  SEXP receipt_sets = R_NilValue;
+  int protected_count = 2;
+
+  if (kind == PARADOX_CORE_BASE) {
+    selected_core = PROTECT(paradox_core_refresh(
+      self,
+      private_environment
+    ));
+    ++protected_count;
+    SEXP payload = paradox_core_payload(selected_core);
+    if (payload == R_UnboundValue) {
+      UNPROTECT(protected_count);
+      Rf_error("Corrupt ParamSet value transaction capsule");
+    }
+    if (insert) current = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
+    expected_root_core = selected_core;
+  } else if (kind == PARADOX_CORE_COLLECTION ||
+      kind == PARADOX_CORE_SHADOW) {
+    SEXP snapshot = PROTECT(paradox_param_set_internal_tuning_snapshot(
+      private_environment,
+      self,
+      R_NilValue,
+      insert_sexp
+    ));
+    ++protected_count;
+    if (TYPEOF(snapshot) != VECSXP ||
+        XLENGTH(snapshot) != PARADOX_INTERNAL_TUNING_SNAPSHOT_COUNT) {
+      UNPROTECT(protected_count);
+      Rf_error("Internal error: malformed set-values graph snapshot");
+    }
+    if (insert) {
+      current = VECTOR_ELT(
+        snapshot,
+        PARADOX_INTERNAL_TUNING_SNAPSHOT_ROOT_VALUES
+      );
+    }
+    receipt_sets = PROTECT(Rf_allocVector(VECSXP, 1));
+    ++protected_count;
+    SET_VECTOR_ELT(
+      receipt_sets,
+      0,
+      VECTOR_ELT(snapshot, PARADOX_INTERNAL_TUNING_SNAPSHOT_RECEIPT)
+    );
+  } else {
+    UNPROTECT(protected_count);
+    Rf_error("Corrupt ParamSet state: unknown core node kind");
+  }
+
+  SEXP merged = PROTECT(paradox_param_set_values_merge(
+    dots,
+    values,
+    current,
+    insert_sexp
+  ));
+  ++protected_count;
+
+  SEXP result = PROTECT(run_value_transaction(
+    private_environment,
+    self,
+    merged,
+    validate,
+    receipt_sets,
+    expected_root_core,
+    policy
+  ));
+  ++protected_count;
+  UNPROTECT(protected_count);
+  return result;
+}
+
+SEXP paradox_param_set_assign_values(SEXP private_environment, SEXP self,
+    SEXP values) {
+  (void) initialize_value_core_symbol();
+  if (TYPEOF(private_environment) != ENVSXP ||
+      TYPEOF(self) != ENVSXP ||
+      !paradox_domain_owns_private_environment(self, private_environment)) {
+    Rf_error("Corrupt ParamSet shell ownership");
+  }
+  SEXP policy = PROTECT(paradox_api_plain_binding_snapshot(
+    self,
+    value_assert_values_symbol
+  ));
+  int validate = FALSE;
+  if (!exact_flag(policy, &validate)) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet assert_values policy");
+  }
+  SEXP result = PROTECT(run_value_transaction(
+    private_environment,
+    self,
+    values,
+    validate,
+    R_NilValue,
+    R_NilValue,
+    policy
+  ));
+  UNPROTECT(2);
+  return result;
+}
+
 SEXP paradox_param_set_store_values(SEXP private_environment, SEXP self,
     SEXP values) {
-  return run_value_transaction(private_environment, self, values, FALSE);
+  return run_value_transaction(
+    private_environment, self, values, FALSE, R_NilValue, R_NilValue,
+    R_NilValue
+  );
 }
 
 SEXP paradox_param_set_assign_values_checked(SEXP private_environment,
     SEXP self, SEXP values) {
-  return run_value_transaction(private_environment, self, values, TRUE);
+  return run_value_transaction(
+    private_environment, self, values, TRUE, R_NilValue, R_NilValue,
+    R_NilValue
+  );
+}
+
+SEXP paradox_param_set_internal_tuning_store(
+    SEXP private_environment, SEXP self, SEXP values,
+    SEXP validate_sexp, SEXP receipts) {
+  int validate = FALSE;
+  if (!exact_flag(validate_sexp, &validate)) {
+    Rf_error("Internal error: invalid internal-tuning value policy");
+  }
+  return run_value_transaction(
+    private_environment,
+    self,
+    values,
+    validate,
+    receipts,
+    R_NilValue,
+    R_NilValue
+  );
 }
 
 static int supported_ascii(SEXP value) {
@@ -666,6 +815,8 @@ static int exact_translation(SEXP translation, SEXP sets, int postfix,
   const R_xlen_t set_count = XLENGTH(sets);
   SEXP set_names = PROTECT(Rf_getAttrib(sets, R_NamesSymbol));
   if (TYPEOF(set_names) != STRSXP || ALTREP(set_names) ||
+      Rf_isS4(set_names) || Rf_isObject(set_names) ||
+      !paradox_api_has_no_attributes(set_names) ||
       XLENGTH(set_names) != set_count) {
     UNPROTECT(5);
     return FALSE;
@@ -864,17 +1015,12 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
     child_count == 0 ? 1 : child_count,
     sizeof(*counts)
   );
-  R_xlen_t *positions = paradox_temporary_alloc(
-    child_count == 0 ? 1 : child_count,
-    sizeof(*positions)
-  );
   R_xlen_t *filled = paradox_temporary_alloc(
     child_count == 0 ? 1 : child_count,
     sizeof(*filled)
   );
   for (R_xlen_t child = 0; child < child_count; ++child) {
     counts[child] = 0;
-    positions[child] = 0;
     filled[child] = 0;
   }
   for (R_xlen_t index = 0; index < value_count; ++index) {
@@ -899,35 +1045,28 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
   ++protected_count;
   SEXP assignments = PROTECT(Rf_allocVector(VECSXP, child_count));
   ++protected_count;
-  R_xlen_t output = 0;
-  for (int touched = TRUE; touched >= FALSE; --touched) {
-    for (R_xlen_t child = 0; child < child_count; ++child) {
-      paradox_account_work(&work_since_interrupt);
-      if ((counts[child] != 0) == touched) {
-        if (output >= child_count) {
-          UNPROTECT(protected_count);
-          Rf_error("Internal error: collection store plan exceeded capacity");
-        }
-        positions[child] = output;
-        SET_INTEGER_ELT(order, output, (int) child + 1);
-        SEXP assignment = PROTECT(Rf_allocVector(
-          VECSXP,
-          counts[child]
-        ));
-        SEXP assignment_names = PROTECT(Rf_allocVector(
-          STRSXP,
-          counts[child]
-        ));
-        Rf_setAttrib(assignment, R_NamesSymbol, assignment_names);
-        SET_VECTOR_ELT(assignments, output, assignment);
-        UNPROTECT(2);
-        ++output;
-      }
-    }
-  }
-  if (output != child_count) {
-    UNPROTECT(protected_count);
-    Rf_error("Internal error: incomplete collection store child plan");
+  /*
+   * Preserve exact child order, including empty complete-replacement plans.
+   * The write engine consumes this plan depth-first and lets the later graph
+   * path win when two paths resolve to one BASE target. Grouping touched
+   * children ahead of untouched children made an omitted earlier alias run
+   * after an explicitly assigned later alias, so even `b.x = value` in
+   * `{a = shared, b = shared}` was spuriously cleared by `a`.
+  */
+  for (R_xlen_t child = 0; child < child_count; ++child) {
+    paradox_account_work(&work_since_interrupt);
+    SET_INTEGER_ELT(order, child, (int) child + 1);
+    SEXP assignment = PROTECT(Rf_allocVector(
+      VECSXP,
+      counts[child]
+    ));
+    SEXP assignment_names = PROTECT(Rf_allocVector(
+      STRSXP,
+      counts[child]
+    ));
+    Rf_setAttrib(assignment, R_NamesSymbol, assignment_names);
+    SET_VECTOR_ELT(assignments, child, assignment);
+    UNPROTECT(2);
   }
 
   for (R_xlen_t index = 0; index < value_count; ++index) {
@@ -945,7 +1084,7 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
         Rf_error("Internal error: invalid collection store owner");
       }
       const R_xlen_t child = (R_xlen_t) owner - 1;
-      SEXP assignment = VECTOR_ELT(assignments, positions[child]);
+      SEXP assignment = VECTOR_ELT(assignments, child);
       SEXP assignment_names = Rf_getAttrib(assignment, R_NamesSymbol);
       const R_xlen_t destination = filled[child];
       if (destination >= counts[child]) {
@@ -988,9 +1127,10 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
  * generations, and performs a callback/allocation-free binding swap wave.
  *
  * A shared target may be reached along several DAG paths. Processing follows
- * the former depth-first child-store order; a later path replaces the earlier
- * complete assignment in the target table. This preserves deterministic
- * last-owner semantics without transiently committing either version.
+ * exact depth-first child order, without moving touched paths ahead of
+ * untouched ones; a later path replaces the earlier complete assignment in
+ * the target table. This preserves deterministic last-owner semantics without
+ * transiently committing either version.
  */
 
 typedef struct value_write_path value_write_path_t;
@@ -1023,6 +1163,13 @@ typedef struct {
 } value_write_target_t;
 
 typedef struct {
+  SEXP private_environment;
+  SEXP core;
+  SEXP shadow_signature;
+  SEXP shadow_signature_content;
+} value_write_node_t;
+
+typedef struct {
   SEXP *roots;
   PROTECT_INDEX roots_index;
   value_write_task_t *tasks;
@@ -1031,6 +1178,11 @@ typedef struct {
   value_write_target_t *targets;
   R_xlen_t target_count;
   R_xlen_t target_capacity;
+  value_write_node_t *nodes;
+  R_xlen_t node_count;
+  R_xlen_t node_capacity;
+  value_write_node_t inline_nodes[8];
+  int track_graph_nodes;
   SEXP root_private;
   paradox_core_kind_t root_kind;
   R_xlen_t *work_since_interrupt;
@@ -1085,6 +1237,127 @@ static void reserve_write_targets(value_write_transaction_t *transaction) {
   );
   transaction->targets = targets;
   transaction->target_capacity = capacity;
+}
+
+static void reserve_write_nodes(value_write_transaction_t *transaction) {
+  if (transaction->node_count < transaction->node_capacity) {
+    return;
+  }
+  if (transaction->node_capacity != 0 &&
+      transaction->node_capacity > R_XLEN_T_MAX / 2) {
+    Rf_error("ParamSet value transaction graph is too large");
+  }
+  const R_xlen_t capacity = transaction->node_capacity == 0
+    ? 8
+    : transaction->node_capacity * 2;
+  value_write_node_t *nodes = paradox_temporary_alloc(
+    capacity,
+    sizeof(*nodes)
+  );
+  if (transaction->node_count != 0) {
+    memcpy(
+      nodes,
+      transaction->nodes,
+      (size_t) transaction->node_count * sizeof(*nodes)
+    );
+  }
+  transaction->nodes = nodes;
+  transaction->node_capacity = capacity;
+}
+
+static void retain_write_node(value_write_transaction_t *transaction,
+    SEXP private_environment, SEXP core, paradox_core_kind_t kind) {
+  if (!transaction->track_graph_nodes ||
+      transaction->root_kind == PARADOX_CORE_BASE) {
+    return;
+  }
+  paradox_generation_receipt_prepare();
+
+  /*
+   * Ordinary nodes are cheap exact pointer receipts and are appended in O(1)
+   * amortized time. Do not add a quadratic uniqueness pass to a wide
+   * collection merely to avoid scanning a genuinely shared node twice.
+   * A Shadow additionally owns an allocated signature-content snapshot, so
+   * reuse that snapshot on repeated DAG paths after authenticating it.
+   */
+  if (kind == PARADOX_CORE_SHADOW) {
+    for (R_xlen_t index = 0; index < transaction->node_count; ++index) {
+      const value_write_node_t *node = &transaction->nodes[index];
+      if (node->private_environment == private_environment) {
+        if (node->core != core ||
+            !paradox_shadow_signature_receipt_is_current(
+              core,
+              node->shadow_signature,
+              node->shadow_signature_content
+            )) {
+          Rf_error(
+            "ParamSet value transaction graph changed while being planned"
+          );
+        }
+        return;
+      }
+    }
+  }
+
+  SEXP signature = R_NilValue;
+  SEXP signature_content = R_NilValue;
+  int protected_count = 0;
+  if (kind == PARADOX_CORE_SHADOW) {
+    signature = PROTECT(paradox_shadow_metadata_signature(core));
+    ++protected_count;
+    if (signature == R_UnboundValue) {
+      UNPROTECT(protected_count);
+      Rf_error("Corrupt ParamSetShadow value transaction signature");
+    }
+    signature_content = PROTECT(
+      paradox_shadow_signature_content_snapshot(signature)
+    );
+    ++protected_count;
+    if (signature_content == R_NilValue ||
+        paradox_api_plain_binding_snapshot(
+          private_environment,
+          value_core_symbol
+        ) != core ||
+        !paradox_shadow_signature_receipt_is_current(
+          core,
+          signature,
+          signature_content
+        )) {
+      UNPROTECT(protected_count);
+      Rf_error("ParamSet value transaction graph changed while being planned");
+    }
+    value_transaction_retain(transaction, signature);
+    value_transaction_retain(transaction, signature_content);
+  }
+
+  reserve_write_nodes(transaction);
+  transaction->nodes[transaction->node_count++] = (value_write_node_t) {
+    private_environment,
+    core,
+    signature,
+    signature_content
+  };
+  UNPROTECT(protected_count);
+}
+
+static void scan_write_graph_nodes(
+    const value_write_transaction_t *transaction) {
+  if (!transaction->track_graph_nodes ||
+      transaction->root_kind == PARADOX_CORE_BASE) {
+    return;
+  }
+  if (transaction->node_count == 0) {
+    Rf_error("Internal error: empty ParamSet value transaction graph");
+  }
+  for (R_xlen_t index = 0; index < transaction->node_count; ++index) {
+    const value_write_node_t *node = &transaction->nodes[index];
+    paradox_generation_receipt_scan_entry(
+      node->private_environment,
+      node->core,
+      node->shadow_signature,
+      node->shadow_signature_content
+    );
+  }
 }
 
 static int write_path_contains(const value_write_path_t *path, SEXP self) {
@@ -1302,9 +1575,16 @@ static void warn_conflicting_write(SEXP id) {
     REPROTECT(message = paradox_utf8_message(pieces, 3), message_index);
     UNPROTECT(1);
   }
-  const char *text = Rf_translateChar(STRING_ELT(message, 0));
-  const size_t size = strlen(text);
+  const size_t size = strlen(Rf_translateChar(STRING_ELT(message, 0)));
   char *owned = paradox_temporary_alloc((R_xlen_t) size + 1, sizeof(*owned));
+  /* Rf_translateChar() returns transient vmax storage.  R_alloc() above may
+   * reuse that arena, so reacquire the translation after allocation and
+   * consume it immediately. */
+  const char *text = Rf_translateChar(STRING_ELT(message, 0));
+  if (strlen(text) != size) {
+    UNPROTECT(1);
+    Rf_error("Value-assignment warning changed while being copied");
+  }
   memcpy(owned, text, size + 1U);
   UNPROTECT(1);
   Rf_warning("%s", owned);
@@ -1568,11 +1848,28 @@ static SEXP current_node_values(SEXP self, SEXP private_environment,
     SEXP core, R_xlen_t *work_since_interrupt) {
   const paradox_core_kind_t kind = paradox_core_kind(core);
   SEXP values;
+  int retained_graph_roots = FALSE;
   if (kind == PARADOX_CORE_COLLECTION) {
-    values = PROTECT(paradox_param_set_collection_values(
+    PROTECT_INDEX roots_index;
+    SEXP roots;
+    PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
+    paradox_collection_graph_t graph;
+    paradox_collection_graph_build(
       private_environment,
-      self
+      self,
+      &graph,
+      &roots,
+      roots_index,
+      work_since_interrupt
+    );
+    values = PROTECT(paradox_collection_values_from_graph(
+      &graph,
+      work_since_interrupt
     ));
+    /* The raw result now owns its list shell and every selected leaf.  The
+     * transaction snapshot below is the internal ownership boundary; avoid
+     * paying the public typed-leaf detachment cost on this hot write path. */
+    retained_graph_roots = TRUE;
   } else {
     SEXP state = paradox_core_payload(core);
     if (state == R_UnboundValue) {
@@ -1585,10 +1882,10 @@ static SEXP current_node_values(SEXP self, SEXP private_environment,
     work_since_interrupt
   ));
   if (paradox_core_from_private(private_environment) != core) {
-    UNPROTECT(2);
+    UNPROTECT(retained_graph_roots ? 3 : 2);
     Rf_error("ParamSetShadow origin changed while planning value assignment");
   }
-  UNPROTECT(2);
+  UNPROTECT(retained_graph_roots ? 3 : 2);
   return result;
 }
 
@@ -1624,7 +1921,9 @@ static void process_shadow_write(value_write_transaction_t *transaction,
         &unused_row,
         transaction->work_since_interrupt
       ) || TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets) ||
-      XLENGTH(sets) != 1 || TYPEOF(VECTOR_ELT(sets, 0)) != ENVSXP) {
+      Rf_isS4(sets) || !paradox_api_has_no_attributes(sets) ||
+      XLENGTH(sets) != 1 || TYPEOF(VECTOR_ELT(sets, 0)) != ENVSXP ||
+      Rf_isS4(VECTOR_ELT(sets, 0))) {
     Rf_error("Corrupt ParamSetShadow value transaction state");
   }
 
@@ -1754,6 +2053,7 @@ static void process_write_task(value_write_transaction_t *transaction,
   if (is_root) {
     transaction->root_kind = kind;
   }
+  retain_write_node(transaction, private_environment, core, kind);
   switch (kind) {
   case PARADOX_CORE_BASE:
     process_base_write(transaction, task, private_environment, core);
@@ -1772,7 +2072,8 @@ static void process_write_task(value_write_transaction_t *transaction,
 }
 
 static void build_value_write_plan(value_write_transaction_t *transaction,
-    SEXP private_environment, SEXP self, SEXP values) {
+    SEXP private_environment, SEXP self, SEXP values,
+    SEXP expected_root_core) {
   SEXP sources = PROTECT(root_value_sources(values));
   value_transaction_retain(transaction, values);
   value_transaction_retain(transaction, sources);
@@ -1782,7 +2083,7 @@ static void build_value_write_plan(value_write_transaction_t *transaction,
     transaction,
     self,
     private_environment,
-    R_NilValue,
+    expected_root_core,
     values,
     sources,
     NULL
@@ -1825,6 +2126,34 @@ static void scan_target_generations(
         target->expected_core) {
       Rf_error(
         "ParamSet values changed during validation; nested mutation was preserved"
+      );
+    }
+  }
+}
+
+static void preflight_multi_target_commit(
+    const value_write_transaction_t *transaction) {
+  /*
+   * A one-target transaction cannot partially commit, and skipping this loop
+   * preserves the ordinary BASE assignment hot path. With two or more
+   * ultimate owners, however, a locked later `.core` binding must be rejected
+   * before an earlier owner changes. The generation scans immediately before
+   * this already proved every cell exists and is plain; R_BindingIsLocked()
+   * therefore only reads the admitted ordinary frame and cannot allocate or
+   * invoke R code. Nothing between this preflight and the define wave can
+   * change a binding lock.
+   */
+  if (transaction->target_count < 2) {
+    return;
+  }
+  for (R_xlen_t index = 0; index < transaction->target_count; ++index) {
+    if (R_BindingIsLocked(
+          value_core_symbol,
+          transaction->targets[index].private_environment
+        ) != FALSE) {
+      Rf_error(
+        "Cannot atomically assign ParamSet values: a target capsule binding "
+        "is locked"
       );
     }
   }
@@ -1965,11 +2294,63 @@ static void build_replacement_cores(value_write_transaction_t *transaction) {
   }
 }
 
+static void scan_token_receipt_sets(SEXP receipt_sets) {
+  if (receipt_sets == R_NilValue) return;
+  if (TYPEOF(receipt_sets) != VECSXP || ALTREP(receipt_sets) ||
+      Rf_isS4(receipt_sets) || Rf_isObject(receipt_sets) ||
+      !paradox_api_has_no_attributes(receipt_sets)) {
+    Rf_error("Internal error: malformed value-transaction token receipts");
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(receipt_sets); ++index) {
+    paradox_param_set_scan_token_receipts(
+      VECTOR_ELT(receipt_sets, index)
+    );
+  }
+}
+
+static void scan_expected_value_policy(SEXP self, SEXP expected_policy,
+    int expected_validate) {
+  if (expected_policy == R_NilValue) return;
+  int current_validate = FALSE;
+  if (TYPEOF(self) != ENVSXP ||
+      paradox_api_plain_binding_scan(self, value_assert_values_symbol) !=
+        expected_policy ||
+      !exact_flag(expected_policy, &current_validate) ||
+      current_validate != expected_validate) {
+    Rf_error(
+      "ParamSet assert_values policy changed during value assignment"
+    );
+  }
+}
+
 static void commit_replacement_cores(
-    const value_write_transaction_t *transaction, SEXP token_receipts) {
+    const value_write_transaction_t *transaction, SEXP token_receipt_sets,
+    SEXP internal_tuning_receipts, SEXP policy_self,
+    SEXP expected_policy, int expected_validate) {
   validate_target_generations(transaction);
   scan_target_generations(transaction);
-  paradox_param_set_scan_token_receipts(token_receipts);
+  scan_write_graph_nodes(transaction);
+  scan_token_receipt_sets(token_receipt_sets);
+  if (internal_tuning_receipts != R_NilValue) {
+    paradox_param_set_scan_internal_tuning_receipts(
+      internal_tuning_receipts
+    );
+  }
+  scan_expected_value_policy(
+    policy_self,
+    expected_policy,
+    expected_validate
+  );
+  preflight_multi_target_commit(transaction);
+  /*
+   * Values are not a derived-schema input, so this does not invalidate any
+   * cached flatten; a Shadow does project them live and must revalidate.
+   * Record the change before the terminal commit wave: on a 32-bit host the
+   * epoch guard can fail before, but never after, one or more targets changed.
+   */
+  if (transaction->target_count != 0) {
+    paradox_core_note_change(PARADOX_CORE_CHANGE_STATE);
+  }
   /* Captured private environments are the package-authoritative mutation
    * targets. After the generation scan, only their existing `.core` bindings
    * are replaced; generated R6 surface topology is deliberately irrelevant. */
@@ -1980,11 +2361,6 @@ static void commit_replacement_cores(
       target->replacement_core,
       target->private_environment
     );
-  }
-  /* Values are not a derived-schema input, so this does not invalidate any
-   * cached flatten; a Shadow does project them live and must revalidate. */
-  if (transaction->target_count != 0) {
-    paradox_core_note_change(PARADOX_CORE_CHANGE_STATE);
   }
 }
 
@@ -2003,7 +2379,8 @@ static SEXP unvalidated_transaction_result(
 }
 
 static SEXP run_value_transaction(SEXP private_environment, SEXP self,
-    SEXP values, int validate) {
+    SEXP values, int validate, SEXP internal_tuning_receipts,
+    SEXP expected_root_core, SEXP expected_policy) {
   (void) initialize_value_core_symbol();
   R_xlen_t work_since_interrupt = 0;
   PROTECT_INDEX roots_index;
@@ -2018,25 +2395,48 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
     .targets = paradox_temporary_alloc(8, sizeof(*transaction.targets)),
     .target_count = 0,
     .target_capacity = 8,
+    .nodes = NULL,
+    .node_count = 0,
+    .node_capacity = 0,
+    .track_graph_nodes = internal_tuning_receipts == R_NilValue,
     .root_private = R_NilValue,
     .root_kind = 0,
     .work_since_interrupt = &work_since_interrupt
   };
+  transaction.nodes = transaction.inline_nodes;
+  transaction.node_capacity =
+    (R_xlen_t) (sizeof(transaction.inline_nodes) /
+      sizeof(transaction.inline_nodes[0]));
 
   SEXP stable_values = PROTECT(snapshot_transaction_values(
     values,
     &work_since_interrupt
   ));
+  const uintptr_t planning_epoch = paradox_core_state_epoch_value();
   build_value_write_plan(
     &transaction,
     private_environment,
     self,
-    stable_values
+    stable_values,
+    expected_root_core
   );
+  if (transaction.root_kind != PARADOX_CORE_BASE &&
+      paradox_core_state_epoch_value() != planning_epoch) {
+    UNPROTECT(2);
+    Rf_error("ParamSet value transaction graph changed while being planned");
+  }
   validate_target_generations(&transaction);
+  scan_write_graph_nodes(&transaction);
+  scan_expected_value_policy(self, expected_policy, validate);
+  if (internal_tuning_receipts != R_NilValue) {
+    paradox_param_set_scan_internal_tuning_receipts(
+      internal_tuning_receipts
+    );
+  }
 
   SEXP result = stable_values;
   SEXP token_receipts = R_NilValue;
+  SEXP token_receipt_sets = R_NilValue;
   if (validate) {
     SEXP sanitized = PROTECT(validate_transaction_values(
       private_environment,
@@ -2045,15 +2445,168 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
       &token_receipts
     ));
     PROTECT(token_receipts);
-    value_transaction_retain(&transaction, token_receipts);
+    if (token_receipts != R_NilValue) {
+      token_receipt_sets = PROTECT(Rf_allocVector(VECSXP, 1));
+      SET_VECTOR_ELT(token_receipt_sets, 0, token_receipts);
+      value_transaction_retain(&transaction, token_receipt_sets);
+      UNPROTECT(1);
+    }
     result = apply_sanitized_values(&transaction, sanitized);
     UNPROTECT(2);
   }
   build_replacement_cores(&transaction);
-  commit_replacement_cores(&transaction, token_receipts);
+  commit_replacement_cores(
+    &transaction,
+    token_receipt_sets,
+    internal_tuning_receipts,
+    self,
+    expected_policy,
+    validate
+  );
   if (!validate) {
     result = unvalidated_transaction_result(&transaction, stable_values);
   }
+  UNPROTECT(2);
+  return result;
+}
+
+SEXP paradox_param_set_internal_tuning_store_owners(
+    SEXP owners, SEXP values, SEXP validate_sexp, SEXP receipts) {
+  int validate = FALSE;
+  if (!exact_flag(validate_sexp, &validate) ||
+      TYPEOF(owners) != VECSXP || ALTREP(owners) || Rf_isS4(owners) ||
+      Rf_isObject(owners) || !paradox_api_has_no_attributes(owners) ||
+      TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isS4(values) ||
+      Rf_isObject(values) || !paradox_api_has_no_attributes(values) ||
+      XLENGTH(owners) == 0 || XLENGTH(owners) != XLENGTH(values)) {
+    Rf_error("Internal error: malformed internal-tuning owner transaction");
+  }
+  const R_xlen_t owner_count = XLENGTH(owners);
+  for (R_xlen_t index = 0; index < owner_count; ++index) {
+    if (TYPEOF(VECTOR_ELT(owners, index)) != ENVSXP ||
+        Rf_isS4(VECTOR_ELT(owners, index))) {
+      Rf_error("Internal error: invalid internal-tuning owner shell");
+    }
+    for (R_xlen_t previous = 0; previous < index; ++previous) {
+      if (VECTOR_ELT(owners, previous) == VECTOR_ELT(owners, index)) {
+        Rf_error("Internal error: duplicate internal-tuning owner");
+      }
+    }
+  }
+
+  (void) initialize_value_core_symbol();
+  paradox_param_set_scan_internal_tuning_receipts(receipts);
+  R_xlen_t work_since_interrupt = 0;
+  PROTECT_INDEX roots_index;
+  SEXP roots;
+  PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
+  value_write_transaction_t transaction = {
+    .roots = &roots,
+    .roots_index = roots_index,
+    .tasks = paradox_temporary_alloc(8, sizeof(*transaction.tasks)),
+    .task_count = 0,
+    .task_capacity = 8,
+    .targets = paradox_temporary_alloc(8, sizeof(*transaction.targets)),
+    .target_count = 0,
+    .target_capacity = 8,
+    .nodes = NULL,
+    .node_count = 0,
+    .node_capacity = 0,
+    .track_graph_nodes = FALSE,
+    .root_private = R_NilValue,
+    .root_kind = 0,
+    .work_since_interrupt = &work_since_interrupt
+  };
+  transaction.nodes = transaction.inline_nodes;
+  transaction.node_capacity =
+    (R_xlen_t) (sizeof(transaction.inline_nodes) /
+      sizeof(transaction.inline_nodes[0]));
+
+  for (R_xlen_t index = 0; index < owner_count; ++index) {
+    SEXP self = VECTOR_ELT(owners, index);
+    SEXP private_environment = PROTECT(
+      paradox_domain_private_environment(self)
+    );
+    if (private_environment == R_UnboundValue) {
+      UNPROTECT(2);
+      Rf_error("Corrupt internal-tuning owner shell");
+    }
+    SEXP core = PROTECT(paradox_core_refresh(self, private_environment));
+    if (paradox_core_kind(core) != PARADOX_CORE_BASE) {
+      UNPROTECT(3);
+      Rf_error("Internal-tuning owner is not an ultimate BASE ParamSet");
+    }
+    SEXP stable = PROTECT(snapshot_transaction_values(
+      VECTOR_ELT(values, index),
+      &work_since_interrupt
+    ));
+    SEXP sources = PROTECT(root_value_sources(stable));
+    push_write_task(
+      &transaction,
+      self,
+      private_environment,
+      core,
+      stable,
+      sources,
+      NULL
+    );
+    UNPROTECT(4);
+  }
+  paradox_param_set_scan_internal_tuning_receipts(receipts);
+
+  while (transaction.task_count != 0) {
+    const value_write_task_t task =
+      transaction.tasks[--transaction.task_count];
+    process_write_task(&transaction, &task, FALSE);
+  }
+  if (transaction.target_count != owner_count) {
+    UNPROTECT(1);
+    Rf_error("Internal error: incomplete internal-tuning owner plan");
+  }
+  validate_target_generations(&transaction);
+
+  SEXP token_receipt_sets = R_NilValue;
+  if (validate) {
+    token_receipt_sets = PROTECT(Rf_allocVector(
+      VECSXP,
+      transaction.target_count
+    ));
+    value_transaction_retain(&transaction, token_receipt_sets);
+    UNPROTECT(1);
+    for (R_xlen_t index = 0;
+        index < transaction.target_count;
+        ++index) {
+      value_write_target_t *target = &transaction.targets[index];
+      SEXP token_receipts = R_NilValue;
+      SEXP sanitized = PROTECT(validate_transaction_values(
+        target->private_environment,
+        target->self,
+        target->values,
+        &token_receipts
+      ));
+      PROTECT(token_receipts);
+      SEXP stable = PROTECT(snapshot_transaction_values(
+        sanitized,
+        &work_since_interrupt
+      ));
+      target->values = stable;
+      value_transaction_retain(&transaction, stable);
+      SET_VECTOR_ELT(token_receipt_sets, index, token_receipts);
+      UNPROTECT(3);
+    }
+    validate_target_generations(&transaction);
+  }
+
+  build_replacement_cores(&transaction);
+  commit_replacement_cores(
+    &transaction,
+    token_receipt_sets,
+    receipts,
+    R_NilValue,
+    R_NilValue,
+    validate
+  );
+  SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
   UNPROTECT(2);
   return result;
 }

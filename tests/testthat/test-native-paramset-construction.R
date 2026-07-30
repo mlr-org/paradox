@@ -5,7 +5,7 @@ native_paramset_construct_symbol = function() {
 test_that("native ParamSet construction is registered and forced-symbol only", {
   symbol = native_paramset_construct_symbol()
   expect_s3_class(symbol, "NativeSymbolInfo")
-  expect_identical(symbol$numParameters, 1L)
+  expect_identical(symbol$numParameters, 2L)
   expect_error(
     .Call("param_set_construct", list(), PACKAGE = "paradox"),
     "not available"
@@ -16,7 +16,7 @@ test_that("native ParamSet construction is registered and forced-symbol only", {
 test_that("native construction creates canonical plain-state bundles", {
   symbol = native_paramset_construct_symbol()
 
-  empty = .Call(symbol, setNames(list(), character()))
+  empty = .Call(symbol, setNames(list(), character()), FALSE)
   expect_named(
     empty,
     c("params", "tags", "trafos", "requirements", "init_values")
@@ -30,7 +30,7 @@ test_that("native construction creates canonical plain-state bundles", {
     lgl = p_lgl(default = FALSE),
     uty = p_uty(init = marker, custom_check = function(x) TRUE)
   )
-  bundle = .Call(symbol, domains)
+  bundle = .Call(symbol, domains, FALSE)
 
   for (field in c("params", "tags", "trafos")) {
     expect_s3_class(bundle[[field]], "data.frame")
@@ -44,6 +44,32 @@ test_that("native construction creates canonical plain-state bundles", {
   expect_identical(bundle$params$id, names(domains))
   expect_identical(names(bundle$init_values), c("int", "uty"))
   expect_identical(bundle$init_values$uty, marker)
+})
+
+test_that("dependency policy is admitted even for an empty schema", {
+  expect_error(
+    ParamSet$new(
+      named_list(),
+      allow_dangling_dependencies = NA
+    ),
+    "`allow_dangling_dependencies` must be TRUE or FALSE",
+    fixed = TRUE
+  )
+  expect_error(
+    ParamSet$new(
+      list(x = p_int()),
+      allow_dangling_dependencies = 1L
+    ),
+    "`allow_dangling_dependencies` must be TRUE or FALSE",
+    fixed = TRUE
+  )
+  expect_s3_class(
+    ParamSet$new(
+      named_list(),
+      allow_dangling_dependencies = TRUE
+    ),
+    "ParamSet"
+  )
 })
 
 test_that("construction without initial values skips an empty value transaction", {
@@ -111,12 +137,20 @@ test_that("closed constructor rejects extension and malformed Domain rows", {
   }
   unknown = p_dbl()
   class(unknown) = c("CustomDomain", class(unknown))
-  expect_error(.Call(symbol, list(x = unknown)), "unsupported|Domain", ignore.case = TRUE)
+  expect_error(
+    .Call(symbol, list(x = unknown), FALSE),
+    "unsupported|Domain",
+    ignore.case = TRUE
+  )
   expect_error(ParamSet$new(list(x = unknown)), "unsupported|Domain", ignore.case = TRUE)
 
   malformed = p_dbl()
   malformed$storage_type = "logical"
-  expect_error(.Call(symbol, list(x = malformed)), "storage|Domain|malformed", ignore.case = TRUE)
+  expect_error(
+    .Call(symbol, list(x = malformed), FALSE),
+    "storage|Domain|malformed",
+    ignore.case = TRUE
+  )
   expect_error(ParamSet$new(list(x = malformed)), "storage|Domain|malformed", ignore.case = TRUE)
 
   reversed = forge_column(
@@ -161,7 +195,7 @@ test_that("closed constructor rejects extension and malformed Domain rows", {
   )
   for (field in names(forged)) {
     expect_error(
-      .Call(symbol, list(x = forged[[field]])),
+      .Call(symbol, list(x = forged[[field]]), FALSE),
       field,
       fixed = TRUE,
       info = field
@@ -209,7 +243,7 @@ test_that("ParamSet Domain admission rejects S4 structural forgery", {
 
   for (case in names(malformed)) {
     expect_error(
-      .Call(symbol, list(x = malformed[[case]])),
+      .Call(symbol, list(x = malformed[[case]]), FALSE),
       "Domain|unsupported|malformed|default value|initial value",
       ignore.case = TRUE,
       info = case
@@ -232,6 +266,64 @@ test_that("ParamSet Domain admission rejects S4 structural forgery", {
   utility = asS4(list(payload = 1L))
   admitted = ParamSet$new(list(x = p_uty(default = utility)))
   expect_identical(admitted$params$default[[1L]], utility)
+})
+
+test_that("ParamSet rejects typed ALTREP specials before aliased leaves are observed", {
+  symbol = native_paramset_construct_symbol()
+
+  for (field in c("default", ".init")) {
+    callbacks = 0L
+    hostile = native_stateful_altrep(
+      0.5,
+      0.5,
+      callback = function() callbacks <<- callbacks + 1L,
+      callback_after = 0L
+    )
+    domain = p_dbl(0, 1)
+    data.table::set(
+      domain,
+      i = 1L,
+      j = "special_vals",
+      value = list(list(hostile))
+    )
+    data.table::set(domain, i = 1L, j = field, value = list(hostile))
+    if (field == ".init") {
+      data.table::set(domain, i = 1L, j = ".init_given", value = TRUE)
+    }
+
+    invoke = function() .Call(symbol, list(x = domain), FALSE)
+    expect_error(
+      invoke(),
+      "special_vals",
+      fixed = TRUE,
+      info = field
+    )
+    expect_identical(callbacks, 0L, info = field)
+  }
+
+  callbacks = 0L
+  hostile_levels = native_stateful_altrep(
+    c("a", "b"),
+    c("a", "b"),
+    callback = function() callbacks <<- callbacks + 1L,
+    callback_after = 0L
+  )
+  domain = p_fct(c("a", "b"))
+  data.table::set(
+    domain,
+    i = 1L,
+    j = "special_vals",
+    value = list(list(hostile_levels))
+  )
+  data.table::set(
+    domain,
+    i = 1L,
+    j = "levels",
+    value = list(hostile_levels)
+  )
+  invoke = function() .Call(symbol, list(x = domain), FALSE)
+  expect_error(invoke(), "special_vals", fixed = TRUE)
+  expect_identical(callbacks, 0L)
 })
 
 test_that("constructed ParamSets retain values across clone and serialization", {

@@ -11,26 +11,17 @@
  * do not invoke S3 `[[` or `is.na` methods for arbitrary column classes.
  */
 
-static SEXP snapshot_strings(SEXP source, const char *description,
+static void validate_snapshot_names(SEXP names, const char *description,
     R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(source) != STRSXP || ALTREP(source) || Rf_isS4(source) ||
-      Rf_isObject(source) || !paradox_api_has_no_attributes(source)) {
-    Rf_error("%s must be a character vector", description);
-  }
-  const R_xlen_t count = XLENGTH(source);
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, count));
+  const R_xlen_t count = XLENGTH(names);
   for (R_xlen_t index = 0; index < count; ++index) {
     paradox_account_work(work_since_interrupt);
-    SEXP value = STRING_ELT(source, index);
+    SEXP value = STRING_ELT(names, index);
     if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES ||
         CHAR(value)[0] == '\0') {
-      UNPROTECT(1);
       Rf_error("%s contains an unsupported name", description);
     }
-    SET_STRING_ELT(result, index, value);
   }
-  UNPROTECT(1);
-  return result;
 }
 
 static int ordinary_design_shell(SEXP data) {
@@ -62,6 +53,15 @@ static int supported_column_type(SEXPTYPE type) {
     type == VECSXP;
 }
 
+static SEXP design_tzone_symbol = NULL;
+static SEXP design_units_symbol = NULL;
+
+static void initialize_design_attribute_symbols(void) {
+  if (design_tzone_symbol != NULL) return;
+  design_tzone_symbol = Rf_install("tzone");
+  design_units_symbol = Rf_install("units");
+}
+
 static void validate_attributes(SEXP source) {
   static const char *const allowed[] = {
     "names", "class", "levels", "tzone", "units"
@@ -70,11 +70,11 @@ static void validate_attributes(SEXP source) {
     Rf_error("Design columns have unsupported structural attributes");
   }
   const SEXP attributes[] = {
-    Rf_getAttrib(source, R_NamesSymbol),
-    Rf_getAttrib(source, R_ClassSymbol),
-    Rf_getAttrib(source, R_LevelsSymbol),
-    Rf_getAttrib(source, Rf_install("tzone")),
-    Rf_getAttrib(source, Rf_install("units"))
+    paradox_api_raw_attribute(source, R_NamesSymbol),
+    paradox_api_raw_attribute(source, R_ClassSymbol),
+    paradox_api_raw_attribute(source, R_LevelsSymbol),
+    paradox_api_raw_attribute(source, design_tzone_symbol),
+    paradox_api_raw_attribute(source, design_units_symbol)
   };
   for (size_t index = 0; index < 5; ++index) {
     if (attributes[index] != R_NilValue &&
@@ -87,14 +87,31 @@ static void validate_attributes(SEXP source) {
 
 static SEXP snapshot_column(SEXP source,
     R_xlen_t *work_since_interrupt) {
+  /*
+   * Intern the two nonstandard attribute tags before selecting the source
+   * generation. The first symbol installation may allocate; every structural
+   * read after the result allocation below is then allocation-free.
+   */
+  initialize_design_attribute_symbols();
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
   if (Rf_isS4(source) || !supported_column_type(type)) {
     Rf_error("Design contains an unsupported column type");
   }
-  validate_attributes(source);
-
   const R_xlen_t count = XLENGTH(source);
   SEXP result = PROTECT(Rf_allocVector(type, count));
+  /*
+   * The result allocation may run a pending finalizer that rewrites the
+   * caller-owned column. Recheck the non-attribute shell before observing its
+   * payload. Structural attributes are copied only after the element pass and
+   * admitted on the owned result below: an ALTREP Elt callback may replace
+   * the source attribute pairlist, so validating it here would authenticate a
+   * different generation from the one ultimately retained.
+   */
+  if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
+      XLENGTH(source) != count) {
+    UNPROTECT(1);
+    Rf_error("Design column changed while being snapshotted");
+  }
   for (R_xlen_t index = 0; index < count; ++index) {
     paradox_account_work(work_since_interrupt);
     switch (type) {
@@ -129,6 +146,12 @@ static SEXP snapshot_column(SEXP source,
     }
   }
   DUPLICATE_ATTRIB(result, source);
+  if ((SEXPTYPE) TYPEOF(result) != type || Rf_isS4(result) ||
+      XLENGTH(result) != count) {
+    UNPROTECT(1);
+    Rf_error("Design column changed while being snapshotted");
+  }
+  validate_attributes(result);
   UNPROTECT(1);
   return result;
 }
@@ -228,30 +251,30 @@ SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
   data = PROTECT(paradox_materialize_public_table_shell(data));
   PROTECT(filter_na);
   const int do_filter = parse_flag(filter_na);
-  if (!ordinary_design_shell(data)) {
+  if (TYPEOF(data) != VECSXP || ALTREP(data) || Rf_isS4(data)) {
     UNPROTECT(2);
     Rf_error("Design$data must be a list-like data frame");
   }
 
   R_xlen_t work_since_interrupt = 0;
   const R_xlen_t column_count = XLENGTH(data);
-  SEXP source_names = PROTECT(paradox_api_raw_attribute(
-    data,
-    R_NamesSymbol
-  ));
-  SEXP names = column_count == 0
-    ? PROTECT(Rf_allocVector(STRSXP, 0))
-    : PROTECT(snapshot_strings(
-        source_names,
-        "Design column names",
-        &work_since_interrupt
-      ));
-  if (XLENGTH(names) != column_count ||
-      Rf_any_duplicated(names, FALSE) != 0) {
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, column_count));
+  SEXP columns = PROTECT(Rf_allocVector(VECSXP, column_count));
+  if (!ordinary_design_shell(data)) {
+    UNPROTECT(4);
+    Rf_error("Design$data must be a list-like data frame");
+  }
+  if (!paradox_capture_list_identities(data, names, columns)) {
     UNPROTECT(4);
     Rf_error("Design$data must have unique column names");
   }
 
+  /*
+   * Capture the dimension carrier in the same allocation-free observation
+   * window as names and columns.  Rf_any_duplicated() below may allocate and
+   * run a pending finalizer; delaying this read could otherwise pair the
+   * already captured columns with a later row.names generation.
+   */
   const int table_input = Rf_isObject(data) != FALSE;
   R_xlen_t table_rows = 0;
   if (table_input &&
@@ -260,15 +283,24 @@ SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
     Rf_error("Design$data has invalid data.frame row names");
   }
 
-  SEXP columns = PROTECT(Rf_allocVector(VECSXP, column_count));
+  validate_snapshot_names(
+    names,
+    "Design column names",
+    &work_since_interrupt
+  );
+  if (Rf_any_duplicated(names, FALSE) != 0) {
+    UNPROTECT(4);
+    Rf_error("Design$data must have unique column names");
+  }
+
   R_xlen_t row_count = table_input ? table_rows : 0;
   for (R_xlen_t column = 0; column < column_count; ++column) {
     paradox_account_work(&work_since_interrupt);
-    SEXP source = PROTECT(VECTOR_ELT(data, column));
+    SEXP source = PROTECT(VECTOR_ELT(columns, column));
     SEXP frozen = PROTECT(snapshot_column(source, &work_since_interrupt));
     const R_xlen_t rows = XLENGTH(frozen);
     if (rows != row_count && (table_input || column != 0)) {
-      UNPROTECT(7);
+      UNPROTECT(6);
       Rf_error(column == 0
         ? "Design$data has invalid data.frame row names"
         : "Design$data columns have inconsistent lengths");
@@ -314,6 +346,6 @@ SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
     UNPROTECT(2 + trim_protects);
   }
 
-  UNPROTECT(6);
+  UNPROTECT(5);
   return result;
 }

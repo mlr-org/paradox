@@ -1,3 +1,4 @@
+#include <limits.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -67,6 +68,12 @@ typedef struct {
   R_xlen_t work_since_interrupt;
 } paradox_upgrade_walker_t;
 
+SEXP paradox_upgrade_structural_list_exact(SEXP source) {
+  return Rf_ScalarLogical(
+    TYPEOF(source) == VECSXP && !ALTREP(source) && !Rf_isS4(source)
+  );
+}
+
 SEXP paradox_upgrade_carrier_list_snapshot(SEXP source) {
   static const char *const allowed_attributes[] = {"names"};
   if (TYPEOF(source) != VECSXP || ALTREP(source) || Rf_isS4(source) ||
@@ -75,40 +82,394 @@ SEXP paradox_upgrade_carrier_list_snapshot(SEXP source) {
     return R_NilValue;
   }
 
-  SEXP source_names = PROTECT(paradox_api_raw_attribute(
-    source,
-    R_NamesSymbol
-  ));
   const R_xlen_t size = XLENGTH(source);
-  if (source_names != R_NilValue &&
-      (TYPEOF(source_names) != STRSXP || ALTREP(source_names) ||
-        Rf_isS4(source_names) || Rf_isObject(source_names) ||
-        !paradox_api_has_no_attributes(source_names) ||
-        XLENGTH(source_names) != size)) {
-    UNPROTECT(1);
+  const int has_names =
+    paradox_api_raw_attribute(source, R_NamesSymbol) != R_NilValue;
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
+  int protect_count = 1;
+  SEXP stable_names = R_NilValue;
+  if (has_names) {
+    stable_names = PROTECT(Rf_allocVector(STRSXP, size));
+    ++protect_count;
+  }
+
+  /*
+   * Both destination carriers now exist.  Either allocation may have run a
+   * pending finalizer that rewrote the caller-owned list or its names, so
+   * re-admit the shell and then capture each name beside its exact element in
+   * one allocation-free pass.  The former names-then-elements sequence could
+   * create a legacy callback carrier generation that never existed.
+   */
+  SEXP source_names = paradox_api_raw_attribute(source, R_NamesSymbol);
+  if (TYPEOF(source) != VECSXP || ALTREP(source) || Rf_isS4(source) ||
+      Rf_isObject(source) || XLENGTH(source) != size ||
+      (source_names != R_NilValue) != has_names ||
+      !paradox_api_has_only_attributes(source, allowed_attributes, 1) ||
+      !paradox_capture_list_identities(
+        source,
+        stable_names,
+        result
+      )) {
+    UNPROTECT(protect_count);
     return R_NilValue;
   }
-  if (source_names != R_NilValue) {
+
+  if (stable_names != R_NilValue) {
     for (R_xlen_t index = 0; index < size; ++index) {
-      SEXP name = STRING_ELT(source_names, index);
+      SEXP name = STRING_ELT(stable_names, index);
       if (name == NA_STRING || Rf_getCharCE(name) == CE_BYTES) {
-        UNPROTECT(1);
+        UNPROTECT(protect_count);
         return R_NilValue;
       }
     }
+    Rf_setAttrib(result, R_NamesSymbol, stable_names);
   }
 
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
-    SET_VECTOR_ELT(result, index, VECTOR_ELT(source, index));
+  UNPROTECT(protect_count);
+  return result;
+}
+
+typedef struct {
+  SEXP internal_selfref_symbol;
+  SEXP sorted_symbol;
+  SEXP index_symbol;
+  SEXP repr_symbol;
+  unsigned int seen;
+  int allow_repr;
+  int valid;
+  SEXP row_names;
+  SEXP repr;
+} paradox_upgrade_table_attributes_t;
+
+enum {
+  UPGRADE_TABLE_ATTRIBUTE_NAMES = 1U << 0,
+  UPGRADE_TABLE_ATTRIBUTE_ROWS = 1U << 1,
+  UPGRADE_TABLE_ATTRIBUTE_CLASS = 1U << 2,
+  UPGRADE_TABLE_ATTRIBUTE_SELFREF = 1U << 3,
+  UPGRADE_TABLE_ATTRIBUTE_SORTED = 1U << 4,
+  UPGRADE_TABLE_ATTRIBUTE_INDEX = 1U << 5,
+  UPGRADE_TABLE_ATTRIBUTE_REPR = 1U << 6
+};
+
+static void capture_upgrade_table_attribute(
+    SEXP tag, SEXP value, void *data) {
+  paradox_upgrade_table_attributes_t *state = data;
+  unsigned int bit = 0U;
+  if (tag == R_NamesSymbol) {
+    bit = UPGRADE_TABLE_ATTRIBUTE_NAMES;
+  } else if (tag == R_RowNamesSymbol) {
+    bit = UPGRADE_TABLE_ATTRIBUTE_ROWS;
+    state->row_names = value;
+  } else if (tag == R_ClassSymbol) {
+    bit = UPGRADE_TABLE_ATTRIBUTE_CLASS;
+  } else if (tag == state->internal_selfref_symbol) {
+    bit = UPGRADE_TABLE_ATTRIBUTE_SELFREF;
+  } else if (tag == state->sorted_symbol) {
+    bit = UPGRADE_TABLE_ATTRIBUTE_SORTED;
+  } else if (tag == state->index_symbol) {
+    bit = UPGRADE_TABLE_ATTRIBUTE_INDEX;
+  } else if (state->allow_repr && tag == state->repr_symbol) {
+    bit = UPGRADE_TABLE_ATTRIBUTE_REPR;
+    state->repr = value;
+  } else {
+    state->valid = FALSE;
+    return;
+  }
+  if ((state->seen & bit) != 0U) {
+    state->valid = FALSE;
+    return;
+  }
+  state->seen |= bit;
+}
+
+static int exact_upgrade_table_classes(SEXP observed, SEXP expected) {
+  if (TYPEOF(observed) != STRSXP || ALTREP(observed) ||
+      Rf_isS4(observed) || Rf_isObject(observed) ||
+      !paradox_api_has_no_attributes(observed) ||
+      TYPEOF(expected) != STRSXP || ALTREP(expected) ||
+      Rf_isS4(expected) || Rf_isObject(expected) ||
+      !paradox_api_has_no_attributes(expected) ||
+      XLENGTH(observed) != XLENGTH(expected)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(expected); ++index) {
+    SEXP left = STRING_ELT(observed, index);
+    SEXP right = STRING_ELT(expected, index);
+    if (left == NA_STRING || right == NA_STRING ||
+        Rf_getCharCE(left) == CE_BYTES || Rf_getCharCE(right) == CE_BYTES ||
+        strcmp(CHAR(left), CHAR(right)) != 0) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int upgrade_table_snapshot_is_current(SEXP source, SEXP snapshot) {
+  if (TYPEOF(source) != VECSXP || ALTREP(source) || Rf_isS4(source) ||
+      TYPEOF(snapshot) != VECSXP || ALTREP(snapshot) ||
+      Rf_isS4(snapshot) || Rf_isObject(snapshot) ||
+      XLENGTH(source) != XLENGTH(snapshot)) {
+    return FALSE;
+  }
+  SEXP source_names = paradox_api_raw_attribute(source, R_NamesSymbol);
+  SEXP snapshot_names = paradox_api_raw_attribute(snapshot, R_NamesSymbol);
+  if ((source_names == R_NilValue) != (snapshot_names == R_NilValue)) {
+    return FALSE;
   }
   if (source_names != R_NilValue) {
-    SEXP stable_names = PROTECT(Rf_duplicate(source_names));
-    Rf_setAttrib(result, R_NamesSymbol, stable_names);
-    UNPROTECT(1);
+    if (TYPEOF(source_names) != STRSXP || ALTREP(source_names) ||
+        Rf_isS4(source_names) || Rf_isObject(source_names) ||
+        !paradox_api_has_no_attributes(source_names) ||
+        TYPEOF(snapshot_names) != STRSXP || ALTREP(snapshot_names) ||
+        Rf_isS4(snapshot_names) || Rf_isObject(snapshot_names) ||
+        !paradox_api_has_no_attributes(snapshot_names) ||
+        XLENGTH(source_names) != XLENGTH(source) ||
+        XLENGTH(snapshot_names) != XLENGTH(snapshot)) {
+      return FALSE;
+    }
   }
-  UNPROTECT(2);
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    if (VECTOR_ELT(source, index) != VECTOR_ELT(snapshot, index) ||
+        (source_names != R_NilValue &&
+          STRING_ELT(source_names, index) !=
+            STRING_ELT(snapshot_names, index))) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int exact_upgrade_table_row_names(
+    SEXP row_names, R_xlen_t row_count) {
+  if (row_count > INT_MAX || TYPEOF(row_names) != INTSXP ||
+      ALTREP(row_names) || Rf_isS4(row_names) ||
+      Rf_isObject(row_names) ||
+      !paradox_api_has_no_attributes(row_names)) {
+    return FALSE;
+  }
+  if (row_count == 0) return XLENGTH(row_names) == 0;
+
+  const R_xlen_t encoded_size = XLENGTH(row_names);
+  if (encoded_size == 2 &&
+      INTEGER_ELT(row_names, 0) == NA_INTEGER) {
+    const int encoded = INTEGER_ELT(row_names, 1);
+    const int expected = (int) row_count;
+    return encoded == expected || encoded == -expected;
+  }
+  if (encoded_size != row_count) return FALSE;
+  for (R_xlen_t row = 0; row < row_count; ++row) {
+    if (INTEGER_ELT(row_names, row) != (int) row + 1) return FALSE;
+  }
+  return TRUE;
+}
+
+static int exact_upgrade_table_rows(
+    const paradox_upgrade_table_attributes_t *attributes,
+    R_xlen_t row_count) {
+  if ((attributes->seen & UPGRADE_TABLE_ATTRIBUTE_ROWS) == 0U) {
+    /*
+     * Paradox 1/data.table legitimately omitted row.names from some empty
+     * keyed internal tables.  That historical spelling is unambiguous only
+     * after the selected columns have proved that the table has zero rows.
+     */
+    return row_count == 0;
+  }
+  return exact_upgrade_table_row_names(attributes->row_names, row_count);
+}
+
+SEXP paradox_upgrade_table_list_snapshot(SEXP source,
+    SEXP expected_classes, SEXP allow_repr) {
+  if (TYPEOF(source) != VECSXP || ALTREP(source) || Rf_isS4(source) ||
+      TYPEOF(allow_repr) != LGLSXP || ALTREP(allow_repr) ||
+      Rf_isS4(allow_repr) || Rf_isObject(allow_repr) ||
+      !paradox_api_has_no_attributes(allow_repr) ||
+      XLENGTH(allow_repr) != 1 ||
+      LOGICAL_ELT(allow_repr, 0) == NA_LOGICAL) {
+    return R_NilValue;
+  }
+
+  /*
+   * Intern every attribute tag and allocate the outward carrier before
+   * selecting source state. A pending finalizer during any of that work is
+   * therefore part of the generation snapshotted below.
+   */
+  paradox_upgrade_table_attributes_t attributes = {
+    Rf_install(".internal.selfref"),
+    Rf_install("sorted"),
+    Rf_install("index"),
+    Rf_install("repr"),
+    0U,
+    LOGICAL_ELT(allow_repr, 0),
+    TRUE,
+    R_NilValue,
+    R_NilValue
+  };
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  SEXP result_names = PROTECT(Rf_allocVector(STRSXP, 2));
+  SET_STRING_ELT(result_names, 0, Rf_mkChar("table"));
+  SET_STRING_ELT(result_names, 1, Rf_mkChar("repr"));
+  Rf_setAttrib(result, R_NamesSymbol, result_names);
+
+  /*
+   * The shared semantic-vector primitive allocates its own destinations first
+   * and then copies every ordinary list name beside its exact column pointer
+   * in one callback-free pass. It deliberately discards the source class and
+   * cache attributes from the returned table shell.
+   */
+  SEXP table = PROTECT(paradox_snapshot_semantic_vector(source));
+  R_xlen_t row_count = 0;
+  if (XLENGTH(table) != 0) {
+    SEXP first_column = VECTOR_ELT(table, 0);
+    if (!Rf_isVector(first_column)) {
+      UNPROTECT(3);
+      return R_NilValue;
+    }
+    /*
+     * A stable ALTREP column may observe Length here. Attribute capture and
+     * the exact source-shell receipt deliberately follow that observation, so
+     * a supported reentrant change is either the selected later generation or
+     * a terminal mismatch, never old columns paired with unrelated row names.
+     */
+    row_count = XLENGTH(first_column);
+  }
+  SEXP observed_classes = paradox_api_raw_attribute(source, R_ClassSymbol);
+  paradox_api_map_stored_attributes(
+    source,
+    capture_upgrade_table_attribute,
+    &attributes
+  );
+  if (!upgrade_table_snapshot_is_current(source, table) ||
+      !attributes.valid ||
+      (attributes.seen & UPGRADE_TABLE_ATTRIBUTE_NAMES) == 0U ||
+      (attributes.seen & UPGRADE_TABLE_ATTRIBUTE_CLASS) == 0U ||
+      !exact_upgrade_table_rows(&attributes, row_count) ||
+      !exact_upgrade_table_classes(observed_classes, expected_classes)) {
+    UNPROTECT(3);
+    return R_NilValue;
+  }
+
+  SET_VECTOR_ELT(result, 0, table);
+  SET_VECTOR_ELT(result, 1, attributes.repr);
+  UNPROTECT(3);
   return result;
+}
+
+enum {
+  UPGRADE_BINDING_RECEIPT_OWNER = 0,
+  UPGRADE_BINDING_RECEIPT_CLASS,
+  UPGRADE_BINDING_RECEIPT_SYMBOLS,
+  UPGRADE_BINDING_RECEIPT_VALUES,
+  UPGRADE_BINDING_RECEIPT_ACTIVE,
+  UPGRADE_BINDING_RECEIPT_LOCKED,
+  UPGRADE_BINDING_RECEIPT_ENVIRONMENT_LOCKED,
+  UPGRADE_BINDING_RECEIPT_SIZE
+};
+
+static int exact_upgrade_receipt_list(SEXP value, R_xlen_t size) {
+  return TYPEOF(value) == VECSXP && !ALTREP(value) &&
+    !Rf_isS4(value) && !Rf_isObject(value) &&
+    paradox_api_has_no_attributes(value) && XLENGTH(value) == size;
+}
+
+static int exact_upgrade_receipt_flags(SEXP value, R_xlen_t size) {
+  if (TYPEOF(value) != LGLSXP || ALTREP(value) ||
+      Rf_isS4(value) || Rf_isObject(value) ||
+      !paradox_api_has_no_attributes(value) || XLENGTH(value) != size) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < size; ++index) {
+    if (LOGICAL_ELT(value, index) == NA_LOGICAL) return FALSE;
+  }
+  return TRUE;
+}
+
+void paradox_validate_upgrade_public_binding_receipts(SEXP receipts) {
+  if (TYPEOF(receipts) != VECSXP || ALTREP(receipts) ||
+      Rf_isS4(receipts) || Rf_isObject(receipts) ||
+      !paradox_api_has_no_attributes(receipts)) {
+    Rf_error("Invalid Paradox migration binding receipt carrier");
+  }
+
+  /*
+   * Every carrier and binding symbol was constructed before entry. The scan
+   * below allocates nothing, invokes no active binding, and forces no promise.
+   * It is therefore the terminal generation barrier after the last joint
+   * capsule validation: a pending finalizer may run before this call, but
+   * cannot make one transplanted shell combine binding values or lock bits
+   * from different generations.
+   */
+  for (R_xlen_t receipt_index = 0;
+      receipt_index < XLENGTH(receipts);
+      ++receipt_index) {
+    SEXP receipt = VECTOR_ELT(receipts, receipt_index);
+    if (!exact_upgrade_receipt_list(
+        receipt,
+        UPGRADE_BINDING_RECEIPT_SIZE
+      )) {
+      Rf_error("Invalid Paradox migration binding receipt");
+    }
+    SEXP owner = VECTOR_ELT(receipt, UPGRADE_BINDING_RECEIPT_OWNER);
+    SEXP expected_class = VECTOR_ELT(
+      receipt,
+      UPGRADE_BINDING_RECEIPT_CLASS
+    );
+    SEXP symbols = VECTOR_ELT(
+      receipt,
+      UPGRADE_BINDING_RECEIPT_SYMBOLS
+    );
+    SEXP values = VECTOR_ELT(receipt, UPGRADE_BINDING_RECEIPT_VALUES);
+    SEXP active = VECTOR_ELT(receipt, UPGRADE_BINDING_RECEIPT_ACTIVE);
+    SEXP locked = VECTOR_ELT(receipt, UPGRADE_BINDING_RECEIPT_LOCKED);
+    SEXP environment_locked = VECTOR_ELT(
+      receipt,
+      UPGRADE_BINDING_RECEIPT_ENVIRONMENT_LOCKED
+    );
+    if (TYPEOF(owner) != ENVSXP || Rf_isS4(owner) ||
+        !exact_upgrade_receipt_flags(environment_locked, 1)) {
+      Rf_error("Invalid Paradox migration binding receipt owner");
+    }
+    if (paradox_api_raw_attribute(owner, R_ClassSymbol) != expected_class ||
+        (R_EnvironmentIsLocked(owner) != FALSE) !=
+          (LOGICAL_ELT(environment_locked, 0) != FALSE)) {
+      Rf_error("Paradox migration public shell changed during commit");
+    }
+    if (TYPEOF(symbols) != VECSXP || ALTREP(symbols) ||
+        Rf_isS4(symbols) || Rf_isObject(symbols) ||
+        !paradox_api_has_no_attributes(symbols)) {
+      Rf_error("Invalid Paradox migration binding receipt symbols");
+    }
+    const R_xlen_t binding_count = XLENGTH(symbols);
+    if (!exact_upgrade_receipt_list(values, binding_count) ||
+        !exact_upgrade_receipt_flags(active, binding_count) ||
+        !exact_upgrade_receipt_flags(locked, binding_count)) {
+      Rf_error("Invalid Paradox migration binding receipt fields");
+    }
+
+    for (R_xlen_t binding_index = 0;
+        binding_index < binding_count;
+        ++binding_index) {
+      SEXP symbol = VECTOR_ELT(symbols, binding_index);
+      SEXP expected_value = VECTOR_ELT(values, binding_index);
+      const int expected_active =
+        LOGICAL_ELT(active, binding_index) != FALSE;
+      const int expected_locked =
+        LOGICAL_ELT(locked, binding_index) != FALSE;
+      if (TYPEOF(symbol) != SYMSXP ||
+          (R_BindingIsActive(symbol, owner) != FALSE) != expected_active ||
+          (R_BindingIsLocked(symbol, owner) != FALSE) != expected_locked ||
+          (expected_active
+            ? paradox_api_active_binding_function(owner, symbol)
+            : paradox_api_plain_binding_scan(owner, symbol)) !=
+              expected_value) {
+        Rf_error("Paradox migration public shell changed during commit");
+      }
+    }
+  }
+}
+
+SEXP paradox_upgrade_public_binding_receipts(SEXP receipts) {
+  paradox_validate_upgrade_public_binding_receipts(receipts);
+  return R_NilValue;
 }
 
 static void *temporary_size_alloc(size_t count, size_t element_size) {
@@ -440,8 +801,9 @@ static int scalar_string_equal(SEXP string, const char *expected) {
 }
 
 static int is_candidate_shell(SEXP environment) {
-  SEXP classes = paradox_api_raw_attribute(environment, R_ClassSymbol);
-  if (TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes)) {
+  SEXP classes;
+  if (!paradox_api_ordinary_class_snapshot(environment, &classes) ||
+      classes == R_NilValue) {
     return FALSE;
   }
   const R_xlen_t count = XLENGTH(classes);
@@ -453,6 +815,28 @@ static int is_candidate_shell(SEXP environment) {
     has_r6 |= scalar_string_equal(label, "R6");
   }
   return has_param_set && has_r6;
+}
+
+SEXP paradox_upgrade_class_snapshot(SEXP value) {
+  PROTECT(value);
+  SEXP classes;
+  if (!paradox_api_ordinary_class_snapshot(value, &classes)) {
+    SEXP result = PROTECT(Rf_ScalarLogical(FALSE));
+    UNPROTECT(2);
+    return result;
+  }
+  if (classes == R_NilValue) {
+    UNPROTECT(1);
+    return R_NilValue;
+  }
+  SEXP result = PROTECT(Rf_duplicate(classes));
+  if (TYPEOF(result) != STRSXP || ALTREP(result) || Rf_isS4(result) ||
+      !paradox_api_has_no_attributes(result)) {
+    UNPROTECT(2);
+    Rf_error("Internal error: could not own ordinary class metadata");
+  }
+  UNPROTECT(2);
+  return result;
 }
 
 static void grow_boundaries(paradox_upgrade_boundaries_t *boundaries) {
@@ -521,6 +905,65 @@ static int imports_environment(SEXP environment) {
   return imports;
 }
 
+static int user_database_environment(SEXP environment) {
+  if (!Rf_isObject(environment)) {
+    return FALSE;
+  }
+  SEXP classes;
+  if (!paradox_api_ordinary_class_snapshot(environment, &classes)) {
+    return TRUE;
+  }
+  return paradox_api_ordinary_class_contains(
+    classes,
+    "UserDefinedDatabase"
+  );
+}
+
+static int package_environment(SEXP environment) {
+  SEXP name = paradox_api_raw_attribute(environment, R_NameSymbol);
+  if (TYPEOF(name) != STRSXP || ALTREP(name) || Rf_isS4(name) ||
+      Rf_isObject(name) || !paradox_api_has_no_attributes(name) ||
+      XLENGTH(name) != 1) {
+    return FALSE;
+  }
+  SEXP label = STRING_ELT(name, 0);
+  return label != NA_STRING && Rf_getCharCE(label) != CE_BYTES &&
+    strncmp(CHAR(label), "package:", 8) == 0 && CHAR(label)[8] != '\0';
+}
+
+static int namespace_environment(SEXP environment) {
+  SEXP marker = PROTECT(paradox_api_optional_plain_binding_snapshot(
+    environment,
+    Rf_install(".__NAMESPACE__.")
+  ));
+  if (TYPEOF(marker) != ENVSXP || Rf_isS4(marker)) {
+    UNPROTECT(1);
+    return FALSE;
+  }
+  SEXP spec = PROTECT(paradox_api_plain_binding_snapshot(
+    marker,
+    Rf_install("spec")
+  ));
+  static const char *const spec_attributes[] = {"names"};
+  if (TYPEOF(spec) != STRSXP || ALTREP(spec) || Rf_isS4(spec) ||
+      !paradox_api_has_only_attributes(spec, spec_attributes, 1) ||
+      XLENGTH(spec) < 1) {
+    UNPROTECT(2);
+    return FALSE;
+  }
+  SEXP name = STRING_ELT(spec, 0);
+  if (name == NA_STRING || Rf_getCharCE(name) == CE_BYTES ||
+      CHAR(name)[0] == '\0') {
+    UNPROTECT(2);
+    return FALSE;
+  }
+  SEXP scalar_name = PROTECT(Rf_ScalarString(name));
+  SEXP registered = PROTECT(R_FindNamespace(scalar_name));
+  const int result = registered == environment;
+  UNPROTECT(4);
+  return result;
+}
+
 static int environment_boundary(
     const paradox_upgrade_walker_t *walker, SEXP environment) {
   return boundary_contains(&walker->boundaries, environment) ||
@@ -531,10 +974,9 @@ static int environment_boundary(
      * This predicate must precede the namespace/package predicates: old R
      * implements those through an object-table lookup.
      */
-    (Rf_isObject(environment) &&
-      Rf_inherits(environment, "UserDefinedDatabase")) ||
-    R_IsNamespaceEnv(environment) ||
-    R_IsPackageEnv(environment) ||
+    user_database_environment(environment) ||
+    namespace_environment(environment) ||
+    package_environment(environment) ||
     imports_environment(environment);
 }
 
@@ -948,12 +1390,35 @@ static void schedule_vector(
   SEXP source = vector;
   PROTECT_INDEX source_index;
   PROTECT_WITH_INDEX(source, &source_index);
+  const SEXPTYPE source_type = (SEXPTYPE) TYPEOF(source);
+  const R_xlen_t count = XLENGTH(source);
+  /*
+   * Path construction allocates.  Copy every child identity into one ordinary
+   * root carrier before constructing the first path, so a pending finalizer
+   * cannot make one discovery pass combine elements from different
+   * generations of an otherwise ordinary caller-owned list.  Allocate the
+   * carrier first: if that allocation changes the source, the receipt below
+   * rejects a changed length/type and the allocation-free copy observes only
+   * the post-allocation generation.
+   *
+   * An ALTREP list is duplicated once, retaining the existing stable-provider
+   * contract and the self-returning Duplicate-method protection invariant,
+   * before its elements are materialized into the same carrier.
+   */
+  SEXP children = PROTECT(Rf_allocVector(VECSXP, count));
   if (ALTREP(source)) {
     REPROTECT(source = Rf_duplicate(source), source_index);
   }
-  const R_xlen_t count = XLENGTH(source);
+  if ((SEXPTYPE) TYPEOF(source) != source_type ||
+      XLENGTH(source) != count) {
+    UNPROTECT(2);
+    Rf_error("Object graph vector changed during inspection");
+  }
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SET_VECTOR_ELT(children, index, VECTOR_ELT(source, index));
+  }
   for (R_xlen_t index = count; index > 0; --index) {
-    SEXP child = PROTECT(VECTOR_ELT(source, index - 1));
+    SEXP child = VECTOR_ELT(children, index - 1);
     const paradox_upgrade_path_t *child_path = indexed_path(
       path,
       "[[",
@@ -965,18 +1430,35 @@ static void schedule_vector(
       child,
       child_path
     );
-    UNPROTECT(1);
   }
-  UNPROTECT(1);
+  UNPROTECT(2);
 }
 
 static void schedule_closure(
     paradox_upgrade_walker_t *walker,
     SEXP closure,
     const paradox_upgrade_path_t *path) {
-  SEXP formals = PROTECT(paradox_api_closure_formals(closure));
-  SEXP expression = PROTECT(paradox_api_closure_expression(closure));
-  SEXP environment = PROTECT(paradox_api_closure_environment(closure));
+  /*
+   * Before R 4.5 the public body()/environment() bridge evaluates small base
+   * calls and may therefore run a pending finalizer between field reads.
+   * Duplicate the closure shell once first; the private shell cannot then be
+   * rewired into a formals/body/environment combination that never existed.
+   * Current R exposes all three direct accessors, so retain its allocation-free
+   * path.
+   */
+#if R_VERSION < R_Version(4, 5, 0)
+  SEXP stable_closure = PROTECT(Rf_duplicate(closure));
+  if (TYPEOF(stable_closure) != CLOSXP || stable_closure == closure) {
+    UNPROTECT(1);
+    Rf_error("Object graph closure could not be snapshotted");
+  }
+#else
+  SEXP stable_closure = closure;
+  PROTECT(stable_closure);
+#endif
+  SEXP formals = PROTECT(paradox_api_closure_formals(stable_closure));
+  SEXP expression = PROTECT(paradox_api_closure_expression(stable_closure));
+  SEXP environment = PROTECT(paradox_api_closure_environment(stable_closure));
   schedule_node(
     walker,
     environment,
@@ -992,7 +1474,7 @@ static void schedule_closure(
     formals,
     literal_path(path, ".formals")
   );
-  UNPROTECT(3);
+  UNPROTECT(4);
 }
 
 static void schedule_pairlist(

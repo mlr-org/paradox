@@ -42,51 +42,55 @@
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL,
     upper_limit = NULL) {
 
-  assert_param_set(param_set, no_untyped = TRUE)
+  # The native operation admits the closed Domain schema and normalizes both
+  # resolution controls against that same graph generation.  In particular,
+  # do not derive IDs, numeric kinds, or factor level counts through separate
+  # active-binding reads here: allocation while preparing a later control can
+  # run a finalizer that swaps `.core`.
+  assert_r6(param_set, "ParamSet")
+  if (!is.null(resolution)) {
+    resolution = unname(assert_count(resolution, coerce = TRUE))
+  }
+  if (!is.null(param_resolutions)) {
+    param_resolutions = assert_integerish(
+      param_resolutions,
+      lower = 0L,
+      any.missing = FALSE,
+      coerce = TRUE
+    )
+    assert_names(names(param_resolutions), type = "unique")
+  }
   if (!is.null(upper_limit)) {
     # Like the other public scalar controls, a name introduced by ordinary
     # indexing is representation-only. The native boundary receives the
     # canonical unclassed count.
     upper_limit = unname(assert_count(upper_limit, coerce = TRUE))
   }
-  ids = param_set$ids()
-  ids_num = ids[param_set$is_number]
-
-  par_res = set_names(integer(0L), character(0L)) # here we construct the resolution for each param
-  if (length(ids_num) > 0L) { # Categorical-only spaces need no numeric-resolution check.
-    if (is.null(resolution) && is.null(param_resolutions)) {
-      stop("You must specify 'resolution' or 'param_resolutions'!")
-    }
-    if (!is.null(resolution)) {
-      # create param_resolutions list, constant entry, same length as ids and named with ids
-      resolution = assert_count(resolution, coerce = TRUE)
-      par_res = set_names(rep.int(resolution, param_set$length), ids)
-    }
-    if (!is.null(param_resolutions)) {
-      assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
-      # user only needs to pass num params (categ resolutions are overwritten anyway)
-      assert_names(names(param_resolutions), subset.of = ids_num)
-      par_res = insert_named(par_res, param_resolutions)
-    }
-    ids_miss = setdiff(ids_num, names(par_res))
-    if (length(ids_miss) > 0L) {
-      stopf("Resolution settings missing for some numerical params: %s", str_collapse(ids_miss))
-    }
-  }
-  # overwrite the resolution for categorical stuff with the number of levels they have
-  isc = param_set$is_categ
-  par_res = insert_named(par_res, param_set$nlevels[isc])
 
   # Closed built-in schemas, including the zero-dimensional schema, use one
   # output-sensitive allocation-and-fill kernel and never branch to a second R
   # implementation. It returns the final fixed, dependency-masked, deduplicated
   # table, so the Design constructor must not normalize it a second time.
-  res = .Call(
+  generated = .Call(
     C_generate_design_grid_builtin,
     get_private(param_set),
     param_set,
-    par_res,
+    list(
+      resolution = resolution,
+      param_resolutions = param_resolutions
+    ),
     upper_limit
   )
-  Design$new(param_set, res, remove_dupl = .design_prepared_grid)
+  design = Design$new(
+    param_set,
+    generated[[1L]],
+    remove_dupl = .design_prepared_grid
+  )
+  # Design construction allocates its R6 shell after the native grid has been
+  # completed. The compact receipt returned with that exact grid generation is
+  # therefore scanned once more as the terminal operation; a finalizer which
+  # moves the caller's live ParamSet during the handoff wins instead of
+  # yielding a Design whose data and source never coexisted.
+  .Call(C_param_set_generation_receipt, generated[[2L]])
+  design
 }

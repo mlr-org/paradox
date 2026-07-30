@@ -10,13 +10,11 @@ sampler_unif_handoff_symbols = function() {
   )
 }
 
-sampler_unif_handoffs = function(param_set, ids = param_set$ids()) {
+sampler_unif_handoffs = function(param_set) {
   symbols = sampler_unif_handoff_symbols()
   .Call(
     symbols$C_sampler_unif_subspace_handoffs,
-    param_set,
-    ids,
-    param_set$extra_trafo
+    param_set
   )
 }
 
@@ -60,17 +58,16 @@ test_that("Sampler1DUnif never consumes a ParamSet subset capability", {
   subset_symbol = get("C_param_set_subset_state", envir = namespace)
   adopt_symbol = get("C_param_set_adopt_subset_state", envir = namespace)
   param = ps(x = p_dbl(0, 1))
-  token = .Call(
+  bundle = .Call(
     subset_symbol,
     param$.__enclos_env__$private,
     param,
     "x",
     FALSE,
     TRUE,
-    param$constraint,
-    param$extra_trafo,
     TRUE
   )
+  token = bundle$token
 
   expect_error(Sampler1DUnif$new(token), "R6")
   expect_true(.Call(adopt_symbol, NULL, token))
@@ -82,7 +79,7 @@ test_that("SamplerUnif ownership handoffs are private and single-use", {
   symbols = sampler_unif_handoff_symbols()
   expect_identical(
     symbols$C_sampler_unif_subspace_handoffs$numParameters,
-    3L
+    1L
   )
   expect_identical(symbols$C_sampler_unif_take_subspace$numParameters, 1L)
 
@@ -133,17 +130,16 @@ test_that("SamplerUnif ownership handoffs reject corruption and fabrication", {
   expect_error(Sampler1DUnif$new(new("externalptr")), "R6")
   namespace = asNamespace("paradox")
   ordinary = ps(x = p_dbl(0, 1))
-  token = .Call(
+  bundle = .Call(
     get("C_param_set_subset_state", envir = namespace),
     ordinary$.__enclos_env__$private,
     ordinary,
     "x",
     FALSE,
     TRUE,
-    ordinary$constraint,
-    ordinary$extra_trafo,
     TRUE
   )
+  token = bundle$token
   expect_error(Sampler1DUnif$new(token), "R6")
 })
 
@@ -190,4 +186,40 @@ test_that("SamplerUnif obtains independent singleton ParamSets via subspaces", {
   expect_identical(sampler$samplers[[1L]]$param$values, list(x = 0.5))
   expect_identical(sampler$samplers[[2L]]$param$values, named_list())
   expect_identical(sampler$samplers[[3L]]$param$values, list(flag = TRUE))
+})
+
+test_that("SamplerUnif owns one coherent graph and detached child callbacks", {
+  observed = new.env(parent = emptyenv())
+  child = ps(x = p_int(0, 5), y = p_lgl())
+  child$extra_trafo = function(x, param_set) {
+    observed$ids = param_set$ids()
+    x$x = x$x + 1L
+    x
+  }
+  source = psc(component = child)
+  sampler = SamplerUnif$new(source)
+
+  expect_s3_class(sampler$param_set, "ParamSetCollection")
+  expect_false(identical(sampler$param_set, source))
+  expect_identical(
+    sampler$samplers[[1L]]$param$trafo(list(component.x = 2L)),
+    list(component.x = 3L)
+  )
+  expect_identical(observed$ids, "x")
+
+  child$extra_trafo = function(x, param_set) {
+    x$x = x$x + 100L
+    x
+  }
+  expect_identical(
+    sampler$samplers[[1L]]$param$trafo(list(component.x = 2L)),
+    list(component.x = 3L)
+  )
+
+  origin = ps(hidden = p_int(), shown = p_dbl(0, 1))
+  shadow_sampler = SamplerUnif$new(
+    ParamSetShadow$new(origin, "hidden")
+  )
+  expect_s3_class(shadow_sampler$param_set, "ParamSetShadow")
+  expect_identical(shadow_sampler$param_set$ids(), "shown")
 })

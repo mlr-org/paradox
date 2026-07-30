@@ -48,6 +48,8 @@ native_value_check = function(param_set, values,
 test_that("value mutation routines have one forced native signature", {
   expected = c(
     param_set_values_merge = 4L,
+    param_set_set_values = 5L,
+    param_set_assign_values = 3L,
     param_set_store_values = 3L,
     param_set_assign_values_checked = 3L
   )
@@ -57,6 +59,88 @@ test_that("value mutation routines have one forced native signature", {
     expect_identical(symbol$numParameters, expected[[name]])
   }
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
+})
+
+test_that("public assignment admits only the exact assert_values policy", {
+  param_set = ps(x = p_int())
+  param_set$assert_values = 1L
+  expect_error(
+    param_set$values <- list(x = 1L),
+    "Corrupt ParamSet assert_values policy",
+    fixed = TRUE
+  )
+  expect_identical(param_set$values, setNames(list(), character()))
+
+  param_set$assert_values = FALSE
+  param_set$values = list(x = "unchecked")
+  expect_identical(param_set$values, list(x = "unchecked"))
+})
+
+test_that("set_values does not overwrite a commit during its merge", {
+  skip_if_no_list_altrep()
+  skip_if_not(
+    exists(
+      "C_test_stateful_altrep",
+      envir = asNamespace("paradox"),
+      inherits = FALSE
+    ),
+    "the internal stateful ALTREP fixture is unavailable"
+  )
+
+  param_set = ps(a = p_int(), b = p_int())
+  param_set$values = list(a = 1L)
+  nested = FALSE
+  updates = native_stateful_altrep(
+    structure(list(b = 2L), names = "b"),
+    structure(list(b = 2L), names = "b"),
+    callback = function() {
+      if (!nested) {
+        nested <<- TRUE
+        param_set$values = list(a = 9L)
+      }
+    },
+    callback_after = 0L
+  )
+
+  expect_error(
+    param_set$set_values(.values = updates),
+    "changed"
+  )
+  expect_identical(param_set$values, list(a = 9L))
+})
+
+test_that("graph set_values does not overwrite a commit during its merge", {
+  skip_if_no_list_altrep()
+  skip_if_not(
+    exists(
+      "C_test_stateful_altrep",
+      envir = asNamespace("paradox"),
+      inherits = FALSE
+    ),
+    "the internal stateful ALTREP fixture is unavailable"
+  )
+
+  child = ps(a = p_int(), b = p_int())
+  child$values = list(a = 1L)
+  collection = ParamSetCollection$new(list(child = child))
+  nested = FALSE
+  updates = native_stateful_altrep(
+    structure(list(2L), names = "child.b"),
+    structure(list(2L), names = "child.b"),
+    callback = function() {
+      if (!nested) {
+        nested <<- TRUE
+        child$values = list(a = 9L)
+      }
+    },
+    callback_after = 0L
+  )
+
+  expect_error(
+    collection$set_values(.values = updates),
+    "changed"
+  )
+  expect_identical(child$values, list(a = 9L))
 })
 
 test_that("native merge owns replacement and insertion semantics", {
@@ -209,6 +293,25 @@ test_that("direct checked and unchecked calls each commit one capsule", {
   ))
   incoming$a = 4L
   expect_identical(param_set$values$a, 3L)
+
+  accesses = 0L
+  opaque = native_stateful_altrep(
+    c(1L, 2L),
+    c(9L, 9L),
+    callback = function() accesses <<- accesses + 1L,
+    callback_after = c(NA_integer_, 0L)
+  )
+  accesses = 0L
+  stored = native_value_store(param_set, list(b = opaque))
+  expect_identical(accesses, 0L)
+  expect_identical(
+    data.table::address(stored$b),
+    data.table::address(opaque)
+  )
+  expect_identical(
+    data.table::address(param_set$values$b),
+    data.table::address(opaque)
+  )
 })
 
 test_that("value transactions reject structural ALTREP list shells", {
@@ -463,6 +566,33 @@ test_that("an intervening reentrant commit aborts the enclosing assignment", {
   expect_identical(param_set$values, list(payload = "nested"))
 })
 
+test_that("value assignment authenticates same-pointer policy contents", {
+  armed = FALSE
+  policy = NULL
+  param_set = ps(payload = p_uty(custom_check = function(value) {
+    if (armed) {
+      armed <<- FALSE
+      data.table::setattr(policy, "adversarial", TRUE)
+    }
+    TRUE
+  }))
+  policy = param_set$assert_values
+  expect_identical(
+    data.table::address(policy),
+    data.table::address(param_set$assert_values)
+  )
+  on.exit(data.table::setattr(policy, "adversarial", NULL), add = TRUE)
+  armed = TRUE
+
+  expect_error(
+    param_set$values <- list(payload = "outer"),
+    "assert_values policy changed",
+    fixed = TRUE
+  )
+  expect_identical(param_set$values, setNames(list(), character()))
+  expect_true(isTRUE(attr(param_set$assert_values, "adversarial")))
+})
+
 test_that("post-callback generation checks do not force delayed core bindings", {
   forced = 0L
   armed = FALSE
@@ -569,6 +699,50 @@ test_that("collection validation preserves a nested commit in another child", {
   expect_identical(right$values, list(x = 9L))
 })
 
+test_that("collection validation authenticates the routed graph generation", {
+  holder = new.env(parent = emptyenv())
+  armed = FALSE
+  child = ps(payload = p_uty(custom_check = function(value) {
+    if (armed) {
+      armed <<- FALSE
+      holder$collection$add(ps(extra = p_int()), "extra")
+    }
+    TRUE
+  }))
+  holder$collection = ParamSetCollection$new(list(child = child))
+  armed = TRUE
+
+  expect_error(
+    holder$collection$values <- list(child.payload = "outer"),
+    "graph changed during deferred operation",
+    fixed = TRUE
+  )
+  expect_identical(child$values, setNames(list(), character()))
+  expect_identical(
+    holder$collection$ids(),
+    c("child.payload", "extra.extra")
+  )
+})
+
+test_that("planning rejects graph mutation from a conflict warning handler", {
+  shared = ps(x = p_int())
+  collection = ParamSetCollection$new(list(a = shared, b = shared))
+
+  expect_error(
+    withCallingHandlers(
+      collection$values <- list(b.x = 7L),
+      warning = function(warning) {
+        collection$add(ps(y = p_int()), "extra")
+        invokeRestart("muffleWarning")
+      }
+    ),
+    "graph changed while being planned",
+    fixed = TRUE
+  )
+  expect_identical(shared$values, setNames(list(), character()))
+  expect_identical(collection$ids(), c("a.x", "b.x", "extra.y"))
+})
+
 test_that("a malformed later child cannot partially commit an earlier child", {
   first = ps(a = p_int())
   second = ps(b = p_int())
@@ -590,6 +764,29 @@ test_that("a malformed later child cannot partially commit an earlier child", {
   )
   expect_identical(first$values, list(a = 7L))
   expect_identical(native_value_core_address(first), first_address)
+})
+
+test_that("a locked later target cannot partially commit an earlier target", {
+  first = ps(a = p_int())
+  second = ps(b = p_int())
+  first$values = list(a = 7L)
+  second$values = list(b = 8L)
+  first_address = native_value_core_address(first)
+  second_address = native_value_core_address(second)
+  collection = ParamSetCollection$new(list(first = first, second = second))
+  second_private = native_value_private(second)
+  lockBinding(".core", second_private)
+  on.exit(unlockBinding(".core", second_private))
+
+  expect_error(
+    collection$values <- list(first.a = 1L, second.b = 2L),
+    "target capsule binding is locked",
+    fixed = TRUE
+  )
+  expect_identical(first$values, list(a = 7L))
+  expect_identical(second$values, list(b = 8L))
+  expect_identical(native_value_core_address(first), first_address)
+  expect_identical(native_value_core_address(second), second_address)
 })
 
 test_that("shared collection targets use deterministic last-owner semantics", {
@@ -647,6 +844,54 @@ test_that("shadow validation preserves a nested origin commit", {
   }, "changed")
   expect_identical(origin$values, list(hidden = 9L))
   expect_identical(shadow$values, setNames(list(), character()))
+})
+
+test_that("shadow assignment authenticates in-place signature contents", {
+  holder = new.env(parent = emptyenv())
+  armed = FALSE
+  origin = ps(payload = p_uty(custom_check = function(value) {
+    if (armed) {
+      armed <<- FALSE
+      signature = attr(
+        holder$shadow$.__enclos_env__$private$.core,
+        ".paradox.shadow.snapshot.v1",
+        exact = TRUE
+      )
+      holder$signature = signature
+      holder$original_entry = signature[[2L]]
+      replacement = ps(other = p_int())$.__enclos_env__$private$.core
+      .Call(
+        get("Csetlistelt", envir = asNamespace("data.table")),
+        signature,
+        2L,
+        replacement
+      )
+    }
+    TRUE
+  }))
+  holder$shadow = ParamSetShadow$new(origin, character())
+  armed = TRUE
+  on.exit({
+    if (!is.null(holder$signature)) {
+      .Call(
+        get("Csetlistelt", envir = asNamespace("data.table")),
+        holder$signature,
+        2L,
+        holder$original_entry
+      )
+    }
+  }, add = TRUE)
+
+  expect_error(
+    holder$shadow$values <- list(payload = "outer"),
+    "graph changed during deferred operation",
+    fixed = TRUE
+  )
+  expect_identical(origin$values, setNames(list(), character()))
+  expect_false(identical(
+    data.table::address(holder$signature[[2L]]),
+    data.table::address(holder$original_entry)
+  ))
 })
 
 test_that("ObjectTuneToken receipts stay rooted across later validation work", {

@@ -9,6 +9,7 @@
 #include "domain_admission.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+#include "shell_auth.h"
 
 enum construction_result {
   RESULT_PARAMS = 0,
@@ -134,57 +135,6 @@ static int exact_domain_column_names(SEXP domain) {
   return TRUE;
 }
 
-static SEXP snapshot_scalar_vector(SEXP source) {
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
-  SEXP result = PROTECT(Rf_allocVector(type, 1));
-  switch (type) {
-  case STRSXP:
-    SET_STRING_ELT(result, 0, STRING_ELT(source, 0));
-    break;
-  case VECSXP:
-    SET_VECTOR_ELT(result, 0, VECTOR_ELT(source, 0));
-    break;
-  case REALSXP:
-    SET_REAL_ELT(result, 0, REAL_ELT(source, 0));
-    break;
-  case INTSXP:
-    SET_INTEGER_ELT(result, 0, INTEGER_ELT(source, 0));
-    break;
-  case LGLSXP:
-    SET_LOGICAL_ELT(result, 0, LOGICAL_ELT(source, 0));
-    break;
-  default:
-    UNPROTECT(1);
-    Rf_error("Internal error: unsupported Domain snapshot type");
-  }
-  UNPROTECT(1);
-  return result;
-}
-
-static SEXP snapshot_builtin_value_leaf(SEXP source) {
-  /* Preserve the S4 bit until the shared Domain-row owner can admit the exact
-   * leaf as a special value or reject it for a typed Domain. */
-  if (Rf_isS4(source)) {
-    return source;
-  }
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
-  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
-      type != CPLXSXP && type != STRSXP && type != RAWSXP) {
-    return source;
-  }
-  SEXP result = PROTECT(paradox_snapshot_semantic_vector(source));
-  /* The snapshot already owns a materialized ordinary `names`. Copying the
-   * source's attribute set replaces the whole attribute list, so reinstall
-   * that owned copy afterwards; otherwise the caller's original names object
-   * -- possibly ALTREP, possibly length-changing -- lands in the capsule. */
-  SEXP owned_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
-  SHALLOW_DUPLICATE_ATTRIB(result, source);
-  Rf_setAttrib(result, R_NamesSymbol, owned_names);
-  UNPROTECT(1);
-  UNPROTECT(1);
-  return result;
-}
-
 static int cargo_nested_container_name(SEXP name) {
   return name != NA_STRING &&
     (paradox_domain_string_is(name, "disable_in_tune") || paradox_domain_string_is(name, "logscale") ||
@@ -217,6 +167,12 @@ static SEXP snapshot_domain_cargo(SEXP source) {
     return R_UnboundValue;
   }
   SEXP result = PROTECT(paradox_snapshot_semantic_vector(source));
+  /*
+   * The semantic snapshot owns a coherent name/value generation.  Continue
+   * interpreting nested cargo through that generation, rather than pairing
+   * its captured values with the pre-allocation names object selected above.
+   */
+  names = Rf_getAttrib(result, R_NamesSymbol);
   for (R_xlen_t index = 0; index < size; ++index) {
     SEXP name = STRING_ELT(names, index);
     if (!cargo_nested_container_name(name)) {
@@ -268,7 +224,9 @@ static SEXP snapshot_domain_cargo(SEXP source) {
   return result;
 }
 
-static SEXP snapshot_domain_nested(SEXP source, enum paradox_domain_column column) {
+SEXP paradox_snapshot_domain_nested(SEXP source,
+    enum paradox_domain_column column,
+    R_xlen_t *work_since_interrupt) {
   if (column == PARADOX_DOMAIN_CARGO) {
     return snapshot_domain_cargo(source);
   }
@@ -305,13 +263,52 @@ static SEXP snapshot_domain_nested(SEXP source, enum paradox_domain_column colum
     return paradox_snapshot_semantic_vector(source);
   }
   if (column == PARADOX_DOMAIN_REQUIREMENTS) {
-    R_xlen_t work_since_interrupt = 0;
     return paradox_snapshot_builtin_requirements(
       source,
-      &work_since_interrupt
+      work_since_interrupt
     );
   }
   return source;
+}
+
+static int snapshot_domain_column(SEXP snapshot,
+    enum paradox_domain_column column,
+    paradox_domain_field_t *failed_field) {
+  SEXP value = PROTECT(VECTOR_ELT(snapshot, column));
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+  const int numeric_column = column == PARADOX_DOMAIN_LOWER ||
+    column == PARADOX_DOMAIN_UPPER || column == PARADOX_DOMAIN_TOLERANCE;
+  if (ALTREP(value) || Rf_isS4(value) || Rf_isObject(value) ||
+      !paradox_api_has_no_attributes(value) || (numeric_column
+      ? type != INTSXP && type != REALSXP
+        : type != domain_column_types[column]) ||
+      XLENGTH(value) != 1) {
+    *failed_field = domain_column_field(column);
+    UNPROTECT(1);
+    return FALSE;
+  }
+
+  SEXP copy = PROTECT(paradox_snapshot_semantic_vector(value));
+  if (column == PARADOX_DOMAIN_CARGO || column == PARADOX_DOMAIN_LEVELS ||
+      column == PARADOX_DOMAIN_SPECIAL_VALS ||
+      column == PARADOX_DOMAIN_REQUIREMENTS) {
+    R_xlen_t work_since_interrupt = 0;
+    SEXP nested = PROTECT(paradox_snapshot_domain_nested(
+      VECTOR_ELT(copy, 0),
+      column,
+      &work_since_interrupt
+    ));
+    if (nested == R_UnboundValue) {
+      *failed_field = domain_column_field(column);
+      UNPROTECT(3);
+      return FALSE;
+    }
+    SET_VECTOR_ELT(copy, 0, nested);
+    UNPROTECT(1);
+  }
+  SET_VECTOR_ELT(snapshot, column, copy);
+  UNPROTECT(2);
+  return TRUE;
 }
 
 /* Capture each column exactly once into ordinary length-one vectors. This is
@@ -321,52 +318,89 @@ static SEXP snapshot_domain(SEXP domain,
     paradox_domain_field_t *failed_field) {
   *failed_field = PARADOX_DOMAIN_FIELD_NONE;
   if (TYPEOF(domain) != VECSXP || ALTREP(domain) || Rf_isS4(domain) ||
-      !Rf_isObject(domain) || XLENGTH(domain) != PARADOX_DOMAIN_COLUMN_COUNT ||
-      !exact_domain_outer_attributes(domain)) {
+      XLENGTH(domain) != PARADOX_DOMAIN_COLUMN_COUNT) {
     return R_NilValue;
   }
 
-  if (!exact_domain_column_names(domain)) {
+  SEXP names = PROTECT(Rf_allocVector(
+    STRSXP,
+    PARADOX_DOMAIN_COLUMN_COUNT
+  ));
+  SEXP snapshot = PROTECT(Rf_allocVector(
+    VECSXP,
+    PARADOX_DOMAIN_COLUMN_COUNT
+  ));
+  if (!Rf_isObject(domain) || !exact_domain_outer_attributes(domain) ||
+      !paradox_capture_list_identities(domain, names, snapshot)) {
+    UNPROTECT(2);
     return R_NilValue;
   }
-  SEXP names = PROTECT(Rf_getAttrib(domain, R_NamesSymbol));
-
-  SEXP snapshot = PROTECT(Rf_allocVector(VECSXP, PARADOX_DOMAIN_COLUMN_COUNT));
   for (R_xlen_t column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     if (!paradox_domain_string_is(STRING_ELT(names, column), paradox_domain_column_names[column])) {
       UNPROTECT(2);
       return R_NilValue;
     }
-    SEXP value = PROTECT(VECTOR_ELT(domain, column));
-    const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
-    const int numeric_column = column == PARADOX_DOMAIN_LOWER ||
-      column == PARADOX_DOMAIN_UPPER || column == PARADOX_DOMAIN_TOLERANCE;
-    if (ALTREP(value) || Rf_isS4(value) || Rf_isObject(value) ||
-        !paradox_api_has_no_attributes(value) || (numeric_column
-        ? type != INTSXP && type != REALSXP
-          : type != domain_column_types[column]) ||
-        XLENGTH(value) != 1) {
-      *failed_field = domain_column_field((enum paradox_domain_column) column);
-      UNPROTECT(3);
+  }
+
+  /*
+   * Snapshot the kind selectors and special-values carrier first.  Every
+   * remaining column may allocate, and requirements/default/init can expose a
+   * leaf through a semantic operation.  The special leaf policy therefore
+   * needs an operation-local receipt before those columns are touched.
+   */
+  static const enum paradox_domain_column early_columns[] = {
+    PARADOX_DOMAIN_CLS,
+    PARADOX_DOMAIN_STORAGE_TYPE,
+    PARADOX_DOMAIN_SPECIAL_VALS
+  };
+  for (size_t index = 0;
+      index < sizeof(early_columns) / sizeof(early_columns[0]);
+      ++index) {
+    if (!snapshot_domain_column(
+        snapshot,
+        early_columns[index],
+        failed_field
+      )) {
+      UNPROTECT(2);
       return R_NilValue;
     }
-    SEXP copy = PROTECT(snapshot_scalar_vector(value));
-    if (column == PARADOX_DOMAIN_CARGO || column == PARADOX_DOMAIN_LEVELS ||
-        column == PARADOX_DOMAIN_SPECIAL_VALS || column == PARADOX_DOMAIN_REQUIREMENTS) {
-      SEXP nested = PROTECT(snapshot_domain_nested(
-        VECTOR_ELT(copy, 0),
-        (enum paradox_domain_column) column
-      ));
-      if (nested == R_UnboundValue) {
-        *failed_field = domain_column_field((enum paradox_domain_column) column);
-        UNPROTECT(5);
-        return R_NilValue;
-      }
-      SET_VECTOR_ELT(copy, 0, nested);
-      UNPROTECT(1);
-    }
-    SET_VECTOR_ELT(snapshot, column, copy);
+  }
+
+  R_xlen_t work_since_interrupt = 0;
+  paradox_special_values_receipt_t special_receipt;
+  if (!paradox_prepare_builtin_special_values(
+      VECTOR_ELT(snapshot, PARADOX_DOMAIN_CLS),
+      VECTOR_ELT(snapshot, PARADOX_DOMAIN_STORAGE_TYPE),
+      VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_SPECIAL_VALS), 0),
+      &special_receipt,
+      &work_since_interrupt
+    )) {
+    *failed_field = class_is_builtin_domain(
+      domain,
+      VECTOR_ELT(snapshot, PARADOX_DOMAIN_CLS)
+    )
+      ? PARADOX_DOMAIN_FIELD_SPECIAL_VALUES
+      : PARADOX_DOMAIN_FIELD_CLASS_STORAGE;
     UNPROTECT(2);
+    return R_NilValue;
+  }
+  paradox_own_builtin_special_value_leaves(
+    VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_SPECIAL_VALS), 0),
+    special_receipt.typed
+  );
+
+  for (enum paradox_domain_column column = PARADOX_DOMAIN_ID;
+      column < PARADOX_DOMAIN_COLUMN_COUNT;
+      column = (enum paradox_domain_column) (column + 1)) {
+    if (column == PARADOX_DOMAIN_CLS ||
+        column == PARADOX_DOMAIN_STORAGE_TYPE ||
+        column == PARADOX_DOMAIN_SPECIAL_VALS) {
+      continue;
+    }
+    if (!snapshot_domain_column(snapshot, column, failed_field)) {
+      UNPROTECT(2);
+      return R_NilValue;
+    }
   }
 
   SEXP cls = VECTOR_ELT(snapshot, PARADOX_DOMAIN_CLS);
@@ -377,13 +411,13 @@ static SEXP snapshot_domain(SEXP domain,
   }
 
   if (!paradox_domain_string_is(STRING_ELT(cls, 0), "ParamUty")) {
-    SEXP stable_default = PROTECT(snapshot_builtin_value_leaf(
+    SEXP stable_default = PROTECT(paradox_snapshot_builtin_value_leaf(
       VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_DEFAULT), 0)
     ));
     SET_VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_DEFAULT), 0, stable_default);
     UNPROTECT(1);
     if (LOGICAL_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_INIT_GIVEN), 0) == TRUE) {
-      SEXP stable_init = PROTECT(snapshot_builtin_value_leaf(
+      SEXP stable_init = PROTECT(paradox_snapshot_builtin_value_leaf(
         VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_INIT), 0)
       ));
       SET_VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_INIT), 0, stable_init);
@@ -403,7 +437,6 @@ static SEXP snapshot_domain(SEXP domain,
   UNPROTECT(1);
 
   paradox_builtin_domain_kind_t admitted_kind;
-  R_xlen_t work_since_interrupt = 0;
   if (!paradox_admit_builtin_domain_row(
       VECTOR_ELT(snapshot, PARADOX_DOMAIN_ID),
       VECTOR_ELT(snapshot, PARADOX_DOMAIN_CLS),
@@ -421,6 +454,7 @@ static SEXP snapshot_domain(SEXP domain,
       VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_REQUIREMENTS), 0),
       VECTOR_ELT(snapshot, PARADOX_DOMAIN_INIT_GIVEN),
       VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_INIT), 0),
+      &special_receipt,
       &admitted_kind,
       failed_field,
       NULL,
@@ -579,11 +613,18 @@ static void copy_permanent_value(SEXP destination, R_xlen_t row,
   }
 }
 
-SEXP paradox_param_set_construct(SEXP domains) {
+SEXP paradox_param_set_construct(SEXP domains,
+    SEXP allow_dangling_dependencies) {
+  if (!paradox_param_set_assert_values_is_exact(
+      allow_dangling_dependencies
+    )) {
+    Rf_error(
+      "`allow_dangling_dependencies` must be TRUE or FALSE"
+    );
+  }
   static const char *const names_only[] = {"names"};
   if (TYPEOF(domains) != VECSXP || ALTREP(domains) || Rf_isS4(domains) ||
-      Rf_isObject(domains) ||
-      !paradox_api_has_only_attributes(domains, names_only, 1)) {
+      Rf_isObject(domains)) {
     Rf_error("ParamSet parameters must be supplied as an ordinary named list");
   }
 
@@ -593,18 +634,22 @@ SEXP paradox_param_set_construct(SEXP domains) {
   }
 
   SEXP ids = PROTECT(paradox_stored_attribute(domains, R_NamesSymbol));
-  if (size == 0) {
-    if (!ordinary_names(ids, 0, TRUE)) {
-      UNPROTECT(1);
-      Rf_error("ParamSet parameter names must be an ordinary character vector");
-    }
-  } else if (!ordinary_names(ids, size, FALSE)) {
-    UNPROTECT(1);
-    Rf_error("ParamSet parameters must have ordinary character names");
-  }
 
   SEXP stable_ids = PROTECT(Rf_allocVector(STRSXP, size));
   SEXP domain_snapshots = PROTECT(Rf_allocVector(VECSXP, size));
+  if (Rf_isObject(domains) ||
+      !paradox_api_has_only_attributes(domains, names_only, 1)) {
+    UNPROTECT(3);
+    Rf_error("ParamSet parameters must be supplied as an ordinary named list");
+  }
+  if (!paradox_capture_list_identities(
+        domains,
+        stable_ids,
+        domain_snapshots
+      )) {
+    UNPROTECT(3);
+    Rf_error("ParamSet parameters must have ordinary character names");
+  }
 
   R_xlen_t tag_count = 0;
   R_xlen_t trafo_count = 0;
@@ -623,16 +668,14 @@ SEXP paradox_param_set_construct(SEXP domains) {
     if (row != 0 && row % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
       R_CheckUserInterrupt();
     }
-    SEXP id = STRING_ELT(ids, row);
+    SEXP id = STRING_ELT(stable_ids, row);
     if (!paradox_string_is_strict_id(id)) {
       UNPROTECT(3);
       Rf_error(
         "ParamSet parameter names must be nonempty, non-missing strict ASCII IDs"
       );
     }
-    SET_STRING_ELT(stable_ids, row, id);
-
-    SEXP domain = PROTECT(VECTOR_ELT(domains, row));
+    SEXP domain = PROTECT(VECTOR_ELT(domain_snapshots, row));
     paradox_domain_field_t failed_field = PARADOX_DOMAIN_FIELD_NONE;
     SEXP snapshot = PROTECT(snapshot_domain(domain, &failed_field));
     if (snapshot == R_NilValue) {

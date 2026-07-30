@@ -28,9 +28,10 @@ typedef struct {
 } paradox_params_state_t;
 
 attribute_hidden int paradox_params_supported_table_attributes(SEXP table);
-/* Canonical capsule row names: an attribute-free INTSXP that is either the
- * public-boundary base ALTREP expansion (accepted without observation) or an
- * ordinary exact 1..n vector. */
+/* Canonical capsule row names: attribute-free ordinary integer(0) for zero
+ * rows, exact compact c(NA, +/-n), or the exact ordinary 1:n spelling retained
+ * by some package producers/runtimes. Public-boundary callback-capable
+ * row-name facades are never admitted into a capsule. */
 attribute_hidden int paradox_params_exact_data_frame_row_names(
   SEXP table,
   R_xlen_t row_count,
@@ -56,6 +57,29 @@ attribute_hidden int paradox_params_load_core_state_rooted(
 );
 attribute_hidden SEXP paradox_params_build_static(
   const paradox_params_state_t *state,
+  R_xlen_t *work_since_interrupt
+);
+/* Detach one row-level Domain field according to the closed kind's ownership
+ * contract. `typed` is false only for ParamUty. Structural containers and
+ * Conditions are owned; callbacks/ParamUty/S4 opaque leaves retain identity. */
+attribute_hidden SEXP paradox_detach_domain_row_field(
+  SEXP source,
+  enum paradox_domain_column column,
+  int typed,
+  R_xlen_t *work_since_interrupt
+);
+/* Detach one general stored/public value by closed Domain kind. Unlike the
+ * schema default/init helper, this never interprets outward classes such as
+ * `NoDefault`: every ParamUty payload is opaque and retains exact identity. */
+attribute_hidden SEXP paradox_detach_stored_value_leaf(
+  SEXP value,
+  int typed
+);
+/* Detach the outer store and every typed atomic value using the owning
+ * parameter row. ParamUty/TuneToken/S4/other opaque leaves keep identity. */
+attribute_hidden SEXP paradox_detach_named_values(
+  SEXP values,
+  const paradox_domain_params_t *params,
   R_xlen_t *work_since_interrupt
 );
 attribute_hidden int paradox_params_finish_dynamic(

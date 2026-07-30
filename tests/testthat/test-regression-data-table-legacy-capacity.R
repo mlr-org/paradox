@@ -30,10 +30,13 @@ test_that("data.table finalization never mutates an aliased input shell", {
     data.table::address(names(finalized)),
     data.table::address(names(source))
   ))
-  expect_identical(
-    vapply(finalized, data.table::address, character(1L)),
-    source_column_addresses
+  finalized_column_addresses = vapply(
+    finalized,
+    data.table::address,
+    character(1L)
   )
+  expect_true(all(finalized_column_addresses != source_column_addresses))
+  expect_identical(as.list(finalized), as.list(source))
 
   data.table::setnames(finalized, c("first", "second"))
   expect_identical(names(source), c("alpha", "beta"))

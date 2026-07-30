@@ -3,6 +3,7 @@
 
 #include "paradox.h"
 #include "builtin_value.h"
+#include "paramset_domain_common.h"
 
 typedef enum {
   PARADOX_DOMAIN_FIELD_NONE = 0,
@@ -35,10 +36,38 @@ typedef enum {
   PARADOX_DOMAIN_FIELD_CARGO_TUNING_AGGR
 } paradox_domain_field_t;
 
+/*
+ * Operation-local proof that the exact privately owned special-values shell
+ * has passed the kind-dependent structural admission.  It is deliberately a
+ * stack receipt rather than persistent metadata: the owning constructor keeps
+ * `special_values` rooted and does not expose its shell between preparation
+ * and complete row admission.
+ */
+typedef struct {
+  SEXP special_values;
+  int typed;
+} paradox_special_values_receipt_t;
+
+/*
+ * Perform the special-values part of canonical Domain-row admission before a
+ * typed default/init leaf can be materialized.  For the four typed kinds this
+ * rejects every ALTREP leaf without observing an element.  Unknown
+ * class/storage pairs are left for the row owner's earlier class diagnostic.
+ */
+attribute_hidden int paradox_prepare_builtin_special_values(
+  SEXP cls,
+  SEXP storage,
+  SEXP special_values,
+  paradox_special_values_receipt_t *receipt,
+  R_xlen_t *work_since_interrupt
+);
+
 /* Sole canonical semantic admission for one built-in Domain row. Opaque
  * default/init/special-value leaves retain identity; only their Paradox-owned
- * containers and marker state are interpreted. `id` may be NULL only while
- * the native constructor is building the row which Domain() names later. */
+ * containers and marker state are interpreted. `special_receipt` must have
+ * been prepared from the exact privately owned `special_values` shell before
+ * any typed default/init snapshot. `id` may be NULL only while the native
+ * constructor is building the row which Domain() names later. */
 attribute_hidden int paradox_admit_builtin_domain_row(
   SEXP id,
   SEXP cls,
@@ -56,6 +85,7 @@ attribute_hidden int paradox_admit_builtin_domain_row(
   SEXP requirements,
   SEXP init_given,
   SEXP init_value,
+  const paradox_special_values_receipt_t *special_receipt,
   paradox_builtin_domain_kind_t *kind,
   paradox_domain_field_t *failure,
   paradox_builtin_value_result_t *value_failure,
@@ -72,6 +102,16 @@ attribute_hidden const char *paradox_domain_field_name(
  * shells.  R_UnboundValue denotes malformed input. */
 attribute_hidden SEXP paradox_snapshot_builtin_requirements(
   SEXP requirements,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Own one interpreted nested Domain field.  This is the single structural
+ * snapshot authority shared by Domain/ParamSet admission and detached public
+ * projections.  Only CARGO, LEVELS, SPECIAL_VALS, and REQUIREMENTS are
+ * interpreted; other columns are returned unchanged. */
+attribute_hidden SEXP paradox_snapshot_domain_nested(
+  SEXP source,
+  enum paradox_domain_column column,
   R_xlen_t *work_since_interrupt
 );
 

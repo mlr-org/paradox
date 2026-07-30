@@ -161,6 +161,27 @@ test_that("generate_design_lhs with zero rows", {
   expect_identical(empty_factor$data$choice, character())
 })
 
+test_that("positive-row LHS rejects empty factors before generator entry", {
+  calls = 0L
+  generator = function(n, k) {
+    calls <<- calls + 1L
+    matrix(runif(n * k), nrow = n, ncol = k)
+  }
+  set.seed(413L)
+  before = .Random.seed
+  expect_error(
+    generate_design_lhs(
+      paradox::ps(choice = p_fct(character())),
+      n = 1L,
+      lhs_fun = generator
+    ),
+    "Cannot map quantiles for a factor parameter with no levels",
+    fixed = TRUE
+  )
+  expect_identical(calls, 0L)
+  expect_identical(.Random.seed, before)
+})
+
 test_that("generate_design_grid with zero rows", {
   ps = th_paramset_full()
   d = generate_design_grid(ps, resolution = 0)
@@ -210,4 +231,20 @@ test_that("generate_design_sobol with zero rows", {
   )
   expect_data_table(empty_factor$data, nrows = 0, ncols = 1)
   expect_identical(empty_factor$data$choice, character())
+})
+
+test_that("positive-row Sobol rejects empty factors before RNG entry", {
+  skip_if_not_installed("spacefillr")
+
+  set.seed(419L)
+  before = .Random.seed
+  expect_error(
+    generate_design_sobol(
+      paradox::ps(choice = p_fct(character())),
+      n = 1L
+    ),
+    "Cannot map quantiles for a factor parameter with no levels",
+    fixed = TRUE
+  )
+  expect_identical(.Random.seed, before)
 })

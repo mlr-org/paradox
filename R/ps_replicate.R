@@ -62,6 +62,12 @@
 #' psr$get_values(any_tags = "set_rep1")
 #' @export
 ps_replicate = function(set, times = length(affixes), affixes = sprintf("rep%s", seq_len(times)), postfix = FALSE, tag_sets = FALSE, tag_params = FALSE) {
+  if (missing(times) && missing(affixes)) {
+    stop(
+      "At least one of `times` or `affixes` must be supplied",
+      call. = FALSE
+    )
+  }
   assert_count(times)
   assert_character(affixes, any.missing = FALSE, unique = TRUE, len = times)
   assert_flag(postfix)

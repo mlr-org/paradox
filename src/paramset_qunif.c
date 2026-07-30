@@ -10,8 +10,10 @@
 #include "builtin_condition.h"
 #include "core_state.h"
 #include "dependency_graph.h"
+#include "generation_receipt.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
+#include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 
@@ -412,13 +414,22 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
     SET_STRING_ELT(stable_names, column, name);
     SET_VECTOR_ELT(source_columns, column, VECTOR_ELT(x, column));
   }
+
+  /*
+   * Select the dimension carrier while this allocation-free snapshot window
+   * still denotes the same table generation as the names and columns above.
+   * A later allocation or interrupt may run a finalizer that mutates the
+   * caller's table shell by reference.
+   */
+  if (!paradox_public_table_row_count(x, &info->rows)) {
+    UNPROTECT(2);
+    Rf_error("`x` has invalid data.frame row names");
+  }
+
   SET_VECTOR_ELT(roots, QUNIF_INPUT_NAMES, stable_names);
   SET_VECTOR_ELT(roots, QUNIF_INPUT_SOURCE, source_columns);
   UNPROTECT(2);
 
-  if (!paradox_public_table_row_count(x, &info->rows)) {
-    Rf_error("`x` has invalid data.frame row names");
-  }
   if (info->rows > INT_MAX) {
     Rf_error("`x` has too many rows for a data.frame result");
   }
@@ -429,7 +440,8 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
     paradox_account_work(work_since_interrupt);
     SEXP source = VECTOR_ELT(source_columns, column);
     const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
-    if ((type != REALSXP && type != INTSXP) || Rf_isObject(source)) {
+    if ((type != REALSXP && type != INTSXP) || Rf_isS4(source) ||
+        Rf_isObject(source)) {
       Rf_error("Every column of `x` must be an unclassed numeric vector");
     }
     if (XLENGTH(source) != info->rows) {
@@ -667,88 +679,173 @@ static int grid_resolution_at(SEXP resolutions, R_xlen_t index,
   return TRUE;
 }
 
-static void snapshot_grid_resolutions(SEXP resolutions, SEXP stable_names,
-    int *counts) {
-  if (!paradox_api_has_single_attribute(resolutions, "names")) {
-    Rf_error("`resolutions` must have exactly one `names` attribute");
+static int parse_grid_resolution(SEXP resolution, int *supplied) {
+  *supplied = resolution != R_NilValue;
+  if (resolution == R_NilValue) return 0;
+  if (Rf_isS4(resolution) || Rf_isObject(resolution) ||
+      ALTREP(resolution) || !paradox_api_has_no_attributes(resolution) ||
+      XLENGTH(resolution) != 1) {
+    Rf_error("`resolution` must be one non-negative whole number");
   }
-  SEXP names = Rf_getAttrib(resolutions, R_NamesSymbol);
-  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isObject(names) ||
-      XLENGTH(names) != XLENGTH(resolutions) ||
-      !paradox_api_has_no_attributes(names)) {
-    Rf_error("`resolutions` must have ordinary character names");
+  int result;
+  if (!grid_resolution_at(resolution, 0, &result)) {
+    Rf_error("`resolution` must be one non-negative whole number");
+  }
+  return result;
+}
+
+static R_xlen_t snapshot_grid_resolution_overrides(
+    SEXP param_resolutions, SEXP stable_names, SEXP stable_counts) {
+  if (param_resolutions == R_NilValue) return 0;
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(param_resolutions);
+  if ((type != INTSXP && type != REALSXP) ||
+      ALTREP(param_resolutions) || Rf_isS4(param_resolutions) ||
+      Rf_isObject(param_resolutions)) {
+    Rf_error(
+      "`param_resolutions` must be a named numeric vector of non-negative whole numbers"
+    );
+  }
+  const R_xlen_t size = XLENGTH(param_resolutions);
+  if (XLENGTH(stable_names) != size || XLENGTH(stable_counts) != size ||
+      !paradox_api_has_single_attribute(param_resolutions, "names")) {
+    Rf_error("`param_resolutions` must have one name per value");
+  }
+  SEXP names = Rf_getAttrib(param_resolutions, R_NamesSymbol);
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+      Rf_isObject(names) || !paradox_api_has_no_attributes(names) ||
+      XLENGTH(names) != size) {
+    Rf_error("`param_resolutions` must have ordinary character names");
   }
 
-  /* Everything above and below this loop is allocation-free. Once copied,
-   * later factor-level materialization and character translation use only
-   * these stable names and counts, so a GC finalizer cannot create a grid from
-   * a mixture of pre- and post-callback resolution state. */
-  for (R_xlen_t index = 0; index < XLENGTH(resolutions); ++index) {
+  /*
+   * Both destinations already exist.  This allocation-free pass owns the
+   * complete caller control generation before the ParamSet graph is selected,
+   * so an ALTREP/finalizer cannot pair one override's name with another
+   * generation's count.
+   */
+  for (R_xlen_t index = 0; index < size; ++index) {
     int count;
     SEXP name = STRING_ELT(names, index);
-    if (name == NA_STRING) {
-      Rf_error("`resolutions` names must not be missing");
+    if (name == NA_STRING || CHAR(name)[0] == '\0') {
+      Rf_error("`param_resolutions` names must be non-empty and non-missing");
     }
-    if (!grid_resolution_at(resolutions, index, &count)) {
+    if (!grid_resolution_at(param_resolutions, index, &count)) {
       Rf_error(
-        "`resolutions` must contain non-negative whole numbers no greater than INT_MAX"
+        "`param_resolutions` must contain non-negative whole numbers no greater than INT_MAX"
       );
     }
-    counts[index] = count;
     SET_STRING_ELT(stable_names, index, name);
+    SET_INTEGER_ELT(stable_counts, index, count);
   }
+  return size;
 }
 
 static void load_grid_specs(const param_columns_t *columns,
-    const id_map_t *id_map, SEXP resolution_names,
-    qunif_spec_t *specs, const int *counts,
-    unsigned char *selected, SEXP spec_roots,
+    const id_map_t *id_map, int global_supplied, int global_count,
+    SEXP override_names, SEXP override_counts,
+    SEXP resolution_names, qunif_spec_t *specs, int *counts,
+    unsigned char *overridden, SEXP spec_roots,
     R_xlen_t *work_since_interrupt) {
+  int has_numeric = FALSE;
   for (R_xlen_t row = 0; row < columns->size; ++row) {
     paradox_account_work(work_since_interrupt);
-    selected[row] = 0;
-  }
-
-  for (R_xlen_t column = 0; column < columns->size; ++column) {
-    paradox_account_work(work_since_interrupt);
-    const SEXP name = STRING_ELT(resolution_names, column);
-    const int count = counts[column];
-    R_xlen_t param_row;
-    if (!find_id(
-          id_map,
-          name,
-          &param_row,
-          work_since_interrupt
-        )) {
-      Rf_error("`resolutions` names must match ParamSet IDs");
-    }
-    if (selected[param_row]) {
-      Rf_error("`resolutions` names must be unique");
-    }
+    overridden[row] = 0;
     if (!load_spec(
           columns,
-          param_row,
-          &specs[column],
+          row,
+          &specs[row],
           spec_roots,
-          column,
+          row,
           work_since_interrupt
         )) {
       if (paradox_domain_string_is(
-          STRING_ELT(columns->classes, param_row),
+          STRING_ELT(columns->classes, row),
           "ParamUty"
         )) {
         Rf_error("Grid generation is undefined for ParamUty");
       }
       Rf_error("Corrupt ParamSet grid quantile state");
     }
-    if ((specs[column].kind == QUNIF_KIND_FCT &&
-          (R_xlen_t) count != XLENGTH(specs[column].levels)) ||
-        (specs[column].kind == QUNIF_KIND_LGL && count != 2)) {
-      Rf_error(
-        "Categorical grid resolution must equal the number of levels"
+    switch (specs[row].kind) {
+    case QUNIF_KIND_DBL:
+    case QUNIF_KIND_INT:
+      has_numeric = TRUE;
+      counts[row] = global_supplied ? global_count : -1;
+      break;
+    case QUNIF_KIND_FCT:
+      if (XLENGTH(specs[row].levels) > INT_MAX) {
+        Rf_error("Factor parameter has too many levels for grid generation");
+      }
+      counts[row] = (int) XLENGTH(specs[row].levels);
+      break;
+    case QUNIF_KIND_LGL:
+      counts[row] = 2;
+      break;
+    case QUNIF_KIND_UNKNOWN:
+      Rf_error("Corrupt ParamSet grid quantile state");
+    }
+  }
+
+  /*
+   * Categorical-only and zero-dimensional spaces have no resolution control
+   * to normalize.  This preserves the public convention that these arguments
+   * are irrelevant there while still admitting the closed schema once.
+   */
+  if (!has_numeric) {
+    for (R_xlen_t row = 0; row < columns->size; ++row) {
+      SET_STRING_ELT(
+        resolution_names,
+        row,
+        STRING_ELT(columns->ids, row)
       );
     }
-    selected[param_row] = 1;
+    return;
+  }
+  if (!global_supplied && XLENGTH(override_names) == 0) {
+    Rf_error("You must specify 'resolution' or 'param_resolutions'!");
+  }
+
+  R_xlen_t output = 0;
+  for (R_xlen_t index = 0; index < XLENGTH(override_names); ++index) {
+    paradox_account_work(work_since_interrupt);
+    SEXP name = STRING_ELT(override_names, index);
+    R_xlen_t row;
+    if (!find_id(id_map, name, &row, work_since_interrupt) ||
+        (specs[row].kind != QUNIF_KIND_DBL &&
+          specs[row].kind != QUNIF_KIND_INT)) {
+      Rf_error(
+        "`param_resolutions` names must name numerical ParamSet parameters"
+      );
+    }
+    if (overridden[row]) {
+      Rf_error("`param_resolutions` names must be unique");
+    }
+    counts[row] = INTEGER_ELT(override_counts, index);
+    overridden[row] = 1;
+    if (!global_supplied) {
+      SET_STRING_ELT(resolution_names, output, name);
+      ++output;
+    }
+  }
+
+  for (R_xlen_t row = 0; row < columns->size; ++row) {
+    if (counts[row] < 0) {
+      Rf_error(
+        "Resolution setting missing for numerical parameter '%s'",
+        CHAR(STRING_ELT(columns->ids, row))
+      );
+    }
+    if (global_supplied || !overridden[row]) {
+      SET_STRING_ELT(
+        resolution_names,
+        output,
+        STRING_ELT(columns->ids, row)
+      );
+      ++output;
+    }
+  }
+  if (output != columns->size) {
+    Rf_error("Internal error: incomplete grid axis order");
   }
 }
 
@@ -924,6 +1021,7 @@ enum grid_state_root {
   GRID_STATE_PARAMS,
   GRID_STATE_VALUES,
   GRID_STATE_DEPENDENCIES,
+  GRID_STATE_RECEIPT,
   GRID_STATE_ROOT_COUNT
 };
 
@@ -931,6 +1029,7 @@ typedef struct {
   SEXP params;
   SEXP values;
   SEXP dependencies;
+  SEXP receipt;
   paradox_domain_values_t values_data;
   paradox_domain_dependencies_t dependencies_data;
 } grid_state_t;
@@ -970,26 +1069,22 @@ static void load_grid_state(SEXP private_environment, SEXP self,
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet grid state: missing core capsule");
   }
-  if (!paradox_core_is_verified(core)) {
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  /* Collection graph admission owns its one refresh traversal. */
+  if (kind != PARADOX_CORE_COLLECTION &&
+      !paradox_core_is_verified(core)) {
     core = paradox_core_refresh(self, private_environment);
+    kind = paradox_core_kind(core);
   }
-  const paradox_core_kind_t kind = paradox_core_kind(core);
   if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
       kind != PARADOX_CORE_SHADOW) {
     Rf_error("Corrupt ParamSet grid state: unknown core kind");
   }
   SET_VECTOR_ELT(state_roots, GRID_STATE_CORE, core);
 
-  SEXP payload = paradox_core_payload(core);
-  if (payload == R_UnboundValue) {
-    Rf_error("Corrupt ParamSet grid state: invalid core payload");
-  }
-  state->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
-  SET_VECTOR_ELT(state_roots, GRID_STATE_PARAMS, state->params);
-
   if (kind == PARADOX_CORE_COLLECTION) {
     paradox_collection_graph_t graph;
-    paradox_collection_graph_build(
+    paradox_collection_graph_build_receipted(
       private_environment,
       self,
       &graph,
@@ -997,6 +1092,8 @@ static void load_grid_state(SEXP private_environment, SEXP self,
       graph_roots_index,
       work_since_interrupt
     );
+    core = graph.nodes[0].core;
+    SET_VECTOR_ELT(state_roots, GRID_STATE_CORE, core);
     state->params = graph.nodes[0].params.table;
     SET_VECTOR_ELT(state_roots, GRID_STATE_PARAMS, state->params);
 
@@ -1019,15 +1116,72 @@ static void load_grid_state(SEXP private_environment, SEXP self,
       state->dependencies
     );
     UNPROTECT(1);
+    state->receipt = PROTECT(paradox_generation_receipt_graph(&graph));
+    SET_VECTOR_ELT(
+      state_roots,
+      GRID_STATE_RECEIPT,
+      state->receipt
+    );
+    UNPROTECT(1);
   } else {
+    SEXP payload = paradox_core_payload(core);
+    if (payload == R_UnboundValue) {
+      Rf_error("Corrupt ParamSet grid state: invalid core payload");
+    }
+    state->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
     state->values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
     state->dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
+    SET_VECTOR_ELT(state_roots, GRID_STATE_PARAMS, state->params);
     SET_VECTOR_ELT(state_roots, GRID_STATE_VALUES, state->values);
     SET_VECTOR_ELT(
       state_roots,
       GRID_STATE_DEPENDENCIES,
       state->dependencies
     );
+    if (kind == PARADOX_CORE_SHADOW) {
+      SEXP signature = PROTECT(paradox_shadow_metadata_signature(core));
+      if (signature == R_UnboundValue) {
+        UNPROTECT(1);
+        Rf_error("Corrupt ParamSetShadow signature in grid generation");
+      }
+      SEXP content = PROTECT(
+        paradox_shadow_signature_content_snapshot(signature)
+      );
+      if (content == R_NilValue ||
+          !paradox_shadow_signature_receipt_is_current(
+            core,
+            signature,
+            content
+          )) {
+        UNPROTECT(2);
+        Rf_error("ParamSetShadow changed during grid generation");
+      }
+      state->receipt = PROTECT(paradox_generation_receipt_single(
+        private_environment,
+        core,
+        signature,
+        content
+      ));
+      SET_VECTOR_ELT(
+        state_roots,
+        GRID_STATE_RECEIPT,
+        state->receipt
+      );
+      UNPROTECT(3);
+    } else {
+      state->receipt = PROTECT(paradox_generation_receipt_single(
+        private_environment,
+        core,
+        R_NilValue,
+        R_NilValue
+      ));
+      SET_VECTOR_ELT(
+        state_roots,
+        GRID_STATE_RECEIPT,
+        state->receipt
+      );
+      UNPROTECT(1);
+    }
   }
 
   if (!paradox_domain_validate_values(
@@ -1041,6 +1195,21 @@ static void load_grid_state(SEXP private_environment, SEXP self,
       )) {
     Rf_error("Corrupt ParamSet grid value or dependency state");
   }
+}
+
+static SEXP grid_result_with_receipt(SEXP prepared, SEXP receipt) {
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  SET_VECTOR_ELT(result, 0, prepared);
+  SET_VECTOR_ELT(result, 1, receipt);
+  /*
+   * The bundle allocation is the last callback-capable operation in native
+   * grid construction. Require the selected graph at this exact boundary;
+   * the R wrapper performs the same scan after installing the caller-facing
+   * Design shell.
+   */
+  paradox_generation_receipt_scan(receipt);
+  UNPROTECT(1);
+  return result;
 }
 
 static void initialize_axis_builder(grid_axis_builder_t *builder,
@@ -1318,14 +1487,14 @@ static void build_grid_axes(const grid_state_t *state,
         )) {
       Rf_error("Internal error: unresolved grid parameter");
     }
-    axes[column].spec = specs[column];
+    axes[column].spec = specs[parameter];
     axes[column].param_row = parameter;
     axis_by_parameter[parameter] = column;
     const R_xlen_t fixed = fixed_by_parameter[parameter];
     if (fixed != R_XLEN_T_MAX) {
       SEXP value = PROTECT(fixed_axis_vector(
         VECTOR_ELT(state->values_data.values, fixed),
-        output_type(specs[column].kind)
+        output_type(specs[parameter].kind)
       ));
       axes[column].values = value;
       axes[column].count = 1;
@@ -1340,7 +1509,7 @@ static void build_grid_axes(const grid_state_t *state,
     } else {
       build_realized_axis(
         &axes[column],
-        counts[column],
+        counts[parameter],
         warn_integer_range,
         work_since_interrupt
       );
@@ -1889,17 +2058,82 @@ static SEXP build_dependent_grid(
 }
 
 SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
-    SEXP resolutions, SEXP upper_limit) {
+    SEXP controls, SEXP upper_limit) {
+  int protected_count = 0;
   PROTECT(private_environment);
+  ++protected_count;
   PROTECT(self);
-  PROTECT(resolutions);
+  ++protected_count;
+  PROTECT(controls);
+  ++protected_count;
   PROTECT(upper_limit);
-  const SEXPTYPE resolution_type = (SEXPTYPE) TYPEOF(resolutions);
-  if ((resolution_type != INTSXP && resolution_type != REALSXP) ||
-      ALTREP(resolutions) || Rf_isObject(resolutions)) {
-    UNPROTECT(4);
-    Rf_error("`resolutions` must be an ordinary named numeric vector");
+  ++protected_count;
+
+  if (TYPEOF(controls) != VECSXP || ALTREP(controls) ||
+      Rf_isS4(controls) || Rf_isObject(controls) ||
+      XLENGTH(controls) != 2 ||
+      !paradox_api_has_single_attribute(controls, "names")) {
+    Rf_error("Invalid grid resolution controls");
   }
+  SEXP control_names = paradox_api_raw_attribute(
+    controls,
+    R_NamesSymbol
+  );
+  if (TYPEOF(control_names) != STRSXP || ALTREP(control_names) ||
+      Rf_isS4(control_names) || Rf_isObject(control_names) ||
+      !paradox_api_has_no_attributes(control_names) ||
+      XLENGTH(control_names) != 2 ||
+      !paradox_domain_string_is(
+        STRING_ELT(control_names, 0),
+        "resolution"
+      ) ||
+      !paradox_domain_string_is(
+        STRING_ELT(control_names, 1),
+        "param_resolutions"
+      )) {
+    Rf_error("Invalid grid resolution controls");
+  }
+  SEXP resolution = VECTOR_ELT(controls, 0);
+  SEXP param_resolutions = VECTOR_ELT(controls, 1);
+  /*
+   * `param_resolutions` is used after the two destination allocations below.
+   * Root the selected control generation itself: a pending finalizer may
+   * rewrite the caller-owned controls list during either allocation and
+   * otherwise leave this local pointer unreachable.
+   */
+  PROTECT(param_resolutions);
+  ++protected_count;
+  int global_supplied = FALSE;
+  const int global_count = parse_grid_resolution(
+    resolution,
+    &global_supplied
+  );
+  R_xlen_t override_count = 0;
+  if (param_resolutions != R_NilValue) {
+    const SEXPTYPE type = (SEXPTYPE) TYPEOF(param_resolutions);
+    if ((type != INTSXP && type != REALSXP) ||
+        ALTREP(param_resolutions) || Rf_isS4(param_resolutions) ||
+        Rf_isObject(param_resolutions)) {
+      Rf_error(
+        "`param_resolutions` must be a named numeric vector of non-negative whole numbers"
+      );
+    }
+    override_count = XLENGTH(param_resolutions);
+  }
+  /*
+   * Allocate both resolution destinations before observing the paired public
+   * names/values. All callback-capable controls are thereby settled before
+   * selecting the ParamSet generation used by the rest of the operation.
+   */
+  SEXP override_names = PROTECT(Rf_allocVector(STRSXP, override_count));
+  ++protected_count;
+  SEXP override_counts = PROTECT(Rf_allocVector(INTSXP, override_count));
+  ++protected_count;
+  snapshot_grid_resolution_overrides(
+    param_resolutions,
+    override_names,
+    override_counts
+  );
 
   int upper_limit_supplied = FALSE;
   const int maximum_rows = parse_grid_upper_limit(
@@ -1911,9 +2145,11 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
     VECSXP,
     GRID_STATE_ROOT_COUNT
   ));
+  ++protected_count;
   PROTECT_INDEX graph_roots_index;
   SEXP graph_roots;
   PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+  ++protected_count;
   grid_state_t state = {0};
   load_grid_state(
     private_environment,
@@ -1927,16 +2163,12 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
 
   param_columns_t columns;
   SEXP column_roots = PROTECT(Rf_allocVector(VECSXP, QUNIF_ROOT_COUNT));
+  ++protected_count;
   if (!load_param_columns(state.params, &columns, column_roots)) {
-    UNPROTECT(7);
     Rf_error("Corrupt ParamSet grid state: invalid parameter schema");
   }
   paradox_dependency_graph_plan_t dependency_plan = {0};
   if (columns.size == 0) {
-    if (XLENGTH(resolutions) != 0) {
-      UNPROTECT(7);
-      Rf_error("`resolutions` must contain one value per parameter");
-    }
     if (state.dependencies_data.row_count != 0) {
       /*
        * A canonical zero-dimensional schema cannot own an edge. Route the
@@ -1951,21 +2183,22 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
       );
     }
     SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, 0));
-    int unused_count = 0;
-    snapshot_grid_resolutions(resolutions, stable_names, &unused_count);
+    ++protected_count;
     SEXP result = PROTECT(Rf_allocVector(VECSXP, 0));
+    ++protected_count;
     SEXP prepared = PROTECT(set_table_attributes(result, stable_names, 0));
-    UNPROTECT(10);
-    return prepared;
-  }
-  if (XLENGTH(resolutions) != columns.size) {
-    UNPROTECT(7);
-    Rf_error("`resolutions` must contain one value per parameter");
+    ++protected_count;
+    SEXP bundled = PROTECT(grid_result_with_receipt(
+      prepared,
+      state.receipt
+    ));
+    ++protected_count;
+    UNPROTECT(protected_count);
+    return bundled;
   }
 
   id_map_t id_map;
   if (!initialize_id_map(columns.ids, &id_map)) {
-    UNPROTECT(7);
     Rf_error("Corrupt ParamSet grid state: duplicate parameter IDs");
   }
 
@@ -1974,30 +2207,54 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
     sizeof(*specs)
   );
   int *counts = paradox_temporary_alloc(columns.size, sizeof(*counts));
-  unsigned char *selected = paradox_temporary_alloc(
+  unsigned char *overridden = paradox_temporary_alloc(
     columns.size,
-    sizeof(*selected)
+    sizeof(*overridden)
   );
   SEXP spec_roots = PROTECT(Rf_allocVector(VECSXP, columns.size));
+  ++protected_count;
   SEXP stable_resolution_names = PROTECT(Rf_allocVector(
     STRSXP,
     columns.size
   ));
-  snapshot_grid_resolutions(
-    resolutions,
-    stable_resolution_names,
-    counts
-  );
+  ++protected_count;
   load_grid_specs(
     &columns,
     &id_map,
+    global_supplied,
+    global_count,
+    override_names,
+    override_counts,
     stable_resolution_names,
     specs,
     counts,
-    selected,
+    overridden,
     spec_roots,
     &work_since_interrupt
   );
+  /*
+   * A global resolution retains canonical ParamSet order: per-axis controls
+   * merely override counts. With no global control, the historical Cartesian
+   * order follows the explicit numeric control order and then the remaining
+   * categorical axes. A nominally empty axis is the one exception: typed
+   * empty designs have always exposed canonical schema order.
+   */
+  int nominally_empty = FALSE;
+  for (R_xlen_t row = 0; row < columns.size; ++row) {
+    if (counts[row] == 0) {
+      nominally_empty = TRUE;
+      break;
+    }
+  }
+  if (nominally_empty) {
+    for (R_xlen_t row = 0; row < columns.size; ++row) {
+      SET_STRING_ELT(
+        stable_resolution_names,
+        row,
+        STRING_ELT(columns.ids, row)
+      );
+    }
+  }
   if (state.dependencies_data.row_count != 0) {
     /*
      * Topology is part of ParamSet admission, not a consequence of producing
@@ -2017,12 +2274,21 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
     sizeof(*axes)
   );
   for (R_xlen_t column = 0; column < columns.size; ++column) {
+    R_xlen_t parameter;
+    if (!find_id(
+          &id_map,
+          STRING_ELT(stable_resolution_names, column),
+          &parameter,
+          &work_since_interrupt
+        )) {
+      Rf_error("Internal error: unresolved grid axis order");
+    }
     axes[column] = (grid_axis_t) {
-      .spec = specs[column],
+      .spec = specs[parameter],
       .values = R_NilValue,
       .first_levels = NULL,
-      .param_row = R_XLEN_T_MAX,
-      .count = counts[column],
+      .param_row = parameter,
+      .count = counts[parameter],
       .fixed = FALSE
     };
   }
@@ -2030,6 +2296,7 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
     stable_resolution_names,
     &work_since_interrupt
   ));
+  ++protected_count;
 
   /*
    * Preserve the established nominal-zero contract before consulting fixed
@@ -2044,8 +2311,14 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
         result_names,
         &work_since_interrupt
       ));
-      UNPROTECT(11);
-      return prepared;
+      ++protected_count;
+      SEXP bundled = PROTECT(grid_result_with_receipt(
+        prepared,
+        state.receipt
+      ));
+      ++protected_count;
+      UNPROTECT(protected_count);
+      return bundled;
     }
   }
 
@@ -2060,7 +2333,6 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
         fixed_by_parameter,
         &work_since_interrupt
       )) {
-    UNPROTECT(10);
     Rf_error("Corrupt ParamSet grid state: invalid stored value IDs");
   }
   R_xlen_t *axis_by_parameter = paradox_temporary_alloc(
@@ -2068,6 +2340,7 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
     sizeof(*axis_by_parameter)
   );
   SEXP axis_roots = PROTECT(Rf_allocVector(VECSXP, columns.size));
+  ++protected_count;
   int warn_integer_range = FALSE;
   build_grid_axes(
     &state,
@@ -2102,9 +2375,15 @@ SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
         upper_limit_supplied,
         &work_since_interrupt
       ));
+  ++protected_count;
   if (warn_integer_range) {
     Rf_warning("NAs introduced by coercion to integer range");
   }
-  UNPROTECT(12);
-  return prepared;
+  SEXP bundled = PROTECT(grid_result_with_receipt(
+    prepared,
+    state.receipt
+  ));
+  ++protected_count;
+  UNPROTECT(protected_count);
+  return bundled;
 }

@@ -66,7 +66,8 @@ static int has_no_attributes(SEXP value) {
 }
 
 static int exact_flag(SEXP value, int *result) {
-  if (TYPEOF(value) != LGLSXP || ALTREP(value) || XLENGTH(value) != 1 ||
+  if (TYPEOF(value) != LGLSXP || ALTREP(value) || Rf_isS4(value) ||
+      Rf_isObject(value) || XLENGTH(value) != 1 ||
       !has_no_attributes(value)) {
     return FALSE;
   }
@@ -83,7 +84,8 @@ static int checked_flag(SEXP value, const char *name) {
   if (exact_flag(value, &result)) {
     return result;
   }
-  if (TYPEOF(value) == LGLSXP && !ALTREP(value) &&
+  if (TYPEOF(value) == LGLSXP && !ALTREP(value) && !Rf_isS4(value) &&
+      !Rf_isObject(value) &&
       XLENGTH(value) == 1 && has_no_attributes(value) &&
       LOGICAL_ELT(value, 0) == NA_LOGICAL) {
     Rf_error("`%s`: May not be NA", name);
@@ -107,13 +109,15 @@ static int supported_ascii(SEXP value) {
 
 static SEXP checked_set_names(SEXP sets, int postfix,
     const char *names_argument, R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets) ||
+  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
+      Rf_isObject(sets) ||
       !paradox_params_names_are_only_attribute(sets)) {
     Rf_error("`sets` must be an ordinary named list");
   }
   const R_xlen_t set_count = XLENGTH(sets);
   SEXP observed_names = PROTECT(Rf_getAttrib(sets, R_NamesSymbol));
   if (TYPEOF(observed_names) != STRSXP || ALTREP(observed_names) ||
+      Rf_isS4(observed_names) || Rf_isObject(observed_names) ||
       !has_no_attributes(observed_names)) {
     UNPROTECT(1);
     Rf_error("`sets` must have ordinary character names");
@@ -228,9 +232,11 @@ static int combined_sizes_supported(SEXP owner, SEXP id) {
 SEXP paradox_test_checked_affixed_size(SEXP owner_boundary,
     SEXP id_boundary) {
   if (TYPEOF(owner_boundary) != INTSXP || ALTREP(owner_boundary) ||
-      XLENGTH(owner_boundary) != 1 ||
+      Rf_isS4(owner_boundary) || Rf_isObject(owner_boundary) ||
+      !has_no_attributes(owner_boundary) || XLENGTH(owner_boundary) != 1 ||
       TYPEOF(id_boundary) != INTSXP || ALTREP(id_boundary) ||
-      XLENGTH(id_boundary) != 1) {
+      Rf_isS4(id_boundary) || Rf_isObject(id_boundary) ||
+      !has_no_attributes(id_boundary) || XLENGTH(id_boundary) != 1) {
     Rf_error("Affix boundary selectors must be ordinary integer scalars");
   }
 
@@ -278,7 +284,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
   child->owner = owner;
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_SELF, self);
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_OWNER, owner);
-  if (TYPEOF(self) != ENVSXP) {
+  if (TYPEOF(self) != ENVSXP || Rf_isS4(self)) {
     return FALSE;
   }
 
@@ -313,10 +319,19 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
   child->core = core;
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_CORE, core);
 
-  SEXP params = paradox_domain_local_value(private_environment, ".params");
-  if (params == R_UnboundValue) {
+  /*
+   * The selected generation is the constructor's one child snapshot and is
+   * already retained by the root carrier.  Read every flattened table from
+   * that payload: validation allocates, so rereading `.core` between tables
+   * could otherwise combine an old `.params` with newer `.tags`/`.trafos`
+   * installed by a pending finalizer while recording the old generation in
+   * `.edges$cores`.
+   */
+  SEXP state = paradox_core_payload(core);
+  if (state == R_UnboundValue) {
     return FALSE;
   }
+  SEXP params = VECTOR_ELT(state, PARADOX_CORE_PARAMS);
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_PARAMS, params);
   paradox_domain_params_t checked_params;
   R_xlen_t unused_row = 0;
@@ -364,10 +379,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
     return FALSE;
   }
 
-  SEXP tags = paradox_domain_local_value(private_environment, ".tags");
-  if (tags == R_UnboundValue) {
-    return FALSE;
-  }
+  SEXP tags = VECTOR_ELT(state, PARADOX_CORE_TAGS);
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_TAGS, tags);
   paradox_domain_tags_t checked_tags;
   if (!paradox_params_supported_table_attributes(tags) ||
@@ -400,10 +412,7 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
     return FALSE;
   }
 
-  SEXP trafos = paradox_domain_local_value(private_environment, ".trafos");
-  if (trafos == R_UnboundValue) {
-    return FALSE;
-  }
+  SEXP trafos = VECTOR_ELT(state, PARADOX_CORE_TRAFOS);
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_TRAFOS, trafos);
   paradox_domain_trafos_t checked_trafos;
   if (!paradox_params_supported_table_attributes(trafos) ||
@@ -516,6 +525,11 @@ static SEXP make_generated_tag(const char *prefix, size_t prefix_size,
     SEXP component) {
   PROTECT(component);
   const size_t component_size = strlen(CHAR(component));
+  if (prefix_size > (size_t) INT_MAX ||
+      component_size > (size_t) INT_MAX - prefix_size) {
+    UNPROTECT(1);
+    Rf_error("Generated ParamSetCollection tag exceeds R's string limit");
+  }
   const size_t output_size = prefix_size + component_size;
   char *buffer = R_alloc(output_size + 1U, 1);
   const char *component_text = CHAR(component);
@@ -670,20 +684,55 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
     SEXP tag_params, SEXP tag_override, int postfix,
     const char *names_argument, SEXP changed_owner) {
   R_xlen_t work_since_interrupt = 0;
-  SEXP set_names = PROTECT(checked_set_names(
-    sets,
+  /*
+   * Allocate both carriers before capturing the caller-owned list.  A pending
+   * finalizer may rewrite its names or children during either allocation; the
+   * allocation-free shared capture then pairs one post-allocation generation
+   * exactly.  Keep that stable carrier through the returned constructor
+   * bundle so the R shell installs the same child graph that was flattened.
+   */
+  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
+      Rf_isObject(sets) ||
+      !paradox_params_names_are_only_attribute(sets)) {
+    Rf_error("`sets` must be an ordinary named list");
+  }
+  const R_xlen_t source_child_count = XLENGTH(sets);
+  SEXP stable_sets = PROTECT(Rf_allocVector(VECSXP, source_child_count));
+  SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, source_child_count));
+  if (!paradox_capture_list_identities(sets, stable_names, stable_sets)) {
+    SEXP observed_names =
+      paradox_api_raw_attribute(sets, R_NamesSymbol);
+    UNPROTECT(2);
+    if (TYPEOF(observed_names) != STRSXP || ALTREP(observed_names) ||
+        Rf_isS4(observed_names) || Rf_isObject(observed_names) ||
+        !has_no_attributes(observed_names)) {
+      Rf_error("`sets` must have ordinary character names");
+    }
+    if (XLENGTH(observed_names) != source_child_count) {
+      Rf_error("`sets` names must have the same length as `sets`");
+    }
+    Rf_error("`sets` changed while being snapshotted");
+  }
+  Rf_setAttrib(stable_sets, R_NamesSymbol, stable_names);
+  UNPROTECT(1);
+  SEXP set_names = checked_set_names(
+    stable_sets,
     postfix,
     names_argument,
     &work_since_interrupt
-  ));
-  const R_xlen_t child_count = XLENGTH(sets);
+  );
+  const R_xlen_t child_count = XLENGTH(stable_sets);
   if (child_count > INT_MAX ||
       child_count > R_XLEN_T_MAX / CONSTRUCTOR_ROOT_STRIDE) {
     UNPROTECT(1);
     Rf_error("ParamSetCollection contains too many child sets");
   }
-  if (TYPEOF(tag_sets) != LGLSXP || XLENGTH(tag_sets) != child_count ||
-      TYPEOF(tag_params) != LGLSXP || XLENGTH(tag_params) != child_count) {
+  if (TYPEOF(tag_sets) != LGLSXP || ALTREP(tag_sets) ||
+      Rf_isS4(tag_sets) || Rf_isObject(tag_sets) ||
+      !has_no_attributes(tag_sets) || XLENGTH(tag_sets) != child_count ||
+      TYPEOF(tag_params) != LGLSXP || ALTREP(tag_params) ||
+      Rf_isS4(tag_params) || Rf_isObject(tag_params) ||
+      !has_no_attributes(tag_params) || XLENGTH(tag_params) != child_count) {
     UNPROTECT(1);
     Rf_error(
       "Internal error: ParamSetCollection edge flags disagree with sets"
@@ -701,7 +750,7 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
     SET_VECTOR_ELT(
       roots,
       roots_offset + CONSTRUCTOR_ROOT_SELF,
-      VECTOR_ELT(sets, child_index)
+      VECTOR_ELT(stable_sets, child_index)
     );
     SET_VECTOR_ELT(
       roots,
@@ -713,6 +762,15 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
     child_count,
     sizeof(*children)
   );
+  /*
+   * Child admission allocates and may run a pending finalizer. Immutable
+   * selected capsules remain safe, but without one generation barrier the
+   * new flatten could combine child states from supported mutations that
+   * never coexisted. Cache refreshes preserve denotation and do not advance
+   * this epoch.
+   */
+  const uintptr_t child_selection_epoch =
+    paradox_core_state_epoch_value();
   R_xlen_t total_params = 0;
   R_xlen_t total_tags = 0;
   R_xlen_t total_trafos = 0;
@@ -753,6 +811,12 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
       UNPROTECT(2);
       Rf_error("ParamSetCollection metadata exceeds the supported size");
     }
+  }
+  if (paradox_core_state_epoch_value() != child_selection_epoch) {
+    UNPROTECT(2);
+    Rf_error(
+      "ParamSet children changed while a collection was being constructed"
+    );
   }
   if (total_params > INT_MAX || total_tags > INT_MAX ||
       total_trafos > INT_MAX) {
@@ -997,17 +1061,18 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
   ));
   Rf_setAttrib(edges, R_NamesSymbol, edge_names);
 
-  SEXP state = PROTECT(Rf_allocVector(VECSXP, 5));
+  SEXP state = PROTECT(Rf_allocVector(VECSXP, 6));
   SET_VECTOR_ELT(state, 0, params);
   SET_VECTOR_ELT(state, 1, tags);
   SET_VECTOR_ELT(state, 2, trafos);
   SET_VECTOR_ELT(state, 3, translation);
   SET_VECTOR_ELT(state, 4, edges);
+  SET_VECTOR_ELT(state, 5, stable_sets);
   SEXP state_names = PROTECT(paradox_domain_character_vector(
     (const char *const[]) {
-      "params", "tags", "trafos", "translation", "edges"
+      "params", "tags", "trafos", "translation", "edges", "sets"
     },
-    5
+    6
   ));
   Rf_setAttrib(state, R_NamesSymbol, state_names);
   UNPROTECT(15);
@@ -1016,7 +1081,11 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
 
 /* The recorded flags fitted to the node's current edge count. */
 static SEXP resized_edge_flags(SEXP flags, R_xlen_t count) {
-  const R_xlen_t available = TYPEOF(flags) == LGLSXP ? XLENGTH(flags) : 0;
+  const R_xlen_t available = TYPEOF(flags) == LGLSXP && !ALTREP(flags) &&
+      !Rf_isS4(flags) && !Rf_isObject(flags) &&
+      has_no_attributes(flags)
+    ? XLENGTH(flags)
+    : 0;
   if (available == count) {
     return flags;
   }
@@ -1050,7 +1119,9 @@ SEXP paradox_param_set_collection_construct(SEXP sets, SEXP tag_sets_sexp,
   /* Sizing only: the builder owns the `sets` shape diagnostics, and it rejects
    * anything this fallback length could not describe. */
   const R_xlen_t child_count =
-    TYPEOF(sets) == VECSXP && !ALTREP(sets) ? XLENGTH(sets) : 0;
+    TYPEOF(sets) == VECSXP && !ALTREP(sets) && !Rf_isS4(sets)
+      ? XLENGTH(sets)
+      : 0;
   SEXP edge_tag_sets = PROTECT(uniform_edge_flags(tag_sets, child_count));
   SEXP edge_tag_params = PROTECT(uniform_edge_flags(tag_params, child_count));
   SEXP result = PROTECT(build_collection_static_state(
@@ -1078,7 +1149,8 @@ typedef struct {
 } add_graph_snapshot_t;
 
 static SEXP checked_add_name(SEXP value) {
-  if (TYPEOF(value) != STRSXP || ALTREP(value) || XLENGTH(value) != 1 ||
+  if (TYPEOF(value) != STRSXP || ALTREP(value) || Rf_isS4(value) ||
+      Rf_isObject(value) || XLENGTH(value) != 1 ||
       !has_no_attributes(value)) {
     Rf_error("`n` must be an unclassed character scalar");
   }
@@ -1190,7 +1262,7 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
       if (forbidden != R_NilValue && frame->self == forbidden) {
         Rf_error("Adding ParamSet would create a cycle in the capsule graph");
       }
-      if (TYPEOF(frame->self) != ENVSXP) {
+      if (TYPEOF(frame->self) != ENVSXP || Rf_isS4(frame->self)) {
         Rf_error("Cannot add corrupt ParamSet graph child reference");
       }
       SEXP private_environment = PROTECT(
@@ -1238,15 +1310,17 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
         frame->sets = R_NilValue;
         frame->child_count = 0;
       } else if (kind == PARADOX_CORE_COLLECTION) {
-        if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets)) {
+        if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
+            Rf_isObject(sets)) {
           UNPROTECT(2);
           Rf_error("Cannot add corrupt COLLECTION graph edges");
         }
         frame->sets = sets;
         frame->child_count = XLENGTH(sets);
       } else if (kind == PARADOX_CORE_SHADOW) {
-        if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets) ||
-            XLENGTH(sets) != 1 || !has_no_attributes(sets)) {
+        if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
+            Rf_isObject(sets) || XLENGTH(sets) != 1 ||
+            !has_no_attributes(sets)) {
           UNPROTECT(2);
           Rf_error("Cannot add corrupt SHADOW origin edge");
         }
@@ -1274,7 +1348,7 @@ static void snapshot_add_graph(SEXP root, SEXP forbidden,
     }
     SEXP child = VECTOR_ELT(frame->sets, frame->next_child);
     ++frame->next_child;
-    if (TYPEOF(child) != ENVSXP) {
+    if (TYPEOF(child) != ENVSXP || Rf_isS4(child)) {
       Rf_error("Cannot add corrupt ParamSet graph child reference");
     }
     if (forbidden != R_NilValue && child == forbidden) {
@@ -1318,7 +1392,10 @@ static int add_graph_snapshot_is_current(
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < snapshot->count; ++index) {
     paradox_account_work(work_since_interrupt);
-    if (paradox_core_from_private(snapshot->private_environments[index]) !=
+    if (paradox_domain_required_private_environment(
+          snapshot->shells[index]
+        ) != snapshot->private_environments[index] ||
+        paradox_core_from_private(snapshot->private_environments[index]) !=
         snapshot->cores[index]) {
       return FALSE;
     }
@@ -1332,7 +1409,9 @@ static int collection_graph_snapshot_is_current(
   for (R_xlen_t index = 0; index < graph->count; ++index) {
     paradox_account_work(work_since_interrupt);
     const paradox_collection_graph_node_t *node = &graph->nodes[index];
-    if (paradox_core_from_private(node->private_environment) != node->core) {
+    if (paradox_domain_required_private_environment(node->self) !=
+          node->private_environment ||
+        paradox_core_from_private(node->private_environment) != node->core) {
       return FALSE;
     }
   }
@@ -1743,6 +1822,12 @@ SEXP paradox_collection_reflatten(SEXP private_environment, SEXP core,
   SEXP state = R_ExternalPtrProtected(core);
   SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
   SEXP edges = VECTOR_ELT(state, PARADOX_CORE_EDGES);
+  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
+      Rf_isObject(sets) ||
+      !paradox_params_names_are_only_attribute(sets)) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSetCollection child edges");
+  }
   int postfix = FALSE;
   if (!exact_flag(VECTOR_ELT(state, PARADOX_CORE_POSTFIX), &postfix)) {
     UNPROTECT(2);
@@ -1785,6 +1870,13 @@ SEXP paradox_collection_reflatten(SEXP private_environment, SEXP core,
   fields[PARADOX_CORE_PARAMS] = VECTOR_ELT(rebuilt, 0);
   fields[PARADOX_CORE_TAGS] = VECTOR_ELT(rebuilt, 1);
   fields[PARADOX_CORE_TRAFOS] = VECTOR_ELT(rebuilt, 2);
+  /*
+   * The builder froze names and child identities together before deriving the
+   * replacement tables.  Install that exact edge snapshot as well: retaining
+   * the caller-owned list here could pair the rebuilt schema with a later
+   * by-reference mutation of the old capsule's `.sets` carrier.
+   */
+  fields[PARADOX_CORE_SETS] = VECTOR_ELT(rebuilt, 5);
   fields[PARADOX_CORE_TRANSLATION] = VECTOR_ELT(rebuilt, 3);
   fields[PARADOX_CORE_EDGES] = VECTOR_ELT(rebuilt, 4);
   SEXP replacement = PROTECT(paradox_core_new_from_fields(

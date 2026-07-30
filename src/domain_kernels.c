@@ -57,8 +57,12 @@ static inline void periodic_interrupt(R_xlen_t iteration) {
 }
 
 static domain_kind_t class_kind(SEXP param) {
+  if (TYPEOF(param) != VECSXP || ALTREP(param) || Rf_isS4(param)) {
+    return DOMAIN_KIND_UNKNOWN;
+  }
   SEXP classes = PROTECT(Rf_getAttrib(param, R_ClassSymbol));
   if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
+      Rf_isS4(classes) || Rf_isObject(classes) ||
       !paradox_api_has_no_attributes(classes)) {
     UNPROTECT(1);
     return DOMAIN_KIND_UNKNOWN;
@@ -162,7 +166,7 @@ static void validate_empty_domain(SEXP param) {
   const R_xlen_t column_count = (R_xlen_t) (
     PARADOX_DOMAIN_COLUMN_COUNT
   );
-  if (TYPEOF(param) != VECSXP || ALTREP(param) ||
+  if (TYPEOF(param) != VECSXP || ALTREP(param) || Rf_isS4(param) ||
       XLENGTH(param) != column_count ||
       !paradox_api_has_only_attributes(param, allowed_attributes, 4)) {
     Rf_error("Corrupt empty Domain storage");
@@ -173,11 +177,15 @@ static void validate_empty_domain(SEXP param) {
     param,
     Rf_install(".internal.selfref")
   ));
-  if (TYPEOF(names) != STRSXP || ALTREP(names) ||
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+      Rf_isObject(names) ||
       !paradox_api_has_no_attributes(names) ||
       XLENGTH(names) != column_count || TYPEOF(row_names) != INTSXP ||
-      ALTREP(row_names) || !paradox_api_has_no_attributes(row_names) ||
-      XLENGTH(row_names) != 0 || TYPEOF(selfref) != EXTPTRSXP) {
+      ALTREP(row_names) || Rf_isS4(row_names) ||
+      Rf_isObject(row_names) ||
+      !paradox_api_has_no_attributes(row_names) ||
+      XLENGTH(row_names) != 0 || TYPEOF(selfref) != EXTPTRSXP ||
+      Rf_isS4(selfref)) {
     UNPROTECT(3);
     Rf_error("Corrupt empty Domain storage");
   }
@@ -187,7 +195,8 @@ static void validate_empty_domain(SEXP param) {
         STRING_ELT(names, column),
         paradox_domain_column_names[column]
       ) || TYPEOF(value) != column_types[column] || ALTREP(value) ||
-        Rf_isObject(value) || !paradox_api_has_no_attributes(value) ||
+        Rf_isS4(value) || Rf_isObject(value) ||
+        !paradox_api_has_no_attributes(value) ||
         XLENGTH(value) != 0) {
       UNPROTECT(3);
       Rf_error("Corrupt empty Domain storage");
@@ -411,31 +420,63 @@ static void snapshot_numeric_column(SEXP column, R_xlen_t size,
   }
 }
 
-static numeric_domain_snapshot_t snapshot_numeric_domain(
-    SEXP lower, SEXP upper, SEXP tolerance, R_xlen_t size) {
+static void snapshot_numeric_bounds_into(
+    SEXP lower, SEXP upper, R_xlen_t size,
+    double *lower_snapshot, double *upper_snapshot) {
+  snapshot_numeric_column(lower, size, "lower", lower_snapshot);
+  snapshot_numeric_column(upper, size, "upper", upper_snapshot);
+}
+
+static numeric_domain_snapshot_t snapshot_numeric_bounds(
+    SEXP lower, SEXP upper, R_xlen_t size) {
   const R_xlen_t allocation_size = size == 0 ? 1 : size;
-  const int has_tolerance = tolerance != R_NilValue;
-  const size_t column_count = has_tolerance ? 3U : 2U;
   double *storage = paradox_temporary_alloc(
     allocation_size,
-    column_count * sizeof(*storage)
+    2U * sizeof(*storage)
   );
   double *lower_snapshot = storage;
   double *upper_snapshot = storage + allocation_size;
-  double *tolerance_snapshot = has_tolerance
-    ? storage + 2 * allocation_size
-    : NULL;
 
-  snapshot_numeric_column(lower, size, "lower", lower_snapshot);
-  snapshot_numeric_column(upper, size, "upper", upper_snapshot);
-  if (has_tolerance) {
-    snapshot_numeric_column(
-      tolerance,
-      size,
-      "tolerance",
-      tolerance_snapshot
-    );
-  }
+  snapshot_numeric_bounds_into(
+    lower,
+    upper,
+    size,
+    lower_snapshot,
+    upper_snapshot
+  );
+
+  const numeric_domain_snapshot_t result = {
+    lower_snapshot,
+    upper_snapshot,
+    NULL
+  };
+  return result;
+}
+
+static numeric_domain_snapshot_t snapshot_numeric_domain(
+    SEXP lower, SEXP upper, SEXP tolerance, R_xlen_t size) {
+  const R_xlen_t allocation_size = size == 0 ? 1 : size;
+  double *storage = paradox_temporary_alloc(
+    allocation_size,
+    3U * sizeof(*storage)
+  );
+  double *lower_snapshot = storage;
+  double *upper_snapshot = storage + allocation_size;
+  double *tolerance_snapshot = storage + 2 * allocation_size;
+
+  snapshot_numeric_bounds_into(
+    lower,
+    upper,
+    size,
+    lower_snapshot,
+    upper_snapshot
+  );
+  snapshot_numeric_column(
+    tolerance,
+    size,
+    "tolerance",
+    tolerance_snapshot
+  );
 
   const numeric_domain_snapshot_t result = {
     lower_snapshot,
@@ -545,12 +586,15 @@ static SEXP check_failure(SEXP id, SEXP reason) {
    * would declare an encoding its bytes do not satisfy. */
   SEXP safe_id = PROTECT(paradox_diagnostic_charsxp(id));
   SEXP safe_reason = PROTECT(paradox_diagnostic_charsxp(reason));
-  const void *vmax = vmaxget();
-  const size_t id_size = strlen(Rf_translateCharUTF8(safe_id));
-  const size_t reason_size = strlen(Rf_translateCharUTF8(safe_reason));
+  size_t id_size;
+  char *id_text = paradox_temporary_utf8_copy(safe_id, &id_size);
+  size_t reason_size;
+  char *reason_text = paradox_temporary_utf8_copy(
+    safe_reason,
+    &reason_size
+  );
   if (id_size > (size_t) R_XLEN_T_MAX - 3U ||
       reason_size > (size_t) R_XLEN_T_MAX - id_size - 3U) {
-    vmaxset(vmax);
     UNPROTECT(4);
     Rf_error("Domain diagnostic is too large");
   }
@@ -558,19 +602,12 @@ static SEXP check_failure(SEXP id, SEXP reason) {
     (R_xlen_t) (id_size + reason_size + 3U),
     sizeof(*message)
   );
-  /* Keep only sizes across allocation. Both owning CHARSXPs are rooted, so
-   * each UTF-8 translation can be reacquired and consumed immediately. */
-  memcpy(message, Rf_translateCharUTF8(safe_id), id_size);
+  memcpy(message, id_text, id_size);
   message[id_size] = ':';
   message[id_size + 1U] = ' ';
-  memcpy(
-    message + id_size + 2U,
-    Rf_translateCharUTF8(safe_reason),
-    reason_size + 1U
-  );
+  memcpy(message + id_size + 2U, reason_text, reason_size + 1U);
   SEXP text = PROTECT(Rf_mkCharCE(message, CE_UTF8));
   SEXP result = PROTECT(Rf_ScalarString(text));
-  vmaxset(vmax);
   UNPROTECT(6);
   return result;
 }
@@ -904,11 +941,11 @@ static SEXP check_utility_domain(SEXP param, SEXP values,
     }
     SEXP id = STRING_ELT(ids, row);
     SEXP result;
-    if (TYPEOF(answer) == STRSXP && XLENGTH(answer) == 1 &&
-        STRING_ELT(answer, 0) != NA_STRING) {
-      SEXP reason = PROTECT(STRING_ELT(answer, 0));
+    SEXP reason = TYPEOF(answer) == STRSXP && XLENGTH(answer) == 1
+      ? STRING_ELT(answer, 0)
+      : NA_STRING;
+    if (reason != NA_STRING) {
       result = PROTECT(check_failure(id, reason));
-      UNPROTECT(1);
     } else {
       result = PROTECT(check_failure_literal(
         id, "`custom_check` must return TRUE or one non-missing string"
@@ -1052,10 +1089,9 @@ static SEXP sanitize_double(SEXP param, SEXP values,
   SEXP upper_sexp = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "upper"
   ));
-  const numeric_domain_snapshot_t bounds = snapshot_numeric_domain(
+  const numeric_domain_snapshot_t bounds = snapshot_numeric_bounds(
     lower_sexp,
     upper_sexp,
-    R_NilValue,
     info->size
   );
   for (R_xlen_t row = 0; row < info->size; ++row) {
@@ -1204,8 +1240,8 @@ static numeric_domain_snapshot_t property_numeric_bounds(SEXP param,
   SEXP upper = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "upper"
   ));
-  const numeric_domain_snapshot_t bounds = snapshot_numeric_domain(
-    lower, upper, R_NilValue, info->size
+  const numeric_domain_snapshot_t bounds = snapshot_numeric_bounds(
+    lower, upper, info->size
   );
   for (R_xlen_t row = 0; row < info->size; ++row) {
     periodic_interrupt(row);
@@ -1355,7 +1391,10 @@ SEXP paradox_domain_property_builtin(SEXP param, SEXP property) {
       value = bounds.lower[row] == bounds.upper[row] ? 1.0 : R_PosInf;
       break;
     case DOMAIN_KIND_INT:
-      value = bounds.upper[row] - bounds.lower[row] + 1.0;
+      value = paradox_integer_domain_nlevels(
+        bounds.lower[row],
+        bounds.upper[row]
+      );
       break;
     case DOMAIN_KIND_FCT: {
       const R_xlen_t level_count = XLENGTH(VECTOR_ELT(levels, row));
@@ -1486,10 +1525,9 @@ static SEXP qunif_numeric(SEXP param, SEXP x, const domain_info_t *info) {
   SEXP upper_sexp = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "upper"
   ));
-  const numeric_domain_snapshot_t bounds = snapshot_numeric_domain(
+  const numeric_domain_snapshot_t bounds = snapshot_numeric_bounds(
     lower_sexp,
     upper_sexp,
-    R_NilValue,
     info->size
   );
   for (R_xlen_t row = 0; row < info->size; ++row) {

@@ -87,9 +87,16 @@ remainder.
 Ordinary inspection, rebuilding, and package-callback failures happen before
 mutation. Pending finalizers from unrelated user objects are not suspended by
 R's interrupt guard. If such a finalizer mutates a selected Paradox root
-during the binding wave, the post-transplant joint validation detects the
-change and errors, but a completed transplant is not rolled back and retry is
-not promised for the externally corrupted graph.
+during the binding wave, post-transplant joint capsule validation detects
+topology/state changes. After its last allocating validation, one
+allocation-free terminal receipt authenticates the exact complete public
+binding and lock surface of every transplanted and already-current selected
+shell whenever the graph contains a transplant. A graph containing only
+current shells has no binding wave and returns after joint capsule
+validation; this also keeps that no-op available on R 3.6, whose public API
+cannot retrieve active-binding functions. A receipt mismatch errors, but a
+completed transplant is not rolled back and retry is not promised for the
+externally corrupted graph.
 
 The default first use of an unupgraded Paradox 1 method gives an actionable
 error. Set \code{options(paradox.legacy_object_action = "upgrade")} to invoke

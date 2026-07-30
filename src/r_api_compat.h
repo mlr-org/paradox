@@ -45,6 +45,18 @@ attribute_hidden int paradox_api_has_only_attributes(
  * unprotected and remains owned by `value`. */
 attribute_hidden SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol);
 
+/* Select class metadata without inheritance dispatch or ALTREP observation.
+ * A missing class is a valid ordinary result with `R_NilValue`; malformed,
+ * attributed, S4, or structural-ALTREP class vectors return false. */
+attribute_hidden int paradox_api_ordinary_class_snapshot(
+  SEXP value,
+  SEXP *classes
+);
+attribute_hidden int paradox_api_ordinary_class_contains(
+  SEXP classes,
+  const char *label
+);
+
 /* The R_NO_REMAP declarations for SET_RAW_ELT() / SET_COMPLEX_ELT(), and the
  * IDENT_USE_CLOENV name, entered the installed API after R 3.6. These
  * version-independent spellings retain the current API on R >= 4.2 and use

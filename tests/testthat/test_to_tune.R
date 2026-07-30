@@ -1031,20 +1031,32 @@ test_that("TuneToken and search metadata use the closed ordinary shape", {
 
 test_that("TuneToken snapshots revalidate after allocation finalizers", {
   token = to_tune(0, 1)
-  expect_error(
-    .Call(
-      get(
-        "C_test_tune_token_gc_mutation_snapshot",
-        envir = asNamespace("paradox")
-      ),
-      token,
-      0L,
-      asS4(0)
+  snapshot = .Call(
+    get(
+      "C_test_tune_token_gc_mutation_snapshot",
+      envir = asNamespace("paradox")
     ),
-    "Malformed RangeTuneToken bounds",
-    fixed = TRUE
+    token,
+    0L,
+    asS4(0)
   )
+  expect_identical(snapshot$content$lower, 0)
   expect_true(isS4(token$content$lower))
+
+  values = list(value = to_tune(0, 1))
+  snapshot = .Call(
+    get(
+      "C_test_tune_token_gc_mutation_snapshot",
+      envir = asNamespace("paradox")
+    ),
+    values,
+    0L,
+    0
+  )
+  expect_identical(names(snapshot), "value")
+  expect_s3_class(snapshot$value, "RangeTuneToken")
+  expect_identical(snapshot$value$content$lower, 0)
+  expect_identical(values$value, 0)
 })
 
 test_that("Domain TuneTokens fail closed on forged candidate storage", {

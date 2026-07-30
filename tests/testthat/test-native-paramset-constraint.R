@@ -40,6 +40,36 @@ test_that("scalar constraint-only checks validate once and call once", {
   )
 })
 
+test_that("constraint evaluators observe logical callback answers exactly once", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  answer = function() {
+    native_stateful_altrep(
+      structure(TRUE, class = "paradox_constraint_probe"),
+      structure(FALSE, class = "paradox_constraint_probe"),
+      elt_switch_after = 1L
+    )
+  }
+
+  scalar_answer = answer()
+  base = ps(x = p_int())
+  base$constraint = function(x) scalar_answer
+  expect_true(base$test_constraint(list(x = 1L)))
+
+  live_answer = answer()
+  child = ps(x = p_int())
+  child$constraint = function(x) live_answer
+  collection = psc(owner = child)
+  expect_identical(collection$constraint(list(owner.x = 1L)), TRUE)
+
+  detached_answer = answer()
+  child$constraint = function(x) detached_answer
+  shadow = ParamSetShadow$new(collection, character())
+  expect_identical(shadow$constraint(list(owner.x = 1L)), TRUE)
+})
+
 test_that("tabular constraint checks validate all rows before callbacks", {
   calls = integer()
   param_set = ps(x = p_int(0L, 2L))

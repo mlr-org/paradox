@@ -7,16 +7,38 @@ native_grid_private = function(param_set) {
 }
 
 native_grid_call = function(param_set, resolutions, upper_limit = NULL) {
+  numeric_ids = param_set$ids()[param_set$is_number]
+  param_resolutions = resolutions[
+    match(numeric_ids, names(resolutions), nomatch = 0L)
+  ]
   .Call(
     native_grid_symbol(),
     native_grid_private(param_set),
     param_set,
-    resolutions,
+    list(
+      resolution = NULL,
+      param_resolutions = param_resolutions
+    ),
     upper_limit
-  )
+  )[[1L]]
+}
+
+native_grid_control_call = function(param_set, resolution = NULL,
+    param_resolutions = NULL, upper_limit = NULL) {
+  .Call(
+    native_grid_symbol(),
+    native_grid_private(param_set),
+    param_set,
+    list(
+      resolution = resolution,
+      param_resolutions = param_resolutions
+    ),
+    upper_limit
+  )[[1L]]
 }
 
 native_grid_reference = function(param_set, resolutions) {
+  resolutions = resolutions[param_set$ids()]
   unit_columns = lapply(resolutions, function(resolution) {
     seq(0, 1, length.out = resolution)
   })
@@ -80,15 +102,6 @@ test_that("zero-dimensional grids are constructed by the native engine", {
   expect_identical(dim(design$data), c(0L, 0L))
   expect_identical(names(design$data), character())
 
-  expect_error(
-    native_grid_call(param_set, integer()),
-    "exactly one `names` attribute"
-  )
-  expect_error(
-    native_grid_call(param_set, c(extra = 1L)),
-    "one value per parameter"
-  )
-
   # A zero-dimensional public ParamSet cannot acquire dependency rows. Ensure a
   # deliberately forged current capsule cannot use the empty-result path to
   # conceal that impossible graph.
@@ -140,7 +153,7 @@ test_that("one-shot grids preserve randomized resolution order exactly", {
     expected = native_grid_reference(param_set, counts)
 
     expect_identical(as.list(observed), as.list(expected), info = iteration_info)
-    expect_identical(names(observed), names(counts), info = iteration_info)
+    expect_identical(names(observed), param_set$ids(), info = iteration_info)
     expect_identical(
       vapply(observed, typeof, character(1L)),
       vapply(expected, typeof, character(1L)),
@@ -237,6 +250,17 @@ test_that("zero-axis grids return an owned typed empty design", {
     c(empty = "double", infinite_integer = "integer")
   )
 
+  per_axis = generate_design_grid(
+    param_set,
+    resolution = 2L,
+    param_resolutions = c(empty = 0L, infinite_integer = 2L)
+  )
+  expect_identical(dim(per_axis$data), c(0L, 2L))
+  expect_identical(
+    vapply(per_axis$data, typeof, character(1L)),
+    c(empty = "double", infinite_integer = "integer")
+  )
+
   # A fixed stored value does not turn a nominally empty axis into a singleton.
   param_set$values = list(empty = 0.25)
   expect_no_warning(
@@ -324,21 +348,24 @@ test_that("direct grid admission fails closed without allocating huge grids", {
   before = valid
 
   invalid = list(
-    list(unname(valid), "exactly one `names` attribute"),
-    list(structure(valid, class = "grid_resolution"), "ordinary named numeric vector"),
+    list(unname(valid), "one name per value"),
+    list(structure(valid, class = "grid_resolution"), "named numeric vector"),
     list(c(y = NA_real_, x = 2), "non-negative whole numbers"),
     list(c(y = NaN, x = 2), "non-negative whole numbers"),
     list(c(y = Inf, x = 2), "non-negative whole numbers"),
     list(c(y = -1, x = 2), "non-negative whole numbers"),
     list(c(y = 1.5, x = 2), "non-negative whole numbers"),
-    list(c(y = 3), "one value per parameter"),
-    list(c(y = 3, unknown = 2), "match ParamSet IDs"),
+    list(c(y = 3), "Resolution setting missing"),
+    list(c(y = 3, unknown = 2), "must name numerical ParamSet parameters"),
     list(c(y = 3, y = 2), "unique"),
     list(c(y = 50000, x = 50000), "Grid product exceeds")
   )
   for (case in invalid) {
     expect_error(
-      native_grid_call(param_set, case[[1L]]),
+      native_grid_control_call(
+        param_set,
+        param_resolutions = case[[1L]]
+      ),
       case[[2L]],
       fixed = TRUE,
       info = deparse(case[[1L]])
@@ -347,14 +374,17 @@ test_that("direct grid admission fails closed without allocating huge grids", {
 
   mixed = ps(x = p_dbl(0, 1), factor = p_fct(c("a", "b")))
   expect_error(
-    native_grid_call(mixed, c(x = 2, factor = 1)),
-    "Categorical grid resolution",
+    native_grid_control_call(
+      mixed,
+      param_resolutions = c(x = 2, factor = 1)
+    ),
+    "must name numerical ParamSet parameters",
     fixed = TRUE
   )
 
   utility = ps(x = p_uty())
   expect_error(
-    native_grid_call(utility, c(x = 1)),
+    native_grid_control_call(utility, param_resolutions = c(x = 1)),
     "undefined for ParamUty",
     fixed = TRUE
   )
@@ -364,7 +394,7 @@ test_that("direct grid admission fails closed without allocating huge grids", {
       native_grid_symbol(),
       new.env(parent = emptyenv()),
       param_set,
-      valid,
+      list(resolution = NULL, param_resolutions = valid),
       NULL
     ),
     "Corrupt ParamSet"

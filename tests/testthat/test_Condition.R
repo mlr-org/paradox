@@ -140,6 +140,29 @@ test_that("Condition comparison snapshots stable ALTREP inputs once", {
   expect_identical(calls, 1L)
 })
 
+test_that("Condition RHS admission cannot launder reentrant structure", {
+  state = new.env(parent = emptyenv())
+  rhs = native_stateful_altrep(
+    1L,
+    1L,
+    callback = function() {
+      state$fired = TRUE
+      data.table::setattr(state$condition[[1L]], "unexpected", TRUE)
+    },
+    callback_after = 0L
+  )
+  state$condition = CondEqual(1L)
+  state$condition[[1L]] = rhs
+  state$fired = FALSE
+
+  expect_error(
+    condition_test(state$condition, 1L),
+    "Semantic vector structure changed while being snapshotted",
+    fixed = TRUE
+  )
+  expect_true(state$fired)
+})
+
 test_that("native Condition admission rejects duplicate AnyOf snapshots", {
   duplicated = CondAnyOf(c(1L, 2L))
   duplicated[[1L]] = c(1L, 1L)

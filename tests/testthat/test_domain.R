@@ -52,6 +52,19 @@ test_that("ps(p_xxx(...)) creates ParamSets", {
 
 })
 
+test_that("p_uty stores the exact custom_check function it validates", {
+  replacement = function(value) FALSE
+  callback = function(value) {
+    assign("custom_check", replacement, envir = parent.frame())
+    TRUE
+  }
+
+  domain = p_uty(custom_check = callback)
+  stored = domain$cargo[[1L]]$custom_check
+  expect_true(stored(1))
+  expect_false(identical(stored, replacement))
+})
+
 test_that("p_fct autotrafo", {
 
   expect_equal(generate_design_grid(ps(x = p_fct(c("a", "b", "c"))))$transpose(),
@@ -199,6 +212,33 @@ test_that("requirements in domains", {
   expect_error(p_int(depends = 1 == x), "must be a parameter name")
   expect_error(p_int(depends = 1), "must be an expression")
   expect_error(p_int(depends = x != 1), "is broken")
+
+  # Hand-built language objects are valid public inputs too. Do not silently
+  # ignore extra operands or leak a low-level subscript error for a missing
+  # operand.
+  short_equal = as.call(list(as.name("=="), as.name("x")))
+  long_equal = as.call(list(as.name("=="), as.name("x"), 1L, 2L))
+  long_and = as.call(list(
+    as.name("&&"),
+    quote(x == 1L),
+    quote(z == "a"),
+    quote(z == "b")
+  ))
+  expect_error(
+    paradox:::parse_depends(short_equal, environment()),
+    "comparison operators must have exactly two operands",
+    fixed = TRUE
+  )
+  expect_error(
+    paradox:::parse_depends(long_equal, environment()),
+    "comparison operators must have exactly two operands",
+    fixed = TRUE
+  )
+  expect_error(
+    paradox:::parse_depends(long_and, environment()),
+    "`&&` must have exactly two operands",
+    fixed = TRUE
+  )
 
 })
 

@@ -6,13 +6,10 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
     stop("`custom_check` must be a function", call. = FALSE)
   }
   if (!is.null(custom_check)) {
-    custom_check_result = custom_check(1)
-    if (!isTRUE(.Call(C_domain_uty_check_result, custom_check_result))) {
-      stop(
-        "The result of `custom_check(1)` must be TRUE or one non-missing string",
-        call. = FALSE
-      )
-    }
+    custom_check = .Call(
+      C_domain_uty_validate_custom_check,
+      custom_check
+    )
   }
   custom_check = .paradox_strip_srcref(custom_check)
   trafo = .paradox_strip_srcref(trafo)

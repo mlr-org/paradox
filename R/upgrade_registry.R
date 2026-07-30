@@ -165,7 +165,7 @@
     ".owner_namespace"
   )
   entry_attributes = attributes(entry)
-  if (typeof(entry) != "list" ||
+  if (!.upgrade_paradox_is_ordinary_list(entry) ||
       !identical(names(entry_attributes), "names") ||
       !identical(
         attr(entry, "names", exact = TRUE),
@@ -256,7 +256,11 @@
 #' the legacy shell's public `assert_values` policy for both migration kinds.
 #' A replacement must return the exact registered class backed by a canonical
 #' current `ParamSetShadow` capsule; Paradox rebinds its single origin while
-#' preserving the legacy shell identity. Registered owner
+#' preserving the legacy shell identity. The returned shell's public, private,
+#' and enclosure environments must be fresh: before changing it, Paradox
+#' rejects aliases with every original/current node in the complete migration
+#' session and with every other prepared result. Shared dependency nodes
+#' remain supported. Registered owner
 #' classes with public or private R6 finalizers are unsupported because moving
 #' a finalizer between environment identities can prematurely or repeatedly
 #' release live state. Hook functions are trusted code from the currently
@@ -484,7 +488,7 @@ register_paradox_object_upgrader = function(
   .paradox_registry_require_current(entry)
   inspection_attributes = attributes(inspection)
   inspection_names = attr(inspection, "names", exact = TRUE)
-  if (typeof(inspection) != "list" ||
+  if (!.upgrade_paradox_is_ordinary_list(inspection) ||
       !identical(names(inspection_attributes), "names") ||
       !identical(
         inspection_names,
@@ -503,7 +507,7 @@ register_paradox_object_upgrader = function(
   dependencies = inspection$dependencies
   dependency_attributes = attributes(dependencies)
   dependency_names = attr(dependencies, "names", exact = TRUE)
-  if (typeof(dependencies) != "list" ||
+  if (!.upgrade_paradox_is_ordinary_list(dependencies) ||
       !identical(names(dependency_attributes), "names") ||
       typeof(dependency_names) != "character" ||
       !is.null(attributes(dependency_names)) ||

@@ -188,6 +188,7 @@ test_that("documented two-argument trafos receive detached leaf ParamSets", {
   expect_identical(observed$class, c("ParamSet", "R6"))
   carriers = get("plan", environment(snapshot$extra_trafo))$sets
   expect_false(".source" %in% names(carriers[[1L]]))
+  expect_false(".core" %in% names(carriers[[1L]]))
   expect_s3_class(carriers[[1L]]$param_set, "ParamSet")
   expect_false(identical(carriers[[1L]]$param_set, child))
 })
@@ -334,6 +335,26 @@ test_that("detached callback plans fail closed when their mapping is forged", {
     allow_dangling_dependencies = TRUE
   )
   plan = get("plan", environment(detached$extra_trafo))
+
+  expect_error(
+    .Call(
+      paradox:::C_param_set_collection_detached_extra_trafo,
+      asS4(plan),
+      list(component.x = 1L)
+    ),
+    "callback plan"
+  )
+
+  invalid_names = plan
+  attr(invalid_names, "names") = asS4(names(invalid_names))
+  expect_error(
+    .Call(
+      paradox:::C_param_set_collection_detached_extra_trafo,
+      invalid_names,
+      list(component.x = 1L)
+    ),
+    "callback plan"
+  )
 
   invalid_unit = plan
   invalid_unit$indices = 0L

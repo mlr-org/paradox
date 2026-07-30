@@ -210,6 +210,17 @@ static void snapshot_cargo_containers(SEXP cargo) {
       );
     }
     if (value != R_NilValue) {
+      static const char *const names_only[] = {"names"};
+      const int attributes_ok = strcmp(bytes, "disable_in_tune") == 0
+        ? paradox_api_has_only_attributes(value, names_only, 1)
+        : paradox_api_has_no_attributes(value);
+      if (!attributes_ok) {
+        UNPROTECT(2);
+        Rf_error(
+          "Invalid built-in Domain state: interpreted cargo entries must "
+          "use canonical attributes"
+        );
+      }
       /* Only an ordinary vector can be snapshotted. Anything else is left for
        * the canonical cargo validator below, which names the offending
        * constructor argument instead of reporting an internal snapshot type. */
@@ -596,82 +607,81 @@ SEXP paradox_snapshot_builtin_requirements(SEXP requirements,
 
   const R_xlen_t size = XLENGTH(requirements);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
+  /*
+   * Allocation may run a pending finalizer.  Revalidate the outer carrier
+   * afterwards, then retain every exact row identity before admitting any
+   * semantic field: materializing an earlier Condition RHS may re-enter R and
+   * rewrite a later caller-owned row.
+   */
+  if (TYPEOF(requirements) != VECSXP || ALTREP(requirements) ||
+      Rf_isS4(requirements) || Rf_isObject(requirements) ||
+      !paradox_api_has_no_attributes(requirements) ||
+      !paradox_capture_list_identities(
+        requirements,
+        R_NilValue,
+        result
+      )) {
+    UNPROTECT(1);
+    return R_UnboundValue;
+  }
   for (R_xlen_t index = 0; index < size; ++index) {
     paradox_account_work(work_since_interrupt);
-    SEXP requirement = PROTECT(VECTOR_ELT(requirements, index));
+    SEXP requirement = PROTECT(VECTOR_ELT(result, index));
+    SEXP owned_requirement = PROTECT(Rf_allocVector(VECSXP, 2));
+    SEXP owned_names = PROTECT(Rf_allocVector(STRSXP, 2));
+    /*
+     * The row carriers are now allocated.  Capture each field beside its
+     * matching name in one allocation-free pass before observing `on` or an
+     * RHS.  This closes the same reentry boundary within a single row.
+     */
     if (TYPEOF(requirement) != VECSXP || ALTREP(requirement) ||
-        Rf_isS4(requirement) ||
-        Rf_isObject(requirement) || XLENGTH(requirement) != 2 ||
-        !paradox_api_has_only_attributes(requirement, allowed, 1)) {
-      UNPROTECT(2);
-      return R_UnboundValue;
-    }
-    SEXP requirement_names = PROTECT(Rf_getAttrib(
-      requirement,
-      R_NamesSymbol
-    ));
-    if (Rf_isS4(requirement_names) ||
-        !paradox_api_has_no_attributes(requirement_names) ||
+        Rf_isS4(requirement) || Rf_isObject(requirement) ||
+        XLENGTH(requirement) != 2 ||
+        !paradox_api_has_only_attributes(requirement, allowed, 1) ||
+        !paradox_capture_list_identities(
+          requirement,
+          owned_names,
+          owned_requirement
+        ) ||
         !paradox_domain_exact_string_vector(
-          requirement_names,
+          owned_names,
           expected_names,
           2,
           work_since_interrupt
         )) {
-      UNPROTECT(3);
-      return R_UnboundValue;
-    }
-
-    SEXP on = PROTECT(paradox_snapshot_semantic_vector(
-      VECTOR_ELT(requirement, 0)
-    ));
-    if (!scalar_string(on) || CHAR(STRING_ELT(on, 0))[0] == '\0') {
       UNPROTECT(4);
       return R_UnboundValue;
     }
 
-    paradox_builtin_condition_kind_t condition_kind;
-    SEXP admitted_rhs = PROTECT(paradox_builtin_condition_admit(
-      VECTOR_ELT(requirement, 1),
-      &condition_kind,
-      work_since_interrupt
+    SEXP raw_on = VECTOR_ELT(owned_requirement, 0);
+    if (TYPEOF(raw_on) != STRSXP || Rf_isS4(raw_on) ||
+        Rf_isObject(raw_on) ||
+        !paradox_api_has_no_attributes(raw_on)) {
+      UNPROTECT(4);
+      return R_UnboundValue;
+    }
+    SEXP on = PROTECT(paradox_snapshot_semantic_vector(
+      raw_on
     ));
-    if (admitted_rhs == R_NilValue) {
+    if (!scalar_string(on) || CHAR(STRING_ELT(on, 0))[0] == '\0') {
       UNPROTECT(5);
       return R_UnboundValue;
     }
 
-    SEXP condition = PROTECT(Rf_allocVector(VECSXP, 2));
-    SET_VECTOR_ELT(condition, 0, admitted_rhs);
-    SET_VECTOR_ELT(
-      condition,
-      1,
-      Rf_mkString(condition_kind == PARADOX_BUILTIN_CONDITION_EQUAL
-        ? "%s == %s"
-        : "%s %%in%% {%s}")
-    );
-    SEXP condition_names = PROTECT(Rf_allocVector(STRSXP, 2));
-    SET_STRING_ELT(condition_names, 0, Rf_mkChar("rhs"));
-    SET_STRING_ELT(condition_names, 1, Rf_mkChar("condition_format_string"));
-    Rf_setAttrib(condition, R_NamesSymbol, condition_names);
-    SEXP condition_classes = PROTECT(Rf_allocVector(STRSXP, 2));
-    SET_STRING_ELT(
-      condition_classes,
-      0,
-      Rf_mkChar(condition_kind == PARADOX_BUILTIN_CONDITION_EQUAL
-        ? "CondEqual"
-        : "CondAnyOf")
-    );
-    SET_STRING_ELT(condition_classes, 1, Rf_mkChar("Condition"));
-    Rf_setAttrib(condition, R_ClassSymbol, condition_classes);
+    SEXP condition = PROTECT(paradox_builtin_condition_snapshot(
+      VECTOR_ELT(owned_requirement, 1),
+      work_since_interrupt
+    ));
+    if (condition == R_UnboundValue) {
+      UNPROTECT(6);
+      return R_UnboundValue;
+    }
 
-    SEXP owned_requirement = PROTECT(Rf_allocVector(VECSXP, 2));
     SET_VECTOR_ELT(owned_requirement, 0, on);
     SET_VECTOR_ELT(owned_requirement, 1, condition);
-    SEXP owned_names = PROTECT(Rf_duplicate(requirement_names));
     Rf_setAttrib(owned_requirement, R_NamesSymbol, owned_names);
     SET_VECTOR_ELT(result, index, owned_requirement);
-    UNPROTECT(9);
+    UNPROTECT(5);
   }
   UNPROTECT(1);
   return result;
@@ -777,10 +787,48 @@ static paradox_builtin_value_spec_t admitted_value_spec(domain_kind_t kind,
   return result;
 }
 
+int paradox_prepare_builtin_special_values(SEXP cls, SEXP storage,
+    SEXP special_values, paradox_special_values_receipt_t *receipt,
+    R_xlen_t *work_since_interrupt) {
+  receipt->special_values = R_NilValue;
+  receipt->typed = FALSE;
+
+  const domain_kind_t private_kind = domain_kind(cls, storage);
+  if (private_kind == DOMAIN_KIND_UNKNOWN) {
+    /*
+     * Preserve the row owner's class/storage diagnostic precedence.  There is
+     * no built-in kind whose leaf policy can be selected at this point.
+     */
+    return TRUE;
+  }
+  if (!canonical_opaque_list(special_values)) {
+    return FALSE;
+  }
+
+  const int typed = private_kind != DOMAIN_KIND_UTY;
+  if (typed) {
+    for (R_xlen_t index = 0; index < XLENGTH(special_values); ++index) {
+      paradox_account_work(work_since_interrupt);
+      /*
+       * ALTREP() is a structural predicate.  In particular, do not call
+       * Length/Elt/DATAPTR or duplicate the leaf before rejecting it.
+       */
+      if (ALTREP(VECTOR_ELT(special_values, index))) {
+        return FALSE;
+      }
+    }
+  }
+
+  receipt->special_values = special_values;
+  receipt->typed = typed;
+  return TRUE;
+}
+
 int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     SEXP cargo, SEXP lower, SEXP upper, SEXP tolerance, SEXP levels,
     SEXP special_values, SEXP default_value, SEXP storage, SEXP tags,
     SEXP trafo, SEXP requirements, SEXP init_given, SEXP init_value,
+    const paradox_special_values_receipt_t *special_receipt,
     paradox_builtin_domain_kind_t *kind, paradox_domain_field_t *failure,
     paradox_builtin_value_result_t *value_failure,
     R_xlen_t *work_since_interrupt) {
@@ -844,16 +892,11 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
       (private_kind != DOMAIN_KIND_DBL || trafo == R_NilValue)) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_CARGO);
   }
-  if (!canonical_opaque_list(special_values)) {
+  const int typed = private_kind != DOMAIN_KIND_UTY;
+  if (special_receipt == NULL ||
+      special_receipt->special_values != special_values ||
+      special_receipt->typed != typed) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
-  }
-  if (private_kind != DOMAIN_KIND_UTY) {
-    for (R_xlen_t index = 0; index < XLENGTH(special_values); ++index) {
-      paradox_account_work(work_since_interrupt);
-      if (ALTREP(VECTOR_ELT(special_values, index))) {
-        REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
-      }
-    }
   }
   if (XLENGTH(special_values) != 0 && trafo != R_NilValue) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
@@ -1028,32 +1071,6 @@ static SEXP one_element_list(SEXP value) {
   return result;
 }
 
-static SEXP snapshot_builtin_value_leaf(SEXP value) {
-  /* S4 is a semantic bit rather than an ordinary attribute. Keep the exact
-   * leaf rooted until the shared row owner can either admit it as an exact
-   * special value or reject it for a typed Domain. ParamUty never enters this
-   * helper. */
-  if (Rf_isS4(value)) {
-    return value;
-  }
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
-  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
-      type != CPLXSXP && type != STRSXP && type != RAWSXP) {
-    return value;
-  }
-  SEXP result = PROTECT(paradox_snapshot_semantic_vector(value));
-  /* The snapshot already owns a materialized ordinary `names`. Copying the
-   * source's attribute set replaces the whole attribute list, so reinstall
-   * that owned copy afterwards; otherwise the caller's original names object
-   * -- possibly ALTREP, possibly length-changing -- lands in the capsule. */
-  SEXP owned_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
-  SHALLOW_DUPLICATE_ATTRIB(result, value);
-  Rf_setAttrib(result, R_NamesSymbol, owned_names);
-  UNPROTECT(1);
-  UNPROTECT(1);
-  return result;
-}
-
 static SEXP build_domain_shell(
     SEXP id,
     SEXP cls,
@@ -1123,6 +1140,42 @@ static SEXP build_domain_shell(
   return prepared;
 }
 
+static SEXP snapshot_constructor_vector(SEXP value) {
+  if (Rf_isObject(value)) {
+    Rf_error(
+      "Invalid built-in Domain state: constructor fields must use unclassed "
+      "canonical vectors"
+    );
+  }
+  if (!representation_shell_attributes(value)) {
+    Rf_error(
+      "Invalid built-in Domain state: structural constructor fields may "
+      "carry at most scalar representation names"
+    );
+  }
+  return paradox_snapshot_semantic_vector(value);
+}
+
+static SEXP snapshot_constructor_cargo(SEXP cargo) {
+  if (!cargo_shell_is_ordinary(cargo)) {
+    Rf_error(
+      "Invalid built-in Domain state: constructor fields must use unclassed "
+      "canonical vectors"
+    );
+  }
+  return paradox_snapshot_semantic_vector(cargo);
+}
+
+static SEXP snapshot_constructor_special_values(SEXP special_vals) {
+  if (!canonical_opaque_list(special_vals)) {
+    Rf_error(
+      "Invalid built-in Domain state: constructor fields must use unclassed "
+      "canonical vectors"
+    );
+  }
+  return paradox_snapshot_semantic_vector(special_vals);
+}
+
 SEXP paradox_domain_construct(
     SEXP cls,
     SEXP grouping,
@@ -1142,45 +1195,12 @@ SEXP paradox_domain_construct(
     SEXP numeric_logscale,
     SEXP id,
     SEXP requirements) {
-  /* Semantic shells are canonical base vectors. Their elements may be
-   * arbitrary opaque R objects, but a class on the shell itself changes R's
-   * indexing/coercion semantics and is not part of a built-in Domain kind. */
-  if (Rf_isObject(cls) || Rf_isObject(grouping) ||
-      !cargo_shell_is_ordinary(cargo) || Rf_isObject(lower) ||
-      Rf_isObject(upper) || Rf_isObject(tolerance) ||
-      (levels != R_NilValue && Rf_isObject(levels)) ||
-      !canonical_opaque_list(special_vals) || Rf_isObject(tags) ||
-      Rf_isObject(storage_type) || Rf_isObject(init_given) ||
-      Rf_isObject(numeric_source_kind) || Rf_isObject(numeric_logscale) ||
-      Rf_isObject(id) ||
-      (requirements != R_NilValue && Rf_isObject(requirements))) {
-    Rf_error(
-      "Invalid built-in Domain state: constructor fields must use unclassed "
-      "canonical vectors"
-    );
-  }
-  if (!representation_shell_attributes(cls) ||
-      !representation_shell_attributes(grouping) ||
-      (cargo != R_NilValue && !representation_shell_attributes(cargo)) ||
-      !representation_shell_attributes(lower) ||
-      !representation_shell_attributes(upper) ||
-      !representation_shell_attributes(tolerance) ||
-      (levels != R_NilValue && !representation_shell_attributes(levels)) ||
-      !representation_shell_attributes(special_vals) ||
-      !representation_shell_attributes(tags) ||
-      !representation_shell_attributes(storage_type) ||
-      !representation_shell_attributes(init_given) ||
-      !representation_shell_attributes(numeric_source_kind) ||
-      !representation_shell_attributes(numeric_logscale) ||
-      !representation_shell_attributes(id) ||
-      (requirements != R_NilValue &&
-        (Rf_isS4(requirements) ||
-          !paradox_api_has_no_attributes(requirements)))) {
-    Rf_error(
-      "Invalid built-in Domain state: structural constructor fields may "
-      "carry at most scalar representation names"
-    );
-  }
+  /*
+   * Every interpreted field is admitted immediately before its own semantic
+   * snapshot below. Earlier field materialization may allocate or invoke a
+   * stable ALTREP method, so one global preflight here would leave later
+   * fields vulnerable to structural mutation before they were copied.
+   */
   enum {
     ROOT_CLS = 0,
     ROOT_GROUPING,
@@ -1203,47 +1223,82 @@ SEXP paradox_domain_construct(
     ROOT_COUNT
   };
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, ROOT_COUNT));
-  SET_VECTOR_ELT(roots, ROOT_CLS, paradox_snapshot_semantic_vector(cls));
+
+  /*
+   * Select the kind and own its special-values shell before observing any
+   * other semantic vector.  A hostile ALTREP leaf may also have been supplied
+   * as a default, init, requirement RHS, or another constructor argument; for
+   * a typed kind its special role must reject it before one of those aliases
+   * can trigger an Elt method.
+   */
+  SET_VECTOR_ELT(roots, ROOT_CLS, snapshot_constructor_vector(cls));
   SET_VECTOR_ELT(
-    roots, ROOT_GROUPING, paradox_snapshot_semantic_vector(grouping)
-  );
-  SET_VECTOR_ELT(
-    roots, ROOT_CARGO, paradox_snapshot_semantic_vector(cargo)
-  );
-  SET_VECTOR_ELT(
-    roots, ROOT_LOWER, paradox_snapshot_semantic_vector(lower)
-  );
-  SET_VECTOR_ELT(
-    roots, ROOT_UPPER, paradox_snapshot_semantic_vector(upper)
-  );
-  SET_VECTOR_ELT(
-    roots, ROOT_TOLERANCE, paradox_snapshot_semantic_vector(tolerance)
-  );
-  SET_VECTOR_ELT(
-    roots, ROOT_LEVELS, paradox_snapshot_semantic_vector(levels)
+    roots, ROOT_STORAGE, snapshot_constructor_vector(storage_type)
   );
   SET_VECTOR_ELT(
     roots, ROOT_SPECIAL_VALS,
-    paradox_snapshot_semantic_vector(special_vals)
+    snapshot_constructor_special_values(special_vals)
+  );
+  /*
+   * Scalar representation names are not Domain semantics.  Remove them from
+   * these privately owned snapshots before selecting the kind.  The remaining
+   * scalar fields are normalized after their snapshots have been installed.
+   */
+  discard_representation_names(VECTOR_ELT(roots, ROOT_CLS));
+  discard_representation_names(VECTOR_ELT(roots, ROOT_STORAGE));
+  R_xlen_t admission_work = 0;
+  paradox_special_values_receipt_t special_receipt;
+  if (!paradox_prepare_builtin_special_values(
+      VECTOR_ELT(roots, ROOT_CLS),
+      VECTOR_ELT(roots, ROOT_STORAGE),
+      VECTOR_ELT(roots, ROOT_SPECIAL_VALS),
+      &special_receipt,
+      &admission_work
+    )) {
+    UNPROTECT(1);
+    Rf_error("Invalid built-in Domain final state in field `special_vals`");
+  }
+  /* The outer shell was just snapshotted above.  Typed atomic specials are
+   * semantic values rather than identity tokens, so detach them now; S4 and
+   * non-atomic typed specials, and all ParamUty specials, keep identity. */
+  paradox_own_builtin_special_value_leaves(
+    VECTOR_ELT(roots, ROOT_SPECIAL_VALS),
+    special_receipt.typed
+  );
+
+  SET_VECTOR_ELT(
+    roots, ROOT_GROUPING, snapshot_constructor_vector(grouping)
   );
   SET_VECTOR_ELT(
-    roots, ROOT_TAGS, paradox_snapshot_semantic_vector(tags)
+    roots, ROOT_CARGO, snapshot_constructor_cargo(cargo)
   );
   SET_VECTOR_ELT(
-    roots, ROOT_STORAGE, paradox_snapshot_semantic_vector(storage_type)
+    roots, ROOT_LOWER, snapshot_constructor_vector(lower)
   );
   SET_VECTOR_ELT(
-    roots, ROOT_INIT_GIVEN, paradox_snapshot_semantic_vector(init_given)
+    roots, ROOT_UPPER, snapshot_constructor_vector(upper)
+  );
+  SET_VECTOR_ELT(
+    roots, ROOT_TOLERANCE, snapshot_constructor_vector(tolerance)
+  );
+  SET_VECTOR_ELT(
+    roots, ROOT_LEVELS, snapshot_constructor_vector(levels)
+  );
+  SET_VECTOR_ELT(
+    roots, ROOT_TAGS, snapshot_constructor_vector(tags)
+  );
+  SET_VECTOR_ELT(
+    roots, ROOT_INIT_GIVEN, snapshot_constructor_vector(init_given)
   );
   SET_VECTOR_ELT(
     roots, ROOT_NUMERIC_SOURCE_KIND,
-    paradox_snapshot_semantic_vector(numeric_source_kind)
+    snapshot_constructor_vector(numeric_source_kind)
   );
   SET_VECTOR_ELT(
     roots, ROOT_NUMERIC_LOGSCALE,
-    paradox_snapshot_semantic_vector(numeric_logscale)
+    snapshot_constructor_vector(numeric_logscale)
   );
-  SET_VECTOR_ELT(roots, ROOT_ID, paradox_snapshot_semantic_vector(id));
+  SET_VECTOR_ELT(roots, ROOT_ID, snapshot_constructor_vector(id));
   R_xlen_t requirement_work = 0;
   SEXP stable_requirements = paradox_snapshot_builtin_requirements(
     requirements,
@@ -1276,13 +1331,11 @@ SEXP paradox_domain_construct(
   default_value = VECTOR_ELT(roots, ROOT_DEFAULT);
   init_value = VECTOR_ELT(roots, ROOT_INIT_VALUE);
   trafo = VECTOR_ELT(roots, ROOT_TRAFO);
-  discard_representation_names(cls);
   discard_representation_names(grouping);
   discard_representation_names(lower);
   discard_representation_names(upper);
   discard_representation_names(tolerance);
   discard_representation_names(tags);
-  discard_representation_names(storage_type);
   discard_representation_names(init_given);
   discard_representation_names(numeric_source_kind);
   discard_representation_names(numeric_logscale);
@@ -1511,10 +1564,14 @@ SEXP paradox_domain_construct(
   }
 
   if (kind != DOMAIN_KIND_UTY) {
-    SEXP stable_default = PROTECT(snapshot_builtin_value_leaf(default_value));
+    SEXP stable_default = PROTECT(
+      paradox_snapshot_builtin_value_leaf(default_value)
+    );
     SET_VECTOR_ELT(roots, ROOT_DEFAULT, stable_default);
     UNPROTECT(1);
-    SEXP stable_init = PROTECT(snapshot_builtin_value_leaf(init_value));
+    SEXP stable_init = PROTECT(
+      paradox_snapshot_builtin_value_leaf(init_value)
+    );
     SET_VECTOR_ELT(roots, ROOT_INIT_VALUE, stable_init);
     UNPROTECT(1);
     default_value = VECTOR_ELT(roots, ROOT_DEFAULT);
@@ -1524,7 +1581,6 @@ SEXP paradox_domain_construct(
   paradox_builtin_domain_kind_t admitted_kind;
   paradox_domain_field_t failed_field;
   paradox_builtin_value_result_t value_failure;
-  R_xlen_t admission_work = 0;
   if (!paradox_admit_builtin_domain_row(
       id,
       cls,
@@ -1542,6 +1598,7 @@ SEXP paradox_domain_construct(
       requirements,
       init_given,
       init_value,
+      &special_receipt,
       &admitted_kind,
       &failed_field,
       &value_failure,
@@ -1656,6 +1713,39 @@ SEXP paradox_domain_uty_check_result(SEXP result) {
     }
   }
   return Rf_ScalarLogical(valid);
+}
+
+SEXP paradox_domain_uty_validate_custom_check(SEXP callback) {
+  if (!Rf_isFunction(callback)) {
+    Rf_error("`custom_check` must be a function");
+  }
+  /*
+   * Keep the exact callback as the registered `.Call` argument while it is
+   * probed. In particular, callback code assigning `custom_check` in
+   * parent.frame() must not replace the function that was just validated
+   * before p_uty() stores it. The fresh evaluation frame preserves ordinary
+   * callback code which writes harmless temporary bindings in parent.frame(),
+   * while avoiding exposure of the p_uty() construction frame. Constructing
+   * it through base `new.env()` is portable to R 3.6 without private API.
+   */
+  SEXP frame_call = PROTECT(Rf_lang1(Rf_install("new.env")));
+  SEXP frame = PROTECT(Rf_eval(frame_call, R_BaseEnv));
+  if (TYPEOF(frame) != ENVSXP) {
+    UNPROTECT(2);
+    Rf_error("Internal error: could not create custom-check probe frame");
+  }
+  SEXP probe = PROTECT(Rf_ScalarReal(1.0));
+  SEXP call = PROTECT(paradox_unary_callback_call(callback, probe));
+  SEXP result = PROTECT(Rf_eval(call, frame));
+  SEXP valid = PROTECT(paradox_domain_uty_check_result(result));
+  if (LOGICAL_ELT(valid, 0) != TRUE) {
+    UNPROTECT(6);
+    Rf_error(
+      "The result of `custom_check(1)` must be TRUE or one non-missing string"
+    );
+  }
+  UNPROTECT(6);
+  return callback;
 }
 
 #define DOMAIN_REPR_MAX_OUTPUT ((size_t) 80)
@@ -1970,7 +2060,8 @@ static int domain_repr_append_real(
     char *end = NULL;
     const double parsed = R_strtod(bytes, &end);
     if (end != bytes + length ||
-        memcmp(&parsed, &real, sizeof(parsed)) != 0) {
+        parsed != real ||
+        (parsed == 0.0 && signbit(parsed) != signbit(real))) {
       UNPROTECT(1);
       return FALSE;
     }

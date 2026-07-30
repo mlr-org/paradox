@@ -125,7 +125,11 @@ test_that("every allocating native entry point survives forced collection", {
     domains$double,
     list(-1 - 5e-7, 1 + 5e-7)
   )
-  constructed_set = .Call(symbols$C_param_set_construct, domains)
+  constructed_set = .Call(
+    symbols$C_param_set_construct,
+    domains,
+    FALSE
+  )
   selected_ids = .Call(
     symbols$C_param_set_ids,
     params,
@@ -188,9 +192,12 @@ test_that("every allocating native entry point survives forced collection", {
     symbols$C_generate_design_grid_builtin,
     private,
     parameter_set,
-    c(double = 3, integer = 5, factor = 2, logical = 2),
+    list(
+      resolution = NULL,
+      param_resolutions = c(double = 3L, integer = 5L)
+    ),
     NULL
-  )
+  )[[1L]]
   recovered_domain = .Call(
     symbols$C_param_set_get_domain,
     private,
@@ -232,17 +239,16 @@ test_that("every allocating native entry point survives forced collection", {
     shadow_private,
     shadow
   )
-  subset_token = .Call(
+  subset_bundle = .Call(
     symbols$C_param_set_subset_state,
     private,
     parameter_set,
     c("factor", "double"),
     FALSE,
     TRUE,
-    parameter_set$constraint,
-    parameter_set$extra_trafo,
     TRUE
   )
+  subset_token = subset_bundle$token
   adopted_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
     subset_private,
@@ -253,33 +259,31 @@ test_that("every allocating native entry point survives forced collection", {
     subset_private,
     subset_token
   )
-  collection_subset_token = .Call(
+  collection_subset_bundle = .Call(
     symbols$C_param_set_subset_state,
     collection_private,
     collection,
     c("inner.factor", "inner.double"),
     FALSE,
     TRUE,
-    collection$constraint,
-    collection$extra_trafo,
     TRUE
   )
+  collection_subset_token = collection_subset_bundle$token
   adopted_collection_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
     collection_subset_private,
     collection_subset_token
   )
-  stripped_subset_token = .Call(
+  stripped_subset_bundle = .Call(
     symbols$C_param_set_subset_state,
     trafo_private,
     trafo_parameter_set,
     "x",
     FALSE,
     TRUE,
-    trafo_parameter_set$constraint,
-    trafo_parameter_set$extra_trafo,
     FALSE
   )
+  stripped_subset_token = stripped_subset_bundle$token
   adopted_stripped_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
     stripped_subset_private,

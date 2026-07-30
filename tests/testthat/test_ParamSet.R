@@ -1,5 +1,73 @@
 context("ParamSet")
 
+test_that("empty ps_union still validates collection controls", {
+  expect_s3_class(ps_union(list()), "ParamSet")
+  expect_error(
+    ps_union(list(), tag_sets = NA),
+    "`tag_sets`: May not be NA",
+    fixed = TRUE
+  )
+  expect_error(
+    ps_union(list(), tag_params = 1L),
+    "`tag_params` must be an unclassed logical flag",
+    fixed = TRUE
+  )
+  expect_error(
+    ps_union(list(), postfix_names = logical()),
+    "`postfix_names` must be an unclassed logical flag",
+    fixed = TRUE
+  )
+})
+
+test_that("assert_param_set uses one coherent capsule snapshot", {
+  bounded = ps(parent = p_lgl(), child = p_int(0L, 1L,
+    depends = parent == TRUE
+  ))
+  collection = ParamSetCollection$new(list(owner = bounded))
+  expect_identical(
+    assert_param_set(
+      collection,
+      cl = c("ParamLgl", "ParamInt"),
+      must_bounded = TRUE
+    ),
+    collection
+  )
+  expect_error(
+    assert_param_set(collection, no_deps = TRUE),
+    "contains dependencies",
+    fixed = TRUE
+  )
+  shadow_origin = ps(
+    hidden = p_int(0L, 1L),
+    parent = p_lgl(),
+    child = p_int(0L, 1L, depends = parent == TRUE)
+  )
+  shadow = ParamSetShadow$new(shadow_origin, "hidden")
+  expect_identical(
+    assert_param_set(
+      shadow,
+      cl = c("ParamLgl", "ParamInt"),
+      must_bounded = TRUE
+    ),
+    shadow
+  )
+  expect_error(
+    assert_param_set(shadow, no_deps = TRUE),
+    "contains dependencies",
+    fixed = TRUE
+  )
+  expect_error(
+    assert_param_set(ps(x = p_uty()), no_untyped = TRUE),
+    "contains untyped",
+    fixed = TRUE
+  )
+  expect_error(
+    assert_param_set(ps(x = p_dbl()), must_bounded = TRUE),
+    "contains unbounded",
+    fixed = TRUE
+  )
+})
+
 test_that("simple active bindings work", {
   ps_list = list(
     th_paramset_dbl1(),

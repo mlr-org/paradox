@@ -408,7 +408,19 @@ families.
   transplant. A third injection mutates an unrelated current root immediately
   after a transplant and requires the post-transplant barrier to detect it
   while retaining the completed transplant, documenting the explicit
-  no-rollback boundary for hostile external finalizers.
+  no-rollback boundary for hostile external finalizers. The capsule barrier is
+  not a complete public-shell receipt: two additional injections replace a
+  method on the transplanted shell and on an unrelated already-current shell.
+  The successful commit's final native barrier must reject both after its
+  allocation-capable graph admission, in the same allocation-free tail that
+  checks every exact capsule receipt, class, environment lock, public binding
+  value/active kind, and binding lock. A direct probe separately changes only
+  a lock bit before changing a binding value. An unlocked environment is
+  rejected before receipt construction because its binding-name inventory
+  could grow or shrink. A current-only graph is also exercised on R 3.6: with
+  no transplant and therefore no binding wave, it must return after joint
+  capsule validation without requiring the unavailable active-binding-function
+  accessor.
   A simulated interrupted binding wave, including the
   lock-restoration edge, verifies post-order monotonicity:
   a parent is identity-rebased only after each original child has been
@@ -495,7 +507,28 @@ families.
   cargo/translation/Domain/owner-value state before callbacks and commit only
   through native mutation; flattened `cargo` closures are rebound to detached
   IDs after native flattening, preserve documented lexical behavior, and
-  cannot act as an alternate capsule/check/callback-selection engine;
+  cannot act as an alternate capsule/check/callback-selection engine.
+  namespace-sensitive Collection and Shadow flattening selects all IDs and
+  route context inside one native graph snapshot, subsets those exact IDs, and
+  rejects a source mutation at the terminal receipt instead of mixing derived
+  generations. Callback-free flattening selects all current IDs inside the
+  cheaper native subset transaction and rejects metadata introduced after its
+  mode decision. BASE flattening and omitted-`ids` `$subspaces()` likewise
+  select all current IDs inside their native transaction, while explicit
+  subspace IDs retain selected-ID behavior;
+- LHS and Sobol generation preserve exact caller ParamSet identity while
+  sampling from one owned graph; an LHS callback mutation is rejected by the
+  terminal complete-graph receipt. The ordinary-environment identity bind
+  precedes that allocation-free barrier;
+- default `$search_space()` snapshots the current raw value store and target
+  Domains in one native generation, while explicit values retain the separate
+  caller-snapshot path; focused tests also authenticate that leanified public
+  stubs preserve omission without changing the reflected default;
+- zero-level categorical Samplers accept `numeric()`, return a typed
+  `character(0)` column for zero rows, and reject positive rows without
+  advancing the RNG. Hierarchical construction owns one graph before reading
+  arbitrary Sampler subclass parameter bindings, rejects duplicate sampler
+  IDs, and cannot splice IDs from one source generation onto another;
 - exact-TuneToken search-space conversion consumes one rooted native
   token/Domain snapshot, replaces live ParamSet candidates with sealed single-
   use BASE subset capabilities before callbacks, uses closed built-in switching,
@@ -578,7 +611,10 @@ families.
   identity-preserving upgrade of CRAN Paradox 1.0.1, shared/nested graphs,
   callbacks, both pinned `mbo_config` fixtures, authentic mlr3/gallery
   containing-object snapshots, registered bbotk/miesmuschel extensions, and
-  rejected unknown legacy extensions;
+  rejected unknown legacy extensions. Legacy table snapshots admit the
+  authentic missing-row-name spelling only for zero rows, and reject it for a
+  nonempty table as well as rejecting callback-capable or noncanonical integer
+  row metadata and a row count inconsistent with the exact selected columns;
 - constructor representation, Design, sampler, subset/flatten/union, and
   ordinary edge diagnostics. Subset coverage pins the compatible
   `keep_trafo = TRUE` default and verifies independent transformation stripping

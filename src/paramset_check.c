@@ -22,6 +22,7 @@
 #include "r_api_compat.h"
 #include "r_utils.h"
 #include "shell_auth.h"
+#include "upgrade_graph.h"
 
 /*
  * ParamSet checking is deliberately one engine.  The R6 object is only the
@@ -77,6 +78,8 @@ enum node_root_slot {
   NODE_ROOT_PRIVATE,
   NODE_ROOT_ASSERT_VALUES,
   NODE_ROOT_SELECTED_CORE,
+  NODE_ROOT_SHADOW_SIGNATURE,
+  NODE_ROOT_SHADOW_SIGNATURE_CONTENT,
   NODE_ROOT_CORE,
   NODE_ROOT_STATE,
   NODE_ROOT_PARAMS,
@@ -101,6 +104,8 @@ typedef struct {
   SEXP private_environment;
   SEXP assert_values;
   SEXP selected_core;
+  SEXP shadow_signature;
+  SEXP shadow_signature_content;
   SEXP state;
   SEXP params;
   SEXP values;
@@ -348,9 +353,12 @@ static int no_attributes(SEXP value) {
 }
 
 static SEXP named_list_element(SEXP value, const char *target) {
-  if (TYPEOF(value) != VECSXP || ALTREP(value)) return R_UnboundValue;
+  if (TYPEOF(value) != VECSXP || ALTREP(value) || Rf_isS4(value)) {
+    return R_UnboundValue;
+  }
   SEXP names = PROTECT(Rf_getAttrib(value, R_NamesSymbol));
-  if (TYPEOF(names) != STRSXP || ALTREP(names) ||
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+      Rf_isObject(names) || !no_attributes(names) ||
       XLENGTH(names) != XLENGTH(value)) {
     UNPROTECT(1);
     return R_UnboundValue;
@@ -546,11 +554,13 @@ static void reserve_graph(check_graph_t *graph) {
 
 static int exact_sets(SEXP sets, SEXP *names,
     R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets)) {
+  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
+      Rf_isObject(sets)) {
     return FALSE;
   }
   SEXP observed_names = PROTECT(Rf_getAttrib(sets, R_NamesSymbol));
   if (TYPEOF(observed_names) != STRSXP || ALTREP(observed_names) ||
+      Rf_isS4(observed_names) || Rf_isObject(observed_names) ||
       !no_attributes(observed_names) ||
       XLENGTH(observed_names) != XLENGTH(sets)) {
     UNPROTECT(1);
@@ -693,7 +703,8 @@ static value_kind_t value_kind(SEXP cls, SEXP storage) {
 
 static SEXP utility_callback(SEXP cargo) {
   if (cargo == R_NilValue) return R_NilValue;
-  if (TYPEOF(cargo) != VECSXP || ALTREP(cargo)) {
+  if (TYPEOF(cargo) != VECSXP || ALTREP(cargo) || Rf_isS4(cargo) ||
+      Rf_isObject(cargo)) {
     Rf_error("Corrupt ParamSet state: ParamUty cargo must be a list or NULL");
   }
   SEXP callback = named_list_element(cargo, "custom_check");
@@ -705,56 +716,99 @@ static SEXP utility_callback(SEXP cargo) {
 }
 
 static int semantic_value_is_ordinary(SEXP value) {
+  /*
+   * Atomic values are overwhelmingly common here.  They have no descendants
+   * to retain, so avoid allocating traversal state on their valid path.
+   * S4 values are opaque identity tokens at this boundary, including an
+   * S4-classed VECSXP: neither their payload nor their class contract belongs
+   * to the built-in value engine.
+   */
+  if (Rf_isS4(value)) return TRUE;
+  if (ALTREP(value)) return FALSE;
+  if (TYPEOF(value) != VECSXP) return TRUE;
+
   R_xlen_t capacity = 16;
   R_xlen_t size = 1;
   R_xlen_t seen_count = 0;
-  SEXP *stack = paradox_temporary_alloc(capacity, sizeof(*stack));
-  SEXP *seen = paradox_temporary_alloc(capacity, sizeof(*seen));
-  stack[0] = value;
+  /*
+   * Both halves of this carrier are scanned by the collector: [0, capacity)
+   * is the pending DFS stack and [capacity, 2 * capacity) is the visited set.
+   * Raw SEXP arrays allocated with R_alloc() are not GC roots.  In
+   * particular, growing such an array can run a pending finalizer after a
+   * descendant was detached from its owning list, leaving only an unscanned
+   * raw pointer.  One indexed carrier keeps every exact selected descendant
+   * alive through growth while retaining allocation-free cycle handling.
+   */
+  PROTECT_INDEX carrier_index;
+  SEXP carrier;
+  PROTECT_WITH_INDEX(
+    carrier = Rf_allocVector(VECSXP, capacity * 2),
+    &carrier_index
+  );
+  SET_VECTOR_ELT(carrier, 0, value);
+  int valid = TRUE;
   R_xlen_t work_since_interrupt = 0;
   while (size != 0) {
     paradox_account_work(&work_since_interrupt);
-    SEXP current = stack[--size];
-    if (ALTREP(current)) return FALSE;
+    SEXP current = VECTOR_ELT(carrier, --size);
+    if (Rf_isS4(current)) continue;
+    if (ALTREP(current)) {
+      valid = FALSE;
+      break;
+    }
     if (TYPEOF(current) != VECSXP) continue;
     int visited = FALSE;
     for (R_xlen_t index = 0; index < seen_count; ++index) {
-      if (seen[index] == current) {
+      if (VECTOR_ELT(carrier, capacity + index) == current) {
         visited = TRUE;
         break;
       }
     }
     if (visited) continue;
-    if (seen_count == capacity) {
-      if (capacity > R_XLEN_T_MAX / 2) return FALSE;
-      const R_xlen_t expanded = capacity * 2;
-      SEXP *new_stack = paradox_temporary_alloc(expanded, sizeof(*new_stack));
-      SEXP *new_seen = paradox_temporary_alloc(expanded, sizeof(*new_seen));
-      memcpy(new_stack, stack, (size_t) size * sizeof(*stack));
-      memcpy(new_seen, seen, (size_t) seen_count * sizeof(*seen));
-      stack = new_stack;
-      seen = new_seen;
-      capacity = expanded;
-    }
-    seen[seen_count++] = current;
     const R_xlen_t children = XLENGTH(current);
-    if (children > R_XLEN_T_MAX - size) return FALSE;
-    while (size + children > capacity) {
-      if (capacity > R_XLEN_T_MAX / 2) return FALSE;
-      const R_xlen_t expanded = capacity * 2;
-      SEXP *new_stack = paradox_temporary_alloc(expanded, sizeof(*new_stack));
-      SEXP *new_seen = paradox_temporary_alloc(expanded, sizeof(*new_seen));
-      memcpy(new_stack, stack, (size_t) size * sizeof(*stack));
-      memcpy(new_seen, seen, (size_t) seen_count * sizeof(*seen));
-      stack = new_stack;
-      seen = new_seen;
-      capacity = expanded;
+    if (children > R_XLEN_T_MAX - size ||
+        seen_count == R_XLEN_T_MAX) {
+      valid = FALSE;
+      break;
     }
+    R_xlen_t required = size + children;
+    if (seen_count + 1 > required) required = seen_count + 1;
+    if (required > capacity) {
+      const R_xlen_t maximum_capacity = R_XLEN_T_MAX / 2;
+      if (required > maximum_capacity) {
+        valid = FALSE;
+        break;
+      }
+      R_xlen_t expanded = capacity;
+      while (expanded < required) {
+        expanded = expanded > maximum_capacity / 2
+          ? maximum_capacity
+          : expanded * 2;
+      }
+      SEXP replacement = Rf_allocVector(VECSXP, expanded * 2);
+      for (R_xlen_t index = 0; index < size; ++index) {
+        SET_VECTOR_ELT(replacement, index, VECTOR_ELT(carrier, index));
+      }
+      for (R_xlen_t index = 0; index < seen_count; ++index) {
+        SET_VECTOR_ELT(
+          replacement,
+          expanded + index,
+          VECTOR_ELT(carrier, capacity + index)
+        );
+      }
+      SET_VECTOR_ELT(replacement, expanded + seen_count, current);
+      REPROTECT(carrier = replacement, carrier_index);
+      capacity = expanded;
+    } else {
+      SET_VECTOR_ELT(carrier, capacity + seen_count, current);
+    }
+    ++seen_count;
     for (R_xlen_t index = 0; index < children; ++index) {
-      stack[size++] = VECTOR_ELT(current, index);
+      SET_VECTOR_ELT(carrier, size++, VECTOR_ELT(current, index));
     }
   }
-  return TRUE;
+  UNPROTECT(1);
+  return valid;
 }
 
 static void validate_node_schema(check_node_t *node,
@@ -917,7 +971,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
     check_graph_t *graph,
     check_node_t *node, SEXP *root_plan, PROTECT_INDEX root_plan_index,
     R_xlen_t *work_since_interrupt, SEXP selected_core,
-    int heal) {
+    int heal, int retain_receipt) {
   node->roots = append_node_roots(
     root_plan, root_plan_index, self, private_environment
   );
@@ -925,6 +979,8 @@ static void initialize_node(SEXP self, SEXP private_environment,
   node->private_environment = private_environment;
   node->classes = R_NilValue;
   node->assert_values = R_NilValue;
+  node->shadow_signature = R_NilValue;
+  node->shadow_signature_content = R_NilValue;
   node->parent = parent;
   node->child_position = child_position;
   node->next_child = 0;
@@ -937,7 +993,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
   }
   SEXP classes = R_NilValue;
   paradox_core_kind_t class_kind = 0;
-  if (!heal) {
+  if (!heal || retain_receipt) {
     class_kind = paradox_param_set_class_kind_raw(self, &classes);
     if (class_kind == 0) {
       Rf_error("Corrupt ParamSet graph: invalid ParamSet-family R6 class");
@@ -968,7 +1024,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
     Rf_error("Corrupt ParamSet shell ownership");
   }
 
-  if (!heal) {
+  if (!heal || retain_receipt) {
     SEXP assert_values = paradox_api_plain_binding_snapshot(
       self,
       check_assert_values_symbol
@@ -999,7 +1055,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
       node->kind != PARADOX_CORE_SHADOW) {
     Rf_error("Corrupt ParamSet state: unknown core node kind");
   }
-  if (!heal && node->kind != class_kind) {
+  if ((!heal || retain_receipt) && node->kind != class_kind) {
     Rf_error("Corrupt ParamSet state: capsule kind disagrees with shell class");
   }
   if (node->kind == PARADOX_CORE_SHADOW &&
@@ -1034,6 +1090,43 @@ static void initialize_node(SEXP self, SEXP private_environment,
         !paradox_shadow_metadata_is_exact(core)) {
       Rf_error("Corrupt ParamSetShadow refreshed core capsule");
     }
+    if (retain_receipt) {
+      /*
+       * Refresh may install a new authoritative projection.  A receipt owns
+       * the generation selected after that installation, not the stale
+       * binding observed before refresh.
+       */
+      node->selected_core = core;
+      SET_VECTOR_ELT(node->roots, NODE_ROOT_SELECTED_CORE, core);
+    }
+  }
+  if (node->kind == PARADOX_CORE_SHADOW &&
+      (retain_receipt || !heal)) {
+    node->shadow_signature = paradox_shadow_metadata_signature(
+      node->selected_core
+    );
+    if (node->shadow_signature == R_UnboundValue) {
+      Rf_error("Corrupt ParamSetShadow native snapshot metadata");
+    }
+    SET_VECTOR_ELT(
+      node->roots,
+      NODE_ROOT_SHADOW_SIGNATURE,
+      node->shadow_signature
+    );
+    SEXP signature_content = PROTECT(paradox_shadow_signature_content_snapshot(
+      node->shadow_signature
+    ));
+    if (signature_content == R_NilValue) {
+      UNPROTECT(1);
+      Rf_error("Corrupt ParamSetShadow native snapshot metadata");
+    }
+    node->shadow_signature_content = signature_content;
+    SET_VECTOR_ELT(
+      node->roots,
+      NODE_ROOT_SHADOW_SIGNATURE_CONTENT,
+      signature_content
+    );
+    UNPROTECT(1);
   }
   SET_VECTOR_ELT(node->roots, NODE_ROOT_CORE, core);
   node->state = paradox_core_payload(core);
@@ -1101,7 +1194,8 @@ static void initialize_node(SEXP self, SEXP private_environment,
     SEXP postfix = VECTOR_ELT(node->state, PARADOX_CORE_POSTFIX);
     if (node->constraint != R_NilValue || node->extra_trafo != R_NilValue ||
         node->checked_values.size != 0 || TYPEOF(postfix) != LGLSXP ||
-        ALTREP(postfix) || !no_attributes(postfix) || XLENGTH(postfix) != 1 ||
+        ALTREP(postfix) || Rf_isS4(postfix) ||
+        !no_attributes(postfix) || XLENGTH(postfix) != 1 ||
         LOGICAL_ELT(postfix, 0) == NA_LOGICAL ||
         !exact_sets(node->sets, &node->set_names, work_since_interrupt)) {
       Rf_error("Corrupt ParamSetCollection state");
@@ -1117,20 +1211,25 @@ static void initialize_node(SEXP self, SEXP private_environment,
   } else if (node->kind == PARADOX_CORE_BASE) {
     SEXP postfix = VECTOR_ELT(node->state, PARADOX_CORE_POSTFIX);
     if (node->sets != R_NilValue || node->translation != R_NilValue ||
-        TYPEOF(postfix) != LGLSXP || ALTREP(postfix) ||
+        TYPEOF(postfix) != LGLSXP || ALTREP(postfix) || Rf_isS4(postfix) ||
         !no_attributes(postfix) || XLENGTH(postfix) != 1 ||
         LOGICAL_ELT(postfix, 0) != FALSE) {
       Rf_error("Corrupt ParamSet state: BASE node contains graph metadata");
     }
   } else {
     SEXP postfix = VECTOR_ELT(node->state, PARADOX_CORE_POSTFIX);
+    SEXP origin = TYPEOF(node->sets) == VECSXP && !ALTREP(node->sets) &&
+        !Rf_isS4(node->sets) && XLENGTH(node->sets) == 1
+      ? VECTOR_ELT(node->sets, 0)
+      : R_NilValue;
     if (TYPEOF(node->sets) != VECSXP || ALTREP(node->sets) ||
-        XLENGTH(node->sets) != 1 ||
-        TYPEOF(VECTOR_ELT(node->sets, 0)) != ENVSXP ||
-        paradox_domain_private_environment(VECTOR_ELT(node->sets, 0)) ==
+        Rf_isS4(node->sets) || Rf_isObject(node->sets) ||
+        !no_attributes(node->sets) || XLENGTH(node->sets) != 1 ||
+        TYPEOF(origin) != ENVSXP || Rf_isS4(origin) ||
+        paradox_domain_private_environment(origin) ==
           R_UnboundValue || VECTOR_ELT(node->sets, 0) == self ||
         node->translation != R_NilValue ||
-        TYPEOF(postfix) != LGLSXP || ALTREP(postfix) ||
+        TYPEOF(postfix) != LGLSXP || ALTREP(postfix) || Rf_isS4(postfix) ||
         !no_attributes(postfix) || XLENGTH(postfix) != 1 ||
         LOGICAL_ELT(postfix, 0) != FALSE) {
       Rf_error("Corrupt ParamSetShadow state: invalid origin edge");
@@ -1189,7 +1288,7 @@ static void barren_registry_add(barren_registry_t *registry, SEXP shell) {
 
 static void build_graph(SEXP private_environment, SEXP self,
     check_graph_t *graph, SEXP *root_plan, PROTECT_INDEX root_plan_index,
-    int heal, SEXP selected_root_core) {
+    int heal, int retain_receipt, SEXP selected_root_core) {
   initialize_check_binding_symbols();
   /* Heal before the first snapshot: this traversal validates every cached
    * flatten against its children, so an ancestor of a set that grew must be
@@ -1201,12 +1300,23 @@ static void build_graph(SEXP private_environment, SEXP self,
       (void) paradox_core_refresh(self, private_environment);
     }
   }
+  /*
+   * The selected capsules below are immutable and individually rooted, but
+   * initializing later nodes allocates. A pending finalizer can therefore
+   * perform a supported mutation between two selections and otherwise leave
+   * an ordinary (non-receipted) check plan describing generations that never
+   * coexisted. Every semantic installation advances the session-wide state
+   * epoch; cache refreshes deliberately do not because they preserve the
+   * graph's denotation. One terminal comparison closes this build without a
+   * per-node receipt scan on the hot check path.
+   */
+  const uintptr_t entry_epoch = paradox_core_state_epoch_value();
   initialize_graph(graph);
   R_xlen_t work_since_interrupt = 0;
   initialize_node(
     self, private_environment, R_XLEN_T_MAX, R_XLEN_T_MAX, TRUE, graph,
     &graph->nodes[0], root_plan, root_plan_index, &work_since_interrupt,
-    selected_root_core, heal
+    selected_root_core, heal, retain_receipt
   );
   graph->count = 1;
   graph->path[0] = 0;
@@ -1255,7 +1365,7 @@ static void build_graph(SEXP private_environment, SEXP self,
         node->kind == PARADOX_CORE_COLLECTION ? node->semantic : FALSE,
         graph,
         &graph->nodes[child_index], root_plan, root_plan_index,
-        &work_since_interrupt, R_NilValue, heal
+        &work_since_interrupt, R_NilValue, heal, retain_receipt
       );
       UNPROTECT(2);
       ++graph->nodes[node_index].next_child;
@@ -1275,6 +1385,10 @@ static void build_graph(SEXP private_environment, SEXP self,
     }
     --depth;
   }
+  if (heal && !retain_receipt &&
+      paradox_core_state_epoch_value() != entry_epoch) {
+    Rf_error("ParamSet graph changed while a native operation was being constructed");
+  }
 }
 
 static int graph_receipts_are_current(const check_graph_t *graph) {
@@ -1282,7 +1396,13 @@ static int graph_receipts_are_current(const check_graph_t *graph) {
     const check_node_t *node = &graph->nodes[index];
     if (node->classes == R_NilValue ||
         Rf_getAttrib(node->self, R_ClassSymbol) != node->classes ||
-        paradox_param_set_class_kind_raw(node->self, NULL) != node->kind) {
+        paradox_param_set_class_kind_raw(node->self, NULL) != node->kind ||
+        (node->kind == PARADOX_CORE_SHADOW &&
+          !paradox_shadow_signature_receipt_is_current(
+            node->selected_core,
+            node->shadow_signature,
+            node->shadow_signature_content
+          ))) {
       return FALSE;
     }
     SEXP enclosure = paradox_api_plain_binding_scan(
@@ -1306,6 +1426,591 @@ static int graph_receipts_are_current(const check_graph_t *graph) {
     }
   }
   return TRUE;
+}
+
+static int internal_tuning_node_receipt_is_current(SEXP roots) {
+  if (TYPEOF(roots) != VECSXP || ALTREP(roots) || Rf_isS4(roots) ||
+      Rf_isObject(roots) || !paradox_api_has_no_attributes(roots) ||
+      XLENGTH(roots) != NODE_ROOT_COUNT ||
+      check_enclosure_symbol == NULL || check_self_symbol == NULL ||
+      check_private_symbol == NULL || check_core_symbol == NULL ||
+      check_assert_values_symbol == NULL) {
+    return FALSE;
+  }
+
+  SEXP self = VECTOR_ELT(roots, NODE_ROOT_SELF);
+  SEXP classes = VECTOR_ELT(roots, NODE_ROOT_CLASS);
+  SEXP expected_enclosure = VECTOR_ELT(roots, NODE_ROOT_ENCLOSURE);
+  SEXP expected_private = VECTOR_ELT(roots, NODE_ROOT_PRIVATE);
+  SEXP expected_assert_values =
+    VECTOR_ELT(roots, NODE_ROOT_ASSERT_VALUES);
+  SEXP expected_core = VECTOR_ELT(roots, NODE_ROOT_SELECTED_CORE);
+  SEXP expected_shadow_signature =
+    VECTOR_ELT(roots, NODE_ROOT_SHADOW_SIGNATURE);
+  SEXP expected_shadow_signature_content =
+    VECTOR_ELT(roots, NODE_ROOT_SHADOW_SIGNATURE_CONTENT);
+  SEXP admitted_core = VECTOR_ELT(roots, NODE_ROOT_CORE);
+  SEXP expected_state = VECTOR_ELT(roots, NODE_ROOT_STATE);
+  const paradox_core_kind_t expected_kind =
+    paradox_core_kind(expected_core);
+  if (TYPEOF(self) != ENVSXP || Rf_isS4(self) ||
+      TYPEOF(expected_enclosure) != ENVSXP || Rf_isS4(expected_enclosure) ||
+      TYPEOF(expected_private) != ENVSXP || Rf_isS4(expected_private) ||
+      admitted_core != expected_core ||
+      !paradox_param_set_assert_values_is_exact(expected_assert_values) ||
+      !paradox_core_is_canonical(expected_core) ||
+      (expected_kind == PARADOX_CORE_SHADOW &&
+        !paradox_shadow_signature_receipt_is_current(
+          expected_core,
+          expected_shadow_signature,
+          expected_shadow_signature_content
+        )) ||
+      (expected_kind != PARADOX_CORE_SHADOW &&
+        (expected_shadow_signature != R_NilValue ||
+         expected_shadow_signature_content != R_NilValue)) ||
+      paradox_core_payload(expected_core) != expected_state ||
+      Rf_getAttrib(self, R_ClassSymbol) != classes ||
+      paradox_param_set_class_kind_raw(self, NULL) !=
+        expected_kind) {
+    return FALSE;
+  }
+
+  if (VECTOR_ELT(roots, NODE_ROOT_PARAMS) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_PARAMS) ||
+      VECTOR_ELT(roots, NODE_ROOT_VALUES) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_VALUES) ||
+      VECTOR_ELT(roots, NODE_ROOT_TAGS) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_TAGS) ||
+      VECTOR_ELT(roots, NODE_ROOT_DEPS) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_DEPS) ||
+      VECTOR_ELT(roots, NODE_ROOT_TRAFOS) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_TRAFOS) ||
+      VECTOR_ELT(roots, NODE_ROOT_EXTRA_TRAFO) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_EXTRA_TRAFO) ||
+      VECTOR_ELT(roots, NODE_ROOT_CONSTRAINT) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_CONSTRAINT) ||
+      VECTOR_ELT(roots, NODE_ROOT_SETS) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_SETS) ||
+      VECTOR_ELT(roots, NODE_ROOT_TRANSLATION) !=
+        VECTOR_ELT(expected_state, PARADOX_CORE_TRANSLATION)) {
+    return FALSE;
+  }
+
+  SEXP enclosure = paradox_api_plain_binding_scan(
+    self,
+    check_enclosure_symbol
+  );
+  return enclosure == expected_enclosure &&
+    paradox_api_plain_binding_scan(enclosure, check_self_symbol) == self &&
+    paradox_api_plain_binding_scan(enclosure, check_private_symbol) ==
+      expected_private &&
+    paradox_api_plain_binding_scan(self, check_assert_values_symbol) ==
+      expected_assert_values &&
+    paradox_api_plain_binding_scan(expected_private, check_core_symbol) ==
+      expected_core;
+}
+
+void paradox_param_set_scan_internal_tuning_receipt(SEXP receipt) {
+  if (TYPEOF(receipt) != VECSXP || ALTREP(receipt) ||
+      Rf_isS4(receipt) || Rf_isObject(receipt) ||
+      !paradox_api_has_no_attributes(receipt) ||
+      XLENGTH(receipt) == 0) {
+    Rf_error("Internal error: malformed internal-tuning graph receipt");
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(receipt); ++index) {
+    if (!internal_tuning_node_receipt_is_current(
+        VECTOR_ELT(receipt, index)
+      )) {
+      Rf_error("ParamSet graph changed during internal-tuning operation");
+    }
+  }
+}
+
+void paradox_param_set_scan_internal_tuning_receipts(SEXP receipts) {
+  if (TYPEOF(receipts) != VECSXP || ALTREP(receipts) ||
+      Rf_isS4(receipts) || Rf_isObject(receipts) ||
+      !paradox_api_has_no_attributes(receipts) ||
+      XLENGTH(receipts) == 0) {
+    Rf_error("Internal error: malformed internal-tuning receipt set");
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(receipts); ++index) {
+    paradox_param_set_scan_internal_tuning_receipt(
+      VECTOR_ELT(receipts, index)
+    );
+  }
+}
+
+SEXP paradox_param_set_internal_tuning_receipt(SEXP receipt) {
+  paradox_param_set_scan_internal_tuning_receipt(receipt);
+  /*
+   * This entry is also the terminal source-generation barrier for cold
+   * Design generators. Returning R_NilValue is part of that contract: unlike
+   * constructing a scalar result, it cannot run a finalizer after the exact
+   * allocation-free scan and before the caller performs one plain-field
+   * ownership handoff.
+   */
+  return R_NilValue;
+}
+
+static SEXP snapshot_internal_tuning_ids(SEXP ids) {
+  if (TYPEOF(ids) != STRSXP || ALTREP(ids) || Rf_isS4(ids) ||
+      Rf_isObject(ids) || !paradox_api_has_no_attributes(ids)) {
+    Rf_error("Internal-tuning parameter IDs must be an ordinary character vector");
+  }
+  const R_xlen_t size = XLENGTH(ids);
+  SEXP stable = PROTECT(Rf_allocVector(STRSXP, size));
+  /*
+   * The allocation above may run a pending finalizer. Recheck the caller
+   * carrier, then copy the exact post-allocation identity sequence without
+   * another allocation boundary.
+   */
+  if (TYPEOF(ids) != STRSXP || ALTREP(ids) || Rf_isS4(ids) ||
+      Rf_isObject(ids) || !paradox_api_has_no_attributes(ids) ||
+      XLENGTH(ids) != size) {
+    UNPROTECT(1);
+    Rf_error("Internal-tuning parameter IDs changed while being admitted");
+  }
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SEXP id = STRING_ELT(ids, index);
+    if (id == NA_STRING || Rf_getCharCE(id) == CE_BYTES ||
+        CHAR(id)[0] == '\0') {
+      UNPROTECT(1);
+      Rf_error("Internal-tuning parameter IDs must be non-missing, non-empty strings");
+    }
+    SET_STRING_ELT(stable, index, id);
+  }
+  if (Rf_any_duplicated(stable, FALSE) != 0) {
+    UNPROTECT(1);
+    Rf_error("Internal-tuning parameter IDs must be unique");
+  }
+  UNPROTECT(1);
+  return stable;
+}
+
+static R_xlen_t internal_tuning_child_node(
+    const check_graph_t *graph, R_xlen_t parent, R_xlen_t child_position) {
+  R_xlen_t child = R_XLEN_T_MAX;
+  for (R_xlen_t index = parent + 1; index < graph->count; ++index) {
+    const check_node_t *candidate = &graph->nodes[index];
+    if (candidate->parent == parent &&
+        candidate->child_position == child_position) {
+      if (child != R_XLEN_T_MAX) {
+        Rf_error("Corrupt ParamSet graph: duplicate internal-tuning route");
+      }
+      child = index;
+    }
+  }
+  if (child == R_XLEN_T_MAX) {
+    Rf_error("Corrupt ParamSet graph: incomplete internal-tuning route");
+  }
+  return child;
+}
+
+static R_xlen_t internal_tuning_terminal(
+    const check_graph_t *graph, SEXP *id, R_xlen_t *work_since_interrupt) {
+  R_xlen_t node_index = 0;
+  for (;;) {
+    const check_node_t *node = &graph->nodes[node_index];
+    if (node->kind == PARADOX_CORE_BASE) {
+      const R_xlen_t row = local_param_row(
+        node,
+        *id,
+        work_since_interrupt
+      );
+      if (row == R_XLEN_T_MAX) {
+        Rf_error("Corrupt ParamSet graph: terminal route lost its parameter");
+      }
+      *id = STRING_ELT(node->checked_params.ids, row);
+      return node_index;
+    }
+    if (node->kind == PARADOX_CORE_SHADOW) {
+      node_index = internal_tuning_child_node(graph, node_index, 0);
+      continue;
+    }
+    if (node->kind != PARADOX_CORE_COLLECTION) {
+      Rf_error("Corrupt ParamSet graph: unsupported internal-tuning node");
+    }
+
+    SEXP exposed = VECTOR_ELT(node->translation, 0);
+    SEXP originals = VECTOR_ELT(node->translation, 1);
+    SEXP owners = VECTOR_ELT(node->translation, 2);
+    R_xlen_t translation_row = R_XLEN_T_MAX;
+    for (R_xlen_t row = 0; row < XLENGTH(exposed); ++row) {
+      paradox_account_work(work_since_interrupt);
+      if (paradox_domain_strings_equal(STRING_ELT(exposed, row), *id)) {
+        translation_row = row;
+        break;
+      }
+    }
+    if (translation_row == R_XLEN_T_MAX) {
+      Rf_error("Corrupt ParamSetCollection internal-tuning translation");
+    }
+    const int owner = INTEGER_ELT(owners, translation_row);
+    if (owner <= 0) {
+      Rf_error("Corrupt ParamSetCollection internal-tuning owner");
+    }
+    *id = STRING_ELT(originals, translation_row);
+    node_index = internal_tuning_child_node(
+      graph,
+      node_index,
+      (R_xlen_t) owner - 1
+    );
+  }
+}
+
+static int internal_tuning_row_has_tag(
+    const check_node_t *root, R_xlen_t parameter_row, const char *tag,
+    R_xlen_t *work_since_interrupt) {
+  SEXP id = STRING_ELT(root->checked_params.ids, parameter_row);
+  for (R_xlen_t row = 0; row < root->checked_tags.row_count; ++row) {
+    paradox_account_work(work_since_interrupt);
+    if (paradox_domain_strings_equal(
+          STRING_ELT(root->checked_tags.ids, row),
+          id
+        ) && paradox_domain_string_is(
+          STRING_ELT(root->checked_tags.values, row),
+          tag
+        )) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+SEXP paradox_param_set_internal_tuning_snapshot(
+    SEXP private_environment, SEXP self, SEXP ids,
+    SEXP include_root_values) {
+  const int capture_root_values = exact_flag(
+    include_root_values,
+    "include_root_values"
+  );
+  const int select_all = ids == R_NilValue;
+  PROTECT_INDEX stable_ids_index;
+  SEXP stable_ids;
+  PROTECT_WITH_INDEX(
+    stable_ids = select_all
+      ? R_NilValue
+      : snapshot_internal_tuning_ids(ids),
+    &stable_ids_index
+  );
+
+  PROTECT_INDEX root_plan_index;
+  SEXP root_plan;
+  PROTECT_WITH_INDEX(root_plan = R_NilValue, &root_plan_index);
+  check_graph_t graph;
+  build_graph(
+    private_environment,
+    self,
+    &graph,
+    &root_plan,
+    root_plan_index,
+    TRUE,
+    TRUE,
+    R_NilValue
+  );
+  const check_node_t *root = &graph.nodes[0];
+  R_xlen_t work_since_interrupt = 0;
+  if (select_all) {
+    /*
+     * Root the destination before the interruptible copy.  The old code kept
+     * the freshly allocated STRSXP only in a C local until after this loop;
+     * `paradox_account_work()` may enter `R_CheckUserInterrupt()`, across
+     * which an unprotected allocation must not be retained.
+     */
+    REPROTECT(
+      stable_ids = Rf_allocVector(
+        STRSXP,
+        root->checked_params.row_count
+      ),
+      stable_ids_index
+    );
+    for (R_xlen_t row = 0;
+        row < root->checked_params.row_count;
+        ++row) {
+      paradox_account_work(&work_since_interrupt);
+      SET_STRING_ELT(
+        stable_ids,
+        row,
+        STRING_ELT(root->checked_params.ids, row)
+      );
+    }
+  }
+  const R_xlen_t size = XLENGTH(stable_ids);
+
+  R_xlen_t *terminal_nodes = paradox_temporary_alloc(
+    size == 0 ? 1 : size,
+    sizeof(*terminal_nodes)
+  );
+  R_xlen_t *route_nodes = paradox_temporary_alloc(
+    size == 0 ? 1 : size,
+    sizeof(*route_nodes)
+  );
+  R_xlen_t *owner_nodes = paradox_temporary_alloc(
+    size == 0 ? 1 : size,
+    sizeof(*owner_nodes)
+  );
+  R_xlen_t route_count = 0;
+  R_xlen_t owner_count = 0;
+
+  SEXP original_ids = PROTECT(Rf_allocVector(STRSXP, size));
+  SEXP route_indices = PROTECT(Rf_allocVector(INTSXP, size));
+  SEXP owner_indices = PROTECT(Rf_allocVector(INTSXP, size));
+  SEXP cargo = PROTECT(Rf_allocVector(VECSXP, size));
+  SEXP internal_tuning = PROTECT(Rf_allocVector(LGLSXP, size));
+  SEXP root_cargo = VECTOR_ELT(root->params, PARADOX_DOMAIN_CARGO);
+
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SEXP exposed_id = STRING_ELT(stable_ids, index);
+    const R_xlen_t root_row = local_param_row(
+      root,
+      exposed_id,
+      &work_since_interrupt
+    );
+    if (root_row == R_XLEN_T_MAX) {
+      UNPROTECT(7);
+      Rf_error("Unknown internal-tuning parameter");
+    }
+    SEXP original_id = exposed_id;
+    const R_xlen_t terminal = internal_tuning_terminal(
+      &graph,
+      &original_id,
+      &work_since_interrupt
+    );
+    terminal_nodes[index] = terminal;
+    SET_STRING_ELT(original_ids, index, original_id);
+    SET_VECTOR_ELT(cargo, index, VECTOR_ELT(root_cargo, root_row));
+    SET_LOGICAL_ELT(
+      internal_tuning,
+      index,
+      internal_tuning_row_has_tag(
+        root,
+        root_row,
+        "internal_tuning",
+        &work_since_interrupt
+      )
+    );
+
+    R_xlen_t route = 0;
+    while (route < route_count && route_nodes[route] != terminal) ++route;
+    if (route == route_count) route_nodes[route_count++] = terminal;
+    if (route >= INT_MAX) {
+      UNPROTECT(7);
+      Rf_error("Internal-tuning route count exceeds R integer bounds");
+    }
+    SET_INTEGER_ELT(route_indices, index, (int) (route + 1));
+
+    R_xlen_t owner = 0;
+    while (owner < owner_count &&
+        graph.nodes[owner_nodes[owner]].self != graph.nodes[terminal].self) {
+      ++owner;
+    }
+    if (owner == owner_count) {
+      owner_nodes[owner_count++] = terminal;
+    } else if (graph.nodes[owner_nodes[owner]].selected_core !=
+        graph.nodes[terminal].selected_core) {
+      UNPROTECT(7);
+      Rf_error("ParamSet owner changed during internal-tuning snapshot");
+    }
+    if (owner >= INT_MAX) {
+      UNPROTECT(7);
+      Rf_error("Internal-tuning owner count exceeds R integer bounds");
+    }
+    SET_INTEGER_ELT(owner_indices, index, (int) (owner + 1));
+  }
+
+  SEXP root_values = R_NilValue;
+  if (!capture_root_values) {
+    PROTECT(root_values);
+  } else {
+    if (size != root->checked_params.row_count) {
+      UNPROTECT(7);
+      Rf_error("Internal-tuning root-value snapshot requires every parameter");
+    }
+    for (R_xlen_t row = 0; row < size; ++row) {
+      if (!paradox_domain_strings_equal(
+          STRING_ELT(stable_ids, row),
+          STRING_ELT(root->checked_params.ids, row)
+        )) {
+        UNPROTECT(7);
+        Rf_error("Internal-tuning root-value snapshot has reordered parameters");
+      }
+    }
+    if (root->kind != PARADOX_CORE_COLLECTION) {
+      root_values = root->values;
+      PROTECT(root_values);
+    } else {
+      R_xlen_t stored_count = 0;
+      for (R_xlen_t row = 0; row < size; ++row) {
+        const check_node_t *terminal = &graph.nodes[terminal_nodes[row]];
+        SEXP local_id = STRING_ELT(original_ids, row);
+        for (R_xlen_t stored = 0;
+            stored < terminal->checked_values.size;
+            ++stored) {
+          paradox_account_work(&work_since_interrupt);
+          if (paradox_domain_strings_equal(
+              STRING_ELT(terminal->checked_values.names, stored),
+              local_id
+            )) {
+            ++stored_count;
+            break;
+          }
+        }
+      }
+      root_values = PROTECT(Rf_allocVector(VECSXP, stored_count));
+      SEXP root_value_names = PROTECT(Rf_allocVector(
+        STRSXP,
+        stored_count
+      ));
+      R_xlen_t output = 0;
+      for (R_xlen_t row = 0; row < size; ++row) {
+        const check_node_t *terminal = &graph.nodes[terminal_nodes[row]];
+        SEXP local_id = STRING_ELT(original_ids, row);
+        for (R_xlen_t stored = 0;
+            stored < terminal->checked_values.size;
+            ++stored) {
+          paradox_account_work(&work_since_interrupt);
+          if (!paradox_domain_strings_equal(
+              STRING_ELT(terminal->checked_values.names, stored),
+              local_id
+            )) {
+            continue;
+          }
+          if (output >= stored_count) {
+            UNPROTECT(9);
+            Rf_error("Internal error: root-value snapshot overflow");
+          }
+          SET_VECTOR_ELT(
+            root_values,
+            output,
+            VECTOR_ELT(terminal->checked_values.values, stored)
+          );
+          SET_STRING_ELT(
+            root_value_names,
+            output,
+            STRING_ELT(stable_ids, row)
+          );
+          ++output;
+          break;
+        }
+      }
+      if (output != stored_count) {
+        UNPROTECT(9);
+        Rf_error("Internal error: incomplete root-value snapshot");
+      }
+      Rf_setAttrib(root_values, R_NamesSymbol, root_value_names);
+      UNPROTECT(1);
+    }
+  }
+
+  SEXP owners = PROTECT(Rf_allocVector(VECSXP, owner_count));
+  SEXP owner_values = PROTECT(Rf_allocVector(VECSXP, owner_count));
+  SEXP owner_ids = PROTECT(Rf_allocVector(VECSXP, owner_count));
+  for (R_xlen_t owner = 0; owner < owner_count; ++owner) {
+    const check_node_t *node = &graph.nodes[owner_nodes[owner]];
+    SET_VECTOR_ELT(owners, owner, node->self);
+    SET_VECTOR_ELT(owner_values, owner, node->values);
+    SET_VECTOR_ELT(owner_ids, owner, node->checked_params.ids);
+  }
+
+  SEXP receipt = PROTECT(Rf_allocVector(VECSXP, graph.count));
+  for (R_xlen_t index = 0; index < graph.count; ++index) {
+    SET_VECTOR_ELT(receipt, index, graph.nodes[index].roots);
+  }
+  int any_constraint = FALSE;
+  for (R_xlen_t index = 0; index < graph.count; ++index) {
+    const check_node_t *node = &graph.nodes[index];
+    if (node->semantic && node->constraint != R_NilValue) {
+      any_constraint = TRUE;
+      break;
+    }
+  }
+  SEXP has_constraint = PROTECT(Rf_ScalarLogical(any_constraint));
+
+  static const char *const snapshot_names[] = {
+    "id", "original_id", "route_index", "owner_ps_index", "owners",
+    "owner_values", "owner_ids", "root_values", "cargo",
+    "internal_tuning", "has_constraint", "assert_values", "receipt"
+  };
+  SEXP result = PROTECT(Rf_allocVector(
+    VECSXP,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_COUNT
+  ));
+  SEXP result_names = PROTECT(Rf_allocVector(
+    STRSXP,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_COUNT
+  ));
+  SET_VECTOR_ELT(result, PARADOX_INTERNAL_TUNING_SNAPSHOT_ID, stable_ids);
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_ORIGINAL_ID,
+    original_ids
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_ROUTE_INDEX,
+    route_indices
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNER_INDEX,
+    owner_indices
+  );
+  SET_VECTOR_ELT(result, PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNERS, owners);
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNER_VALUES,
+    owner_values
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_OWNER_IDS,
+    owner_ids
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_ROOT_VALUES,
+    root_values
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_CARGO,
+    cargo
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_TAG,
+    internal_tuning
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_HAS_CONSTRAINT,
+    has_constraint
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_ASSERT_VALUES,
+    root->assert_values
+  );
+  SET_VECTOR_ELT(
+    result,
+    PARADOX_INTERNAL_TUNING_SNAPSHOT_RECEIPT,
+    receipt
+  );
+  for (int field = 0;
+      field < PARADOX_INTERNAL_TUNING_SNAPSHOT_COUNT;
+      ++field) {
+    SET_STRING_ELT(result_names, field, Rf_mkChar(snapshot_names[field]));
+  }
+  Rf_setAttrib(result, R_NamesSymbol, result_names);
+
+  /*
+   * All result allocations are complete. This terminal nonallocating scan
+   * proves that cargo, translations, owner stores, and shell generations were
+   * simultaneously current at one instant before the snapshot escapes.
+   */
+  paradox_param_set_scan_internal_tuning_receipt(receipt);
+  UNPROTECT(15);
+  return result;
 }
 
 static value_spec_t load_spec(SEXP params, R_xlen_t row) {
@@ -1513,7 +2218,7 @@ static void build_check_plan(SEXP private_environment, SEXP self,
     check_plan_t *plan, SEXP *root_plan, PROTECT_INDEX root_plan_index) {
   build_graph(
     private_environment, self, &plan->graph, root_plan, root_plan_index, TRUE,
-    R_NilValue
+    FALSE, R_NilValue
   );
   initialize_check_plan(plan);
 }
@@ -1541,7 +2246,8 @@ static void build_exact_base_check_plan(SEXP private_environment, SEXP self,
     root_plan_index,
     &work_since_interrupt,
     selected_core,
-    TRUE
+    TRUE,
+    FALSE
   );
   plan->graph.count = 1;
   plan->graph.path[0] = 0;
@@ -1707,7 +2413,7 @@ static token_param_set_admission_t admit_token_param_set_base(
 }
 
 static int exact_base_receipt_unchanged(SEXP receipt) {
-  if (TYPEOF(receipt) != VECSXP || ALTREP(receipt) ||
+  if (TYPEOF(receipt) != VECSXP || ALTREP(receipt) || Rf_isS4(receipt) ||
       XLENGTH(receipt) != 3 || !paradox_api_has_no_attributes(receipt) ||
       token_enclosure_symbol == NULL || token_self_symbol == NULL ||
       token_private_symbol == NULL || token_core_symbol == NULL) {
@@ -1744,7 +2450,7 @@ static int exact_base_receipt_unchanged(SEXP receipt) {
 
 void paradox_param_set_scan_token_receipts(SEXP receipts) {
   if (receipts == R_NilValue) return;
-  if (TYPEOF(receipts) != VECSXP || ALTREP(receipts) ||
+  if (TYPEOF(receipts) != VECSXP || ALTREP(receipts) || Rf_isS4(receipts) ||
       !paradox_api_has_no_attributes(receipts)) {
     Rf_error("Internal error: malformed ObjectTuneToken receipt set");
   }
@@ -1766,13 +2472,13 @@ void paradox_param_set_scan_token_receipts(SEXP receipts) {
  * candidate method or replay candidate admission. */
 static void verify_token_receipts(SEXP receipts) {
   if (receipts == R_NilValue) return;
-  if (TYPEOF(receipts) != VECSXP || ALTREP(receipts)) {
+  if (TYPEOF(receipts) != VECSXP || ALTREP(receipts) || Rf_isS4(receipts)) {
     Rf_error("Internal error: malformed ObjectTuneToken receipt set");
   }
   for (R_xlen_t index = 0; index < XLENGTH(receipts); ++index) {
     SEXP receipt = VECTOR_ELT(receipts, index);
     if (receipt == R_NilValue) continue;
-    if (TYPEOF(receipt) != VECSXP || ALTREP(receipt) ||
+    if (TYPEOF(receipt) != VECSXP || ALTREP(receipt) || Rf_isS4(receipt) ||
         XLENGTH(receipt) != 3) {
       Rf_error("Internal error: malformed ObjectTuneToken receipt");
     }
@@ -1874,6 +2580,46 @@ typedef enum {
   TOKEN_SNAPSHOT_INTERNAL_FULL,
   TOKEN_SNAPSHOT_INTERNAL_RANGE
 } token_snapshot_kind_t;
+
+typedef struct {
+  const char *const *names;
+  R_xlen_t size;
+  R_xlen_t representation_scalar_count;
+  int internal;
+  int range;
+  int has_aggr;
+} token_content_layout_t;
+
+static int token_content_layout(token_snapshot_kind_t kind, R_xlen_t size,
+    token_content_layout_t *layout) {
+  static const char *const full_names[] = {"logscale"};
+  static const char *const full_aggr_names[] = {"logscale", "aggr"};
+  static const char *const range_names[] = {
+    "lower", "upper", "logscale"
+  };
+  static const char *const range_aggr_names[] = {
+    "lower", "upper", "logscale", "aggr"
+  };
+  if (kind == TOKEN_SNAPSHOT_OBJECT) return FALSE;
+
+  layout->internal = kind == TOKEN_SNAPSHOT_INTERNAL_FULL ||
+    kind == TOKEN_SNAPSHOT_INTERNAL_RANGE;
+  layout->range = kind == TOKEN_SNAPSHOT_RANGE ||
+    kind == TOKEN_SNAPSHOT_INTERNAL_RANGE;
+  const R_xlen_t ordinary_size = layout->range ? 3 : 1;
+  layout->has_aggr = layout->internal && size == ordinary_size + 1;
+  if ((!layout->internal && size != ordinary_size) ||
+      (layout->internal && size != ordinary_size &&
+        size != ordinary_size + 1)) {
+    return FALSE;
+  }
+  layout->names = layout->range
+    ? (layout->has_aggr ? range_aggr_names : range_names)
+    : (layout->has_aggr ? full_aggr_names : full_names);
+  layout->size = size;
+  layout->representation_scalar_count = ordinary_size;
+  return TRUE;
+}
 
 static int exact_token_string_vector(SEXP value,
     const char *const *expected, R_xlen_t size,
@@ -2030,14 +2776,6 @@ static int token_number_or_null(SEXP value) {
 }
 
 static void validate_token_content(SEXP content, token_snapshot_kind_t kind) {
-  static const char *const full_names[] = {"logscale"};
-  static const char *const full_aggr_names[] = {"logscale", "aggr"};
-  static const char *const range_names[] = {
-    "lower", "upper", "logscale"
-  };
-  static const char *const range_aggr_names[] = {
-    "lower", "upper", "logscale", "aggr"
-  };
   if (kind == TOKEN_SNAPSHOT_OBJECT) {
     if (Rf_isS4(content) ||
         (!Rf_inherits(content, "Domain") && TYPEOF(content) != ENVSXP)) {
@@ -2048,32 +2786,23 @@ static void validate_token_content(SEXP content, token_snapshot_kind_t kind) {
     return;
   }
 
-  const int internal = kind == TOKEN_SNAPSHOT_INTERNAL_FULL ||
-    kind == TOKEN_SNAPSHOT_INTERNAL_RANGE;
-  const int range = kind == TOKEN_SNAPSHOT_RANGE ||
-    kind == TOKEN_SNAPSHOT_INTERNAL_RANGE;
-  const R_xlen_t ordinary_size = range ? 3 : 1;
   const R_xlen_t size = TYPEOF(content) == VECSXP && !ALTREP(content)
     ? XLENGTH(content)
     : 0;
-  const int has_aggr = internal && size == ordinary_size + 1;
-  const char *const *expected_names = range
-    ? (has_aggr ? range_aggr_names : range_names)
-    : (has_aggr ? full_aggr_names : full_names);
-  if ((!internal && size != ordinary_size) ||
-      (internal && size != ordinary_size && size != ordinary_size + 1) ||
-      !token_content_names(content, expected_names, size)) {
+  token_content_layout_t layout;
+  if (!token_content_layout(kind, size, &layout) ||
+      !token_content_names(content, layout.names, size)) {
     Rf_error("Malformed TuneToken content");
   }
-  if (range && (!token_number_or_null(VECTOR_ELT(content, 0)) ||
+  if (layout.range && (!token_number_or_null(VECTOR_ELT(content, 0)) ||
       !token_number_or_null(VECTOR_ELT(content, 1)))) {
     Rf_error("Malformed RangeTuneToken bounds");
   }
-  const R_xlen_t logscale_index = range ? 2 : 0;
+  const R_xlen_t logscale_index = layout.range ? 2 : 0;
   SEXP logscale = VECTOR_ELT(content, logscale_index);
   if (!plain_token_logical(logscale) ||
-      (internal && LOGICAL_ELT(logscale, 0) != FALSE) ||
-      (has_aggr && (Rf_isS4(VECTOR_ELT(content, size - 1)) ||
+      (layout.internal && LOGICAL_ELT(logscale, 0) != FALSE) ||
+      (layout.has_aggr && (Rf_isS4(VECTOR_ELT(content, size - 1)) ||
         !Rf_isFunction(VECTOR_ELT(content, size - 1))))) {
     Rf_error("Malformed TuneToken content");
   }
@@ -2087,36 +2816,44 @@ static void validate_token_call(SEXP call) {
   }
 }
 
+static void run_test_gc_column_mutation(
+    SEXP source, SEXP column, SEXP replacement) {
+  if (column == R_NilValue) return;
+  PROTECT(paradox_test_gc_column_mutator(source, column, replacement));
+  UNPROTECT(1);
+  const int selected = INTEGER_ELT(column, 0);
+  /*
+   * This is a test-only deterministic finalizer barrier. R_gc() and
+   * R_RunPendingFinalizers() are public APIs; invoking both here guarantees
+   * that the mutation occurs at the exact snapshot boundary under test.
+   */
+  R_gc();
+  R_RunPendingFinalizers();
+  if (VECTOR_ELT(source, selected) != replacement) {
+    Rf_error("TuneToken GC-mutation test fixture did not run");
+  }
+}
+
+static SEXP snapshot_search_space_value_carrier(SEXP values);
+static SEXP snapshot_tune_tokens_from_value_carrier(
+  SEXP stable_values, SEXP *value_names
+);
+
 static SEXP snapshot_tune_token_impl(
     SEXP token, SEXP mutation_column, SEXP mutation_replacement) {
   const token_snapshot_kind_t kind = exact_token_kind(token);
   SEXP content = PROTECT(VECTOR_ELT(token, 0));
   SEXP call = PROTECT(VECTOR_ELT(token, 1));
   validate_token_call(call);
-  validate_token_content(content, kind);
-
-  if (mutation_column != R_NilValue) {
-    PROTECT(paradox_test_gc_column_mutator(
-      content,
-      mutation_column,
-      mutation_replacement
-    ));
-    UNPROTECT(1);
-    const int selected = INTEGER_ELT(mutation_column, 0);
-    /* This is a test-only deterministic finalizer barrier. R_gc() and
-     * R_RunPendingFinalizers() are public APIs; invoking both here guarantees
-     * that the mutation occurs after exact admission and before the owned
-     * copy, instead of relying on an allocation to drain the pending queue. */
-    R_gc();
-    R_RunPendingFinalizers();
-    if (VECTOR_ELT(content, selected) != mutation_replacement) {
-      UNPROTECT(2);
-      Rf_error("TuneToken GC-mutation test fixture did not run");
-    }
-  }
 
   SEXP stable_content;
   if (kind == TOKEN_SNAPSHOT_OBJECT) {
+    validate_token_content(content, kind);
+    run_test_gc_column_mutation(
+      content,
+      mutation_column,
+      mutation_replacement
+    );
     if (TYPEOF(content) == VECSXP) {
       paradox_domain_field_t failed_field = PARADOX_DOMAIN_FIELD_NONE;
       stable_content = PROTECT(paradox_snapshot_builtin_domain(
@@ -2159,26 +2896,72 @@ static SEXP snapshot_tune_token_impl(
       stable_content = PROTECT(content);
     }
   } else {
-    stable_content = PROTECT(Rf_allocVector(VECSXP, XLENGTH(content)));
-    const R_xlen_t representation_scalar_count =
-      kind == TOKEN_SNAPSHOT_FULL || kind == TOKEN_SNAPSHOT_INTERNAL_FULL
-      ? 1
-      : 3;
-    for (R_xlen_t index = 0; index < XLENGTH(content); ++index) {
+    /*
+     * Allocate both destination carriers before selecting any caller-owned
+     * content. A pending finalizer may rewrite `content` during either
+     * allocation. Afterwards, select every name beside its exact matching
+     * element in one allocation-free pass. Per-leaf duplication may allocate,
+     * but it consumes only this rooted carrier and never rereads the source
+     * spine or its names.
+     */
+    const R_xlen_t size = TYPEOF(content) == VECSXP && !ALTREP(content)
+      ? XLENGTH(content)
+      : 0;
+    token_content_layout_t layout;
+    if (!token_content_layout(kind, size, &layout)) {
+      UNPROTECT(2);
+      Rf_error("Malformed TuneToken content");
+    }
+    stable_content = PROTECT(Rf_allocVector(VECSXP, size));
+    SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, size));
+
+    R_xlen_t work_since_interrupt = 0;
+    SEXP observed_names = Rf_getAttrib(content, R_NamesSymbol);
+    if (TYPEOF(content) != VECSXP || ALTREP(content) ||
+        Rf_isS4(content) || Rf_isObject(content) ||
+        XLENGTH(content) != size ||
+        !paradox_api_has_single_attribute(content, "names") ||
+        !exact_token_string_vector(
+          observed_names,
+          layout.names,
+          size,
+          &work_since_interrupt
+        )) {
+      UNPROTECT(4);
+      Rf_error("Malformed TuneToken content");
+    }
+    for (R_xlen_t index = 0; index < size; ++index) {
+      SET_STRING_ELT(
+        stable_names,
+        index,
+        STRING_ELT(observed_names, index)
+      );
+      SET_VECTOR_ELT(stable_content, index, VECTOR_ELT(content, index));
+    }
+    Rf_setAttrib(stable_content, R_NamesSymbol, stable_names);
+    UNPROTECT(1);
+
+    validate_token_content(stable_content, kind);
+    run_test_gc_column_mutation(
+      content,
+      mutation_column,
+      mutation_replacement
+    );
+    for (R_xlen_t index = 0; index < size; ++index) {
       SEXP element = PROTECT(snapshot_parameter_leaf(
-        VECTOR_ELT(content, index)
+        VECTOR_ELT(stable_content, index)
       ));
       /* Ordinary R arithmetic and subsetting commonly attach a name to a
        * scalar.  Bounds and logscale admit that representation, but their
        * owned snapshot is canonical.  The optional aggregation callback is
        * deliberately opaque and must retain its identity and attributes. */
-      if (index < representation_scalar_count && element != R_NilValue) {
+      if (index < layout.representation_scalar_count &&
+          element != R_NilValue) {
         Rf_setAttrib(element, R_NamesSymbol, R_NilValue);
       }
       SET_VECTOR_ELT(stable_content, index, element);
       UNPROTECT(1);
     }
-    SHALLOW_DUPLICATE_ATTRIB(stable_content, content);
   }
   SEXP stable_call = PROTECT(Rf_duplicate(call));
   SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
@@ -2208,6 +2991,17 @@ SEXP paradox_test_tune_token_gc_mutation_snapshot(
   if (TYPEOF(token) != VECSXP || ALTREP(token) || XLENGTH(token) < 1) {
     Rf_error("Invalid TuneToken GC-mutation test fixture token");
   }
+  if (!Rf_inherits(token, "TuneToken")) {
+    SEXP stable_values = PROTECT(snapshot_search_space_value_carrier(token));
+    run_test_gc_column_mutation(token, column, replacement);
+    SEXP value_names = R_NilValue;
+    SEXP result = PROTECT(snapshot_tune_tokens_from_value_carrier(
+      stable_values,
+      &value_names
+    ));
+    UNPROTECT(2);
+    return result;
+  }
   SEXP content = VECTOR_ELT(token, 0);
   if (TYPEOF(content) != VECSXP || ALTREP(content)) {
     Rf_error("Invalid TuneToken GC-mutation test fixture content");
@@ -2220,6 +3014,23 @@ static SEXP snapshot_parameter_value(SEXP value) {
     return snapshot_tune_token(value);
   }
   return snapshot_parameter_leaf(value);
+}
+
+static SEXP snapshot_value_for_spec(
+    SEXP value, const value_spec_t *spec) {
+  /*
+   * ParamUty is the package's opaque escape hatch.  Its ordinary values are
+   * identity-bearing leaves, not interpreted vectors: in particular, merely
+   * checking or storing one must not call an ALTREP method or duplicate an
+   * ordinary atomic object.  TuneTokens remain semantic syntax regardless of
+   * the target Domain and therefore retain their one canonical snapshot.
+   */
+  if (Rf_inherits(value, "TuneToken")) {
+    return snapshot_tune_token(value);
+  }
+  return spec->kind == VALUE_UTY
+    ? value
+    : snapshot_parameter_leaf(value);
 }
 
 static int representation_only_s3_classes(SEXP value) {
@@ -2282,25 +3093,30 @@ static SEXP snapshot_named_list(SEXP values) {
   /* `list()` is the canonical public spelling of an empty point.  R does not
    * attach a zero-length names vector to it, so normalize that sole unnamed
    * case before entering the common point kernel. */
-  SEXP stable_names = PROTECT(names == R_NilValue
-    ? Rf_allocVector(STRSXP, 0)
-    : Rf_duplicate(names));
+  SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, size));
+  /*
+   * The allocations are complete.  Re-select names now, then capture each
+   * name beside the exact matching leaf in one allocation-free pass.  A
+   * pending finalizer may have rewritten the caller-owned list while either
+   * carrier was allocated; it may not leave a pre-callback name paired with a
+   * post-callback value.
+   */
+  names = Rf_getAttrib(values, R_NamesSymbol);
   if (TYPEOF(stable_names) != STRSXP || ALTREP(stable_names) ||
       Rf_isS4(stable_names) || XLENGTH(stable_names) != size ||
-      !no_attributes(stable_names)) {
+      !no_attributes(stable_names) ||
+      !ordinary_names_vector(names, size, size == 0)) {
     UNPROTECT(3);
     return check_message("Names must be an ordinary character vector");
   }
   for (R_xlen_t index = 0; index < size; ++index) {
-    if (STRING_ELT(stable_names, index) == NA_STRING ||
-        CHAR(STRING_ELT(stable_names, index))[0] == '\0') {
+    SEXP name = STRING_ELT(names, index);
+    if (name == NA_STRING || CHAR(name)[0] == '\0') {
       UNPROTECT(3);
       return check_message("Names must be non-missing and non-empty");
     }
-    SEXP value = PROTECT(VECTOR_ELT(values, index));
-    SEXP copy = PROTECT(snapshot_parameter_value(value));
-    SET_VECTOR_ELT(result, index, copy);
-    UNPROTECT(2);
+    SET_STRING_ELT(stable_names, index, name);
+    SET_VECTOR_ELT(result, index, VECTOR_ELT(values, index));
   }
   if (Rf_any_duplicated(stable_names, FALSE) != 0) {
     UNPROTECT(3);
@@ -2311,10 +3127,12 @@ static SEXP snapshot_named_list(SEXP values) {
   return result;
 }
 
-/* Publishes the complete admitted name vector through `value_names` beside the
- * TuneToken subset it returns. Both cross the return boundary unrooted, so the
- * caller must root them before anything that can allocate. */
-static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
+/*
+ * Own one exact outer values generation before TuneToken selection begins.
+ * The returned ordinary named list is the sole authority for both names and
+ * leaves after this function returns.
+ */
+static SEXP snapshot_search_space_value_carrier(SEXP values) {
   static const char *const allowed_attributes[] = {"names", "class"};
   if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isS4(values) ||
       !paradox_api_has_only_attributes(values, allowed_attributes, 2)) {
@@ -2324,32 +3142,58 @@ static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
     Rf_error("Search-space value container has a malformed S3 class");
   }
   const R_xlen_t size = XLENGTH(values);
-  SEXP names = PROTECT(Rf_getAttrib(values, R_NamesSymbol));
+  SEXP stable_values = PROTECT(Rf_allocVector(VECSXP, size));
+  SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, size));
+
+  /*
+   * Either allocation above may run a pending finalizer. Reauthenticate the
+   * source shell, then capture every name beside its matching leaf without
+   * another allocation or callback. This prevents a name from one generation
+   * being paired with a value selected from another.
+   */
+  if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isS4(values) ||
+      XLENGTH(values) != size ||
+      !paradox_api_has_only_attributes(values, allowed_attributes, 2)) {
+    UNPROTECT(2);
+    Rf_error("Search-space values must be an ordinary named list");
+  }
+  if (!representation_only_s3_classes(values)) {
+    UNPROTECT(2);
+    Rf_error("Search-space value container has a malformed S3 class");
+  }
+  SEXP names = Rf_getAttrib(values, R_NamesSymbol);
   if (!ordinary_names_vector(names, size, size == 0)) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     Rf_error("Search-space values must have ordinary character names");
   }
-  SEXP stable_names = PROTECT(names == R_NilValue
-    ? Rf_allocVector(STRSXP, 0)
-    : Rf_duplicate(names));
-  if (TYPEOF(stable_names) != STRSXP || ALTREP(stable_names) ||
-      Rf_isS4(stable_names) || Rf_isObject(stable_names) ||
-      XLENGTH(stable_names) != size || !no_attributes(stable_names)) {
-    UNPROTECT(2);
-    Rf_error("Search-space value names must be ordinary characters");
-  }
   for (R_xlen_t index = 0; index < size; ++index) {
-    SEXP name = STRING_ELT(stable_names, index);
+    SEXP name = STRING_ELT(names, index);
     if (name == NA_STRING || CHAR(name)[0] == '\0') {
       UNPROTECT(2);
       Rf_error("Search-space value names must be non-missing and non-empty");
     }
+    SET_STRING_ELT(stable_names, index, name);
+    SET_VECTOR_ELT(stable_values, index, VECTOR_ELT(values, index));
   }
   if (Rf_any_duplicated(stable_names, FALSE) != 0) {
     UNPROTECT(2);
     Rf_error("Search-space value names must be unique");
   }
+  Rf_setAttrib(stable_values, R_NamesSymbol, stable_names);
+  UNPROTECT(2);
+  return stable_values;
+}
 
+/* Publishes the complete admitted name vector through `value_names` beside the
+ * TuneToken subset it returns. Both cross the return boundary unrooted, so the
+ * caller must root them before anything that can allocate. */
+static SEXP snapshot_tune_tokens_from_value_carrier(
+    SEXP stable_values, SEXP *value_names) {
+  const R_xlen_t size = XLENGTH(stable_values);
+  SEXP stable_names = PROTECT(Rf_getAttrib(
+    stable_values,
+    R_NamesSymbol
+  ));
   R_xlen_t token_count = 0;
   unsigned char *selected = paradox_temporary_alloc(
     size == 0 ? 1 : size,
@@ -2357,7 +3201,7 @@ static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
   );
   for (R_xlen_t index = 0; index < size; ++index) {
     const int is_token = Rf_inherits(
-      VECTOR_ELT(values, index), "TuneToken"
+      VECTOR_ELT(stable_values, index), "TuneToken"
     ) != FALSE;
     selected[index] = is_token ? 1U : 0U;
     token_count += selected[index] != 0;
@@ -2366,9 +3210,10 @@ static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
   SEXP result_names = PROTECT(Rf_allocVector(STRSXP, token_count));
   R_xlen_t output = 0;
   for (R_xlen_t index = 0; index < size; ++index) {
-    SEXP value = VECTOR_ELT(values, index);
     if (selected[index] == 0) continue;
-    SEXP token = PROTECT(snapshot_tune_token(value));
+    SEXP token = PROTECT(snapshot_tune_token(
+      VECTOR_ELT(stable_values, index)
+    ));
     SET_VECTOR_ELT(result, output, token);
     SET_STRING_ELT(result_names, output, STRING_ELT(stable_names, index));
     ++output;
@@ -2376,7 +3221,17 @@ static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
   }
   Rf_setAttrib(result, R_NamesSymbol, result_names);
   *value_names = stable_names;
-  UNPROTECT(4);
+  UNPROTECT(3);
+  return result;
+}
+
+static SEXP snapshot_tune_tokens_from_values(SEXP values, SEXP *value_names) {
+  SEXP stable_values = PROTECT(snapshot_search_space_value_carrier(values));
+  SEXP result = PROTECT(snapshot_tune_tokens_from_value_carrier(
+    stable_values,
+    value_names
+  ));
+  UNPROTECT(2);
   return result;
 }
 
@@ -2500,17 +3355,10 @@ static value_spec_t target_domain_spec(SEXP domain) {
   return result;
 }
 
-SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
-    SEXP values) {
-  SEXP value_names = R_NilValue;
-  SEXP tokens = PROTECT(snapshot_tune_tokens_from_values(values, &value_names));
-  PROTECT(value_names);
+static SEXP finish_tune_token_snapshot(
+    SEXP tokens, SEXP value_names, SEXP all_domains) {
   SEXP token_names = PROTECT(Rf_getAttrib(tokens, R_NamesSymbol));
   R_xlen_t work_since_interrupt = 0;
-  SEXP all_domains = PROTECT(paradox_param_set_domains(
-    private_environment,
-    self
-  ));
   SEXP targets = PROTECT(select_tune_target_domains(
     all_domains,
     value_names,
@@ -2529,7 +3377,7 @@ SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
           &candidate_private,
           NULL
         )) {
-        UNPROTECT(5);
+        UNPROTECT(2);
         Rf_error("Malformed ObjectTuneToken: malformed exact BASE ParamSet");
       }
       PROTECT(candidate_private);
@@ -2565,12 +3413,50 @@ SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
   SET_STRING_ELT(names, 0, Rf_mkChar("tokens"));
   SET_STRING_ELT(names, 1, Rf_mkChar("targets"));
   Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(7);
+  UNPROTECT(4);
+  return result;
+}
+
+SEXP paradox_tune_token_snapshot_list(SEXP private_environment, SEXP self,
+    SEXP values) {
+  SEXP value_names = R_NilValue;
+  SEXP tokens = PROTECT(snapshot_tune_tokens_from_values(values, &value_names));
+  PROTECT(value_names);
+  SEXP all_domains = PROTECT(paradox_param_set_domains(
+    private_environment,
+    self
+  ));
+  SEXP result = PROTECT(finish_tune_token_snapshot(
+    tokens,
+    value_names,
+    all_domains
+  ));
+  UNPROTECT(4);
+  return result;
+}
+
+SEXP paradox_tune_token_snapshot_current(
+    SEXP private_environment, SEXP self) {
+  SEXP source = PROTECT(paradox_param_set_domains_and_values(
+    private_environment,
+    self
+  ));
+  SEXP values = VECTOR_ELT(source, 0);
+  SEXP all_domains = VECTOR_ELT(source, 1);
+  SEXP value_names = R_NilValue;
+  SEXP tokens = PROTECT(snapshot_tune_tokens_from_values(values, &value_names));
+  PROTECT(value_names);
+  SEXP result = PROTECT(finish_tune_token_snapshot(
+    tokens,
+    value_names,
+    all_domains
+  ));
+  UNPROTECT(4);
   return result;
 }
 
 static SEXP initialize_point(SEXP stable_values, const check_plan_t *plan,
-    point_t *point) {
+    point_t *point, int values_are_stable) {
   point->values = stable_values;
   point->names = Rf_getAttrib(stable_values, R_NamesSymbol);
   point->size = XLENGTH(stable_values);
@@ -2600,6 +3486,22 @@ static SEXP initialize_point(SEXP stable_values, const check_plan_t *plan,
     }
     point->param_rows[index] = row;
     point->value_for_param[row] = index;
+  }
+  if (!values_are_stable) {
+    /*
+     * Name admission above is callback-free and complete before a semantic
+     * leaf is observed.  The owned point shell can now be specialized by the
+     * exact selected Domain without a schema-blind R/C fallback.
+     */
+    for (R_xlen_t index = 0; index < point->size; ++index) {
+      SEXP value = PROTECT(VECTOR_ELT(point->values, index));
+      SEXP stable = PROTECT(snapshot_value_for_spec(
+        value,
+        &plan->specs[point->param_rows[index]]
+      ));
+      SET_VECTOR_ELT(point->values, index, stable);
+      UNPROTECT(2);
+    }
   }
   return R_NilValue;
 }
@@ -2681,10 +3583,12 @@ static SEXP validate_ordinary_value(const value_spec_t *spec, SEXP value,
       return R_NilValue;
     }
     SEXP result;
-    if (TYPEOF(answer) == STRSXP && XLENGTH(answer) == 1 &&
-        STRING_ELT(answer, 0) != NA_STRING) {
+    SEXP reason = TYPEOF(answer) == STRSXP && XLENGTH(answer) == 1
+      ? STRING_ELT(answer, 0)
+      : NA_STRING;
+    if (reason != NA_STRING) {
       result = PROTECT(utf8_message_2(
-        "", spec->id, ": ", STRING_ELT(answer, 0), ""
+        "", spec->id, ": ", reason, ""
       ));
     } else {
       result = PROTECT(utf8_message_1(
@@ -2810,7 +3714,7 @@ static SEXP validate_object_token(const value_spec_t *spec, SEXP content,
 static SEXP validate_tune_token(const value_spec_t *spec, SEXP token,
     R_xlen_t *work_since_interrupt, SEXP *receipt_result) {
   if (receipt_result != NULL) *receipt_result = R_NilValue;
-  if (TYPEOF(token) != VECSXP || ALTREP(token)) {
+  if (TYPEOF(token) != VECSXP || ALTREP(token) || Rf_isS4(token)) {
     return utf8_message_1(
       "", spec->id, ": tune token invalid: malformed token"
     );
@@ -2830,7 +3734,7 @@ static SEXP validate_tune_token(const value_spec_t *spec, SEXP token,
         " for non-numeric param must have zero or one argument."
       );
     }
-    if (TYPEOF(content) != VECSXP || ALTREP(content)) {
+    if (TYPEOF(content) != VECSXP || ALTREP(content) || Rf_isS4(content)) {
       return utf8_message_1(
         "", spec->id, ": tune token invalid: malformed range"
       );
@@ -3188,12 +4092,15 @@ static SEXP check_constraints(check_plan_t *plan,
     ));
     SEXP call = PROTECT(Rf_lang2(node->constraint, values));
     SEXP answer = PROTECT(Rf_eval(call, R_BaseEnv));
-    if (TYPEOF(answer) != LGLSXP || XLENGTH(answer) != 1 ||
-        LOGICAL_ELT(answer, 0) == NA_LOGICAL) {
+    if (TYPEOF(answer) != LGLSXP || XLENGTH(answer) != 1) {
       UNPROTECT(3);
       Rf_error("ParamSet constraint must return one non-missing logical value");
     }
     const int accepted = LOGICAL_ELT(answer, 0);
+    if (accepted == NA_LOGICAL) {
+      UNPROTECT(3);
+      Rf_error("ParamSet constraint must return one non-missing logical value");
+    }
     UNPROTECT(3);
     if (!accepted) return Rf_mkString("Constraint not fulfilled.");
   }
@@ -3464,10 +4371,10 @@ static SEXP validate_initialized_point(check_plan_t *plan,
 static SEXP validate_point(check_plan_t *plan, SEXP stable_values,
     int check_constraints_flag, int check_dependencies_flag,
     int sanitize, presence_t presence, int allow_token,
-    SEXP *receipts_result) {
+    SEXP *receipts_result, int values_are_stable) {
   point_t point;
   SEXP structural_failure = PROTECT(initialize_point(
-    stable_values, plan, &point
+    stable_values, plan, &point, values_are_stable
   ));
   if (structural_failure != R_NilValue) {
     UNPROTECT(1);
@@ -3487,18 +4394,50 @@ static SEXP validate_point(check_plan_t *plan, SEXP stable_values,
 }
 
 static SEXP snapshot_table_column(SEXP column) {
+  /* The list-column shell is interpreted structure even though its cells are
+   * opaque semantic leaves. Preserve S4 leaf identity, but do not normalize
+   * an S4 carrier into an apparently ordinary private snapshot. */
+  if (TYPEOF(column) == VECSXP && Rf_isS4(column)) {
+    return R_UnboundValue;
+  }
   if (TYPEOF(column) != VECSXP) return snapshot_parameter_value(column);
   const R_xlen_t size = XLENGTH(column);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
   for (R_xlen_t row = 0; row < size; ++row) {
-    SEXP value = PROTECT(VECTOR_ELT(column, row));
-    SEXP copy = PROTECT(snapshot_parameter_value(value));
-    SET_VECTOR_ELT(result, row, copy);
-    UNPROTECT(2);
+    SET_VECTOR_ELT(result, row, VECTOR_ELT(column, row));
   }
   SHALLOW_DUPLICATE_ATTRIB(result, column);
   UNPROTECT(1);
   return result;
+}
+
+static void stabilize_table_list_columns(
+    SEXP table, const check_plan_t *plan) {
+  SEXP names = Rf_getAttrib(table, R_NamesSymbol);
+  R_xlen_t work_since_interrupt = 0;
+  for (R_xlen_t column = 0; column < XLENGTH(table); ++column) {
+    SEXP values = VECTOR_ELT(table, column);
+    if (TYPEOF(values) != VECSXP) continue;
+
+    R_xlen_t parameter = R_XLEN_T_MAX;
+    if (!find_id(
+          &plan->root_ids,
+          STRING_ELT(names, column),
+          &parameter,
+          &work_since_interrupt
+        )) {
+      /* initialize_point() owns the ordinary unavailable-ID diagnostic. */
+      continue;
+    }
+    const value_spec_t *spec = &plan->specs[parameter];
+    for (R_xlen_t row = 0; row < XLENGTH(values); ++row) {
+      paradox_account_work(&work_since_interrupt);
+      SEXP value = PROTECT(VECTOR_ELT(values, row));
+      SEXP stable = PROTECT(snapshot_value_for_spec(value, spec));
+      SET_VECTOR_ELT(values, row, stable);
+      UNPROTECT(2);
+    }
+  }
 }
 
 static int ordinary_table_class(SEXP table, const char *required_class) {
@@ -3512,25 +4451,35 @@ static int ordinary_table_class(SEXP table, const char *required_class) {
 }
 
 static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
-  if (!ordinary_table_class(table, "data.frame")) {
+  if (TYPEOF(table) != VECSXP || ALTREP(table) || Rf_isS4(table)) {
     return check_message("Must be a data.frame or data.table");
   }
   const R_xlen_t columns = XLENGTH(table);
-  SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
-  if (names != R_NilValue &&
-      (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
-        Rf_isObject(names) || !no_attributes(names) ||
-        XLENGTH(names) != columns)) {
-    UNPROTECT(1);
+  SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, columns));
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, columns));
+  if (!ordinary_table_class(table, "data.frame")) {
+    UNPROTECT(2);
+    return check_message("Must be a data.frame or data.table");
+  }
+  if (!paradox_capture_list_identities(
+      table,
+      stable_names,
+      result
+    )) {
+    UNPROTECT(2);
     return check_message("Table columns must be named");
   }
-  if (names == R_NilValue && columns != 0) {
-    UNPROTECT(1);
-    return check_message("Table columns must be named");
+  /*
+   * Capture row-name authority in the same post-allocation observation
+   * window as names and columns. Name diagnostics and duplicate detection may
+   * allocate; delaying this read could pair an earlier column generation with
+   * later row names after a pending finalizer.
+   */
+  R_xlen_t rows = 0;
+  if (!paradox_public_table_row_count(table, &rows)) {
+    UNPROTECT(2);
+    return check_message("Invalid data.frame row names");
   }
-  SEXP stable_names = PROTECT(names == R_NilValue
-    ? Rf_allocVector(STRSXP, 0)
-    : Rf_duplicate(names));
   for (R_xlen_t column = 0; column < columns; ++column) {
     if (STRING_ELT(stable_names, column) == NA_STRING ||
         CHAR(STRING_ELT(stable_names, column))[0] == '\0') {
@@ -3543,26 +4492,23 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
     return check_message("Table column names must be unique");
   }
 
-  R_xlen_t rows = 0;
-  if (!paradox_public_table_row_count(table, &rows)) {
-    UNPROTECT(2);
-    return check_message("Invalid data.frame row names");
-  }
-
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, columns));
   for (R_xlen_t column = 0; column < columns; ++column) {
-    SEXP source = PROTECT(VECTOR_ELT(table, column));
+    SEXP source = PROTECT(VECTOR_ELT(result, column));
     SEXP stable = PROTECT(snapshot_table_column(source));
+    if (stable == R_UnboundValue) {
+      UNPROTECT(4);
+      return check_message("Table list-column shells must not be S4");
+    }
     const SEXPTYPE type = (SEXPTYPE) TYPEOF(stable);
     if (type != LGLSXP && type != INTSXP && type != REALSXP &&
         type != CPLXSXP && type != STRSXP && type != RAWSXP &&
         type != VECSXP) {
-      UNPROTECT(5);
+      UNPROTECT(4);
       return check_message("Unsupported table column type '%s'",
         Rf_type2char(type));
     }
     if (XLENGTH(stable) != rows) {
-      UNPROTECT(5);
+      UNPROTECT(4);
       return check_message(column == 0
         ? "Invalid data.frame row names"
         : "Table columns must have equal lengths");
@@ -3572,7 +4518,7 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
   }
   Rf_setAttrib(result, R_NamesSymbol, stable_names);
   *row_count = rows;
-  UNPROTECT(3);
+  UNPROTECT(2);
   return result;
 }
 
@@ -3689,6 +4635,7 @@ SEXP paradox_param_set_validate_current_graph(
     &root_plan,
     root_plan_index,
     FALSE,
+    FALSE,
     selected_core
   );
   initialize_check_plan(&plan);
@@ -3700,12 +4647,14 @@ SEXP paradox_param_set_validate_current_graph(
   return result;
 }
 
-SEXP paradox_param_set_validate_current_roots(SEXP selves) {
+SEXP paradox_param_set_validate_current_roots(
+    SEXP selves, SEXP public_receipts) {
   /*
    * This is the migration session's final all-roots barrier. Every selected
    * shell generation remains in one shared protected root plan until all
-   * graphs have been admitted; only then do allocation-free receipt scans
-   * certify the complete set simultaneously.
+   * graphs have been admitted; only then do allocation-free graph receipt
+   * scans, followed immediately by the optional complete public-shell receipt
+   * scan, certify the complete set simultaneously.
    */
   if (TYPEOF(selves) != VECSXP || ALTREP(selves) || Rf_isS4(selves)) {
     Rf_error("Current ParamSet roots must be an ordinary list");
@@ -3755,6 +4704,7 @@ SEXP paradox_param_set_validate_current_roots(SEXP selves) {
       &root_plan,
       root_plan_index,
       FALSE,
+      FALSE,
       selected_core
     );
     initialize_check_plan(&plans[index]);
@@ -3767,6 +4717,9 @@ SEXP paradox_param_set_validate_current_roots(SEXP selves) {
         "ParamSet roots changed during joint read-only validation"
       );
     }
+  }
+  if (public_receipts != R_NilValue) {
+    paradox_validate_upgrade_public_binding_receipts(public_receipts);
   }
   UNPROTECT(2);
   return result;
@@ -3803,7 +4756,8 @@ SEXP paradox_param_set_check_builtin_with_receipts(
     do_sanitize,
     required_presence,
     tokens,
-    receipts_result
+    receipts_result,
+    FALSE
   ));
   UNPROTECT(3);
   return result;
@@ -3828,7 +4782,8 @@ SEXP paradox_param_set_check_builtin(SEXP private_environment, SEXP self,
 SEXP paradox_param_set_check_dependencies_builtin(
     SEXP private_environment, SEXP self, SEXP values) {
   static const char *const allowed_attributes[] = {"names"};
-  if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isObject(values) ||
+  if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isS4(values) ||
+      Rf_isObject(values) ||
       !paradox_api_has_only_attributes(values, allowed_attributes, 1)) {
     return Rf_mkString("Must be an ordinary named list");
   }
@@ -3852,7 +4807,9 @@ SEXP paradox_param_set_check_dependencies_builtin(
     .retain_reasons = TRUE,
     .result = {NULL, NULL}
   };
-  SEXP result = PROTECT(initialize_point(stable_values, &plan, &point));
+  SEXP result = PROTECT(initialize_point(
+    stable_values, &plan, &point, FALSE
+  ));
   if (result == R_NilValue) {
     UNPROTECT(1);
     result = PROTECT(check_dependencies(&plan, &point, &activity));
@@ -3880,8 +4837,10 @@ static void constraint_input_error(SEXP failure, const char *argument) {
 
 static void initialize_constraint_point(SEXP values,
     check_plan_t *plan, point_t *point, int assert_value,
-    const char *argument) {
-  SEXP structural_failure = PROTECT(initialize_point(values, plan, point));
+    const char *argument, int values_are_stable) {
+  SEXP structural_failure = PROTECT(initialize_point(
+    values, plan, point, values_are_stable
+  ));
   if (structural_failure != R_NilValue) {
     constraint_input_error(structural_failure, argument);
   }
@@ -3941,7 +4900,7 @@ SEXP paradox_param_set_test_constraint_builtin(
     .result = {NULL, NULL}
   };
   initialize_constraint_point(
-    stable_values, &plan, &point, validate, "x"
+    stable_values, &plan, &point, validate, "x", FALSE
   );
   SEXP failure = PROTECT(check_constraints(&plan, &point, &activity));
   SEXP result = PROTECT(Rf_ScalarLogical(failure == R_NilValue));
@@ -3970,6 +4929,7 @@ SEXP paradox_param_set_test_constraint_dt_builtin(
   build_check_plan(
     private_environment, self, &plan, &root_plan, root_plan_index
   );
+  stabilize_table_list_columns(stable_table, &plan);
 
   if (validate) {
     const void *row_watermark = vmaxget();
@@ -3979,7 +4939,9 @@ SEXP paradox_param_set_test_constraint_dt_builtin(
       }
       SEXP values = PROTECT(table_point(stable_table, row));
       point_t point;
-      initialize_constraint_point(values, &plan, &point, TRUE, "x");
+      initialize_constraint_point(
+        values, &plan, &point, TRUE, "x", TRUE
+      );
       UNPROTECT(1);
       vmaxset(row_watermark);
     }
@@ -4012,7 +4974,9 @@ SEXP paradox_param_set_test_constraint_dt_builtin(
       .retain_reasons = FALSE,
       .result = {NULL, NULL}
     };
-    initialize_constraint_point(values, &plan, &point, FALSE, "x");
+    initialize_constraint_point(
+      values, &plan, &point, FALSE, "x", TRUE
+    );
     SEXP failure = PROTECT(check_constraints(
       &plan,
       &point,
@@ -4046,6 +5010,7 @@ SEXP paradox_param_set_check_dt_builtin(SEXP private_environment, SEXP self,
   build_check_plan(
     private_environment, self, &plan, &root_plan, root_plan_index
   );
+  stabilize_table_list_columns(stable_table, &plan);
   /*
    * Keep operation-lifetime topology below the per-row watermark. Point,
    * mask, and DFS scratch can then be reclaimed after every row instead of
@@ -4068,7 +5033,8 @@ SEXP paradox_param_set_check_dt_builtin(SEXP private_environment, SEXP self,
       FALSE,
       required_presence,
       tokens,
-      NULL
+      NULL,
+      TRUE
     ));
     if (TYPEOF(result) != LGLSXP || XLENGTH(result) != 1 ||
         LOGICAL_ELT(result, 0) != TRUE) {

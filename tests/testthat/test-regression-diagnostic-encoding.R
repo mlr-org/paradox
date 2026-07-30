@@ -37,6 +37,22 @@ test_that("declared encodings still take their documented path", {
   expect_identical(set$check(list(zzz = 1)), "Parameter 'zzz' not available")
 })
 
+test_that("mismarked diagnostics survive transient allocation under collection", {
+  skip_on_cran()
+  invalid = "\xe9"
+  skip_if(validUTF8(invalid), "the test locale accepts this byte as UTF-8")
+  set = ps(alpha = p_dbl(0, 1), beta = p_dbl(0, 1))
+  point = stats::setNames(list(1), invalid)
+
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+  observed = set$check(point)
+  gctorture(previous)
+
+  expect_identical(observed, "Parameter '\\xe9' not available")
+  expect_true(validUTF8(observed))
+})
+
 test_that("a custom_check diagnostic is the encoding it declares", {
   invalid = "\xe9 rejected"
   skip_if(validUTF8(invalid), "the test locale accepts this byte as UTF-8")

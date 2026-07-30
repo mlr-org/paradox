@@ -11,7 +11,7 @@ native_subset_symbols = function() {
   )
 }
 
-native_subset_token = function(param_set, ids,
+native_subset_bundle = function(param_set, ids,
     allow_dangling_dependencies = FALSE, keep_constraint = TRUE,
     keep_trafo = TRUE) {
   symbols = native_subset_symbols()
@@ -22,10 +22,20 @@ native_subset_token = function(param_set, ids,
     ids,
     allow_dangling_dependencies,
     keep_constraint,
-    param_set$constraint,
-    param_set$extra_trafo,
     keep_trafo
   )
+}
+
+native_subset_token = function(param_set, ids,
+    allow_dangling_dependencies = FALSE, keep_constraint = TRUE,
+    keep_trafo = TRUE) {
+  native_subset_bundle(
+    param_set,
+    ids,
+    allow_dangling_dependencies,
+    keep_constraint,
+    keep_trafo
+  )$token
 }
 
 native_subset_rich_set = function() {
@@ -45,8 +55,8 @@ native_subset_rich_set = function() {
 
 test_that("subset capsule routines are the complete registered surface", {
   symbols = native_subset_symbols()
-  expect_identical(symbols$C_param_set_subset_state$numParameters, 8L)
-  expect_identical(symbols$C_param_set_subspace_states$numParameters, 4L)
+  expect_identical(symbols$C_param_set_subset_state$numParameters, 6L)
+  expect_identical(symbols$C_param_set_subspace_states$numParameters, 3L)
   expect_identical(symbols$C_param_set_adopt_subset_state$numParameters, 2L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
 
@@ -196,6 +206,106 @@ test_that("subset flags cannot dispatch or carry semantic attributes", {
     expect_error(set$subset(set$ids(), keep_trafo = named), "keep_trafo")
   }
   expect_identical(dispatched, 0L)
+})
+
+test_that("subset retains its exact BASE generation across reentry", {
+  param_set = ps(x = p_dbl(0, 1), y = p_int())
+  param_set$values = list(x = 0.25)
+  symbol = get(
+    "C_test_param_set_subset_reentry",
+    envir = asNamespace("paradox")
+  )
+  expect_identical(symbol$numParameters, 7L)
+
+  bundle = .Call(
+    symbol,
+    param_set$.__enclos_env__$private,
+    param_set,
+    "x",
+    FALSE,
+    TRUE,
+    TRUE,
+    function() param_set$values = list(x = 0.75)
+  )
+  snapshot = ParamSet$new(bundle$token)
+  expect_identical(snapshot$values, list(x = 0.25))
+  expect_identical(param_set$values, list(x = 0.75))
+})
+
+test_that("nested Collection-Shadow subsets retain generations across finalizers", {
+  origin = ps(x = p_dbl(0, 1), hidden = p_lgl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  collection = psc(layer = shadow)
+  symbol = get(
+    "C_test_param_set_subset_reentry",
+    envir = asNamespace("paradox")
+  )
+  fired = new.env(parent = emptyenv())
+  fired$value = FALSE
+
+  hook = function() {
+    victim = new.env(parent = emptyenv())
+    reg.finalizer(victim, function(ignored) {
+      fired$value = TRUE
+      origin$values = list(x = 0.5)
+    })
+    rm(victim)
+    invisible(gc(full = TRUE))
+  }
+  bundle = .Call(
+    symbol,
+    collection$.__enclos_env__$private,
+    collection,
+    "layer.x",
+    FALSE,
+    TRUE,
+    TRUE,
+    hook
+  )
+  snapshot = ParamSet$new(bundle$token)
+  expect_true(fired$value)
+  expect_identical(origin$values, list(x = 0.5))
+  expect_identical(snapshot$values, named_list())
+})
+
+test_that("nested Shadow receipts detect in-place signature entry changes", {
+  origin = ps(x = p_int(), hidden = p_lgl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  collection = psc(layer = shadow)
+  signature = attr(
+    shadow$.__enclos_env__$private$.core,
+    ".paradox.shadow.snapshot.v1",
+    exact = TRUE
+  )
+  replacement = ps(other = p_int())$.__enclos_env__$private$.core
+  subset_symbol = get(
+    "C_test_param_set_subset_reentry",
+    envir = asNamespace("paradox")
+  )
+  mutator_symbol = get(
+    "C_test_gc_column_mutator",
+    envir = asNamespace("paradox")
+  )
+
+  expect_error(
+    .Call(
+      subset_symbol,
+      collection$.__enclos_env__$private,
+      collection,
+      "layer.x",
+      FALSE,
+      TRUE,
+      TRUE,
+      function() {
+        pending = .Call(mutator_symbol, signature, 1L, replacement)
+        rm(pending)
+        invisible(gc(full = TRUE))
+      }
+    ),
+    "changed while constructing a subset",
+    fixed = TRUE
+  )
+  expect_identical(signature[[2L]], replacement)
 })
 
 test_that("subset can discard all transformation authority independently", {

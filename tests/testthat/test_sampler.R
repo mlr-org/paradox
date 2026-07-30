@@ -119,3 +119,133 @@ test_that("Sampler1DRfun with 0 samples (#338)", {
   x = s$sample(0)
   expect_data_table(x$data, nrows = 0L, ncols = 1L)
 })
+
+test_that("Sampler1DUnif rejects empty factors before RNG entry", {
+  sampler = Sampler1DUnif$new(ps(choice = p_fct(character())))
+  zero = sampler$sample(0L)
+  expect_identical(dim(zero$data), c(0L, 1L))
+  expect_identical(zero$data$choice, character())
+
+  set.seed(421L)
+  before = .Random.seed
+  expect_error(
+    sampler$sample(1L),
+    "Cannot sample a factor parameter with no levels",
+    fixed = TRUE
+  )
+  expect_identical(.Random.seed, before)
+})
+
+test_that("Sampler1DCateg preserves typed zero-row empty factors", {
+  sampler = Sampler1DCateg$new(
+    ps(choice = p_fct(character()))
+  )
+  zero = sampler$sample(0L)
+  expect_identical(dim(zero$data), c(0L, 1L))
+  expect_identical(zero$data$choice, character())
+
+  explicit = Sampler1DCateg$new(
+    ps(choice = p_fct(character())),
+    prob = numeric()
+  )
+  expect_identical(explicit$sample(0L)$data$choice, character())
+
+  set.seed(422L)
+  before = .Random.seed
+  expect_error(
+    sampler$sample(1L),
+    "Cannot sample a factor parameter with no levels",
+    fixed = TRUE
+  )
+  expect_identical(.Random.seed, before)
+})
+
+test_that("SamplerHierarchical rejects duplicate sampler IDs at construction", {
+  param_set = ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
+  x1 = Sampler1DUnif$new(param_set$subset("x"))
+  x2 = Sampler1DUnif$new(param_set$subset("x"))
+  y = Sampler1DUnif$new(param_set$subset("y"))
+
+  expect_error(
+    SamplerHierarchical$new(param_set, list(x1, x2, y)),
+    "IDs of params in samplers do not correspond",
+    fixed = TRUE
+  )
+  sampler = SamplerHierarchical$new(param_set, list(y, x1))
+  expect_identical(names(sampler$sample(2L)$data), c("y", "x"))
+})
+
+test_that("SamplerHierarchical owns its graph before subclass reads", {
+  source = psc(base = ps(x = p_dbl(0, 1)))
+  mutate_source = function() {
+    source$add(ps(y = p_dbl(0, 1)), "late")
+  }
+  MutatingSampler = R6::R6Class(
+    "ParadoxAdversarialMutatingSampler",
+    inherit = Sampler1D,
+    public = list(
+      initialize = function(param, callback) {
+        private$.callback = callback
+        super$initialize(param)
+      }
+    ),
+    active = list(
+      param = function() {
+        if (!private$.fired) {
+          private$.fired = TRUE
+          private$.callback()
+        }
+        self$param_set
+      }
+    ),
+    private = list(
+      .callback = NULL,
+      .fired = FALSE,
+      .sample = function(n) {
+        data.table::data.table(base.x = rep(0.5, n))
+      }
+    )
+  )
+  child = MutatingSampler$new(
+    source$subset("base.x"),
+    mutate_source
+  )
+
+  sampler = SamplerHierarchical$new(source, list(child))
+  expect_identical(source$ids(), c("base.x", "late.y"))
+  expect_identical(sampler$param_set$ids(), "base.x")
+})
+
+test_that("Sampler cannot pair sampled rows with a rebound support", {
+  RebindingSampler = R6::R6Class(
+    "ParadoxAdversarialRebindingSampler",
+    inherit = Sampler,
+    public = list(
+      initialize = function(param_set, replacement) {
+        private$.replacement = replacement
+        super$initialize(param_set)
+      }
+    ),
+    private = list(
+      .replacement = NULL,
+      .sample = function(n) {
+        self$param_set = private$.replacement
+        data.table::data.table(x = rep(0.5, n))
+      }
+    )
+  )
+  replacement = ps(y = p_dbl(0, 1))
+  sampler = RebindingSampler$new(
+    ps(x = p_dbl(0, 1)),
+    replacement
+  )
+
+  expect_error(
+    sampler$sample(1L),
+    "changed its ParamSet while sampling",
+    fixed = TRUE
+  )
+  # The inner mutation wins; the outer operation merely refuses to construct a
+  # chimera Design from its rows.
+  expect_identical(sampler$param_set, replacement)
+})

@@ -192,6 +192,34 @@ test_that("the Shadow constraint adapter is a registered native boundary", {
   )
   expect_s3_class(symbol, "NativeSymbolInfo")
   expect_identical(symbol$numParameters, 2L)
+
+  callback = function(x) TRUE
+  plan = list(
+    callback = callback,
+    hidden_values = setNames(list(), character())
+  )
+  visible = setNames(list(), character())
+  expect_error(
+    .Call(symbol, asS4(plan), visible),
+    "Corrupt ParamSetShadow constraint plan"
+  )
+  attr(plan, "names") = asS4(names(plan))
+  expect_error(
+    .Call(symbol, plan, visible),
+    "Corrupt ParamSetShadow constraint plan"
+  )
+})
+
+test_that("Shadow construction rejects attributed hidden-ID carriers", {
+  origin = ps(hidden = p_int(), visible = p_lgl())
+  expect_error(
+    ParamSetShadow$new(
+      origin,
+      structure("hidden", probe = TRUE)
+    ),
+    "`shadowed` must be a character vector",
+    fixed = TRUE
+  )
 })
 
 test_that("Shadow constraints merge hidden values natively without S3 dispatch", {
@@ -234,6 +262,11 @@ test_that("Shadow constraints merge hidden values natively without S3 dispatch",
     "non-missing and non-empty"
   )
   expect_error(adapter(1L), "must be a named list")
+
+  s4_class = structure(list(x = 1L), names = "x")
+  attr(s4_class, "class") = asS4("paradox_shadow_probe")
+  expect_error(adapter(s4_class), "must be a named list")
+  expect_identical(c_calls, 0L)
 
   corrupt_plan = environment(adapter)$plan
   corrupt_plan$hidden_values = structure(
@@ -337,6 +370,127 @@ test_that("ParamSetShadow composes with collections", {
   )
   collection$values = list(view.flag = FALSE)
   expect_identical(origin$values, list(hidden = 9L, flag = FALSE))
+})
+
+test_that("old-R Shadow generation receipts never enter the evaluator", {
+  skip_if(
+    getRversion() >= "4.2.0",
+    "R >= 4.2 has a public non-evaluating binding-existence operation"
+  )
+
+  left = ps(ax = p_dbl(tags = "left"))
+  right = ps(bx = p_dbl(tags = "right"))
+  origin = ParamSetCollection$new(list(a = left, b = right))
+  shadow = ParamSetShadow$new(origin, "a.ax")
+  enclosing = ParamSetCollection$new(list(s = shadow))
+
+  # Make the Shadow unverified without changing its origin signature.  Before
+  # the allocation-free receipt, its old-R terminal scan called base::exists()
+  # for every graph node.  A finalizer at the second complete scan could then
+  # mutate the already observed root, and the Shadow was stamped at the new
+  # epoch with the old projection.  An enclosing collection trusted that stamp
+  # and made the stale projection persistent.
+  epoch_source = ps(epoch = p_dbl())
+  epoch_source$values = list(epoch = 1)
+
+  audit = new.env(parent = emptyenv())
+  audit$busy = FALSE
+  audit$phase = 0L
+  audit$complete_passes = 0L
+  audit$hit = FALSE
+  path = list(
+    origin,
+    origin$.__enclos_env__,
+    origin$.__enclos_env__$private,
+    left,
+    left$.__enclos_env__,
+    left$.__enclos_env__$private,
+    right,
+    right$.__enclos_env__,
+    right$.__enclos_env__$private
+  )
+  tracer = function() {
+    if (audit$busy) {
+      return(invisible())
+    }
+    environment = get("envir", envir = parent.frame(), inherits = FALSE)
+    next_phase = audit$phase + 1L
+    if (next_phase <= length(path) &&
+        identical(environment, path[[next_phase]])) {
+      audit$phase = next_phase
+    } else {
+      audit$phase = if (identical(environment, path[[1L]])) 1L else 0L
+    }
+    if (!audit$hit && audit$complete_passes == 1L &&
+        audit$phase == 4L) {
+      audit$busy = TRUE
+      origin$tags = list(a.ax = "changed", b.bx = "changed")
+      audit$hit = TRUE
+      audit$busy = FALSE
+    }
+    if (audit$phase == length(path)) {
+      audit$complete_passes = audit$complete_passes + 1L
+      audit$phase = 0L
+    }
+    invisible()
+  }
+
+  tracer_name = ".__paradox_shadow_receipt_tracer__"
+  had_tracer = exists(
+    tracer_name,
+    envir = .GlobalEnv,
+    inherits = FALSE
+  )
+  previous_tracer = if (had_tracer) {
+    get(tracer_name, envir = .GlobalEnv, inherits = FALSE)
+  } else {
+    NULL
+  }
+  assign(tracer_name, tracer, envir = .GlobalEnv)
+  traced = FALSE
+  on.exit({
+    if (traced) {
+      invisible(untrace("exists", where = baseenv()))
+    }
+    if (had_tracer) {
+      assign(tracer_name, previous_tracer, envir = .GlobalEnv)
+    } else if (exists(tracer_name, envir = .GlobalEnv, inherits = FALSE)) {
+      rm(list = tracer_name, envir = .GlobalEnv)
+    }
+  }, add = TRUE)
+  invisible(trace(
+    "exists",
+    tracer = quote(
+      get(
+        ".__paradox_shadow_receipt_tracer__",
+        envir = .GlobalEnv,
+        inherits = FALSE
+      )()
+    ),
+    where = baseenv(),
+    print = FALSE
+  ))
+  traced = TRUE
+  first = shadow$tags
+  invisible(untrace("exists", where = baseenv()))
+  traced = FALSE
+  if (had_tracer) {
+    assign(tracer_name, previous_tracer, envir = .GlobalEnv)
+  } else {
+    rm(list = tracer_name, envir = .GlobalEnv)
+  }
+
+  # A required-linkage receipt performs no second evaluator-visible pass, so
+  # the adversarial mutation is never reached.  Keep the semantic assertions
+  # as well: they capture the persistent enclosing-collection failure rather
+  # than testing only an implementation detail.
+  expect_false(audit$hit)
+  expected_shadow = list(b.bx = origin$tags[["b.bx"]])
+  expected_enclosing = list(s.b.bx = origin$tags[["b.bx"]])
+  expect_identical(first, expected_shadow)
+  expect_identical(shadow$tags, expected_shadow)
+  expect_identical(enclosing$tags, expected_enclosing)
+  expect_identical(enclosing$tags, expected_enclosing)
 })
 
 test_that("a COLLECTION-origin Shadow follows nested Shadow children", {
@@ -575,6 +729,268 @@ test_that("corrupt native Shadow metadata errors without semantic replay", {
     upgrade_paradox_object(shadow),
     "corrupt current state capsule"
   )
+})
+
+test_that("Shadow capsule structure rejects S4 carriers and flags", {
+  forge = function(field, value) {
+    origin = ps(hidden = p_int(), x = p_int())
+    shadow = ParamSetShadow$new(origin, "hidden")
+    private = shadow$.__enclos_env__$private
+    state = paradox:::param_set_core_state(private)
+    state[[field]] = value(state[[field]])
+    forged = .Call(paradox:::C_param_set_core_new, 3L, state)
+    attr(forged, ".paradox.shadow.snapshot.v1") = attr(
+      private$.core,
+      ".paradox.shadow.snapshot.v1",
+      exact = TRUE
+    )
+    private$.core = forged
+    shadow
+  }
+
+  s4_sets = forge(".sets", asS4)
+  expect_error(s4_sets$values, "Corrupt ParamSetShadow")
+
+  s4_postfix = forge(".postfix", asS4)
+  expect_error(s4_postfix$values, "Corrupt ParamSetShadow")
+})
+
+test_that("same-shaped forged Shadow cache signatures invalidate verification", {
+  signature_name = ".paradox.shadow.snapshot.v1"
+
+  exercise = function(origin, donor_origin) {
+    shadow = ParamSetShadow$new(origin, character())
+    donor = ParamSetShadow$new(donor_origin, character())
+
+    # Bring the target to the epoch after both graphs were constructed and
+    # retain the genuinely verified generation selected at that point.
+    invisible(shadow$ids())
+    invisible(donor$ids())
+    private = shadow$.__enclos_env__$private
+    target_core = private$.core
+    donor_signature = attr(
+      donor$.__enclos_env__$private$.core,
+      signature_name,
+      exact = TRUE
+    )
+    expect_identical(
+      length(attr(target_core, signature_name, exact = TRUE)),
+      length(donor_signature)
+    )
+
+    # `setattr()` replaces the attribute on the existing external pointer:
+    # neither the capsule identity nor the session epoch changes. A
+    # shape-only verifier therefore used to accept this unrelated graph.
+    data.table::setattr(target_core, signature_name, donor_signature)
+    expect_identical(private$.core, target_core)
+
+    invisible(shadow$ids())
+    expect_false(identical(private$.core, target_core))
+    repaired = attr(private$.core, signature_name, exact = TRUE)
+    expect_identical(repaired[[1L]], origin)
+    expect_identical(
+      repaired[[2L]],
+      origin$.__enclos_env__$private$.core
+    )
+  }
+
+  exercise(
+    ps(x = p_int()),
+    ps(y = p_int())
+  )
+  exercise(
+    ParamSetCollection$new(list(owner = ps(x = p_int()))),
+    ParamSetCollection$new(list(owner = ps(y = p_int())))
+  )
+})
+
+test_that("Collection verification authenticates descendant Shadow signatures", {
+  signature_name = ".paradox.shadow.snapshot.v1"
+  origin = ps(x = p_int())
+  donor_origin = ps(y = p_int())
+  shadow = ParamSetShadow$new(origin, character())
+  donor = ParamSetShadow$new(donor_origin, character())
+  collection = ParamSetCollection$new(list(owner = shadow))
+
+  # Construct every graph first, then stamp the collection at the final epoch.
+  invisible(donor$ids())
+  invisible(collection$ids())
+  collection_private = collection$.__enclos_env__$private
+  collection_core = collection_private$.core
+  shadow_private = shadow$.__enclos_env__$private
+  shadow_core = shadow_private$.core
+  donor_signature = attr(
+    donor$.__enclos_env__$private$.core,
+    signature_name,
+    exact = TRUE
+  )
+
+  # Replacing only the child's package-private cache carrier advances neither
+  # epoch and leaves the enclosing collection capsule itself untouched.
+  data.table::setattr(shadow_core, signature_name, donor_signature)
+  expect_identical(collection_private$.core, collection_core)
+  expect_identical(shadow_private$.core, shadow_core)
+
+  # Any semantic entry through the parent must reject that stale proof, heal
+  # the descendant, and leave the parent's genuinely unchanged flatten intact.
+  expect_identical(collection$ids(), "owner.x")
+  expect_false(identical(shadow_private$.core, shadow_core))
+  repaired = attr(shadow_private$.core, signature_name, exact = TRUE)
+  expect_identical(repaired[[1L]], origin)
+  expect_identical(repaired[[2L]], origin$.__enclos_env__$private$.core)
+  expect_identical(collection_private$.core, collection_core)
+
+  # The same parent proof must also include the carrier contents: this
+  # package-native primitive changes a list entry without replacing the list.
+  selected = shadow_private$.core
+  repaired = attr(selected, signature_name, exact = TRUE)
+  invisible(.Call(
+    data.table:::Csetlistelt,
+    repaired,
+    1L,
+    donor_signature[[1L]]
+  ))
+  invisible(.Call(
+    data.table:::Csetlistelt,
+    repaired,
+    2L,
+    donor_signature[[2L]]
+  ))
+  expect_identical(collection$ids(), "owner.x")
+  expect_false(identical(shadow_private$.core, selected))
+  expect_identical(collection_private$.core, collection_core)
+})
+
+test_that("nested collections reauthenticate one shared Shadow exactly", {
+  signature_name = ".paradox.shadow.snapshot.v1"
+  origin = ps(x = p_int())
+  donor_origin = ps(y = p_int())
+  shadow = ParamSetShadow$new(origin, character())
+  donor = ParamSetShadow$new(donor_origin, character())
+  inner = ParamSetCollection$new(list(left = shadow, right = shadow))
+  outer = ParamSetCollection$new(list(nested = inner))
+
+  invisible(donor$ids())
+  expect_identical(
+    outer$ids(),
+    c("nested.left.x", "nested.right.x")
+  )
+  shadow_private = shadow$.__enclos_env__$private
+  inner_private = inner$.__enclos_env__$private
+  outer_private = outer$.__enclos_env__$private
+  selected_shadow = shadow_private$.core
+  selected_inner = inner_private$.core
+  selected_outer = outer_private$.core
+  signature = attr(selected_shadow, signature_name, exact = TRUE)
+  donor_signature = attr(
+    donor$.__enclos_env__$private$.core,
+    signature_name,
+    exact = TRUE
+  )
+
+  # Preserve the carrier pointer and rewrite both alternating entries. The
+  # shared child is visited once, but neither collection is allowed to turn a
+  # probabilistic digest of this mutable list into a verification proof.
+  invisible(.Call(
+    data.table:::Csetlistelt,
+    signature,
+    1L,
+    donor_signature[[1L]]
+  ))
+  invisible(.Call(
+    data.table:::Csetlistelt,
+    signature,
+    2L,
+    donor_signature[[2L]]
+  ))
+
+  expect_identical(
+    outer$ids(),
+    c("nested.left.x", "nested.right.x")
+  )
+  expect_false(identical(shadow_private$.core, selected_shadow))
+  expect_identical(inner_private$.core, selected_inner)
+  expect_identical(outer_private$.core, selected_outer)
+  repaired = attr(shadow_private$.core, signature_name, exact = TRUE)
+  expect_identical(repaired[[1L]], origin)
+  expect_identical(
+    repaired[[2L]],
+    origin$.__enclos_env__$private$.core
+  )
+})
+
+test_that("Shadow verification authenticates in-place cache entries", {
+  signature_name = ".paradox.shadow.snapshot.v1"
+  set_list_element = function(value, index, replacement) {
+    # This registered data.table primitive is intentionally used directly:
+    # unlike ordinary `[<-`, it changes an existing ordinary list without
+    # duplicating its shell.
+    invisible(.Call(
+      data.table:::Csetlistelt,
+      value,
+      as.integer(index),
+      replacement
+    ))
+  }
+
+  origin = ps(x = p_int())
+  donor_origin = ps(y = p_int())
+  shadow = ParamSetShadow$new(origin, character())
+  donor = ParamSetShadow$new(donor_origin, character())
+  invisible(shadow$ids())
+  invisible(donor$ids())
+  private = shadow$.__enclos_env__$private
+  selected = private$.core
+  signature = attr(selected, signature_name, exact = TRUE)
+  donor_signature = attr(
+    donor$.__enclos_env__$private$.core,
+    signature_name,
+    exact = TRUE
+  )
+
+  set_list_element(signature, 1L, donor_signature[[1L]])
+  set_list_element(signature, 2L, donor_signature[[2L]])
+  expect_identical(
+    attr(selected, signature_name, exact = TRUE),
+    signature
+  )
+  invisible(shadow$ids())
+  expect_false(identical(private$.core, selected))
+  repaired = attr(private$.core, signature_name, exact = TRUE)
+  expect_identical(repaired[[1L]], origin)
+  expect_identical(repaired[[2L]], origin$.__enclos_env__$private$.core)
+
+  # Self- and mutually referential cache tokens are not graph authority and
+  # must neither recurse through C validation nor inherit a verification
+  # proof. Both are repaired from the authoritative `.sets` graph.
+  left_origin = ps(left = p_int())
+  right_origin = ps(right = p_int())
+  left = ParamSetShadow$new(left_origin, character())
+  right = ParamSetShadow$new(right_origin, character())
+  invisible(left$ids())
+  invisible(right$ids())
+  left_private = left$.__enclos_env__$private
+  right_private = right$.__enclos_env__$private
+  left_core = left_private$.core
+  right_core = right_private$.core
+  left_signature = attr(left_core, signature_name, exact = TRUE)
+  right_signature = attr(right_core, signature_name, exact = TRUE)
+  set_list_element(left_signature, 1L, right)
+  set_list_element(left_signature, 2L, right_core)
+  set_list_element(right_signature, 1L, left)
+  set_list_element(right_signature, 2L, left_core)
+
+  expect_identical(left$ids(), "left")
+  expect_identical(right$ids(), "right")
+  expect_false(identical(left_private$.core, left_core))
+  expect_false(identical(right_private$.core, right_core))
+
+  self_core = left_private$.core
+  self_signature = attr(self_core, signature_name, exact = TRUE)
+  set_list_element(self_signature, 1L, left)
+  set_list_element(self_signature, 2L, self_core)
+  expect_identical(left$ids(), "left")
+  expect_false(identical(left_private$.core, self_core))
 })
 
 test_that("Shadow refresh rejects related IDs outside its fixed schema", {

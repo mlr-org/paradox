@@ -7,6 +7,7 @@
 
 #include "core_state.h"
 #include "paramset_domain_common.h"
+#include "r_api_compat.h"
 #include "r_utils.h"
 
 typedef struct {
@@ -38,7 +39,8 @@ static inline void periodic_interrupt(R_xlen_t iteration) {
 }
 
 static void require_callback_free_match_operand(SEXP value) {
-  if (TYPEOF(value) != STRSXP || ALTREP(value) || Rf_isObject(value)) {
+  if (TYPEOF(value) != STRSXP || ALTREP(value) || Rf_isS4(value) ||
+      Rf_isObject(value) || !paradox_api_has_no_attributes(value)) {
     Rf_error(
       "Corrupt ParamSet storage: matching columns must use callback-free "
       "character representations"
@@ -331,6 +333,14 @@ static R_xlen_t ordinary_character_column_size(SEXP column,
     paradox_require_column(column, STRSXP, diagnostic_size, column_name);
     return 0;
   }
+  if (Rf_isS4(column) || Rf_isObject(column) ||
+      !paradox_api_has_no_attributes(column)) {
+    Rf_error(
+      "Corrupt ParamSet storage: `%s` must use an ordinary character "
+      "representation",
+      column_name
+    );
+  }
   return XLENGTH(column);
 }
 
@@ -500,8 +510,15 @@ static SEXP param_set_ids_impl(SEXP params, SEXP tag_table,
 
   if (class_filter == R_NilValue && all_tags == R_NilValue &&
       any_tags == R_NilValue) {
-    UNPROTECT(1);
-    return ids;
+    /*
+     * The no-filter path is hot, but `ids` is a capsule column. Returning it
+     * directly lets a caller use a by-reference attribute setter as a write
+     * route into otherwise immutable state. Own the one public vector here;
+     * filtered paths already allocate their selected result.
+     */
+    SEXP result = PROTECT(paradox_snapshot_builtin_value_leaf(ids));
+    UNPROTECT(2);
+    return result;
   }
 
   int *selected = paradox_temporary_alloc(size, sizeof(*selected));

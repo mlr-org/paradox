@@ -83,14 +83,21 @@ through to the sets.
 COLLECTION flattens and SHADOW projections are refreshed lazily at one native
 entry gate that walks the graph in post-order, so an ancestor of a set that
 grew re-derives instead of going stale. Two session-global epochs (schema and
-state) plus a per-capsule stamp in the address slot make an unchanged graph a
-single comparison; a cache refresh advances neither epoch.
+state) plus a per-capsule stamp in the address slot make an unchanged
+SHADOW-free graph a single comparison; a cache refresh advances neither epoch.
+Only a COLLECTION whose complete subtree is proven SHADOW-free is stamped.
+SHADOW and Shadow-bearing COLLECTION graphs remain unstamped and compare every
+mutable Shadow signature exactly against its authoritative origin graph on
+each entry; a finite address-word fingerprint would not be an exact proof.
 
 The documented public `assert_values` field is the sole stateful R-shell policy
 outside that model. It selects checked versus unchecked native value-store
 entry, is retained by ordinary R6 clone/serialization, and is included in
 semantic equality, but it is not schema/value/graph authority and does not
-alter the fixed payload ABI.
+alter the fixed payload ABI. Deep-clone planning nevertheless receipts it with
+the selected capsule generation: the terminal native scan jointly authenticates
+shell policy, private capsule, and exact Shadow signature before opaque value
+clone callbacks can run, and child shells receive the receipted policy.
 
 A SHADOW external pointer additionally has exactly one internal attribute,
 `.paradox.shadow.snapshot.v1`. It is an exact ordinary alternating
@@ -114,6 +121,15 @@ new capsule shell, and swap `.core` only after validation. An operation retains
 the capsule selected at entry, so reentrant code observes a precise old or new
 generation instead of partially mutated private tables.
 
+Deep clone remains cold R6 lifecycle orchestration over native authority. Its
+terminal allocation-free receipt authenticates every selected shell's exact
+`.__enclos_env__` linkage, that enclosure's `self` and `private` bindings, the
+selected private `.core`, the public `assert_values` policy, and any Shadow
+signature receipt in one wave. Opaque utility-value clone callbacks run only
+after this barrier, and child shells receive the selected policy rather than a
+later live binding. Thus a finalizer cannot rewire a shell to another private
+environment while leaving the earlier private/core pair apparently current.
+
 ## Serialized shell targets and migration
 
 Paradox owns its leanification scheme because namespace target names are part
@@ -130,6 +146,11 @@ matching core are retained, and the superclass chain is followed to the
 enclosure that defines the requested historical family target. The gateway
 ignores the serialized stub's still-lazy `private` and `super` promises and
 replays the rooted native context without a later R reread or top-slice guess.
+For the three historical `$subspaces()` / `$search_space()` targets whose old
+lean stubs explicitly forward their defaults, the cold gateway also recovers
+omission from the active stub call frame without forcing it. It drops only a
+genuinely omitted `ids` or `values` promise, so the current target retains its
+single-generation native default path while explicit arguments remain lazy.
 A shell without a current context either reports the default migration error
 or, when
 `options(paradox.legacy_object_action = "upgrade")` is set, invokes the
@@ -137,6 +158,19 @@ identity-preserving upgrader, receives the authenticated transplanted context,
 and forwards once to the versioned target. Paradox does not call
 `mlr3misc::leanify_package()` because that would collapse historical and
 current target authority back into one name.
+
+Two non-ParamSet historical targets also need the same cold first-use policy.
+`Design$transpose()` and `Sampler$sample()` can enter current native code with
+an embedded legacy ParamSet before invoking a ParamSet-family method. Their
+unversioned targets upgrade the complete containing graph before replay;
+already-current graphs forward directly, while current versioned stubs never
+enter this bridge. The same serialized-shell boundary requires two lower
+Sampler bridges: Paradox 1's private `Sampler1D$as_dt_col` and
+`Sampler1DRfun$sample_truncated` stubs have narrower formals than their current
+versions. Cold unversioned `Sampler1DRfun$.sample` (including Normal) and
+`Sampler1DCateg$.sample` targets select the current Domain once and invoke the
+versioned lower-level targets directly; no Paradox-2-only argument is sent
+through an old stub, and current sampling paths remain unchanged.
 
 The migration implementation has three layers:
 
@@ -189,6 +223,18 @@ The migration implementation has three layers:
    Legacy R6 authentication inspects active-binding functions through the same
    version gate; direct as well as recursive ParamSet-family migration therefore
    fails closed on R 3.6 and requires R >= 4.0.
+   Legacy ordinary-list carriers and canonical table shells are selected by
+   native cold-path snapshots which allocate their destination carriers first
+   and then pair each name with its exact element/column in one allocation-free
+   pass. Table admission additionally receipts that selected generation before
+   taking class, optional `repr`, and ordinary canonical integer row metadata.
+   Row metadata must be empty, compact `c(NA, +/-n)`, or exact `1:n`, and match
+   the selected first column's length. An absent row-name attribute is the one
+   historical exception and is admitted only for a selected zero-row table,
+   matching authentic Paradox-1/data.table fixtures. A pending finalizer performing a
+   by-reference rewrite can therefore make migration reject, or can precede
+   the selected generation, but cannot splice names, columns, and metadata
+   from states which never coexisted.
    Read-only Shadow admission builds the authoritative live semantic core
    without installing it, retains the private binding's source core as a
    distinct generation receipt, and derives callback detachment from the same
@@ -214,10 +260,19 @@ The migration implementation has three layers:
    method on retry. Preflight errors mutate nothing, and an idempotent retry
    finishes a catastrophic allocation failure. R's `suspendInterrupts()` does
    not suppress pending finalizers from unrelated user objects. If one
-   deliberately mutates a selected root inside the R-level binding wave, the
-   post-transplant joint scan detects it after the fact; a completed transplant
-   is not rolled back and retry is not promised for that externally corrupted
-   graph.
+   deliberately mutates a selected root inside the R-level binding wave,
+   post-transplant joint capsule scans detect topology, policy, capsule, and
+   Shadow-generation changes. In a session containing a transplant, after the
+   last allocating scan one allocation-free terminal batch receipt authenticates
+   every transplanted and already-current selected shell's exact class,
+   environment lock, complete binding value/active-kind surface, and binding
+   locks. An all-current graph has no binding wave and returns after joint
+   capsule validation, including on R 3.6 where active-binding functions cannot
+   be retrieved through the public API. A mismatch is reported
+   after the fact; a completed transplant is not rolled back and retry is not
+   promised for that externally corrupted graph. Selected public R6
+   environments must be locked, so no binding can appear or disappear outside
+   the complete receipted inventory.
    The cold lock transition resolves base `unlockBinding` explicitly rather
    than using a syntactic call, solely because R's package-tampering checker
    cannot infer that the planned environment is an authenticated R6
@@ -233,8 +288,12 @@ current `ParamSetShadow`. Replacement handlers may declare old-only retired
 active fields. Registered owner classes with public or private R6 finalizers
 are rejected because their finalizer registration cannot be moved safely
 between environment identities. Unknown/overlapping/malformed registrations
-fail closed. There is no S3 dispatch, superclass search, or stored serialized
-hook function.
+fail closed. Graph discovery completes before owner construction, and every
+owner result must have fresh public, private, and enclosure environments
+distinct from all original/current session nodes and all other prepared owner
+or non-owner results before Paradox mutates it offside. Shared dependency nodes remain
+ordinary graph aliases. There is no S3 dispatch, superclass search, or stored
+serialized hook function.
 
 The registry cannot intercept a historical leanified stub whose target lives
 in the owner package namespace. An owner that emitted such targets must reserve
@@ -304,6 +363,21 @@ boundary for caller-owned/public-ingress tables. Mutating an accessor result
 with `set()` or `:=` cannot mutate the capsule. `Design$data` remains an
 intentionally public mutable data.table and is treated as operation input, not
 internal state.
+
+The same rule applies to nested public projections. `$params`, `$domains`,
+`$data`, property vectors, raw `$values`, and `$get_values()` detach their list
+carriers and built-in typed atomic leaves, including complete nested attribute
+metadata. Condition shells/RHS vectors,
+levels, defaults, initialization values, special-value lists, and interpreted
+cargo therefore cannot be used as a by-reference route back into capsule
+state. Opaque ParamUty leaves, callbacks, environments, external pointers,
+typed S4 identity tokens, and Collection child shells retain exact identity;
+the operation owns only the carrier around them. Detachment occurs only while
+constructing an outward result. Internal value planning and mutation keep
+using the exact retained capsule/graph snapshot and pay no public-copy cost.
+The schema default/init position alone interprets the package-owned
+`NoDefault` marker; the same outward class on a general ParamUty stored value
+has no authority and preserves exact opaque identity.
 
 There is one ledgered cold presentation-only data.table identity lookup in
 `R/ParamSet.R`. It resolves the unexported `.reassign_extracted_table` and the
@@ -558,6 +632,9 @@ itself, never by an R retry.
 A zero-level `ParamFct` is canonical. Zero-row quantile, grid, and uniform
 sampling results retain a `character(0)` column; a positive-row quantile or
 uniform-sampling request errors before level indexing or RNG entry.
+`Sampler1DCateg` follows the identical RNG boundary: an empty probability
+vector is canonical for the zero-level Domain, a zero-row request is typed
+empty, and a positive request fails before `sample()`.
 
 Grid generation is output-sensitive rather than a fast materialization of the
 nominal Cartesian product followed by repair. One registered operation freezes
@@ -576,6 +653,15 @@ full-product/normalize/first-unique row order without constructing that product.
 The optional `upper_limit` is checked against complete realized leaves, not an
 intermediate expansion.
 
+Axis order retains its established control-sensitive contract. With a global
+`resolution`, canonical ParamSet order is authoritative and named
+`param_resolutions` only override counts. Without a global resolution, the
+explicit numeric control order comes first and the remaining categorical axes
+follow in schema order. A nominally empty typed result uses canonical schema
+order. The native builder resolves each output axis back to its already
+admitted parameter row; this is ordering metadata, not a second quantile or
+Domain engine.
+
 The nominal-zero rule precedes fixed-axis collapse: any zero requested
 resolution or zero-level factor makes the complete typed grid empty. Dependency
 topology is nevertheless admitted before returning, so a cycle is never hidden
@@ -587,6 +673,18 @@ native result is already fixed, dependency-masked, deduplicated, and ordered.
 Only this package-created result may pass the namespace-owned prepared-grid
 token to `Design$new()`; all other generators and public Design construction
 retain the ordinary normalization boundary.
+
+Both native dependency planning and native grid generation may have to return
+through a short R ownership/mutation handoff after selecting their source
+generation. They return one compact, flat, ordinary-R receipt beside the
+prepared result. Receipt construction roots each selected private environment,
+exact capsule, and—only for a Shadow—its exact metadata carrier/content. The
+terminal scanner compares the already-admitted plain `.core` bindings directly
+and reauthenticates exact Shadow metadata; it does not replay full immutable
+capsule validation. `Design$new()` scans after data.table patching and
+deduplication, while the grid wrapper scans after the R6 shell is complete.
+These scans are allocation-free and terminal. This is an operation-local proof,
+not a caller-trust cache or persistent generation stamp.
 
 Supported callbacks remain first-class state: ParamUty custom checks,
 individual transformations, extra transformations, constraints, aggregation,
@@ -614,13 +712,22 @@ The wrapper installed by `to_tune(ParamSet)` similarly calls its documented
 user transformation once, checks the single list result, and assigns its public
 name directly instead of paying checkmate/mlr3misc dispatch on every call.
 
-`ParamSet$set_values()` captures `...` in R, validates the scalar `.insert`
-language argument without checkmate, and hands both value sources to one native
-merge. The C entry point owns name uniqueness/disjointness and merge ordering;
-there is no preliminary R scan followed by the same native scan, and malformed
-direct calls raise instead of returning a replay sentinel.
+`ParamSet$set_values()` captures `...` in R and hands both value sources plus
+`.insert` to one native read/merge/write transaction. The C entry point owns
+the exact scalar `.insert` and `assert_values` admission, name
+uniqueness/disjointness, merge ordering, validation selection, and atomic
+commit. It selects the BASE raw-value generation or complete graph receipt
+before merge and terminally authenticates that selection and the exact policy;
+an allocating merge therefore cannot overwrite a commit made by a pending
+finalizer. There is no preliminary R scan followed by the same native scan,
+and malformed direct calls raise instead of returning a replay sentinel.
+Policy authentication includes both binding identity and the exact scalar
+contents: an in-place attribute/content rewrite of the selected same-pointer
+logical cannot evade the terminal barrier.
 
-Direct checked and unchecked `$values <-` both reject an outer ALTREP shell
+Direct `$values <-` selects and authenticates the exact public
+`assert_values` policy inside the same native transaction; malformed policy
+shapes never enter either store. Its checked and unchecked branches both reject an outer ALTREP shell
 before observing its length, names, or elements. The Paradox-1 clear-values
 spellings—`NULL`, an ordinary attribute-free zero-length atomic/expression
 vector, or an accepted empty base/S3-representation list—are canonicalized to
@@ -844,12 +951,21 @@ nested mutation.
 Checked value assignment plans the complete BASE/COLLECTION/SHADOW graph
 through the ultimate BASE targets before invoking ParamUty or constraint
 callbacks. Shared targets are deduplicated with deterministic last-owner
-semantics. The plan captures every target generation, validates the complete
+semantics. “Last” is exact depth-first child order, including empty
+complete-replacement paths; routing must not reorder touched children ahead of
+untouched children. Thus in `{a = shared, b = shared}` a value supplied only as
+`b.x` survives because `b` is the later owner, while a value supplied only as
+`a.x` is cleared by `b`'s later empty plan. The plan captures every target
+generation plus the complete routed node graph and exact Shadow signature
+contents. One state-epoch comparison rejects a capsule installation while that
+multi-node plan is being assembled; the resulting exact receipt spans
+validation and replacement allocation. It validates the complete
 assignment's structural/Domain/token contract once without requiring dependency
 activity, filters the proposed state only for any constraint callback, and
 prebuilds every replacement capsule. It then rechecks all target generations
-and swaps every replacement `.core` in one allocation- and callback-free commit
-wave. A nested public assignment to any planned target therefore wins: the
+and the routed graph receipt and swaps every replacement `.core` in one
+allocation- and callback-free commit wave. A nested public assignment to any
+planned target or routed collection/view node therefore wins: the
 outer setter raises before changing any target. Validation, callback, or
 allocation failure likewise leaves the complete graph unchanged; there is no
 second child-store pass or root-only generation guard.
@@ -1019,15 +1135,33 @@ value/capsule mutation. After native subset/flatten has returned canonical
 detached state, collection flattening may walk the validated translation
 snapshot and rebind documented `cargo` callbacks to flattened IDs, then replace
 that one column in the detached BASE capsule through the package replacement
-primitive. This family neither repeats structural admission nor competes with
+primitive. For namespace-sensitive cargo, Collection and Shadow flattening pass
+the package-private `NULL` all-ID request to that native snapshot, subset
+exactly its returned IDs, and scan its complete receipt before rebinding.
+Callback-free flattening takes the cheaper dedicated all-current-ID native
+subset transaction and fails closed if its detached result unexpectedly
+contains namespace-sensitive cargo. Neither path carries a preliminary R-side
+ID vector across a derived-schema refresh. This family neither repeats
+structural admission nor competes with
 native graph, value, checking, or callback-selection semantics.
+Ordinary BASE flattening uses that same all-current-ID subset transaction
+directly. Omitted-`ids` `$subspaces()` uses the existing all-current-ID
+multi-subspace engine for every node kind, while explicit IDs use the selected
+multi-subspace entry point. Thus neither public default first evaluates
+`$ids()` in R and carries that vector into a later capsule generation.
 
 The second is exact-TuneToken `$search_space()` conversion. Its R code receives
 only the one rooted native token/target-Domain snapshot, in which every live
 ParamSet content has already been replaced by a sealed, single-use BASE subset
-capability. It switches over the five built-in token class vectors and owns
-callback-dependent plausibility, one-dimensional compatibility, dependency
-reconstruction, and outward ParamSet assembly. It does not admit structure
+capability. With omitted `values`, native admission selects both the raw
+current store and target
+Domains from one capsule/graph generation; the lean R6 stub preserves the
+public `values = self$values` formal but forwards omission without forcing that
+default. Explicit `values` is admitted as the independent caller snapshot it
+has always represented. The R conversion switches over the five built-in token
+class vectors and owns callback-dependent plausibility, one-dimensional
+compatibility, dependency reconstruction, and outward ParamSet assembly. It
+does not admit structure
 independently, call a third-party S3/candidate method, reread a live candidate,
 or select a competing native/R path. Its deterministic sampling restores the
 caller's RNG kind/state on success or failure.
@@ -1141,8 +1275,20 @@ through sampler-specific process-local single-use carriers. Public
 malformed, or generic carriers reject, and the public sampler topology does not
 contain a carrier.
 Users wanting executable custom child samplers use `SamplerHierarchical`.
+Its constructor first owns and validates one deep-cloned graph, then reads
+arbitrary Sampler subclass `$param` bindings and compares their unique IDs to
+that owned generation. A reentrant custom binding can mutate the caller but
+cannot make the hierarchical sampler combine pre-mutation IDs with a
+post-mutation ParamSet.
 `generate_design_random()` and `SamplerUnif` both pass the native table through
 the one `Design$new()` boundary for fixed values and dependency masking.
+LHS and Sobol construction instead retain the exact caller ParamSet reference
+for compatibility. Both generate against one owned graph snapshot, install
+the caller reference by a direct ordinary-environment bind, and then perform
+one terminal allocation-free complete-graph receipt scan. The bind precedes
+the scan because R's `$<-` preparation allocates even when its target is an
+ordinary R6 environment; no callback-capable or allocating work follows the
+scan.
 
 Translation units may be split for readability, but a split must not create a
 second semantic engine. Legacy files named around “surface auth”, “builtin

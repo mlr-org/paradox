@@ -17,9 +17,14 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
     #' Note that this object is typically constructed via derived classes,
     #' e.g., [`Sampler1DUnif`].
     initialize = function(param) {
-      assert_r6(param, "ParamSet")
-      if (param$length != 1) stopf("param must contain exactly 1 Param, but contains %s", param$length)
       super$initialize(param)
+      dimension = self$param_set$length
+      if (dimension != 1) {
+        stopf(
+          "param must contain exactly 1 Param, but contains %s",
+          dimension
+        )
+      }
     }
   ),
 
@@ -31,9 +36,10 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
 
   private = list(
     # create a 1-col-dt, named by param-id, from a data vector (from sampling), and enforce storage type
-    as_dt_col = function(x) {
-      x = as_type(x, self$param$storage_type)
-      set_names(data.table(x), self$param$ids())
+    as_dt_col = function(x, storage_type = self$param$storage_type,
+        id = self$param$ids()) {
+      x = as_type(x, storage_type)
+      set_names(data.table(x), id)
     }
   )
 )
@@ -59,9 +65,10 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
         super$initialize(param)
       } else {
         # Only the package-owned SamplerUnif issuer can create an accepted
-        # carrier. ParamSet$new() consumes its nested subset token, installing
-        # the already independent capsule without a redundant deep clone.
-        owned = ParamSet$new(handoff)
+        # carrier. The bundle installs its nested subset token and any callback
+        # detached from the exact same source generation without a redundant
+        # deep clone.
+        owned = param_set_from_subset_bundle(handoff)
         if (owned$length != 1) {
           stopf(
             "param must contain exactly 1 Param, but contains %s",
@@ -75,7 +82,13 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
   ),
 
   private = list(
-    .sample = function(n) self$param_set$qunif(setnames(data.table(runif(n)), self$param$ids())) # sample by doing qunif(u)
+    # The one-shot engine selects schema, bounds, levels, IDs, dependency
+    # state, and the RNG transaction together. It is both faster than
+    # constructing a unit data.table in R and immune to split active-binding
+    # reads around allocation/finalizers.
+    .sample = function(n) {
+      .Call(C_sampler_unif_sample_builtin, self$param_set, n)
+    }
   )
 )
 
@@ -119,22 +132,34 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
     # maybe we want an option to use my truncation here, as this slows stuff down somewhat
     # and there are some real truncated rngs in R
     .sample = function(n) {
+      param = self$param
+      domain = .Call(
+        C_param_set_domains,
+        get_private(param),
+        param
+      )[[1L]]
+      lower = domain$lower[[1L]]
+      upper = domain$upper[[1L]]
+      storage_type = domain$storage_type[[1L]]
+      id = domain$id[[1L]]
+      rfun = self$rfun
+      trunc = self$trunc
       if (n == 0L) {
         s = numeric() # skip truncation stuff, #338
-      } else if (self$trunc) {
-        s = private$sample_truncated(n, self$rfun)
+      } else if (trunc) {
+        s = private$sample_truncated(n, rfun, lower, upper)
       } else {
-        s = self$rfun(n = n)
+        s = rfun(n = n)
       }
-      super$as_dt_col(s)
+      super$as_dt_col(s, storage_type, id)
     },
 
     # extreme naive rejection sampling to enable trunc sampling from finite, restricted support
-    sample_truncated = function(n, rfun) {
+    sample_truncated = function(n, rfun, lower, upper) {
       r = numeric(0L)
       for (i in 1:1000) {
         s = rfun(n = 2 * n)
-        s = s[s >= self$param$lower & s <= self$param$upper]
+        s = s[s >= lower & s <= upper]
         r = c(r, s)
         if (length(r) >= n) {
           return(r[1:n])
@@ -149,6 +174,8 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
 #'
 #' @description
 #' Sampling from a discrete distribution, for a [`ParamSet`] containing a single [`p_fct()`] or [`p_lgl()`].
+#' A zero-level factor accepts `numeric()` probabilities and can be sampled
+#' for zero rows; a positive-row request fails before entering the RNG.
 #'
 #' @template param_param
 #'
@@ -168,20 +195,41 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
     initialize = function(param, prob = NULL) {
       super$initialize(param)
       assert_subset(self$param$class, c("ParamFct", "ParamLgl"))
-      k = param$nlevels
+      k = self$param$nlevels[[1L]]
       if (is.null(prob)) {
         prob = rep(1 / k, k)
       }
       assert_numeric(prob, lower = 0, upper = 1, len = k)
-      assert_true(all.equal(sum(prob), 1))
+      if (k != 0L) {
+        assert_true(all.equal(sum(prob), 1))
+      }
       self$prob = prob
     }
   ),
 
   private = list(
     .sample = function(n) {
-      s = sample(self$param$levels[[1]], n, replace = TRUE, prob = self$prob)
-      super$as_dt_col(s)
+      param = self$param
+      domain = .Call(
+        C_param_set_domains,
+        get_private(param),
+        param
+      )[[1L]]
+      levels = domain$levels[[1L]]
+      storage_type = domain$storage_type[[1L]]
+      id = domain$id[[1L]]
+      prob = self$prob
+      if (!length(levels)) {
+        if (n != 0L) {
+          stop(
+            "Cannot sample a factor parameter with no levels",
+            call. = FALSE
+          )
+        }
+        return(super$as_dt_col(character(), storage_type, id))
+      }
+      s = sample(levels, n, replace = TRUE, prob = prob)
+      super$as_dt_col(s, storage_type, id)
     }
   )
 )

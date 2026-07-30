@@ -24,27 +24,37 @@ param_set_internal_table = function(x) {
   if (length(sizes) && any(sizes != rows)) {
     stop("Internal error: unaligned ParamSet state table", call. = FALSE)
   }
+  if (rows > .Machine$integer.max) {
+    stop("Internal error: ParamSet state table is too large", call. = FALSE)
+  }
   structure(
     columns,
     names = names(x),
-    row.names = if (rows) seq_len(rows) else integer(),
+    row.names = if (rows) c(NA_integer_, -as.integer(rows)) else integer(),
     class = "data.frame"
   )
 }
 
 # Construct the outward mutable facade without invoking data.table. The native
-# finalizer owns the shell/names and installs a valid self-reference; capsule
-# columns stay shared only through R's copy-on-write rules and the capsule never
-# retains the facade itself.
+# defensive finalizer owns the shell, names, and every column spine before it
+# installs a valid self-reference. List-column leaves keep their documented
+# opaque identity.
 param_set_data_table_facade = function(x) {
   x = param_set_internal_table(x)
   table = structure(
-    lapply(unname(as.list(x)), function(column) column[seq_along(column)]),
+    unname(as.list(x)),
     names = names(x),
     row.names = if (nrow(x)) seq_len(nrow(x)) else integer(),
     class = c("data.table", "data.frame")
   )
   finalize_domain_data_table(table)
+}
+
+param_set_tags_from_state = function(params, tags) {
+  split(
+    tags$tag,
+    factor(tags$id, levels = params$id)
+  )
 }
 
 param_set_table_rows = function(table, rows) {
@@ -133,17 +143,85 @@ param_set_core_deep_clone = function(self, core) {
     0L
   }
 
-  node_private = function(node) {
-    private = get_private(node)
-    if (!inherits(node, "ParamSet") || !is.environment(private)) {
+  plain_binding = function(owner, name, required = TRUE) {
+    if (!is.environment(owner) ||
+        !exists(name, envir = owner, inherits = FALSE)) {
+      if (!required) return(NULL)
       stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
     }
-    private
+    snapshot = .paradox_plain_binding_snapshot(owner, name)
+    if (!isTRUE(snapshot$ok)) {
+      stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+    }
+    snapshot$value
+  }
+
+  node_topology = function(node) {
+    if (!is.environment(node) ||
+        !(.Call(C_param_set_class_kind, node) %in% 1:3)) {
+      stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+    }
+    binding = node
+    environments = list()
+    private = NULL
+    repeat {
+      enclosing = plain_binding(binding, ".__enclos_env__")
+      if (!is.environment(enclosing)) {
+        stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+      }
+      selected_self = plain_binding(enclosing, "self")
+      selected_private = plain_binding(enclosing, "private")
+      if (!identical(selected_self, node) ||
+          !is.environment(selected_private) ||
+          (!is.null(private) && !identical(selected_private, private))) {
+        stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+      }
+      private = selected_private
+      selected = list(binding, enclosing)
+      if (any(vapply(
+          selected,
+          function(environment) any(vapply(
+            environments,
+            identical,
+            logical(1L),
+            y = environment
+          )),
+          logical(1L)
+        ))) {
+        stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+      }
+      environments = c(environments, selected)
+      if (length(environments) == 2L) {
+        if (any(vapply(
+            environments,
+            identical,
+            logical(1L),
+            y = private
+          ))) {
+          stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+        }
+        environments[[3L]] = private
+      }
+      if (!exists("super", envir = enclosing, inherits = FALSE)) break
+      binding = plain_binding(enclosing, "super")
+      if (!is.environment(binding)) {
+        stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+      }
+    }
+    list(private = private, environments = environments)
   }
 
   node_snapshot = function(node, expected_core = NULL) {
-    private = node_private(node)
-    current_core = private$.core
+    topology = node_topology(node)
+    private = topology$private
+    assert_values = .paradox_plain_binding_snapshot(node, "assert_values")
+    if (!identical(
+        .Call(C_param_set_assert_values_exact, assert_values$value),
+        TRUE
+      )) {
+      stop("Corrupt ParamSet assert_values policy", call. = FALSE)
+    }
+    current_core = plain_binding(private, ".core")
     if (!is.null(expected_core) && !identical(current_core, expected_core)) {
       stop("ParamSet capsule changed during deep clone", call. = FALSE)
     }
@@ -152,6 +230,10 @@ param_set_core_deep_clone = function(self, core) {
     # schema whose sets have moved on is brought current, and a malformed
     # Shadow signature errors instead of being cloned as it stands.
     current_core = .Call(C_param_set_core_refresh, node, private)
+    shadow_receipt = .Call(
+      C_param_set_deep_clone_shadow_receipt,
+      current_core
+    )
     kind = .Call(C_param_set_core_kind, current_core)
     state = .Call(C_param_set_core_state, current_core, node)
     sets = state$.sets
@@ -178,8 +260,16 @@ param_set_core_deep_clone = function(self, core) {
       ))) {
       stop("Corrupt ParamSet capsule graph child", call. = FALSE)
     }
-    list(private = private, core = current_core, kind = kind, state = state,
-      sets = sets)
+    list(
+      private = private,
+      topology = topology,
+      core = current_core,
+      assert_values = assert_values$value,
+      shadow_receipt = shadow_receipt,
+      kind = kind,
+      state = state,
+      sets = sets
+    )
   }
 
   same_edges = function(left, right) {
@@ -297,21 +387,52 @@ param_set_core_deep_clone = function(self, core) {
     )
   }
 
+  # Every phase-one capsule must still be the generation currently installed
+  # at one common terminal point. Re-enter the authoritative refresh gate
+  # first: this catches a COLLECTION made stale by a child schema mutation and
+  # a SHADOW whose origin moved after the parent was discovered. The final
+  # native scan then compares every ordinary `.core` binding in one
+  # allocation-free wave; doing those comparisons in R would leave a
+  # finalizer window between nodes.
+  for (index in seq_along(nodes)) {
+    current = node_snapshot(
+      nodes[[index]],
+      expected_core = snapshots[[index]]$core
+    )
+    if (!identical(current$core, snapshots[[index]]$core) ||
+        !identical(current$kind, snapshots[[index]]$kind) ||
+        !same_edges(current$sets, snapshots[[index]]$sets)) {
+      stop("ParamSet capsule graph changed during deep clone", call. = FALSE)
+    }
+  }
+  .Call(
+    C_param_set_deep_clone_receipt,
+    unname(nodes),
+    unname(lapply(snapshots, `[[`, "private")),
+    unname(lapply(snapshots, `[[`, "core")),
+    unname(lapply(snapshots, `[[`, "assert_values")),
+    unname(lapply(snapshots, `[[`, "shadow_receipt"))
+  )
+
   # Origins are cloned before Shadows and children before Collections. The
   # authoritative native Shadow builder therefore derives dynamic fields from
-  # the already rewired origin. Its immutable edge is checked again before use.
+  # the already rewired origin. All source edges were checked at the terminal
+  # receipt above; output construction now reads only the retained snapshots.
   clones = vector("list", length(nodes))
   cloned_cores = vector("list", length(nodes))
+  source_environments = unlist(
+    lapply(snapshots, function(snapshot) snapshot$topology$environments),
+    recursive = FALSE
+  )
+  clone_environments = list()
+  overlaps = function(candidates, existing) {
+    any(vapply(candidates, function(candidate) {
+      any(vapply(existing, identical, logical(1L), y = candidate))
+    }, logical(1L)))
+  }
+  namespace = asNamespace("paradox")
   for (index in postorder) {
     snapshot = snapshots[[index]]
-    if (identical(snapshot$kind, 3L)) {
-      current = node_snapshot(nodes[[index]])
-      if (!identical(current$kind, snapshot$kind) ||
-          !same_edges(current$sets, snapshot$sets)) {
-        stop("ParamSet capsule graph changed during deep clone", call. = FALSE)
-      }
-      snapshot = current
-    }
 
     children = edge_indices[[index]]
     # Carry the source edge list's exact attribute shape, including the
@@ -328,14 +449,40 @@ param_set_core_deep_clone = function(self, core) {
     cloned_core = clone_payload(snapshot, cloned_sets, cloned_child_cores)
     cloned_cores[[index]] = cloned_core
     if (index != 1L) {
-      clone = nodes[[index]]$clone(deep = FALSE)
-      if (!inherits(clone, "ParamSet") || !is.environment(clone) ||
-          identical(clone, nodes[[index]])) {
+      target = get(
+        switch(
+          as.character(snapshot$kind),
+          `1` = ".__paradox2_ParamSet__clone",
+          `2` = ".__paradox2_ParamSetCollection__clone",
+          `3` = ".__paradox2_ParamSetShadow__clone"
+        ),
+        envir = namespace,
+        inherits = FALSE
+      )
+      clone = target(
+        self = nodes[[index]],
+        private = snapshot$private,
+        deep = FALSE
+      )
+      clone_topology = node_topology(clone)
+      if (overlaps(clone_topology$environments, source_environments) ||
+          overlaps(clone_topology$environments, clone_environments)) {
         stop("Cannot clone ParamSet capsule graph child", call. = FALSE)
       }
-      clone_private = node_private(clone)
-      clone_private$.core = cloned_core
+      clone_private = clone_topology$private
+      if (bindingIsActive(".core", clone_private) ||
+          bindingIsLocked(".core", clone_private) ||
+          bindingIsActive("assert_values", clone) ||
+          bindingIsLocked("assert_values", clone)) {
+        stop("Cannot clone ParamSet capsule graph child", call. = FALSE)
+      }
+      assign(".core", cloned_core, envir = clone_private)
+      assign("assert_values", snapshot$assert_values, envir = clone)
       clones[[index]] = clone
+      clone_environments = c(
+        clone_environments,
+        clone_topology$environments
+      )
     }
   }
   cloned_cores[[1L]]
@@ -376,19 +523,54 @@ params_data_table_temporary_reassignment = function() {
 # Build and consume package-owned one-row BASE capsules. The native call owns
 # the complete node snapshot; the R loop performs only the unavoidable public
 # R6 shell construction and never reimplements subset semantics.
-param_set_subspace_shells = function(param_set, private, ids) {
-  tokens = .Call(
-    C_param_set_subspace_states,
-    private,
+param_set_subspace_shells = function(
     param_set,
-    ids,
-    param_set$extra_trafo
-  )
-  result = vector("list", length(tokens))
-  for (index in seq_along(tokens)) {
-    result[[index]] = ParamSet$new(tokens[[index]])
+    private,
+    ids = NULL,
+    select_all = FALSE
+) {
+  bundles = if (select_all) {
+    .Call(
+      C_param_set_all_subspace_states,
+      private,
+      param_set
+    )
+  } else {
+    .Call(
+      C_param_set_subspace_states,
+      private,
+      param_set,
+      ids
+    )
   }
-  names(result) = names(tokens)
+  result = vector("list", length(bundles))
+  for (index in seq_along(bundles)) {
+    result[[index]] = param_set_from_subset_bundle(bundles[[index]])
+  }
+  names(result) = names(bundles)
+  result
+}
+
+param_set_from_subset_bundle = function(bundle) {
+  result = ParamSet$new(bundle$token)
+  detached = bundle$detach
+  if (is.null(detached)) return(result)
+
+  if (isTRUE(bundle$keep_constraint) &&
+      length(detached$constraint_indices)) {
+    result$constraint = param_set_collection_constraint_factory(
+      detached$translation,
+      detached$constraint_indices,
+      detached$constraint_sets
+    )
+  }
+  if (isTRUE(bundle$keep_trafo) && length(detached$trafo_indices)) {
+    result$extra_trafo = param_set_collection_extra_trafo_factory(
+      detached$translation,
+      detached$trafo_indices,
+      detached$trafo_sets
+    )
+  }
   result
 }
 
@@ -513,7 +695,11 @@ ParamSet = R6Class("ParamSet",
       # methods or replacing generator members is intentionally unsupported;
       # subclass identity is therefore not a reason to duplicate construction
       # in R.
-      native = .Call(C_param_set_construct, params)
+      native = .Call(
+        C_param_set_construct,
+        params,
+        allow_dangling_dependencies
+      )
       paramtbl = native$params
       tags = native$tags
       trafos = native$trafos
@@ -619,14 +805,14 @@ ParamSet = R6Class("ParamSet",
       if (!identical(.insert, TRUE) && !identical(.insert, FALSE)) {
         stop("`.insert` must be TRUE or FALSE", call. = FALSE)
       }
-      new_values = .Call(
-        C_param_set_values_merge,
+      invisible(.Call(
+        C_param_set_set_values,
+        private,
+        self,
         dots,
         .values,
-        if (.insert) self$values else NULL,
         .insert
-      )
-      self$values = new_values
+      ))
       invisible(self)
     },
 
@@ -686,11 +872,14 @@ ParamSet = R6Class("ParamSet",
     #'   The ids of the parameters for which to disable internal tuning.
     #' @return `Self`
     disable_internal_tuning = function(ids) {
-      assert_subset(ids, self$ids(tags = "internal_tuning"))
-      state = private$.state()
-      cargos = state$.params$cargo[match(ids, state$.params$id)]
-      pvs = Reduce(c, map(cargos, "disable_in_tune")) %??% named_list()
-      self$set_values(.values = pvs)
+      # Pre-release Paradox-2 Shadows inherited this ParamSet target. Their
+      # serialized lean stubs continue to call it after loading the release
+      # package, so route that cold compatibility case through the same
+      # Shadow implementation used by fresh shells.
+      if (inherits(self, "ParamSetShadow")) {
+        return(param_set_shadow_disable_internal_tuning(self, ids))
+      }
+      param_set_internal_tuning_disable(self, private, ids)
     },
 
     #' @description
@@ -700,27 +889,7 @@ ParamSet = R6Class("ParamSet",
     #'   The internal search space.
     #' @return (named `list()`)
     convert_internal_search_space = function(search_space) {
-      assert_class(search_space, "ParamSet")
-      # A Shadow value read refreshes its dynamic origin snapshot. Capture the
-      # resulting capsule generation only afterward; BASE reads select the
-      # same generation without an extra semantic path.
-      param_vals = private$.get_values()
-      state = private$.state()
-      domains = search_space$domains
-      converters = lapply(names(domains), function(.id) {
-        converter = param_set_table_first(
-          state$.params, .id, "cargo"
-        )$in_tune_fn
-        if (!is.function(converter)) {
-          stopf("No converter exists for parameter '%s'", .id)
-        }
-        converter
-      })
-      names(converters) = names(domains)
-
-      imap(domains, function(token, .id) {
-        converters[[.id]](token, param_vals)
-      })
+      param_set_internal_tuning_convert(self, private, search_space)
     },
 
     #' @description
@@ -1029,18 +1198,16 @@ ParamSet = R6Class("ParamSet",
     #' @return `ParamSet`.
     subset = function(ids, allow_dangling_dependencies = FALSE,
       keep_constraint = TRUE, keep_trafo = TRUE) {
-      token = .Call(
+      bundle = .Call(
         C_param_set_subset_state,
         private,
         self,
         ids,
         allow_dangling_dependencies,
         keep_constraint,
-        self$constraint,
-        self$extra_trafo,
         keep_trafo
       )
-      ParamSet$new(token)
+      param_set_from_subset_bundle(bundle)
     },
 
     #' @description
@@ -1049,13 +1216,34 @@ ParamSet = R6Class("ParamSet",
     #'   IDs for which to create `ParamSet`s. Defaults to all IDs.
     #' @return named `list()` of `ParamSet`.
     subspaces = function(ids = self$ids()) {
-      param_set_subspace_shells(self, private, ids)
+      if (missing(ids)) {
+        param_set_subspace_shells(
+          self,
+          private,
+          select_all = TRUE
+        )
+      } else {
+        param_set_subspace_shells(self, private, ids)
+      }
     },
 
     #' @description
     #' Create a `ParamSet` from this object, even if this object itself is not
     #' a `ParamSet` but e.g. a [`ParamSetCollection`].
-    flatten = function() self$subset(private$.state()$.params$id, allow_dangling_dependencies = TRUE),
+    flatten = function() {
+      # Pre-release Shadows inherited this versioned target. Fresh Shadows
+      # override it, while restored old shells take this cold branch.
+      if (inherits(self, "ParamSetShadow")) {
+        return(param_set_shadow_flatten(self))
+      }
+      # Select every ID only after the native transaction has admitted one
+      # exact capsule generation. Reading IDs here and invoking `$subset()`
+      # afterward could otherwise omit a parameter installed by a finalizer
+      # between the two operations.
+      param_set_from_subset_bundle(
+        .Call(C_param_set_flatten_state, private, self)
+      )
+    },
 
     #' @description
     #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
@@ -1079,7 +1267,11 @@ ParamSet = R6Class("ParamSet",
     #'   dependency that becomes dangling *within* the tuning space is an
     #'   error.
     search_space = function(values = self$values) {
-      pars = private$get_tune_ps(values)
+      pars = if (missing(values)) {
+        private$get_tune_ps()
+      } else {
+        private$get_tune_ps(values)
+      }
       on = NULL  # pacify static code check
       dangling_deps = pars$deps[!pars$ids(), on = "on"]
       if (nrow(dangling_deps)) {
@@ -1155,19 +1347,22 @@ ParamSet = R6Class("ParamSet",
     #'   and structural metadata are ordinary non-ALTREP/non-S4.
     data = function(v) {
       if (!missing(v)) stop("data is read-only")
-      params = private$.state()$.params
+      # `$params` is the single detached schema projection. Reusing that exact
+      # result keeps every `$data` column off capsule storage and avoids
+      # separately reading tags from a potentially newer graph generation.
+      params = self$params
       param_set_data_table_facade(list(
         id = params$id,
         class = params$cls,
         lower = params$lower,
         upper = params$upper,
         levels = params$levels,
-        nlevels = self$nlevels,
-        is_bounded = self$is_bounded,
+        nlevels = .Call(C_param_set_property, params, 0L),
+        is_bounded = .Call(C_param_set_property, params, 3L),
         special_vals = params$special_vals,
         default = params$default,
         storage_type = params$storage_type,
-        tags = self$tags
+        tags = params$.tags
       ))
     },
 
@@ -1176,21 +1371,15 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.get_values())
       }
-      if (self$assert_values) {
-        # One native transaction snapshots the complete capsule graph,
-        # validates every supplied value, computes activity only when needed
-        # to filter constraint input, and commits every ultimate BASE target
-        # only after all callbacks have returned. Dependency inactivity makes
-        # a value dormant; it does not reject the transaction. Both
-        # checked and unchecked native stores reject a structural outer ALTREP
-        # before observation. The native store canonicalizes the Paradox-1
-        # NULL/ordinary zero-length clear-values spellings; R never
-        # pre-observes that shell.
-        xs = .Call(C_param_set_assign_values_checked, private, self, xs)
-        return(xs)
-      }
-      private$.store_values(xs)
-      xs
+      # One native transaction snapshots the exact public policy and complete
+      # capsule graph, validates when requested, and commits every ultimate
+      # BASE target only after all callbacks have returned. Dependency
+      # inactivity makes a value dormant; it does not reject the transaction.
+      # Both policy branches reject a structural outer ALTREP before
+      # observation. The native store canonicalizes the Paradox-1
+      # NULL/ordinary zero-length clear-values spellings; R never pre-observes
+      # that shell.
+      .Call(C_param_set_assign_values, private, self, xs)
     },
 
     #' @template field_tags
@@ -1261,7 +1450,18 @@ ParamSet = R6Class("ParamSet",
     #' @field is_empty (`logical(1)`)\cr Is the `ParamSet` empty? Named with parameter IDs.
     is_empty = function() nrow(private$.state()$.params) == 0L,
     #' @field has_trafo (`logical(1)`)\cr Whether a `trafo` function is present, in parameters or in `extra_trafo`.
-    has_trafo = function() !is.null(self$extra_trafo) || nrow(private$.state()$.trafos),
+    has_trafo = function() {
+      if (inherits(self, "ParamSetCollection")) {
+        return(.Call(
+          C_param_set_collection_has_callback,
+          private,
+          self,
+          2L
+        ))
+      }
+      state = private$.state()
+      !is.null(state$.extra_trafo) || nrow(state$.trafos) != 0L
+    },
     #' @field has_extra_trafo (`logical(1)`)\cr Whether `extra_trafo` is set.
     has_extra_trafo = function() !is.null(self$extra_trafo),
     #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
@@ -1287,32 +1487,58 @@ ParamSet = R6Class("ParamSet",
     # Per-Parameter properties
 
     #' @field class (named `character()`)\cr Classes of contained parameters. Named with parameter IDs.
-    class = function() with(private$.state()$.params, set_names(cls, id)),
+    class = function() {
+      .Call(C_param_set_property, private$.state()$.params, 4L)
+    },
     #' @field lower (named `double()`)\cr Lower bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
-    lower = function() with(private$.state()$.params, set_names(lower, id)),
+    lower = function() {
+      .Call(C_param_set_property, private$.state()$.params, 5L)
+    },
     #' @field upper (named `double()`)\cr Upper bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
-    upper = function() with(private$.state()$.params, set_names(upper, id)),
+    upper = function() {
+      .Call(C_param_set_property, private$.state()$.params, 6L)
+    },
     #' @field levels (named `list()` of `character`)\cr Allowed levels of categorical parameters (`NULL` for non-categoricals).
     #' Named with parameter IDs.
-    levels = function() with(private$.state()$.params, set_names(levels, id)),
+    levels = function() {
+      .Call(C_param_set_property, private$.state()$.params, 7L)
+    },
     #' @field storage_type (`character()`)\cr Data types of parameters when stored in tables. Named with parameter IDs.
-    storage_type = function() with(private$.state()$.params, set_names(storage_type, id)),
+    storage_type = function() {
+      .Call(C_param_set_property, private$.state()$.params, 8L)
+    },
     #' @field special_vals (named `list()` of `list()`)\cr Special values for all parameters. Named with parameter IDs.
-    special_vals = function() with(private$.state()$.params, set_names(special_vals, id)),
+    special_vals = function() {
+      .Call(C_param_set_property, private$.state()$.params, 9L)
+    },
     #' @field default (named `list()`)\cr Default values of all parameters. If no default exists, element is not present.
     #' Named with parameter IDs.
     default = function() {
-      params = private$.state()$.params
-      keep = !map_lgl(params$default, is_nodefault)
-      set_names(params$default[keep], params$id[keep])
+      values = .Call(C_param_set_property, private$.state()$.params, 10L)
+      values[!map_lgl(values, is_nodefault)]
     },
     #' @field has_trafo_param (`logical()`)\cr Whether `trafo` is set for any parameter.
-    has_trafo_param = function() with(private$.state()$.params, set_names(id %in% private$.state()$.trafos$id, id)),
+    has_trafo_param = function() {
+      state = private$.state()
+      ids = state$.params$id
+      # The logical payload is fresh, but `set_names()` retains its names
+      # vector exactly. Own that carrier so a by-reference attribute setter on
+      # `names(result)` cannot write into the capsule's canonical ID column.
+      set_names(ids %in% state$.trafos$id, ids[seq_along(ids)])
+    },
     #' @field is_logscale (`logical()`)\cr Whether `trafo` was set to `logscale` during construction.\cr
     #' Note that this only refers to the `logscale` flag set during construction, e.g. `p_dbl(logscale = TRUE)`.
     #' If the parameter was set to logscale manually, e.g. through `p_dbl(trafo = exp)`,
     #' this `is_logscale` will be `FALSE`.
-    is_logscale = function() with(private$.state()$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & map_lgl(cargo, function(x) isTRUE(x$logscale)), id)),
+    is_logscale = function() {
+      params = private$.state()$.params
+      values = with(
+        params,
+        cls %in% c("ParamDbl", "ParamInt") &
+          map_lgl(cargo, function(x) isTRUE(x$logscale))
+      )
+      set_names(values, params$id[seq_along(params$id)])
+    },
 
     ############################
     # Per-parameter properties for the five maintained native Domain kinds
@@ -1345,14 +1571,20 @@ ParamSet = R6Class("ParamSet",
     .store_values = function(xs) {
       invisible(.Call(C_param_set_store_values, private, self, xs))
     },
-    .get_values = function() private$.state()$.values,
+    .get_values = function() {
+      .Call(C_param_set_collection_values, private, self)
+    },
 
     get_tune_ps = function(values) {
       # C receives the complete container so S3 `[` methods cannot participate
       # in filtering. It selects exact built-in TuneTokens, snapshots their
       # target Domains (including dependency requirements), and seals exact
       # BASE ParamSet candidates before any candidate callback can run.
-      admitted = .Call(C_tune_token_snapshot_list, private, self, values)
+      admitted = if (missing(values)) {
+        .Call(C_tune_token_snapshot_current, private, self)
+      } else {
+        .Call(C_tune_token_snapshot_list, private, self, values)
+      }
       values = admitted$tokens
       if (!length(values)) return(ParamSet$new())
       params = admitted$targets

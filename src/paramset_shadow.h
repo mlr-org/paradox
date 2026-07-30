@@ -23,6 +23,10 @@ attribute_hidden SEXP paradox_param_set_shadow_construct(
   SEXP origin,
   SEXP shadowed
 );
+attribute_hidden SEXP paradox_param_set_shadow_origin(
+  SEXP private_environment,
+  SEXP self
+);
 
 /* Refresh one current SHADOW against its origin capsule graph.  A replacement
  * is committed only if the selected SHADOW capsule is still current. */
@@ -42,8 +46,23 @@ attribute_hidden SEXP paradox_shadow_preview_authoritative(
  * field.  Returns R_UnboundValue for malformed or non-SHADOW cores. */
 attribute_hidden SEXP paradox_shadow_origin_from_core(SEXP core);
 
-/* Authenticate the complete package-private refresh signature without
- * refreshing or otherwise evaluating the origin graph. */
+/* Select the complete package-private refresh signature without refreshing
+ * or otherwise evaluating the origin graph. Returns R_UnboundValue unless the
+ * carrier has its exact ordinary alternating shell/core shape. */
+attribute_hidden SEXP paradox_shadow_metadata_signature(SEXP core);
+/* Own the exact alternating entries of an already selected signature after
+ * the destination allocation, or return R_NilValue for malformed input. */
+attribute_hidden SEXP paradox_shadow_signature_content_snapshot(
+  SEXP signature
+);
+/* Allocation-free terminal receipt: the core still names the same exact
+ * carrier and every alternating shell/generation entry is unchanged. */
+attribute_hidden int paradox_shadow_signature_receipt_is_current(
+  SEXP core,
+  SEXP signature,
+  SEXP content_snapshot
+);
+/* Shape-only predicate retained for cold capsule admission call sites. */
 attribute_hidden int paradox_shadow_metadata_is_exact(SEXP core);
 /* Carry a SHADOW's derived-cache carrier onto a replacement generation. A
  * field-level capsule replacement rebuilds the external pointer, and a SHADOW

@@ -75,7 +75,11 @@ installs the prepared base capsule for an additive migration, and restores
 the legacy shell's public \code{assert_values} policy for both migration kinds.
 A replacement must return the exact registered class backed by a canonical
 current \code{ParamSetShadow} capsule; Paradox rebinds its single origin while
-preserving the legacy shell identity. Registered owner
+preserving the legacy shell identity. The returned shell's public, private,
+and enclosure environments must be fresh: before changing it, Paradox
+rejects aliases with every original/current node in the complete migration
+session and with every other prepared result. Shared dependency nodes
+remain supported. Registered owner
 classes with public or private R6 finalizers are unsupported because moving
 a finalizer between environment identities can prematurely or repeatedly
 release live state. Hook functions are trusted code from the currently

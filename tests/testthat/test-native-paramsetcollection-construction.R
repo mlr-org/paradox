@@ -83,6 +83,31 @@ test_that("affixed ID arithmetic is checked at native C boundaries", {
   )
 })
 
+test_that("collection construction rejects S4 structural arguments", {
+  sets = list(child = ps(x = p_int()))
+  expect_error(
+    collection2_construct(asS4(sets)),
+    "ordinary named list"
+  )
+
+  s4_names = sets
+  attr(s4_names, "names") = asS4(names(s4_names))
+  expect_error(
+    collection2_construct(s4_names),
+    "ordinary character names"
+  )
+
+  constructor = collection2_symbol("param_set_collection_construct")
+  for (position in 2:4) {
+    arguments = list(sets, FALSE, FALSE, FALSE)
+    arguments[[position]] = asS4(arguments[[position]])
+    expect_error(
+      do.call(.Call, c(list(constructor), arguments)),
+      "unclassed logical flag"
+    )
+  }
+})
+
 test_that("native construction creates exact canonical collection state", {
   left = ps(
     zeta = p_int(tags = c("set_left", "param_zeta")),
@@ -92,7 +117,11 @@ test_that("native construction creates exact canonical collection state", {
   sets = list(left = left, right = right)
   native = collection2_construct(sets, tag_sets = TRUE, tag_params = TRUE)
 
-  expect_named(native, c("params", "tags", "trafos", "translation", "edges"))
+  expect_named(
+    native,
+    c("params", "tags", "trafos", "translation", "edges", "sets")
+  )
+  expect_identical(native$sets, sets)
   for (table in native[c("params", "tags", "trafos", "translation")]) {
     expect_identical(class(table), "data.frame")
     expect_null(attr(table, ".internal.selfref", exact = TRUE))
@@ -157,6 +186,38 @@ test_that("native construction creates exact canonical collection state", {
     state$.edges$cores,
     list(collection2_private(left)$.core, collection2_private(right)$.core)
   )
+})
+
+test_that("collection construction keeps each child paired with one name generation", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$sets = list(old = ps(x = p_int()))
+  state$fired = FALSE
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    data.table::setattr(state$sets, "names", "new")
+  })
+  trigger = NULL
+
+  native = collection2_construct(state$sets)
+  gctorture(previous)
+  expect_true(state$fired)
+  expect_identical(
+    native$params$id,
+    paste0(names(native$sets), ".x")
+  )
+  expect_identical(
+    native$translation$owner_name,
+    names(native$sets)
+  )
+
+  collection = ParamSetCollection$new(native$sets)
+  expect_identical(collection$ids(), native$params$id)
 })
 
 test_that("native collection add installs one complete replacement generation", {
@@ -322,12 +383,76 @@ test_that("native collection add rejects cycles and corruption atomically", {
   )
 })
 
+test_that("collection add rejects shell reparenting during a child refresh", {
+  collection = ParamSetCollection$new(list(existing = ps(x = p_int())))
+  original_enclosure = collection$.__enclos_env__
+  original_private = original_enclosure$private
+  original_core = original_private$.core
+  donor = ParamSetCollection$new(list(donor = ps(z = p_int())))
+
+  set_collection_enclosure = function(value) {
+    was_locked = bindingIsLocked(".__enclos_env__", collection)
+    if (was_locked) {
+      unlockBinding(".__enclos_env__", collection)
+    }
+    assign(".__enclos_env__", value, envir = collection)
+    if (was_locked) {
+      lockBinding(".__enclos_env__", collection)
+    }
+  }
+  on.exit(set_collection_enclosure(original_enclosure), add = TRUE)
+
+  origin = ps(hidden = p_int(), shown = p_int())
+  origin$constraint = function(x) TRUE
+  shadow = ParamSetShadow$new(origin, "hidden")
+  # Make the Shadow stale so collection add must rebuild its constraint through
+  # the fixed package factory after the receiving graph was already selected.
+  origin$constraint = function(x) is.null(x$shown) || x$shown >= 0L
+
+  namespace = asNamespace("paradox")
+  factory_name = "param_set_shadow_constraint_factory"
+  original_factory = get(factory_name, envir = namespace, inherits = FALSE)
+  factory_was_locked = bindingIsLocked(factory_name, namespace)
+  set_factory = function(value) {
+    if (bindingIsLocked(factory_name, namespace)) {
+      unlockBinding(factory_name, namespace)
+    }
+    assign(factory_name, value, envir = namespace)
+    if (factory_was_locked) {
+      lockBinding(factory_name, namespace)
+    }
+  }
+  on.exit(set_factory(original_factory), add = TRUE)
+
+  calls = 0L
+  set_factory(function(callback, hidden_values) {
+    calls <<- calls + 1L
+    set_collection_enclosure(donor$.__enclos_env__)
+    original_factory(callback, hidden_values)
+  })
+
+  expect_error(
+    collection$add(shadow, "child"),
+    "capsule graph changed during collection add",
+    fixed = TRUE
+  )
+  expect_identical(calls, 1L)
+
+  # The hostile callback changed an unsupported shell surface, but the native
+  # transaction must not have committed through the private environment it
+  # selected before that reparenting.
+  set_collection_enclosure(original_enclosure)
+  expect_identical(original_private$.core, original_core)
+  expect_named(collection$sets, "existing")
+})
+
 test_that("empty, prefix, postfix, nested, and shared public graphs are stable", {
   empty_native = collection2_construct(setNames(list(), character()))
   expect_named(
     empty_native,
-    c("params", "tags", "trafos", "translation", "edges")
+    c("params", "tags", "trafos", "translation", "edges", "sets")
   )
+  expect_identical(empty_native$sets, setNames(list(), character()))
   expect_identical(
     unname(vapply(
       empty_native[c("params", "tags", "trafos", "translation")],

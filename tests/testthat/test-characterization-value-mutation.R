@@ -179,6 +179,13 @@ test_that("shared collection children retain last-owner mutation semantics", {
   expect_warning(collection$set_values(right.b = NULL), "more than one path")
   expect_identical(child$values, list(a = 3L))
   expect_identical(collection$values, list(left.a = 3L, right.a = 3L))
+
+  # The later alias is authoritative independently of whether an earlier path
+  # was touched. This is the symmetric insertion case: the old `left.a` is in
+  # the merged root store, but the explicit later update must win.
+  expect_warning(collection$set_values(right.a = 9L), "more than one path")
+  expect_identical(child$values, list(a = 9L))
+  expect_identical(collection$values, list(left.a = 9L, right.a = 9L))
 })
 
 test_that("nested postfix mutation translates and clears at each level", {

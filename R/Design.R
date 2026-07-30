@@ -45,42 +45,57 @@ Design = R6Class("Design",
     #'   Remove duplicates?
     initialize = function(param_set, data, remove_dupl) {
 
-      assert_param_set(param_set)
-      assert_data_table(data, ncols = param_set$length)
-      assert_names(colnames(data), permutation.of = param_set$ids())
+      assert_r6(param_set, "ParamSet")
+      # The namespace-owned grid token certifies a table produced and fully
+      # normalized by the one-shot native grid operation. Keeping this branch
+      # free of a second schema snapshot is both the grid hot path and the
+      # reason the token is an identity object rather than a public flag.
+      if (identical(remove_dupl, .design_prepared_grid)) {
+        self$param_set = param_set
+        self$data = data
+        return(invisible(NULL))
+      }
+
+      assert_data_table(data)
+      # Admit the complete public table first and then one complete ParamSet
+      # graph. The native plan owns fixed-value classification, column
+      # permutation validation, and dependency evaluation from that same
+      # generation; separate `$length`, `$ids`, `$storage_type`, `$values`,
+      # and `$deps` reads could combine generations around a finalizer.
+      native = .Call(C_design_dependency_plan, data, param_set)
       self$param_set = param_set
       self$data = data
-      if (!identical(remove_dupl, .design_prepared_grid)) {
-        # Apply fixed values at this one generator-independent boundary. Random,
-        # Sobol, LHS, and directly constructed designs therefore share identical
-        # overwrite and dependency behavior even when their input contains
-        # placeholder data. The native grid generator has already performed this
-        # normalization while pruning its search and enters with the package's
-        # namespace-owned prepared-grid token.
-        storage_types = param_set$storage_type
-        imap(param_set$values, function(v, n) {
-          # Mirror the native grid generator: one ordinary element of the
-          # parameter's own storage type collapses into that typed column,
-          # while every other legal stored value -- `NULL`, a multi-element or
-          # cross-storage special value, an S4 or list leaf -- keeps its
-          # identity as a list-column entry. Assigning such a value as a plain
-          # column would instead coerce it to `NA`, recycle or reject it by
-          # length, or (for `NULL`) delete the column outright.
-          if (inherits(v, "TuneToken")) {
-            stopf("Design generation cannot materialize the stored TuneToken value of parameter '%s'.", n)
-          }
-          if (design_column_value_is_plain(v, storage_types[[n]])) {
-            set(data, j = n, value = v)
+      for (index in seq_along(native$fixed_columns)) {
+        value = native$fixed_values[[index]]
+        set(
+          self$data,
+          j = native$fixed_columns[[index]],
+          value = if (native$fixed_plain[[index]]) {
+            value
           } else {
-            set(data, j = n, value = rep(list(v), nrow(data)))
+            rep(list(value), nrow(self$data))
           }
-        })
-        private$set_deps_to_na()
-        # NB: duplicated rows can happen due to NA setting.
-        if (remove_dupl) {
-          self$data = unique(self$data)
-        }
+        )
       }
+      for (edge in seq_along(native$rows)) {
+        set(
+          self$data,
+          i = native$rows[[edge]],
+          j = native$columns[[edge]],
+          value = native$values[[edge]]
+        )
+      }
+      # NB: duplicated rows can happen due to NA setting.
+      if (remove_dupl) {
+        self$data = unique(self$data)
+      }
+      # The native plan retains the exact BASE capsule or complete
+      # COLLECTION/SHADOW graph it used. All callback-capable R work is now
+      # complete, so one allocation-free scan is the terminal barrier: a
+      # finalizer or custom callback which moved the live support during the
+      # by-reference patch wave wins, and this constructor refuses to return a
+      # Design whose rows describe the earlier generation.
+      .Call(C_param_set_generation_receipt, native$receipt)
     },
 
 
@@ -125,44 +140,5 @@ Design = R6Class("Design",
       if (trafo) xs = .Call(C_design_transpose_trafos, xs, ps)
       return(xs)
     }
-  ),
-
-  private = list(
-    # function to set unsatisfied deps to NA in the design dt "data":
-    # walk thru all params, toposorted order, then walk thru all deps
-    # and set values in x to NA which where the dep is not OK
-    set_deps_to_na = function() {
-
-      ps = self$param_set
-      native = .Call(C_design_dependency_plan, self$data, ps)
-      # Keep the public Design data.table mutable by reference, but all graph
-      # planning and condition evaluation comes from the single native engine.
-      for (edge in seq_along(native$rows)) {
-        set(
-          self$data,
-          i = native$rows[[edge]],
-          j = native$columns[[edge]],
-          value = native$values[[edge]]
-        )
-      }
-      invisible(NULL)
-    }
   )
 )
-
-# A stored parameter value collapses into an ordinary typed design column only
-# when it is exactly one attribute-free element of the parameter's own storage
-# type. `p_uty()` stores into a list column, so its values never collapse.
-design_column_value_is_plain = function(value, storage_type) {
-  if (storage_type == "list" || !is.atomic(value) || is.object(value) ||
-    length(value) != 1L || !is.null(attributes(value))) {
-    return(FALSE)
-  }
-  switch(storage_type,
-    numeric = is.double(value) || is.integer(value),
-    integer = is.integer(value),
-    character = is.character(value),
-    logical = is.logical(value),
-    FALSE
-  )
-}
