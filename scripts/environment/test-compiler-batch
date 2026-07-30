@@ -54,8 +54,9 @@ make_admission_report() {
   fi
   {
     printf 'field\tvalue\n'
-    printf 'schema\t1\n'
+    printf 'schema\t2\n'
     printf 'profile\tapi-compile\n'
+    printf 'containment\tdirect\n'
     printf 'platform\tLinux\n'
     printf 'online_cpus\t%s\n' "$cpu_limit"
     printf 'affinity_cpus\t%s\n' "$cpu_limit"

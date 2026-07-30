@@ -87,13 +87,14 @@ validate_admission_report() {
   local memory_available cgroup_memory memory_reserve memory_per memory_jobs
   local operator jobs expected_cpu_limit expected_cpu_reserve expected_jobs value
   local expected_cpu_jobs expected_memory_reserve expected_memory_jobs
+  local reserve_floor
   [[ "$report" == /* && -f "$report" && ! -L "$report" ]] ||
     fail "--admission-report must be one plain absolute file"
   [[ "$(cd "$(dirname "$report")" && pwd -P)/$(basename "$report")" == \
      "$report" ]] || fail "--admission-report is not canonical"
   awk -F '\t' 'NF != 2 { exit 1 }' "$report" ||
     fail "admission report is not an exact two-column TSV"
-  expected_fields=$'field\nschema\nprofile\nplatform\nonline_cpus\naffinity_cpus\ncgroup_cpu_limit\ncpu_limit\ncpu_reserve\ncpu_per_job\ncpu_jobs\nmemory_source\nmemory_available_mib\ncgroup_memory_available_mib\nmemory_reserve_mib\nmemory_mib_per_job\nmemory_jobs\nprofile_max_jobs\noperator_max_jobs\njobs\nselection'
+  expected_fields=$'field\nschema\nprofile\ncontainment\nplatform\nonline_cpus\naffinity_cpus\ncgroup_cpu_limit\ncpu_limit\ncpu_reserve\ncpu_per_job\ncpu_jobs\nmemory_source\nmemory_available_mib\ncgroup_memory_available_mib\nmemory_reserve_mib\nmemory_mib_per_job\nmemory_jobs\nprofile_max_jobs\noperator_max_jobs\njobs\nselection'
   actual_fields=$(cut -f 1 "$report")
   [[ "$actual_fields" == "$expected_fields" ]] ||
     fail "admission report has an unexpected field inventory"
@@ -102,11 +103,18 @@ validate_admission_report() {
   }
   canonical_positive() { [[ "$1" =~ ^[1-9][0-9]{0,8}$ ]]; }
   canonical_nonnegative() { [[ "$1" =~ ^(0|[1-9][0-9]{0,8})$ ]]; }
-  [[ "$(report_value schema)" == 1 &&
+  [[ "$(report_value schema)" == 2 &&
      "$(report_value profile)" == api-compile &&
      "$(report_value selection)" == \
        live_ceiling_lowered_against_retained_initial ]] ||
     fail "admission report has an unsupported identity or policy"
+  # Containment selects the reserve floor: the aggregate envelope already
+  # withholds the host reserve, so only a small intra-envelope floor remains.
+  case "$(report_value containment)" in
+    direct) reserve_floor=12288 ;;
+    aggregate-systemd) reserve_floor=4096 ;;
+    *) fail "admission report has an unknown containment mode" ;;
+  esac
   online=$(report_value online_cpus)
   affinity=$(report_value affinity_cpus)
   cgroup_cpu=$(report_value cgroup_cpu_limit)
@@ -149,7 +157,8 @@ validate_admission_report() {
   expected_cpu_jobs=$(((expected_cpu_limit - expected_cpu_reserve) / cpu_per))
   ((expected_cpu_jobs > 0)) || expected_cpu_jobs=1
   expected_memory_reserve=$((memory_available / 4))
-  ((expected_memory_reserve >= 12288)) || expected_memory_reserve=12288
+  ((expected_memory_reserve >= reserve_floor)) ||
+    expected_memory_reserve=$reserve_floor
   ((memory_available > expected_memory_reserve)) ||
     fail "admission report violates the memory safety reserve"
   expected_memory_jobs=$(((memory_available - expected_memory_reserve) / memory_per))

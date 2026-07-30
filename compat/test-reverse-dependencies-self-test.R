@@ -830,6 +830,45 @@ if (!identical(parallel_wave$backend, "external") ||
   )
 }
 
+# A wave larger than its worker limit refills freed slots: five rows finish
+# under a two-worker limit, results stay in task order, and no more than two
+# workers ever overlap.  Each worker counts live sibling markers while it
+# runs; the coordinator only launches a replacement after the previous
+# process exited, so a third concurrent marker proves a refill defect.
+refill_root <- file.path(temporary, "refill-wave")
+dir.create(refill_root)
+refill_tasks <- lapply(1:5, function(index) {
+  directory <- file.path(refill_root, paste0("row-", index))
+  external_task(list(index = index, directory = directory), directory)
+})
+refill_wave <- rr_parallel_wave(refill_tasks, function(task) {
+  root <- dirname(task$directory)
+  marker <- file.path(root, paste0("running-", task$index))
+  writeLines("running", marker, useBytes = TRUE)
+  overlap <- length(list.files(root, pattern = "^running-"))
+  Sys.sleep(0.3)
+  unlink(marker)
+  if (overlap > 2L) {
+    stop("refill exceeded the worker limit: ", overlap, call. = FALSE)
+  }
+  task$index
+}, 2L, external_rscript, wave_worker_script, worker_group_script, 60L)
+if (length(refill_wave$results) != 5L ||
+    any(!vapply(refill_wave$results, function(value) isTRUE(value$ok),
+      logical(1L))) ||
+    !identical(lapply(refill_wave$results, `[[`, "value"), as.list(1:5))) {
+  rr_fail(
+    "refill wave lost a row, its order, or its concurrency bound: ",
+    paste(vapply(refill_wave$results, function(value) paste0(
+      "ok=", value$ok, ",error=",
+      if (is.null(value$error)) "-" else value$error
+    ), character(1L)), collapse = " | ")
+  )
+}
+if (rr_reverse_wave_capacity(2L) != 6L) {
+  rr_fail("reverse wave capacity is not three rows per admitted worker")
+}
+
 # The coordinator imposes an outer deadline even when the worker never reaches
 # its own bounded child calls.
 hanging_directory <- file.path(temporary, "hanging-worker")
@@ -1225,21 +1264,47 @@ invisible(file.copy(
 ))
 resource_report_fixture <- data.frame(
   field = c(
-    "schema", "profile", "platform", "online_cpus", "affinity_cpus",
-    "cgroup_cpu_limit", "cpu_limit", "cpu_reserve", "cpu_per_job",
-    "cpu_jobs", "memory_source", "memory_available_mib",
+    "schema", "profile", "containment", "platform", "online_cpus",
+    "affinity_cpus", "cgroup_cpu_limit", "cpu_limit", "cpu_reserve",
+    "cpu_per_job", "cpu_jobs", "memory_source", "memory_available_mib",
     "cgroup_memory_available_mib", "memory_reserve_mib",
     "memory_mib_per_job", "memory_jobs", "profile_max_jobs",
     "operator_max_jobs", "jobs"
   ),
   value = c(
-    "1", "consumer", "Linux", "6", "6", "5", "5", "1", "2", "2",
+    "2", "consumer", "direct", "Linux", "6", "6", "5", "5", "1", "2", "2",
     "proc_memavailable", "32768", "unlimited", "16384", "8192", "2",
     "4", "1", "1"
   ),
   stringsAsFactors = FALSE
 )
 invisible(rr_validate_resource_report(resource_report_fixture, "consumer"))
+# The aggregate containment policy admits the measured 2048-MiB cooperative
+# weight, the 4096-MiB intra-envelope floor, and the eight-row cap; a report
+# mixing the modes or naming an unknown mode fails closed.
+aggregate_resource_report <- resource_report_fixture
+aggregate_resource_report$value <- c(
+  "2", "consumer", "aggregate-systemd", "Linux", "32", "32", "unlimited",
+  "32", "2", "2", "15", "proc_memavailable+cgroup", "30720", "30720",
+  "7680", "2048", "11", "8", "none", "8"
+)
+invisible(rr_validate_resource_report(aggregate_resource_report, "consumer"))
+mixed_policy_resource_report <- aggregate_resource_report
+mixed_policy_resource_report$value[
+  mixed_policy_resource_report$field == "memory_mib_per_job"
+] <- "8192"
+expect_error(
+  rr_validate_resource_report(mixed_policy_resource_report, "consumer"),
+  "internally inconsistent"
+)
+unknown_containment_resource_report <- resource_report_fixture
+unknown_containment_resource_report$value[
+  unknown_containment_resource_report$field == "containment"
+] <- "best-effort"
+expect_error(
+  rr_validate_resource_report(unknown_containment_resource_report, "consumer"),
+  "unknown containment mode"
+)
 raised_resource_report <- resource_report_fixture
 raised_resource_report$value[
   raised_resource_report$field == "jobs"

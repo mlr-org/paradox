@@ -60,7 +60,10 @@ scripts/native-check --mode strict-gcc --mode strict-clang --tests focused
 ```
 
 `resource-jobs` computes reviewed parallel ceilings from online CPUs, affinity,
-cgroup v1/v2 CPU and memory constraints, and currently available RAM. Its
+cgroup v1/v2 CPU and memory constraints, and currently available RAM. On a
+hybrid hierarchy it consults the v1 memory/CPU controllers whenever the
+unified walk finds no constraint, so a v1-only limit such as the aggregate
+service ceiling is never silently invisible. Its
 `--report` mode is evidence-friendly; `--max-jobs` can only lower the result.
 It fails closed when even one job would invade the reserved memory headroom.
 Inside a top-level verification worker it also converts
@@ -68,20 +71,28 @@ Inside a top-level verification worker it also converts
 `PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` into a cooperative job-count ceiling, so
 several aggregate-contained coarse tasks cannot each rediscover and spend the
 complete service envelope.
-The conservative profiles are: `compile`, one CPU and 1024 MiB per job with a
-16-job cap; `api-compile`, one CPU and 768 MiB per job; `light-test`, one CPU
-and 2048 MiB per job with a 16-job cap; and `consumer`, two CPUs and 8192 MiB
-per job with a four-job cap and 16384 MiB minimum reserve. These are admission
-budgets, not measured peaks. Direct and individually contained consumer runs
-use that full 8192-MiB estimate for both live and assigned-envelope admission.
-Only under the authenticated aggregate systemd ceiling does an assigned
-consumer envelope use the measured 4096-MiB cooperative row weight. The
-retained report still records the conservative 8192-MiB live estimate; a
-finite historical `operator_max_jobs` records any lowering imposed by the
-coordinator assignment, and `--verify-report` accepts and replays that
-lowering-only cap. The serial `rchk` profile admits one analyzer only
+Every schema-2 report records its containment mode, and both live derivation
+and `--verify-report` replay select the policy from that mode. Direct
+(uncontained or per-worker contained) admission stays deliberately
+conservative because nothing else protects unrelated host processes:
+`compile`, one CPU and 1024 MiB per job with a 16-job cap; `api-compile`, one
+CPU and 768 MiB per job; `light-test`, one CPU and 2048 MiB per job with a
+16-job cap; and `consumer`, two CPUs and 8192 MiB per job with a four-job cap
+and 16384 MiB minimum reserve. Inside the authenticated aggregate systemd
+service -- the environment marker is honoured only when the process actually
+sits in the dedicated `/system.slice/paradox-verify-aggregate-*` leaf -- the
+root-owned launcher has already withheld the host reserve while sizing the
+hard ceiling, so admission switches to measured cooperative weights: consumer
+rows use 2048 MiB with an eight-row cap, light-test jobs use 1024 MiB, and
+all cooperative profiles keep only a 4096-MiB intra-envelope reserve floor
+above the live one-quarter dynamic reserve. These are admission weights, not
+hard per-row limits; the service cgroup remains the hard boundary, and the
+live headroom-based derivation shrinks later admissions as real usage grows.
+The serial `rchk` profile admits one analyzer only
 with a 20480 MiB address-space budget and at least 16384 MiB retained for the
-host; the analyzer also receives an independent hard `RLIMIT_AS`.
+host; the analyzer also receives an independent hard `RLIMIT_AS`. The
+valgrind/rchk analyzer profiles keep one identical conservative policy in
+both containment modes because they never run inside the envelope.
 `run-compiler-batch` executes isolated compiler admissions under that ceiling,
 keeps deterministic input-order aggregates, and waits for the complete batch
 before failing. Its schema-4 plan binds the admission report, authenticated

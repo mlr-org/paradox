@@ -112,12 +112,29 @@ sudo install -o root -g root -m 0644 \
 ```
 
 Inspect `/etc/paradox-verify-systemd.conf` before use. Its checked-in values
-are specific to this checkout and user. The checked-in `worker_image` is the
-immutable repository digest of the reviewed worker built locally on this host;
-it is never pulled implicitly. Another machine must build/provision its own
-reviewed image and replace that value. It may instead be left empty and
-supplied through `PARADOX_VERIFY_WORKER_IMAGE`, although pinning the immutable
-reference in the root-owned configuration is preferable for unattended runs.
+are specific to this checkout and user, and the file deliberately holds only
+what genuinely needs root: machine identity (repository, uid/gid, home) and
+the safety rails (`memory_max_mib` as the self-service ceiling,
+`memory_reserve_mib`, `cpu_reserve`, `tasks_max`, `runtime_max_sec`).
+Everything that churns is user-owned state below `.local/verify/`:
+
+- `worker-image.pin` holds the immutable reference of the locally built
+  worker image; `scripts/verify` exports it as
+  `PARADOX_VERIFY_WORKER_IMAGE` (an explicit environment value still wins)
+  and the launcher's existing `--worker-image` override carries it into the
+  service, so a rebuilt image digest never needs a root reinstall. Leave
+  `worker_image` empty in the root configuration.
+- `systemd-tunables.conf` may set `memory_target_mib` to spend up to — never
+  beyond — the root-pinned `memory_max_mib` ceiling and must stay above the
+  protected reserve. The root launcher parses it as data with the same
+  strict grammar as its own configuration, requires it to be owned by the
+  configured user, and fails closed on anything else. An absent file means
+  "use the full ceiling".
+
+Root intervention therefore remains for exactly three things: installing or
+updating the reviewed launcher itself, changing machine identity, and
+raising the rails. Routine harness development, image rebuilds, and capacity
+tuning within the rails are unprivileged.
 
 The installed helper applies only bounded, fixed systemd properties as root.
 It then uses systemd's `--uid`/`--gid` boundary before any mutable repository
@@ -143,13 +160,31 @@ checkout-specific helper.
 `scripts/verify-systemd ...` requests it explicitly. `scripts/verify
 self-test` always remains unprivileged and daemon-free.
 
-The supplied policy targets 32 GiB but clamps every invocation to current
-`MemAvailable` minus the larger of 12 GiB and 25% of available memory. It
-reserves two online CPUs, so this 32-CPU machine gets a 30-CPU quota, and
-limits the complete process tree to 8,192 tasks. The clamp is evaluated by the
-root-owned helper immediately before creating the service; it is not a promise
-that 32 GiB is always available. Adjust those values only in the root-owned
-configuration.
+The supplied policy allows up to 48 GiB but clamps every invocation to
+current `MemAvailable` minus the larger of 12 GiB and 25% of available
+memory, so the protected outside reserve holds even when the target is
+generous. It reserves two online CPUs, so this 32-CPU machine gets a 30-CPU
+quota, and limits the complete process tree to 8,192 tasks. The clamp is
+evaluated by the root-owned helper immediately before creating the service;
+it is not a promise that 48 GiB is always available. The effective target
+within that ceiling is the user-owned `memory_target_mib` tunable; only the
+ceiling and reserves live in the root-owned configuration. A machine still
+carrying an older configuration keeps a valid, merely smaller envelope (and
+ignores the tunables file) until `/etc/paradox-verify-systemd.conf` and the
+launcher are reinstalled once from the refreshed examples.
+
+The root helper exists only because this host runs the hybrid cgroup-v1
+hierarchy, where an unprivileged user cannot create a memory-limited
+service at all. The structural endgame is booting the machine with
+`systemd.unified_cgroup_hierarchy=1` (cgroup v2): systemd then delegates
+the memory/pids controllers to the user manager, `systemd-run --user` can
+create the envelope without any root helper, and rootless Podman gains real
+per-worker limits that this controller's per-worker containment mode
+already knows how to prove. That is one boot-parameter change plus a
+reboot; on this shared machine it needs coordination with the
+administrator, and the controller's aggregate probe would need to learn the
+user-manager unit shape before the helper can be retired, so it is recorded
+here as the intended direction rather than assumed.
 
 ## Hard containment is proved, not inferred
 
@@ -195,13 +230,19 @@ PID flags and use `--cgroups=disabled --cgroupns=host`. Their manifest
 allocations are scheduler reservations inside one hard envelope, not separate
 hard task limits. This permits multiple independent checks to run in parallel
 without pretending cgroup v1 can isolate them individually. The worker entry
-point and nested `resource-jobs` calls cooperatively cap Make/test waves by the
-assigned CPU and RAM. Consumer rows use a 4-GiB cooperative weight only in
-this authenticated aggregate mode, while their ordinary live/direct admission
-retains the conservative 8-GiB estimate. Thus an 8-GiB coarse allocation can
-run two ordinary rows when CPU permits without weakening the aggregate hard
-ceiling. The nested planner's ordinary live-resource check remains an
-independent fail-closed guard. An increase in a
+point and nested `resource-jobs` calls cooperatively cap Make/test waves by
+the assigned CPU and RAM. Schema-2 resource reports record their containment
+mode explicitly, and the aggregate policy applies only after the process
+proves it sits inside the dedicated service cgroup: consumer rows then use
+the measured 2-GiB cooperative weight with an eight-row cap, light-test jobs
+the 1-GiB weight, and cooperative profiles a 4-GiB intra-envelope reserve
+floor, because the root-owned launcher already withheld the host reserve when
+sizing the hard ceiling. Ordinary live/direct admission retains the
+conservative 8-GiB estimate, 16-GiB reserve floor, and four-row cap. Thus a
+16-GiB coarse allocation can run eight ordinary rows when CPU permits without
+weakening the aggregate hard ceiling. The nested planner's live
+headroom-derived check remains an independent fail-closed guard that shrinks
+later waves as sibling usage grows. An increase in a
 memory/PID event counter, a changed limit or cgroup path, or loss of the
 authenticated unit contract aborts the whole run and terminates every sibling.
 Successful artifacts from completed siblings remain available for an exact
@@ -258,8 +299,11 @@ requests. There are no shell command strings. The scheduler:
 - admits ready tasks continuously while all resource sums fit;
 - admits a task at its reviewed CPU/RAM minimum on a smaller machine, then
   gives spare capacity to higher-priority peers up to their reviewed ceiling;
-- sets nested BLAS/OpenMP/testthat parallelism to one and gives Make only the
-  CPUs reserved for that coarse worker;
+- sets nested BLAS/OpenMP/testthat parallelism to one by default and gives
+  Make only the CPUs reserved for that coarse worker; a reviewed driver may
+  re-enable parallel testthat for the Paradox suite itself within the same
+  assigned envelope (the full native check does this for its `--as-cran`
+  test run through an explicit light-test admission);
 - records a separate append-only attempt log for every retry/resume.
 
 The default `adaptive` policy finishes independent peers in the current phase,
@@ -315,6 +359,60 @@ scripts/verify run --profile release-core \
   --param source_ref=refs/paradox-release/CANDIDATE \
   --worker-image "$PARADOX_VERIFY_WORKER_IMAGE"
 ```
+
+## Loosening resource allotments after a limit event
+
+The scheduler is deliberately aggressive inside the aggregate envelope, and
+the envelope is a tripwire: on cgroup v1 even a successfully reclaimed limit
+contact increments `memory.failcnt`, which the controller treats as a fatal
+infrastructure event. When a run dies that way, or a row is OOM-killed, do
+not weaken the envelope's outside protection; raise the one allotment that
+was actually too tight and start a replacement run. Diagnose first:
+
+- **Aggregate memory/PID event, whole run invalidated.** The summary names
+  the event counter. The aggregate usage approached the hard ceiling, so the
+  cooperative estimate of at least one concurrently running task was too low.
+  Identify the heavy task from the attempt logs, then raise that one task's
+  `memory_mib_min`/`memory_mib` in `verification/tasks.json` (a larger
+  reservation admits fewer siblings next to it). Reservation sums for the
+  phase-30 compatibility branches are pinned by `verification/test_harness.py`;
+  run `scripts/verify self-test` after editing.
+- **One row killed inside a wave (exit 137 / killed by signal 9) while the
+  run survived.** A single consumer/test row exceeded its cooperative weight
+  badly. Either raise the aggregate per-row weight — `consumer` 2048 MiB or
+  `light-test` 1024 MiB in `scripts/environment/resource-jobs` — or lower the
+  wave width for that gate only with the lowering-only knobs below. A weight
+  change must be applied in lockstep to the re-derivation validators
+  (`compat/repository-runner.R`, `compat/reverse-runner.R`,
+  `scripts/native-check`, `scripts/environment/validate-native-source-run`,
+  `scripts/environment/run-compiler-batch`, `run-compiler-wave`) and their
+  self-tests (`test-resource-jobs`, `test-verification-economy`, the compat
+  self-tests); the structural tests fail loudly on any partial edit.
+- **A task is blocked as `unsupported` or waits forever on admission.** Its
+  reviewed minimum no longer fits the live budget. Lower the task's
+  `cpu_min`/`memory_mib_min` (after proving the inner driver degrades safely
+  there) or raise the envelope.
+- **`resource-jobs` fails closed** (`insufficient memory for one ... job`).
+  Outside the envelope this is the direct policy protecting the host — free
+  memory or use the envelope. Inside the envelope it means the service is
+  genuinely near its ceiling; let running work finish or raise the envelope.
+
+Lowering-only per-gate knobs (never raise the derived ceiling):
+`PARADOX_REVERSE_JOBS` (reverse waves), `PARADOX_RUNTIME_MATRIX_JOBS`
+(runtime stages, 1–4), `PARADOX_API_JOBS` (header syntax compiles),
+`PARADOX_NATIVE_COMPILE_JOBS` / `PARADOX_NATIVE_TEST_JOBS` (native install
+and both direct and `--as-cran` testthat parallelism), and each helper's
+`--max-jobs`.
+
+Raising the envelope target within the root-approved ceiling: edit
+`memory_target_mib` in the user-owned
+`.local/verify/systemd-tunables.conf` — no root involved. Only raising the
+ceiling itself (`memory_max_mib`) or changing `memory_reserve_mib` requires
+reinstalling the root-owned `/etc/paradox-verify-systemd.conf` from
+`verification/systemd/paradox-verify-systemd.conf.example`. The launcher's
+live clamp keeps the outside reserve intact regardless of the target. Never
+mirror a bigger target by weakening `memory_reserve_mib` below what
+interactive sessions on this host need.
 
 ## Cache and resume
 
@@ -462,16 +560,37 @@ branches have cooperative minima of 8 GiB for reverse dependencies, 8 GiB for
 the repository corpus, and 4 GiB each for documentation and focused downstream
 checks. Their 24-GiB memory, 6,144-PID, and 8-GiB scratch totals fit below the
 ordinary aggregate budgets on the development host, so the controller may run
-all four at once. Reverse and corpus tasks can expand to 16 GiB and four CPUs
-when peers leave capacity. These figures are scheduler reservations, not claims
+all four at once. Reverse and corpus tasks start at four CPUs and can expand
+to 16 GiB and 16 CPUs when peers leave capacity, which the aggregate 2-GiB
+consumer weight translates into up to eight concurrent rows per branch. These
+figures are scheduler reservations, not claims
 about measured peaks; the aggregate cgroup and live disk-reserve monitor remain
 the hard safety boundaries, and any memory/PID event or protected-disk pressure
-invalidates the run. The global `resource-jobs consumer` profile retains its
-more conservative direct-run policy. The completed `4c4cb53` diagnostic run
-used one row per wave because its 9,699-MiB corpus allocation was divided by
-the former 8-GiB assigned-envelope weight; the measured aggregate peak was
-10,670 MiB with zero OOM, memory-failure, or PID-limit events. The aggregate-
-only 4-GiB weight corrects that observed throughput bottleneck.
+invalidates the run. The `resource-jobs consumer` profile retains its
+conservative direct-run policy outside the envelope. The completed `4c4cb53`
+diagnostic run used one row per wave because its 9,699-MiB corpus allocation
+was divided by the historical 8-GiB assigned-envelope weight; the measured
+aggregate peak was 10,670 MiB with zero OOM, memory-failure, or PID-limit
+events. That evidence motivated first the 4-GiB and now the containment-aware
+2-GiB cooperative row weight with the eight-row cap.
+
+Both consumer runners also refill within a wave — a wave may plan up to
+three rows per admitted worker while only the admitted count runs
+concurrently, so a slow row no longer idles its siblings' slots — and both
+order their queue heaviest-first from the measured `4c4cb53` single-row
+durations, so the longest checks start immediately and the refill packs the
+tail. The measured table is a scheduling hint inside the runners, never
+evidence; an unhinted row keeps its reviewed inventory position. The
+documentation gate deliberately stays serial: its retained workload labels
+embed the execution-order index, every workload is bracketed by whole-tree
+protected-input attestations, and its rows are fully hidden behind the
+corpus/reverse branches in `prepared-release-compat`. Parallelizing it would
+rename retained evidence for approximately zero critical-path gain; revisit
+only if documentation ever becomes the phase-30 long pole. The runtime
+matrix's supported stages run the package suite with a capability-probed
+two-worker parallel testthat (testthat 3.2+ with callr in that stage's
+sealed library); old runtimes keep the exact serial path, and the retained
+stage log records the decision as `testthat_parallel`/`testthat_workers`.
 
 Run the complete prepared compatibility DAG unattended with:
 

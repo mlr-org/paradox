@@ -144,6 +144,53 @@ verify_owner=$("$STAT" -c '%u' -- "$repository/scripts/verify") ||
 [[ -z "${SUDO_UID:-}" || "$SUDO_UID" == "$uid" ]] ||
   fail "sudo caller does not match the configured verification user"
 
+# Machine-local tuning within root-approved rails.  The optional user-owned
+# tunables file may only lower the aggregate memory target below the
+# root-pinned memory_max_mib ceiling; identity, reserves, and every other
+# bound stay in the root-owned configuration, so routine capacity changes
+# need no root intervention while the rails still do.  The file is parsed
+# as data with the same strict grammar as the root configuration and is
+# never sourced by a shell.
+TUNABLES="$repository/.local/verify/systemd-tunables.conf"
+memory_target_mib=$memory_max_mib
+if [[ -e "$TUNABLES" ]]; then
+  [[ -f "$TUNABLES" && ! -L "$TUNABLES" ]] ||
+    fail "tunables file is non-regular or symbolic: $TUNABLES"
+  tunables_owner=$("$STAT" -c '%u' -- "$TUNABLES") ||
+    fail "cannot inspect tunables ownership"
+  [[ "$tunables_owner" == "$uid" ]] ||
+    fail "tunables file must be owned by the configured verification user"
+  tunables_size=$("$STAT" -c '%s' -- "$TUNABLES") ||
+    fail "cannot inspect tunables size"
+  [[ "$tunables_size" =~ ^[0-9]+$ && "$tunables_size" -le 4096 ]] ||
+    fail "tunables file is unexpectedly large"
+  declare -A tunables_seen=()
+  tunables_line=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    ((tunables_line += 1))
+    [[ -n "$line" && "$line" != \#* ]] || continue
+    [[ "$line" == *=* ]] ||
+      fail "tunables row $tunables_line is not key=value"
+    key=${line%%=*}
+    value=${line#*=}
+    [[ "$key" =~ ^[a-z][a-z0-9_]*$ && -z "${tunables_seen[$key]:-}" ]] ||
+      fail "tunables row $tunables_line has an unsafe or duplicate key"
+    safe_scalar "$value" ||
+      fail "tunables row $tunables_line has an unsafe value"
+    tunables_seen[$key]=1
+    case "$key" in
+      memory_target_mib) memory_target_mib=$value ;;
+      *) fail "tunables row $tunables_line has unknown key '$key'" ;;
+    esac
+  done < "$TUNABLES"
+  positive_integer "$memory_target_mib" ||
+    fail "tunables memory_target_mib is not a positive integer"
+  ((memory_target_mib <= memory_max_mib)) ||
+    fail "tunables memory_target_mib exceeds the root-approved ceiling"
+  ((memory_target_mib > memory_reserve_mib)) ||
+    fail "tunables memory_target_mib is not above the protected reserve"
+fi
+
 expected_root=
 override_engine=
 override_image=
@@ -208,7 +255,7 @@ fi
 ((mem_available_mib > reserve_mib)) ||
   fail "not enough currently available memory outside the protected reserve"
 safe_cap_mib=$((mem_available_mib - reserve_mib))
-cap_mib=$memory_max_mib
+cap_mib=$memory_target_mib
 if ((safe_cap_mib < cap_mib)); then
   cap_mib=$safe_cap_mib
 fi

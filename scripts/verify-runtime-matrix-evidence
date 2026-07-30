@@ -1020,6 +1020,14 @@ verify_source_scope() {
     $(log_value "$log" expectations_failed) == 0 &&
     $(log_value "$log" warnings) == 0 && $(log_value "$log" errors) == 0 ]] ||
     fail "Retained source-test policy or clean status is inconsistent"
+  # The suite scheduler decision is retained evidence: a capable stage runs
+  # exactly two testthat workers, an incapable one exactly the serial path.
+  testthat_parallel=$(log_value "$log" testthat_parallel)
+  testthat_workers=$(log_value "$log" testthat_workers)
+  case "$testthat_parallel:$testthat_workers" in
+    true:2|false:1) ;;
+    *) fail "Retained testthat scheduler decision is missing or inconsistent" ;;
+  esac
 
   [[ $(metadata_value "$metadata" pre46_exclusion_manifest_sha256) == \
       "$(sha256sum "$exclusions" | cut -d ' ' -f 1)" &&

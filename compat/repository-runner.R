@@ -714,6 +714,33 @@ repository_runner_candidate_proof <- function(authentication, output) {
       "candidate-source-manifest.tsv")))
 }
 
+# Measured single-row check durations in seconds from the complete
+# `4c4cb53` release-refresh corpus run (28 one-row waves, 2026-07-27).
+# These are scheduling hints, not evidence: ordering the queue
+# heaviest-first starts the longest checks immediately so continuous
+# refill packs the tail behind them, and a repository without a hint
+# simply keeps its reviewed inventory position after the hinted rows.
+repository_runner_duration_hints <- c(
+  mlr3extralearners = 3628, mlr3resampling = 2878, mlr3pipelines = 2378,
+  mlr3 = 592, mlr3mbo = 479, mlr3forecast = 445, mlr3tuning = 309,
+  mlr3fselect = 255, mlr3learners = 208, celecx = 151, mlr3proba = 147,
+  mlr3spatiotempcv = 145, mlr3inferr = 143, xplainfi = 140,
+  mlr3hyperband = 137, mlr3torch = 128, mlr3fda = 120, mlr3cluster = 89,
+  mlr3filters = 74, bbotk = 72, mlr3fairness = 71, miesmuschel = 65,
+  mlr3batchmark = 50, mlr3cmprsk = 46, mlr3automl = 42, mlr3oml = 34,
+  mlr3tuningspaces = 29, mlr3verse = 25
+)
+
+repository_runner_heaviest_first_order <- function(repositories) {
+  if (!is.character(repositories) || !length(repositories) ||
+      anyNA(repositories)) {
+    repository_runner_fail("heaviest-first ordering requires repository names")
+  }
+  hints <- repository_runner_duration_hints[repositories]
+  hints[is.na(hints)] <- 0
+  order(-hints, seq_along(repositories))
+}
+
 repository_runner_selection <- function(value) {
   columns <- c("position", "repository", "priority", "origin", "commit", "tree")
   if (!identical(names(value), columns) || !nrow(value) || anyNA(value)) {
@@ -811,13 +838,30 @@ repository_runner_tool_receipt <- function(config, output = NULL) {
 }
 
 repository_runner_resource_fields <- function() c(
-  "schema", "profile", "platform", "online_cpus", "affinity_cpus",
-  "cgroup_cpu_limit", "cpu_limit", "cpu_reserve", "cpu_per_job",
-  "cpu_jobs", "memory_source", "memory_available_mib",
+  "schema", "profile", "containment", "platform", "online_cpus",
+  "affinity_cpus", "cgroup_cpu_limit", "cpu_limit", "cpu_reserve",
+  "cpu_per_job", "cpu_jobs", "memory_source", "memory_available_mib",
   "cgroup_memory_available_mib", "memory_reserve_mib",
   "memory_mib_per_job", "memory_jobs", "profile_max_jobs",
   "operator_max_jobs", "jobs"
 )
+
+# The consumer policy is containment-dependent.  Direct admission keeps the
+# conservative 8192-MiB weight, 16384-MiB reserve floor, and four-row cap;
+# inside the authenticated aggregate systemd envelope the launcher already
+# withheld the host reserve, so rows use the measured 2048-MiB cooperative
+# weight, a 4096-MiB intra-envelope floor, and an eight-row cap.
+repository_runner_consumer_policy <- function(containment) {
+  if (identical(containment, "aggregate-systemd")) {
+    list(memory_per_job = 2048L, reserve_floor = 4096L, profile_max = 8L)
+  } else if (identical(containment, "direct")) {
+    list(memory_per_job = 8192L, reserve_floor = 16384L, profile_max = 4L)
+  } else {
+    repository_runner_fail(
+      "resource scheduler report has an unknown containment mode"
+    )
+  }
+}
 
 repository_runner_parse_resource_report <- function(lines) {
   if (!length(lines) || anyNA(lines) || any(grepl("[\r]", lines))) {
@@ -857,9 +901,11 @@ repository_runner_parse_resource_report <- function(lines) {
     if (identical(report[[name]], absent)) return(Inf)
     positive(name)
   }
-  if (!identical(report[["schema"]], "1") ||
+  policy <- repository_runner_consumer_policy(report[["containment"]])
+  if (!identical(report[["schema"]], "2") ||
       !identical(report[["profile"]], "consumer") ||
-      !identical(report[["profile_max_jobs"]], "4") ||
+      !identical(report[["profile_max_jobs"]],
+        as.character(policy$profile_max)) ||
       !grepl("^[A-Za-z0-9_.+-]+$", report[["platform"]]) ||
       !grepl("^[A-Za-z0-9_.+-]+$", report[["memory_source"]])) {
     repository_runner_fail("resource scheduler report violates consumer policy")
@@ -889,18 +935,21 @@ repository_runner_parse_resource_report <- function(lines) {
   expected_cpu_jobs <- max(
     1L, as.integer((expected_cpu_limit - expected_cpu_reserve) %/% 2L)
   )
-  expected_memory_reserve <- max(16384L, memory_available %/% 4L)
+  expected_memory_reserve <- max(policy$reserve_floor, memory_available %/% 4L)
   expected_memory_jobs <- as.integer(
-    (memory_available - expected_memory_reserve) %/% 8192L
+    (memory_available - expected_memory_reserve) %/% policy$memory_per_job
   )
-  unconstrained_jobs <- min(expected_cpu_jobs, expected_memory_jobs, 4L)
+  unconstrained_jobs <- min(
+    expected_cpu_jobs, expected_memory_jobs, policy$profile_max
+  )
   if (!identical(cpu_limit, as.integer(expected_cpu_limit)) ||
       !identical(cpu_reserve, expected_cpu_reserve) ||
       !identical(cpu_per_job, 2L) ||
       !identical(cpu_jobs, expected_cpu_jobs) ||
       is.finite(cgroup_memory) && memory_available > cgroup_memory ||
       !identical(memory_reserve, expected_memory_reserve) ||
-      !identical(memory_per_job, 8192L) || expected_memory_jobs < 1L ||
+      !identical(memory_per_job, policy$memory_per_job) ||
+      expected_memory_jobs < 1L ||
       !identical(memory_jobs, expected_memory_jobs) ||
       is.finite(operator_max) && operator_max > unconstrained_jobs ||
       !identical(jobs, as.integer(min(unconstrained_jobs, operator_max)))) {
@@ -2790,7 +2839,20 @@ repository_runner_worker_environment <- function(state) {
   environment
 }
 
-repository_runner_run_workers <- function(context, rows, prepared,
+# A wave may hold more rows than concurrent workers.  Three times the
+# admitted job count balances straggler refill (a freed slot immediately
+# starts the next planned row) against the blast radius of the pre/post
+# protected-input boundary, which still brackets one whole wave and
+# invalidates every row in it on a violation.
+repository_runner_wave_capacity <- function(jobs) {
+  jobs <- as.integer(jobs)
+  if (length(jobs) != 1L || is.na(jobs) || jobs < 1L) {
+    repository_runner_fail("wave capacity requires one positive job count")
+  }
+  jobs * 3L
+}
+
+repository_runner_run_workers <- function(context, rows, prepared, jobs,
                                           fixture = NULL) {
   worker_script <- context$config$tool_files[["repository-wave-worker.R"]]
   if (is.null(worker_script)) {
@@ -2798,6 +2860,10 @@ repository_runner_run_workers <- function(context, rows, prepared,
   }
   worker_script <- repository_runner_require_file(worker_script,
     "external repository wave worker")
+  jobs <- as.integer(jobs)
+  if (length(jobs) != 1L || is.na(jobs) || jobs < 1L) {
+    repository_runner_fail("external worker pool requires one positive job count")
+  }
   processes <- vector("list", nrow(rows))
   states <- vector("character", nrow(rows))
   results <- vector("character", nrow(rows))
@@ -2816,8 +2882,8 @@ repository_runner_run_workers <- function(context, rows, prepared,
       }
     }
   }, add = TRUE)
-  for (index in seq_len(nrow(rows))) {
-    states[[index]] <- repository_runner_reserve_directory(
+  launch_row <- function(index) {
+    states[[index]] <<- repository_runner_reserve_directory(
       prepared[[index]]$attempt, "external-worker-state",
       "external repository worker state")
     environment <- repository_runner_worker_environment(states[[index]])
@@ -2825,15 +2891,40 @@ repository_runner_run_workers <- function(context, rows, prepared,
       context = context, row = rows[index, , drop = FALSE],
       prepared = prepared[[index]], fixture = fixture)
     spec_path <- file.path(states[[index]], "spec.rds")
-    results[[index]] <- file.path(states[[index]], "result.rds")
+    results[[index]] <<- file.path(states[[index]], "result.rds")
     saveRDS(spec, spec_path, version = 3L)
     log <- file.path(prepared[[index]]$attempt, "worker-transport.log")
-    processes[[index]] <- processx::process$new(context$config$rscript,
+    processes[[index]] <<- processx::process$new(context$config$rscript,
       c("--vanilla", worker_script, spec_path, results[[index]]),
       env = environment, stdout = log, stderr = "2>&1", cleanup = TRUE,
       cleanup_tree = TRUE, supervise = TRUE, windows_verbatim_args = TRUE)
+    invisible(NULL)
   }
-  for (process in processes) process$wait(-1)
+  # Continuous refill: at most `jobs` workers run concurrently; a finished
+  # slot immediately starts the next planned row instead of idling behind the
+  # slowest sibling of a fixed batch.
+  next_index <- 1L
+  running <- integer()
+  while (next_index <= nrow(rows) || length(running)) {
+    while (next_index <= nrow(rows) && length(running) < jobs) {
+      launch_row(next_index)
+      running <- c(running, next_index)
+      next_index <- next_index + 1L
+    }
+    finished <- running[!vapply(running, function(index) isTRUE(tryCatch(
+      processes[[index]]$is_alive(), error = function(...) FALSE
+    )), logical(1L))]
+    if (length(finished)) {
+      for (index in finished) {
+        suppressWarnings(try(processes[[index]]$wait(5000), silent = TRUE))
+      }
+      running <- setdiff(running, finished)
+    }
+    if (length(running) &&
+        (length(running) >= jobs || next_index > nrow(rows))) {
+      Sys.sleep(0.05)
+    }
+  }
   active <- FALSE
   values <- lapply(seq_len(nrow(rows)), function(index) {
     status <- tryCatch(processes[[index]]$get_exit_status(),
@@ -2865,7 +2956,7 @@ repository_runner_run_wave <- function(context, rows, prepared, decision,
   if (!is.function(worker) || !identical(worker,
       repository_runner_execute_attempt) ||
       nrow(rows) != length(prepared) || !nrow(rows) ||
-      nrow(rows) > decision$jobs) {
+      nrow(rows) > repository_runner_wave_capacity(decision$jobs)) {
     repository_runner_fail("repository wave inputs are malformed or exceed its ceiling")
   }
   repository_runner_assert_parent_lock(context)
@@ -2877,7 +2968,7 @@ repository_runner_run_wave <- function(context, rows, prepared, decision,
   wave <- repository_runner_begin_wave(context, decision, rows, prepared,
     parent_before, operator_max)
   worker_results <- repository_runner_run_workers(context, rows, prepared,
-    worker_fixture)
+    decision$jobs, worker_fixture)
   worker_results <- lapply(worker_results, function(value) {
     if (is.null(value) || !is.list(value) || is.null(value$ok)) {
       list(ok = FALSE, value = NULL, error = "worker_terminated_without_result")
@@ -2980,7 +3071,9 @@ repository_runner_run_rows_bounded <- function(context, rows,
       repository_runner_fail("resource scheduler differs from sealed tool identity")
     }
     indices <- which(outcomes == "pending")
-    indices <- utils::head(indices, decision$jobs)
+    indices <- utils::head(
+      indices, repository_runner_wave_capacity(decision$jobs)
+    )
     wave_rows <- rows[indices, , drop = FALSE]
     prepared <- lapply(seq_along(indices), function(offset)
       repository_runner_prepare_row(context,
@@ -3062,10 +3155,11 @@ repository_runner_verify_wave <- function(context, path) {
       repository_runner_sha256(file.path(path, "parent-post-boundary.tsv")))
   if (is.na(helper_index) || !identical(decision[["schema"]], "1") ||
       !identical(decision[["wave"]], basename(path)) || is.na(jobs) ||
-      is.na(automatic_jobs) || is.na(retained_jobs) || jobs < 1L || jobs > 4L ||
+      is.na(automatic_jobs) || is.na(retained_jobs) || jobs < 1L || jobs > 8L ||
       automatic_jobs < jobs || retained_jobs < jobs ||
       retained_jobs != context$initial_resource$jobs ||
-      nrow(plan) < 1L || nrow(plan) > jobs ||
+      nrow(plan) < 1L ||
+      nrow(plan) > repository_runner_wave_capacity(jobs) ||
       !identical(decision[["rows"]], as.character(nrow(plan))) ||
       !identical(decision[["jobs"]], as.character(report$jobs)) ||
       !identical(decision[["automatic_jobs"]], as.character(automatic$jobs)) ||

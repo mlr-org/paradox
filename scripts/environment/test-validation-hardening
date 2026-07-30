@@ -1678,8 +1678,9 @@ write_fixture_resource_report() {
   mkdir -p "$(dirname "$report")"
   printf '%s\n' \
     $'field\tvalue' \
-    $'schema\t1' \
+    $'schema\t2' \
     "profile"$'\t'"$profile" \
+    $'containment\tdirect' \
     $'platform\tLinux' \
     $'online_cpus\t8' \
     $'affinity_cpus\t8' \
@@ -1716,6 +1717,10 @@ write_fixture_resource_evidence() {
     modes/strict-gcc/artifacts/install-resource-jobs.tsv
   append_fixture_resource_row functional-test strict-gcc light-test 4 \
     "modes/strict-gcc/artifacts/native-tests-$FIXTURE_TESTS-resource-jobs.tsv"
+  if [[ "$FIXTURE_TESTS" == full ]]; then
+    append_fixture_resource_row check-tests strict-gcc light-test 4 \
+      modes/strict-gcc/artifacts/check-tests-resource-jobs.tsv
+  fi
   append_fixture_resource_row install strict-clang compile 4 \
     modes/strict-clang/artifacts/install-resource-jobs.tsv
   append_fixture_resource_row install analyzer-gcc compile 1 \
@@ -1736,10 +1741,10 @@ write_functional_ledger_fixture() {
   total_file_count=14
   if [[ "$FIXTURE_TESTS" == full ]]; then
     selected_count=$total_file_count
-    block_count=28
+    block_count=30
   else
     selected_count=12
-    block_count=24
+    block_count=26
   fi
   mkdir -p "$RUN_DIRECTORY/source/tests/testthat"
   for index in $(seq 1 "$total_file_count"); do
@@ -1783,6 +1788,9 @@ write_functional_ledger_fixture() {
     'test_that("bulk qunif remains rooted under adversarial collection", { skip_on_cran(); expect_true(TRUE) })' \
     >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-qunif.R"
   printf '%s\n' \
+    'test_that("frame input names and columns come from one generation", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-qunif.R"
+  printf '%s\n' \
     'test_that("authoritative ParamSet trafo survives forced collection", { skip_on_cran(); expect_true(TRUE) })' \
     >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-trafo-gctorture.R"
   printf '%s\n' \
@@ -1791,6 +1799,9 @@ write_functional_ledger_fixture() {
   printf '%s\n' \
     'test_that("live and detached mixed-encoding trafo names survive forced collection", { skip_on_cran(); expect_true(TRUE) })' \
     >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-trafo-gctorture.R"
+  printf '%s\n' \
+    'test_that("ObjectTuneToken receipts stay rooted across later validation work", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-value-mutation.R"
   printf '%s\n' \
     'test_that("collection construction remains rooted under forced collection", { skip_on_cran(); expect_true(TRUE) })' \
     >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramsetcollection-construction.R"
@@ -1828,14 +1839,20 @@ write_functional_ledger_fixture() {
       file=test-native-paramset-trafo-gctorture.R
       description='live and detached mixed-encoding trafo names survive forced collection'
     elif [[ $index -eq 8 ]]; then
+      file=test-native-paramset-qunif.R
+      description='frame input names and columns come from one generation'
+    elif [[ $index -eq 9 ]]; then
+      file=test-native-paramset-value-mutation.R
+      description='ObjectTuneToken receipts stay rooted across later validation work'
+    elif [[ $index -eq 10 ]]; then
       file=test-native-paramsetcollection-construction.R
       description='collection construction remains rooted under forced collection'
-    elif [[ $index -le 12 ]]; then
-      scoped_index=$index
+    elif [[ $index -le 14 ]]; then
+      scoped_index=$((index - 2))
       file=$(fixture_test_file "$scoped_index")
       description=$(printf 'fixture test %03d' "$scoped_index")
     else
-      file_count=$(( (index - 12) % selected_count + 1 ))
+      file_count=$(( (index - 14) % selected_count + 1 ))
       file=$(fixture_test_file "$file_count")
       description=$(printf 'synthetic ledger block %03d' "$index")
     fi
@@ -1895,12 +1912,16 @@ write_functional_ledger_fixture() {
     'every allocating native entry point survives forced collection' \
     "$fixture_dso_sha" test-native-paramset-qunif.R \
     'bulk qunif remains rooted under adversarial collection' \
+    "$fixture_dso_sha" test-native-paramset-qunif.R \
+    'frame input names and columns come from one generation' \
     "$fixture_dso_sha" test-native-paramset-trafo-gctorture.R \
     'authoritative ParamSet trafo survives forced collection' \
     "$fixture_dso_sha" test-native-paramset-trafo-gctorture.R \
     'batched nested collection name translation releases transient state' \
     "$fixture_dso_sha" test-native-paramset-trafo-gctorture.R \
     'live and detached mixed-encoding trafo names survive forced collection' \
+    "$fixture_dso_sha" test-native-paramset-value-mutation.R \
+    'ObjectTuneToken receipts stay rooted across later validation work' \
     "$fixture_dso_sha" test-native-paramsetcollection-construction.R \
     'collection construction remains rooted under forced collection' \
     >> "$analyzer_ledger"
@@ -1910,9 +1931,9 @@ write_functional_ledger_fixture() {
     printf 'test\t1\tanalyzer\tFALSE\t%s\t%s\tfixture\t%s\t10\t10\t0\t0\t0\t0\t-\t-\n' \
       "$fixture_dso_sha" "$analyzer_file" "$description" >> "$analyzer_ledger"
   done
-  analyzer_expectations=$((8 + 8 * 10))
+  analyzer_expectations=$((10 + 8 * 10))
   analyzer_passed=$((8 * 10))
-  printf 'summary\t1\tanalyzer\tFALSE\t%s\t-\t-\tcomplete\t%d\t%d\t0\t8\t0\t0\t-\tfiles=8;test_blocks=16;requested_jobs=1;effective_jobs=1;scheduler_backend=serial\n' \
+  printf 'summary\t1\tanalyzer\tFALSE\t%s\t-\t-\tcomplete\t%d\t%d\t0\t10\t0\t0\t-\tfiles=8;test_blocks=18;requested_jobs=1;effective_jobs=1;scheduler_backend=serial\n' \
     "$fixture_dso_sha" "$analyzer_expectations" "$analyzer_passed" \
     >> "$analyzer_ledger"
   printf '%s\n' analyzer-tests-ok \

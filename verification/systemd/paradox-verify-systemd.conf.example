@@ -1,15 +1,27 @@
 # Install as /etc/paradox-verify-systemd.conf, owned by root and mode 0644.
 # Values are parsed as data; this file is never sourced by a shell.
+#
+# This file holds only machine identity and root-approved rails, so it
+# should essentially never change again.  Routine capacity tuning is
+# user-owned: memory_max_mib is the CEILING the unprivileged tunables file
+# ($repository/.local/verify/systemd-tunables.conf, key memory_target_mib)
+# may spend up to, and the launcher still clamps every invocation to
+# current MemAvailable minus the larger of memory_reserve_mib and one
+# quarter of available memory, so the outside reserve holds even when the
+# ceiling is generous.  The worker image is likewise user-owned state
+# ($repository/.local/verify/worker-image.pin, forwarded by scripts/verify
+# as PARADOX_VERIFY_WORKER_IMAGE); leave worker_image empty here so a
+# rebuilt image digest never needs a root reinstall.
 repository=/home/mewse/paradox_neo
 uid=1002
 gid=1002
 user=mewse
 group=mewse
 home=/home/mewse
-memory_max_mib=32768
+memory_max_mib=49152
 memory_reserve_mib=12288
 cpu_reserve=2
 tasks_max=8192
 runtime_max_sec=604800
 engine=podman
-worker_image=localhost/paradox-verification-worker@sha256:9af0174219c3b0467cec8a4f0db8b3b664077ff797c88fd38ad03402e94bab4c
+worker_image=

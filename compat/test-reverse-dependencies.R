@@ -1430,6 +1430,17 @@ if (length(arguments$packages)) {
     ,
     drop = FALSE
   ]
+} else {
+  # Heaviest-first launch order (a scheduling hint, not evidence): the
+  # longest checks start immediately and the continuous-refill wave packs
+  # the tail behind them.  An explicit --package order stays the
+  # operator's; an unhinted package keeps its reviewed inventory position
+  # after the hinted rows.
+  selected_inventory <- selected_inventory[
+    rr_reverse_heaviest_first_order(selected_inventory$package),
+    ,
+    drop = FALSE
+  ]
 }
 if (!nrow(selected_inventory)) stop("priority selection is empty", call. = FALSE)
 
@@ -3340,7 +3351,9 @@ while (length(pending_queue)) {
   protected_before <- reverse_validate_row_boundary(
     paste0("before reverse wave ", wave_number)
   )
-  provisional_indices <- head(pending_queue, scheduler_initial_jobs)
+  provisional_indices <- head(
+    pending_queue, rr_reverse_wave_capacity(scheduler_initial_jobs)
+  )
   for (index in provisional_indices) {
     reverse_verify_plan_archive(
       index, paste("before wave checking", plan$package[[index]])
@@ -3366,7 +3379,10 @@ while (length(pending_queue)) {
     stop("resource-aware scheduler selected no workers for wave ", wave_number,
       call. = FALSE)
   }
-  wave_indices <- head(pending_queue, wave_jobs)
+  # The wave holds up to three rows per admitted worker; rr_parallel_wave
+  # keeps only wave_jobs running concurrently and refills a freed slot from
+  # the same wave, so a slow row no longer idles its siblings' slots.
+  wave_indices <- head(pending_queue, rr_reverse_wave_capacity(wave_jobs))
   pending_queue <- tail(pending_queue, -length(wave_indices))
   report_entries <- list.files(
     scheduler_reports_directory, all.files = TRUE, full.names = TRUE,

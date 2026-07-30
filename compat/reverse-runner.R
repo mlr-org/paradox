@@ -381,11 +381,25 @@ rr_reverse_check_environment <- function(environment, package) {
   environment
 }
 
+# The consumer policy is containment-dependent: conservative direct weights
+# protect an uncontained host, while the authenticated aggregate systemd
+# envelope admits measured cooperative rows because the root-owned launcher
+# already withheld the host reserve when sizing the hard ceiling.
+rr_consumer_policy <- function(containment) {
+  if (identical(containment, "aggregate-systemd")) {
+    list(memory_per_job = 2048L, reserve_floor = 4096L, profile_max = 8L)
+  } else if (identical(containment, "direct")) {
+    list(memory_per_job = 8192L, reserve_floor = 16384L, profile_max = 4L)
+  } else {
+    rr_fail("resource scheduler report has an unknown containment mode")
+  }
+}
+
 rr_validate_resource_report <- function(report, profile = "consumer") {
   fields <- c(
-    "schema", "profile", "platform", "online_cpus", "affinity_cpus",
-    "cgroup_cpu_limit", "cpu_limit", "cpu_reserve", "cpu_per_job",
-    "cpu_jobs", "memory_source", "memory_available_mib",
+    "schema", "profile", "containment", "platform", "online_cpus",
+    "affinity_cpus", "cgroup_cpu_limit", "cpu_limit", "cpu_reserve",
+    "cpu_per_job", "cpu_jobs", "memory_source", "memory_available_mib",
     "cgroup_memory_available_mib", "memory_reserve_mib",
     "memory_mib_per_job", "memory_jobs", "profile_max_jobs",
     "operator_max_jobs", "jobs"
@@ -415,12 +429,13 @@ rr_validate_resource_report <- function(report, profile = "consumer") {
     if (identical(values[[name]], absent)) return(Inf)
     positive(name)
   }
-  if (!identical(values[["schema"]], "1") ||
+  if (!identical(values[["schema"]], "2") ||
       !identical(values[["profile"]], profile) ||
       !grepl("^[A-Za-z][A-Za-z0-9._-]*$", values[["platform"]]) ||
       !grepl("^[a-z_]+(\\+cgroup)?$", values[["memory_source"]])) {
     rr_fail("resource scheduler report has an invalid identity")
   }
+  policy <- rr_consumer_policy(values[["containment"]])
   online <- positive("online_cpus")
   affinity <- positive("affinity_cpus")
   cgroup_cpu <- optional_positive("cgroup_cpu_limit", "unlimited")
@@ -447,7 +462,9 @@ rr_validate_resource_report <- function(report, profile = "consumer") {
   expected_cpu_jobs <- max(
     1L, as.integer((expected_cpu_limit - expected_cpu_reserve) %/% cpu_per_job)
   )
-  expected_memory_reserve <- max(16384L, memory_available %/% 4L)
+  expected_memory_reserve <- max(
+    policy$reserve_floor, memory_available %/% 4L
+  )
   expected_memory_jobs <- as.integer(
     (memory_available - expected_memory_reserve) %/% memory_per_job
   )
@@ -458,8 +475,9 @@ rr_validate_resource_report <- function(report, profile = "consumer") {
   if (is.finite(cgroup_memory) && memory_available > cgroup_memory) {
     rr_fail("resource scheduler memory ceiling exceeds its cgroup headroom")
   }
-  if (!identical(cpu_per_job, 2L) || !identical(memory_per_job, 8192L) ||
-      !identical(profile_max, 4L) ||
+  if (!identical(cpu_per_job, 2L) ||
+      !identical(memory_per_job, policy$memory_per_job) ||
+      !identical(profile_max, policy$profile_max) ||
       !identical(cpu_limit, as.integer(expected_cpu_limit)) ||
       !identical(cpu_reserve, expected_cpu_reserve) ||
       !identical(cpu_jobs, expected_cpu_jobs) ||
@@ -1886,12 +1904,51 @@ rr_validate_worker_transport <- function(transport) {
 # processx supervisor and Linux parent-death signal own each complete descendant
 # tree.  Results are atomically published outside disposable startup state, so
 # a sibling that finished before parent interruption remains resumable.
+# Measured single-row consumer-check durations in seconds from the complete
+# `4c4cb53` release-refresh corpus run (2026-07-27), reused as reverse-check
+# proxies.  Scheduling hints only, not evidence: the plan starts its longest
+# checks first so the continuous-refill wave packs the tail, and a package
+# without a hint keeps its reviewed inventory position after the hinted rows.
+rr_reverse_duration_hints <- c(
+  mlr3extralearners = 3628, mlr3resampling = 2878, mlr3pipelines = 2378,
+  mlr3 = 592, mlr3mbo = 479, mlr3forecast = 445, mlr3tuning = 309,
+  mlr3fselect = 255, mlr3learners = 208, celecx = 151, mlr3proba = 147,
+  mlr3spatiotempcv = 145, mlr3inferr = 143, xplainfi = 140,
+  mlr3hyperband = 137, mlr3torch = 128, mlr3fda = 120, mlr3cluster = 89,
+  mlr3filters = 74, bbotk = 72, mlr3fairness = 71, miesmuschel = 65,
+  mlr3batchmark = 50, mlr3cmprsk = 46, mlr3automl = 42, mlr3oml = 34,
+  mlr3tuningspaces = 29, mlr3verse = 25
+)
+
+rr_reverse_heaviest_first_order <- function(packages) {
+  if (!is.character(packages) || !length(packages) || anyNA(packages)) {
+    rr_fail("heaviest-first ordering requires package names")
+  }
+  hints <- rr_reverse_duration_hints[packages]
+  hints[is.na(hints)] <- 0
+  order(-hints, seq_along(packages))
+}
+
+# A wave may hold more rows than concurrent workers.  Three times the worker
+# limit balances straggler refill (a finished slot immediately starts the next
+# row instead of idling behind the slowest sibling) against the blast radius
+# of the pre/post protected-input boundary, which still brackets one whole
+# wave and invalidates every row in it on a violation.
+rr_reverse_wave_capacity <- function(worker_limit) {
+  worker_limit <- as.integer(worker_limit)
+  if (length(worker_limit) != 1L || is.na(worker_limit) || worker_limit < 1L) {
+    rr_fail("reverse wave capacity requires one positive worker limit")
+  }
+  worker_limit * 3L
+}
+
 rr_parallel_wave <- function(tasks, worker, jobs, rscript, worker_script,
                              worker_group, timeout_seconds,
                              inherited_environment = Sys.getenv()) {
   if (!is.list(tasks) || !length(tasks) || !is.function(worker) ||
       length(jobs) != 1L || is.na(jobs) || jobs < 1L ||
-      jobs != as.integer(jobs) || length(tasks) > as.integer(jobs) ||
+      jobs != as.integer(jobs) ||
+      length(tasks) > rr_reverse_wave_capacity(jobs) ||
       length(timeout_seconds) != 1L || is.na(timeout_seconds) ||
       !is.finite(timeout_seconds) || timeout_seconds <= 0 ||
       !requireNamespace("processx", quietly = TRUE) ||
@@ -1935,10 +1992,10 @@ rr_parallel_wave <- function(tasks, worker, jobs, rscript, worker_script,
       }
     }
   }, add = TRUE)
-  for (position in positions) {
+  launch_position <- function(position) {
     task <- tasks[[position]]
     task$rr_transport <- NULL
-    task_hashes[[position]] <- rr_object_sha256(task)
+    task_hashes[[position]] <<- rr_object_sha256(task)
     spec <- list(
       schema = 1L, position = as.integer(position), task = task,
       task_sha256 = task_hashes[[position]], bundle = bundle,
@@ -1962,19 +2019,38 @@ rr_parallel_wave <- function(tasks, worker, jobs, rscript, worker_script,
       PARADOX_REVERSE_TASK_SHA256 = task_hashes[[position]]
     )
     environment[names(group_environment)] <- unname(group_environment)
-    processes[[position]] <- processx::process$new(
+    processes[[position]] <<- processx::process$new(
       worker_group, c(rscript, "--vanilla", worker_script, spec_path),
       env = environment,
       stdout = transports[[position]]$log, stderr = "2>&1", cleanup = TRUE,
       cleanup_tree = TRUE, supervise = TRUE, windows_verbatim_args = TRUE,
       linux_pdeathsig = TRUE
     )
-    launched_at[[position]] <- proc.time()[["elapsed"]]
+    launched_at[[position]] <<- proc.time()[["elapsed"]]
+    invisible(NULL)
   }
-  unfinished <- rep(TRUE, length(processes))
-  while (any(unfinished)) {
+  # Continuous refill: at most `jobs` workers run concurrently, and a finished
+  # slot immediately starts the next planned row instead of idling until the
+  # slowest sibling of a fixed batch exits.  Hashing every task first keeps
+  # the returned identity vector complete even if an early failure aborts the
+  # wave before later rows launch.
+  for (position in positions) {
+    task <- tasks[[position]]
+    task$rr_transport <- NULL
+    task_hashes[[position]] <- rr_object_sha256(task)
+  }
+  pending_launch <- positions
+  running <- integer()
+  while (length(pending_launch) || length(running)) {
+    while (length(pending_launch) && length(running) < as.integer(jobs)) {
+      position <- pending_launch[[1L]]
+      pending_launch <- pending_launch[-1L]
+      launch_position(position)
+      running <- c(running, position)
+    }
     now <- proc.time()[["elapsed"]]
-    for (position in positions[unfinished]) {
+    finished <- integer()
+    for (position in running) {
       alive <- isTRUE(tryCatch(
         processes[[position]]$is_alive(), error = function(...) FALSE
       ))
@@ -1995,9 +2071,13 @@ rr_parallel_wave <- function(tasks, worker, jobs, rscript, worker_script,
         abandoned[[position]] <- TRUE
         alive <- FALSE
       }
-      if (!alive) unfinished[[position]] <- FALSE
+      if (!alive) finished <- c(finished, position)
     }
-    if (any(unfinished)) Sys.sleep(0.02)
+    if (length(finished)) running <- setdiff(running, finished)
+    if (length(running) &&
+        (length(running) >= as.integer(jobs) || !length(pending_launch))) {
+      Sys.sleep(0.02)
+    }
   }
   # processx marks the complete spawned tree in its environment and can still
   # find reparented descendants on platforms without /proc or setsid.  Sweep
@@ -2276,9 +2356,9 @@ rr_validate_reverse_waves <- function(path, plan_packages) {
           as.character(length(parsed) - length(unstarted))) ||
         !identical(waves$workers_completed[[ordinal]],
           as.character(length(parsed) - length(unstarted) - length(missing))) ||
-        length(parsed) != as.integer(waves$worker_limit[[ordinal]]) ||
-        as.integer(waves$workers_started[[ordinal]]) >
-          as.integer(waves$worker_limit[[ordinal]]) ||
+        length(parsed) < 1L ||
+        length(parsed) > rr_reverse_wave_capacity(
+          waves$worker_limit[[ordinal]]) ||
         as.integer(waves$workers_completed[[ordinal]]) >
           as.integer(waves$workers_started[[ordinal]]) ||
         any(!errors %in% indices) || anyDuplicated(errors) ||

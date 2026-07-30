@@ -1657,14 +1657,27 @@ the captured value through a here-string or a regular retained file instead.
 
 Use `scripts/environment/resource-jobs` before parallel work. Parallelize
 independent test files, consumers, and runtime stages at the outer level while
-keeping nested make/testthat/BLAS/OpenMP pools at one. Honor the reported
+keeping nested make/testthat/BLAS/OpenMP pools at one. The one reviewed
+exception is the Paradox suite itself: it is validated for parallel testthat,
+so a driver or an ad-hoc complete-suite run may set `TESTTHAT_PARALLEL=true`
+with `TESTTHAT_CPUS` taken from a `light-test` admission; foreign consumer
+suites stay serial per row. Honor the reported
 memory-aware ceiling. Never multiply every layer by the CPU count, and retain
 enough RAM that the controlling Codex process cannot be OOM-killed.
 `PARADOX_API_JOBS` and `PARADOX_BRIDGE_COMPILE_JOBS` are lowering-only release
 knobs for the R-API matrix and downstream bridge compilation respectively; the
-resource scheduler remains the upper bound. On this 32-CPU, no-swap host use 4
-compile jobs and at most 2 independent R/test consumers unless a fresh resource
-report requires less.
+resource scheduler remains the upper bound. Admission is containment-aware
+(schema-2 reports record the mode): inside the installed aggregate systemd
+envelope the scheduler uses measured cooperative weights — 2-GiB consumer
+rows capped at eight, 1-GiB light-test jobs, and a 4-GiB intra-envelope
+reserve floor — because the root-owned launcher already withheld the host
+reserve when sizing the hard ceiling, and the envelope with its fatal event
+counters remains the hard boundary. Direct, uncontained work keeps the
+conservative policy: on this 32-CPU, no-swap host follow the reported direct
+ceilings (at most 4 consumer rows, 16-GiB reserve) unless a fresh resource
+report requires less. Prefer running broad parallel work through
+`scripts/verify` so it is contained; `verification/README.md` documents how
+to loosen one allotment in a targeted way after a limit event.
 `scripts/memory-check` performs this admission itself for its serial heavy
 modes: Valgrind receives one 16-GiB working-set allowance while at least 16 GiB
 remains reserved for the host, and rchk receives its one 20-GiB analyzer
@@ -2050,7 +2063,13 @@ After the manually reviewed root-owned launcher from `verification/systemd/`
 is installed, ordinary `scripts/verify doctor|plan|run` commands enter its
 aggregate service by default and can schedule independent coarse tasks in
 parallel. Repository code never runs as root: systemd changes to the configured
-UID/GID first. Aggregate Podman workers use `--cgroups=disabled
+UID/GID first. The root surface is deliberately identity and rails only:
+the worker-image pin (`.local/verify/worker-image.pin`, exported by
+`scripts/verify` as `PARADOX_VERIFY_WORKER_IMAGE`) and the envelope target
+(`.local/verify/systemd-tunables.conf`, `memory_target_mib` at most the
+root-pinned `memory_max_mib` ceiling) are user-owned files the launcher
+honours strictly within its root-approved bounds, so image rebuilds and
+capacity tuning never need root. Aggregate Podman workers use `--cgroups=disabled
 --cgroupns=host` and omit ineffective individual resource flags. Docker/remote
 engines are ineligible because their daemon can escape the service.
 `PARADOX_VERIFY_SYSTEMD_DEFAULT=off` is the machine-local escape hatch;
@@ -2063,11 +2082,17 @@ ARM64 and Windows x86-64 remain hosted-workflow evidence until a task supplies
 a self-contained platform toolchain image and overrides that constraint.
 
 The coordinator preserves at least 12 GiB/25% live memory and 8 GiB free disk
-outside its work for Codex, the OS, and unrelated processes. It continuously
+outside its work for Codex, the OS, and unrelated processes, and keeps a
+3-GiB engine-overhead-and-margin allowance below the aggregate ceiling so
+cooperative estimation error does not touch the fatal limit tripwire. It
+continuously
 admits ready tasks by summed CPU, memory, PID, and scratch reservations;
 tasks start at reviewed CPU/RAM minima and receive spare capacity up to their
 reviewed ceilings in information order. Make receives only a task's actual
-allocation while BLAS/OpenMP/testthat nested parallelism stays one. One
+allocation while BLAS/OpenMP/testthat nested parallelism stays one by
+default; the full native check re-enables parallel testthat for the Paradox
+suite inside its own allocation through an explicit retained light-test
+admission. One
 per-user machine execution lock prevents independent controllers—even from
 different checkouts—from double-spending that aggregate budget. Cgroup-aware
 live memory, disk, and PID availability are refreshed before new waves and at
@@ -2080,10 +2105,14 @@ Under aggregate containment, task allocations are scheduler reservations
 rather than individual cgroup limits. Admission uses the smaller of aggregate
 headroom and global available memory outside the protected reserve, without
 subtracting that reserve twice. `verify-task-entry` and `resource-jobs` must
-cap nested work by the assigned CPU/RAM envelope; aggregate-contained consumer
-rows translate assigned memory with a measured 4-GiB cooperative weight while
-their independent live/direct resource gate retains the conservative 8-GiB
-estimate. A finite `operator_max_jobs` is a valid lowering-only external
+cap nested work by the assigned CPU/RAM envelope. Schema-2 resource reports
+carry their containment mode; the aggregate policy — 2-GiB consumer rows
+capped at eight, 1-GiB light-test jobs, 4-GiB intra-envelope reserve floor —
+applies only after the process proves it sits inside the dedicated
+`/system.slice/paradox-verify-aggregate-*` service leaf, while the live and
+direct gates retain the conservative 8-GiB estimate, 16-GiB floor, and
+four-row cap, and every report validator re-derives the policy for the
+recorded mode. A finite `operator_max_jobs` is a valid lowering-only external
 ceiling and must never exceed the independently recomputed raw ceiling. Any
 aggregate memory/PID
 event-counter increase or
@@ -2199,7 +2228,9 @@ remain Linux x86-64 as well.
 
 The aggregate-contained phase-30 reservations are intentionally 8--16 GiB for
 reverse dependencies, 8--16 GiB for the repository corpus, and 4--8 GiB for
-each serial documentation/focused branch. Their phase total is 24 GiB of RAM,
+each serial documentation/focused branch, with reverse and corpus CPU ranges
+of 4--16 so a branch alone can widen to eight concurrent rows. Their phase
+minima total 24 GiB of RAM,
 6,144 cooperative PIDs, and 8 GiB of scratch, permitting all four independent
 branches to run together beneath the hard systemd aggregate and protected-disk
 budgets. These values are admission weights, not measured peaks; no retained
@@ -2207,10 +2238,20 @@ evidence supported the old 26--51-GiB weights. Keep the direct
 `resource-jobs consumer` reserve unchanged. The completed `4c4cb53`
 diagnostic run empirically peaked at 10,670 MiB and had zero memory/PID events;
 its one-row corpus waves exposed the assigned-envelope 8-GiB divisor as a
-throughput bottleneck, so aggregate-contained assignments now use 4 GiB per
-ordinary consumer row. An aggregate memory/PID event or
+throughput bottleneck, motivating first the 4-GiB and now the
+containment-aware 2-GiB cooperative row weight. Both consumer runners refill
+within a wave (up to three planned rows per admitted worker, admitted count
+concurrent, freed slots start the next row) and order their queues
+heaviest-first from the measured `4c4cb53` durations embedded as scheduling
+hints; the documentation gate stays deliberately serial because its retained
+labels embed execution order and it is hidden behind the corpus/reverse
+branches. Supported runtime-matrix stages run the suite with a
+capability-probed two-worker parallel testthat recorded in the stage log;
+old runtimes keep the exact serial path. An aggregate memory/PID event
+or
 protected-disk pressure invalidates only the verification unit and calls for a
-replacement run with the offending reservation raised.
+replacement run with the offending reservation raised;
+`verification/README.md` enumerates the targeted loosening knobs.
 
 The coordinator self-test is the routine harness-change gate. It must cover
 strict container exited-state/exit agreement, fail-closed stale cleanup,

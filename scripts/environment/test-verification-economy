@@ -426,29 +426,46 @@ verify_resource_profile() {
   done
 }
 verify_resource_profile "$compile_profile" CPU_PER_JOB=1 \
-  MEMORY_MIB_PER_JOB=1024 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=16
+  MEMORY_MIB_PER_JOB=1024 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=16 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=1024 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=16
 verify_resource_profile "$api_profile" CPU_PER_JOB=1 \
-  MEMORY_MIB_PER_JOB=768 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=0
+  MEMORY_MIB_PER_JOB=768 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=0 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=768 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=0
 verify_resource_profile "$consumer_profile" CPU_PER_JOB=2 \
-  MEMORY_MIB_PER_JOB=8192 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=4
+  MEMORY_MIB_PER_JOB=8192 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=4 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=2048 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=8
 verify_resource_profile "$light_profile" CPU_PER_JOB=1 \
-  MEMORY_MIB_PER_JOB=2048 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=16
+  MEMORY_MIB_PER_JOB=2048 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=16 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=1024 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=16
 verify_resource_profile "$valgrind_profile" CPU_PER_JOB=1 \
-  MEMORY_MIB_PER_JOB=16384 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=1
+  MEMORY_MIB_PER_JOB=16384 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=1 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=16384 AGGREGATE_MINIMUM_RESERVE_MIB=16384 \
+  AGGREGATE_PROFILE_MAX_JOBS=1
 verify_resource_profile "$rchk_profile" CPU_PER_JOB=1 \
-  MEMORY_MIB_PER_JOB=20480 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=1
+  MEMORY_MIB_PER_JOB=20480 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=1 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=20480 AGGREGATE_MINIMUM_RESERVE_MIB=16384 \
+  AGGREGATE_PROFILE_MAX_JOBS=1
 grep -Fq 'DYNAMIC_RESERVE_MIB=$((MEMORY_AVAILABLE_MIB / 4))' \
   "$RESOURCE_JOBS" ||
   fail "resource scheduler no longer reserves one quarter of live memory"
-grep -Fq 'RESERVE_MIB=$MINIMUM_RESERVE_MIB' "$RESOURCE_JOBS" ||
+grep -Fq 'RESERVE_MIB=$EFFECTIVE_MINIMUM_RESERVE_MIB' "$RESOURCE_JOBS" ||
   fail "resource scheduler no longer enforces its absolute memory reserve"
 for contract in \
-    'ASSIGNED_MEMORY_MIB_PER_JOB=$MEMORY_MIB_PER_JOB' \
+    'CONTAINMENT=direct' \
     '"${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1' \
-    'ASSIGNED_MEMORY_MIB_PER_JOB=4096' \
-    'ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / ASSIGNED_MEMORY_MIB_PER_JOB))'; do
+    'CONTAINMENT=aggregate-systemd' \
+    'EFFECTIVE_MEMORY_MIB_PER_JOB=$AGGREGATE_MEMORY_MIB_PER_JOB' \
+    'EFFECTIVE_MINIMUM_RESERVE_MIB=$AGGREGATE_MINIMUM_RESERVE_MIB' \
+    'EFFECTIVE_PROFILE_MAX_JOBS=$AGGREGATE_PROFILE_MAX_JOBS' \
+    'ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / EFFECTIVE_MEMORY_MIB_PER_JOB))' \
+    'fail "aggregate containment marker without the aggregate service cgroup"' \
+    'printf '"'"'containment\t%s\n'"'"' "$CONTAINMENT"'; do
   grep -Fq "$contract" "$RESOURCE_JOBS" ||
-    fail "resource scheduler lost aggregate consumer-weight contract: $contract"
+    fail "resource scheduler lost containment-policy contract: $contract"
 done
 
 # Parallel API admission must keep exit status as data; a declaration typo
@@ -847,7 +864,7 @@ printf '%s\n' "$cache_self_test" |
 # Compiler batches retain exact admission, deadline, process provenance,
 # NUL-framed argument-vector, per-task, and paired-lane evidence.  Plan schema
 # changes are intentionally review-visible in this focused preflight.
-expected_admission_source="expected_fields=\$'field\\nschema\\nprofile\\nplatform\\nonline_cpus\\naffinity_cpus\\ncgroup_cpu_limit\\ncpu_limit\\ncpu_reserve\\ncpu_per_job\\ncpu_jobs\\nmemory_source\\nmemory_available_mib\\ncgroup_memory_available_mib\\nmemory_reserve_mib\\nmemory_mib_per_job\\nmemory_jobs\\nprofile_max_jobs\\noperator_max_jobs\\njobs\\nselection'"
+expected_admission_source="expected_fields=\$'field\\nschema\\nprofile\\ncontainment\\nplatform\\nonline_cpus\\naffinity_cpus\\ncgroup_cpu_limit\\ncpu_limit\\ncpu_reserve\\ncpu_per_job\\ncpu_jobs\\nmemory_source\\nmemory_available_mib\\ncgroup_memory_available_mib\\nmemory_reserve_mib\\nmemory_mib_per_job\\nmemory_jobs\\nprofile_max_jobs\\noperator_max_jobs\\njobs\\nselection'"
 for runner in "$COMPILER_BATCH_RUNNER" "$COMPILER_WAVE_RUNNER"; do
   grep -Fq "$expected_admission_source" "$runner" ||
     fail "compiler runner does not require the exact admission-report schema: $runner"
@@ -857,9 +874,12 @@ for runner in "$COMPILER_BATCH_RUNNER" "$COMPILER_WAVE_RUNNER"; do
     fail "compiler runner does not recheck the API per-job memory budget: $runner"
   grep -Fq 'expected_memory_reserve=$((memory_available / 4))' "$runner" ||
     fail "compiler runner does not recompute the 25 percent memory reserve: $runner"
-  grep -Fq '((expected_memory_reserve >= 12288)) || expected_memory_reserve=12288' \
-    "$runner" ||
-    fail "compiler runner does not recompute the 12 GiB minimum reserve: $runner"
+  grep -Fq 'direct) reserve_floor=12288 ;;' "$runner" ||
+    fail "compiler runner does not recompute the direct reserve floor: $runner"
+  grep -Fq 'aggregate-systemd) reserve_floor=4096 ;;' "$runner" ||
+    fail "compiler runner does not recompute the aggregate reserve floor: $runner"
+  grep -Fq '((expected_memory_reserve >= reserve_floor)) ||' "$runner" ||
+    fail "compiler runner does not recompute the containment reserve floor: $runner"
   grep -Fq 'fail "admission report arithmetic is internally inconsistent"' \
     "$runner" ||
     fail "compiler runner trusts rather than rederives report arithmetic: $runner"

@@ -380,7 +380,7 @@ exec {stage_artifacts_descriptor}<&-
   "$R_INSTALL_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" ]] ||
   fail "stage-aware activation did not retain authenticated R startup inputs"
 
-# The scheduler admits at most two independently isolated R-version stages at
+# The scheduler admits at most four independently isolated R-version stages at
 # once. Do not let a package, BLAS, OpenMP runtime, future/parallel, or a nested
 # build multiply the admitted process and memory budget inside a stage.
 export R_LIBS_USER="$STAGE_LIBRARY"

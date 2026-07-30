@@ -8,6 +8,30 @@ set -eu
 
 ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 
+# The worker image is user-owned state, not root configuration: an explicit
+# PARADOX_VERIFY_WORKER_IMAGE wins, then the machine-local pin below, and
+# only then any legacy image in the root-owned helper configuration.  The
+# pin travels through the aggregate launcher's existing --worker-image
+# override, so refreshing a rebuilt image digest never needs root.
+WORKER_IMAGE_PIN="$ROOT/.local/verify/worker-image.pin"
+if [ -z "${PARADOX_VERIFY_WORKER_IMAGE:-}" ] &&
+    [ -f "$WORKER_IMAGE_PIN" ] && [ ! -L "$WORKER_IMAGE_PIN" ]; then
+  IFS= read -r PARADOX_VERIFY_WORKER_IMAGE < "$WORKER_IMAGE_PIN" || :
+  case "${PARADOX_VERIFY_WORKER_IMAGE:-}" in
+    ''|*[!A-Za-z0-9@:._/-]*)
+      printf '%s\n' \
+        "scripts/verify: $WORKER_IMAGE_PIN is empty or malformed" >&2
+      exit 2
+      ;;
+  esac
+  if [ "${#PARADOX_VERIFY_WORKER_IMAGE}" -gt 512 ]; then
+    printf '%s\n' \
+      "scripts/verify: $WORKER_IMAGE_PIN is unexpectedly long" >&2
+    exit 2
+  fi
+  export PARADOX_VERIFY_WORKER_IMAGE
+fi
+
 # A root-owned helper is a machine-local opt-in. Once installed, ordinary
 # doctor/plan/run commands enter the dedicated aggregate systemd envelope by
 # default. Help and self-tests stay daemon/root-free, and an operator can

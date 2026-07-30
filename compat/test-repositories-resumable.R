@@ -434,6 +434,14 @@ if (!identical(dependency_selected$repository, dependency_snapshot$repository) |
   stop("dependency scope disagrees with the reviewed snapshot", call. = FALSE)
 }
 
+# Positions are assigned after a heaviest-first sort so the longest checks
+# launch first and continuous refill packs the tail; the hint table is
+# scheduling data only and an unhinted repository keeps its reviewed
+# inventory position after the hinted rows.
+heavy_order <- repository_runner_heaviest_first_order(selected$repository)
+selected <- selected[heavy_order, , drop = FALSE]
+selected_snapshot <- selected_snapshot[heavy_order, , drop = FALSE]
+
 consumer_root <- normalizePath(profile$consumer_root,
   winslash = "/", mustWork = TRUE)
 selection_rows <- lapply(seq_len(nrow(selected)), function(row_index) {

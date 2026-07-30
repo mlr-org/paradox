@@ -87,8 +87,8 @@ while (($#)); do
   esac
 done
 
-if ! positive_integer "${JOBS:-}" || ((JOBS > 2)); then
-  fail "--jobs must be one or two"
+if ! positive_integer "${JOBS:-}" || ((JOBS > 4)); then
+  fail "--jobs must be between one and four"
 fi
 if ! positive_integer "${TASK_TIMEOUT_SECONDS:-}" ||
     ((TASK_TIMEOUT_SECONDS > 86400)); then
@@ -134,10 +134,10 @@ report_value() {
 awk -F '\t' 'NR == 1 {next} NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}' \
   "$ADMISSION_REPORT" || fail "admission report is malformed"
 admitted_jobs=$(report_value jobs)
-[[ $(report_value schema) == 1 && $(report_value profile) == light-test ]] ||
+[[ $(report_value schema) == 2 && $(report_value profile) == light-test ]] ||
   fail "admission report is not the light-test schema"
 positive_integer "$admitted_jobs" || fail "admission report jobs are malformed"
-((JOBS == admitted_jobs && JOBS <= 2)) ||
+((JOBS == admitted_jobs && JOBS <= 4)) ||
   fail "requested jobs differ from the lowering-only admission report"
 
 [[ $(head -n 1 "$TASK_LIST") == $'ordinal\tversion' ]] ||

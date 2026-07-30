@@ -269,7 +269,8 @@ write_file(resource_helper, c(
   "    *) exit 64 ;;",
   "  esac",
   "done",
-  "printf '%s\\n' 'field\tvalue' 'schema\t1' 'profile\tconsumer' \\",
+  "printf '%s\\n' 'field\tvalue' 'schema\t2' 'profile\tconsumer' \\",
+  "  'containment\tdirect' \\",
   "  'platform\tlinux' 'online_cpus\t64' 'affinity_cpus\t64' \\",
   "  'cgroup_cpu_limit\tunlimited' 'cpu_limit\t64' 'cpu_reserve\t2' \\",
   "  'cpu_per_job\t2' 'cpu_jobs\t31' 'memory_source\tcgroup' \\",
@@ -367,6 +368,19 @@ read_time <- function(name) as.numeric(readLines(file.path(timing, name),
 if (!(read_time("consumer1-start") < read_time("consumer2-end") &&
       read_time("consumer2-start") < read_time("consumer1-end"))) {
   stop("two synthetic repository workers did not overlap", call. = FALSE)
+}
+# Refill keeps the two-job concurrency bound while packing all three rows
+# into one wave: the third worker may start only after a sibling's slot
+# freed, and the scheduler needs no second wave for the remainder.
+if (read_time("consumer3-start") <
+    min(read_time("consumer1-end"), read_time("consumer2-end"))) {
+  stop("refill started a third worker before a two-job slot freed",
+    call. = FALSE)
+}
+observed_waves <- list.files(file.path(context$stage, "scheduler", "waves"))
+if (length(observed_waves) != 1L) {
+  stop("three rows under a two-job ceiling did not form one refill wave: ",
+    paste(observed_waves, collapse = ","), call. = FALSE)
 }
 if (!dir.exists(file.path(row_two, "attempt-000001")) ||
     !dir.exists(file.path(row_two, "attempt-000002")) ||

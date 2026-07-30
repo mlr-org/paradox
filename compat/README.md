@@ -468,11 +468,19 @@ the check child starts; an invalid cache is quarantined and rebuilt once.
 Concurrent same-key builders stage privately; exactly one atomically promotes
 the cache and every loser authenticates and reuses that completed target.
 
-Independent rows run in conservative bounded waves. Immediately before every
+Independent rows run in bounded waves with continuous refill: a wave may
+plan up to three rows per admitted worker, only the admitted count runs
+concurrently, and a freed slot immediately starts the wave's next row
+instead of idling behind the slowest sibling. Queues are ordered
+heaviest-first from the measured `4c4cb53` single-row durations embedded in
+the runners as scheduling hints (never evidence); an unhinted row keeps its
+reviewed inventory position, and an explicit `--package` order stays the
+operator's. Immediately before every
 wave, `scripts/environment/resource-jobs consumer --report` recomputes the
 live CPU-affinity, cgroup, and available-memory ceiling; its exact report is
-retained with that wave. The automatic ceiling is at most four heavyweight
-consumers and fails closed if even one would invade the memory reserve.
+retained with that wave. The automatic direct ceiling is at most four
+heavyweight consumers (eight inside the authenticated aggregate envelope)
+and fails closed if even one would invade the memory reserve.
 The historical `operator_max_jobs` report field may contain a lowering-only
 coordinator-assigned envelope; it may never exceed the independently
 recomputed CPU/memory/profile ceiling. Evidence fields named

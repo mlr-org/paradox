@@ -614,6 +614,12 @@ class EngineTests(unittest.TestCase):
             "--property=KillMode=control-group",
             "--property=Delegate=no",
             "--setenv=PARADOX_VERIFY_AGGREGATE_SYSTEMD=1",
+            # User-owned tunables may only spend within root-approved rails.
+            '((memory_target_mib <= memory_max_mib)) ||',
+            '((memory_target_mib > memory_reserve_mib)) ||',
+            'fail "tunables memory_target_mib exceeds the root-approved ceiling"',
+            '[[ "$tunables_owner" == "$uid" ]] ||',
+            "cap_mib=$memory_target_mib",
         ):
             self.assertIn(contract, launcher)
         self.assertNotIn(" --user ", launcher)
@@ -2930,7 +2936,7 @@ class SchedulerTests(unittest.TestCase):
             disk_available_mib=32 * 1024,
             memory_reserve_mib=12 * 1024,
             disk_reserve_mib=8 * 1024,
-            cpu_budget=6,
+            cpu_budget=10,
             memory_budget_mib=24 * 1024,
             disk_budget_mib=8 * 1024,
             memory_source="fixture",

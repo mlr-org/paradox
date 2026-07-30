@@ -1561,7 +1561,7 @@ printf 'ordinal\tversion\n1\t4.3.3\n' > "$wave_fixture/tasks-one.tsv"
 printf 'ordinal\tversion\n1\t3.6.3\n2\t4.3.3\n3\t4.5.2\n' \
   > "$wave_fixture/tasks-three.tsv"
 make_report() {
-  printf 'field\tvalue\nschema\t1\nprofile\tlight-test\noperator_max_jobs\t%s\njobs\t%s\n' \
+  printf 'field\tvalue\nschema\t2\nprofile\tlight-test\ncontainment\tdirect\noperator_max_jobs\t%s\njobs\t%s\n' \
     "$1" "$1" > "$2"
 }
 make_report 2 "$wave_fixture/report-two.tsv"
@@ -1607,9 +1607,24 @@ run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-three.tsv" \
 }
 if run_wave 3 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
     "$wave_fixture/unsafe-three" 5 >/dev/null 2>&1; then
-  echo "Runtime wave accepted more than two stage workers" >&2
+  echo "Runtime wave accepted jobs above its lowering-only admission" >&2
   exit 1
 fi
+make_report 5 "$wave_fixture/report-five.tsv"
+if run_wave 5 "$wave_fixture/report-five.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/unsafe-five" 5 >/dev/null 2>&1; then
+  echo "Runtime wave accepted more than four stage workers" >&2
+  exit 1
+fi
+printf 'quick\n' > "$wave_root/mode"
+make_report 3 "$wave_fixture/report-three.tsv"
+run_wave 3 "$wave_fixture/report-three.tsv" "$wave_fixture/tasks-three.tsv" \
+  "$wave_fixture/three-wide" 5
+[[ $(awk -F '\t' 'NR > 1 && $4 == 0 {n++} END {print n + 0}' \
+    "$wave_fixture/three-wide/task-ledger.tsv") -eq 3 ]] || {
+  echo "Runtime wave did not run three admitted stages together" >&2
+  exit 1
+}
 
 # A one-job admission must be honored rather than silently raised.  Both rows
 # are still collected in their deterministic task order.

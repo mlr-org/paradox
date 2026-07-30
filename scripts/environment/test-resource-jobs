@@ -90,48 +90,88 @@ env \
   --verify-report "$ASSIGNED_REPORT")" == \
   resource_report_verified=api-compile ]]
 
-# A consumer keeps its conservative 8-GiB direct estimate, while a worker
-# under the hard aggregate systemd ceiling may use the measured 4-GiB
-# cooperative row weight when translating its assigned envelope.
+# A consumer keeps its conservative 8-GiB direct estimate and 16-GiB reserve
+# outside the envelope.  Inside the authenticated aggregate systemd service
+# -- the fixture reproduces this host's hybrid layout, where the service
+# limit is only visible on the v1 memory controller while every process also
+# has a v2 row -- rows use the measured 2-GiB cooperative weight, a 4-GiB
+# intra-envelope reserve floor, and an eight-row cap.
 CONSUMER="$SCRATCH/consumer"
-cp -a "$V2" "$CONSUMER"
-write_file "$CONSUMER/cgroup/team/job/memory.max" '68719476736'
-write_file "$CONSUMER/cgroup/team/memory.max" '60129542144'
-write_file "$CONSUMER/cgroup/team/job/cpu.max" '1200000 100000'
-write_file "$CONSUMER/cgroup/team/cpu.max" '1000000 100000'
+AGGREGATE_LEAF='/system.slice/paradox-verify-aggregate-u1002-fixture-1.service'
+write_file "$CONSUMER/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   52428800 kB'
+write_file "$CONSUMER/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$CONSUMER/proc/self/cgroup" \
+  "9:memory:$AGGREGATE_LEAF" \
+  "6:cpu,cpuacct:$AGGREGATE_LEAF" \
+  "0::$AGGREGATE_LEAF"
+write_file "$CONSUMER/cgroup/memory$AGGREGATE_LEAF/memory.limit_in_bytes" \
+  '34359738368'
+write_file "$CONSUMER/cgroup/memory$AGGREGATE_LEAF/memory.usage_in_bytes" \
+  '2147483648'
+run_aggregate_fixture() {
+  env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$@"
+}
+CONSUMER_LIVE_REPORT="$SCRATCH/consumer-aggregate-live.tsv"
+run_aggregate_fixture "$HELPER" consumer --report > "$CONSUMER_LIVE_REPORT"
+[[ "$(field schema "$CONSUMER_LIVE_REPORT")" == 2 ]]
+[[ "$(field containment "$CONSUMER_LIVE_REPORT")" == aggregate-systemd ]]
+[[ "$(field memory_source "$CONSUMER_LIVE_REPORT")" == proc_memavailable+cgroup ]]
+[[ "$(field cgroup_memory_available_mib "$CONSUMER_LIVE_REPORT")" == 30720 ]]
+[[ "$(field memory_reserve_mib "$CONSUMER_LIVE_REPORT")" == 7680 ]]
+[[ "$(field memory_mib_per_job "$CONSUMER_LIVE_REPORT")" == 2048 ]]
+[[ "$(field profile_max_jobs "$CONSUMER_LIVE_REPORT")" == 8 ]]
+[[ "$(field jobs "$CONSUMER_LIVE_REPORT")" == 8 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_LIVE_REPORT")" == \
+  resource_report_verified=consumer ]]
+LIGHT_AGGREGATE_REPORT="$SCRATCH/light-aggregate-live.tsv"
+run_aggregate_fixture "$HELPER" light-test --report \
+  > "$LIGHT_AGGREGATE_REPORT"
+[[ "$(field containment "$LIGHT_AGGREGATE_REPORT")" == aggregate-systemd ]]
+[[ "$(field memory_mib_per_job "$LIGHT_AGGREGATE_REPORT")" == 1024 ]]
+[[ "$(field memory_reserve_mib "$LIGHT_AGGREGATE_REPORT")" == 7680 ]]
+[[ "$(field jobs "$LIGHT_AGGREGATE_REPORT")" == 16 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" light-test \
+  --verify-report "$LIGHT_AGGREGATE_REPORT")" == \
+  resource_report_verified=light-test ]]
 CONSUMER_ONE_REPORT="$SCRATCH/consumer-assigned-one.tsv"
-env \
-  PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+run_aggregate_fixture env \
   PARADOX_VERIFY_ASSIGNED_CPUS=2.0 \
   PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
-  PARADOX_RESOURCE_TEST_MODE=true \
-  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
-  PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
-  PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
-  PARADOX_RESOURCE_ONLINE_CPUS=32 \
   "$HELPER" consumer --report > "$CONSUMER_ONE_REPORT"
-[[ "$(field memory_mib_per_job "$CONSUMER_ONE_REPORT")" == 8192 ]]
+[[ "$(field memory_mib_per_job "$CONSUMER_ONE_REPORT")" == 2048 ]]
 [[ "$(field operator_max_jobs "$CONSUMER_ONE_REPORT")" == 1 ]]
 [[ "$(field jobs "$CONSUMER_ONE_REPORT")" == 1 ]]
 [[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
   --verify-report "$CONSUMER_ONE_REPORT")" == \
   resource_report_verified=consumer ]]
-CONSUMER_TWO_REPORT="$SCRATCH/consumer-assigned-two.tsv"
-env \
-  PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
-  PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+CONSUMER_FOUR_REPORT="$SCRATCH/consumer-assigned-four.tsv"
+run_aggregate_fixture env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=8 \
   PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
-  PARADOX_RESOURCE_TEST_MODE=true \
-  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
-  PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
-  PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
-  PARADOX_RESOURCE_ONLINE_CPUS=32 \
-  "$HELPER" consumer --report > "$CONSUMER_TWO_REPORT"
-[[ "$(field operator_max_jobs "$CONSUMER_TWO_REPORT")" == 2 ]]
-[[ "$(field jobs "$CONSUMER_TWO_REPORT")" == 2 ]]
+  "$HELPER" consumer --report > "$CONSUMER_FOUR_REPORT"
+[[ "$(field operator_max_jobs "$CONSUMER_FOUR_REPORT")" == 4 ]]
+[[ "$(field jobs "$CONSUMER_FOUR_REPORT")" == 4 ]]
 [[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
-  --verify-report "$CONSUMER_TWO_REPORT")" == \
+  --verify-report "$CONSUMER_FOUR_REPORT")" == \
   resource_report_verified=consumer ]]
+CONSUMER_FULL_REPORT="$SCRATCH/consumer-assigned-full.tsv"
+run_aggregate_fixture env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=16 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=16384 \
+  "$HELPER" consumer --report > "$CONSUMER_FULL_REPORT"
+[[ "$(field operator_max_jobs "$CONSUMER_FULL_REPORT")" == none ]]
+[[ "$(field jobs "$CONSUMER_FULL_REPORT")" == 8 ]]
 CONSUMER_DIRECT_REPORT="$SCRATCH/consumer-assigned-direct.tsv"
 env \
   PARADOX_VERIFY_ASSIGNED_CPUS=4 \
@@ -142,17 +182,17 @@ env \
   PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
   PARADOX_RESOURCE_ONLINE_CPUS=32 \
   "$HELPER" consumer --report > "$CONSUMER_DIRECT_REPORT"
-[[ "$(field operator_max_jobs "$CONSUMER_DIRECT_REPORT")" == 1 ]]
+[[ "$(field containment "$CONSUMER_DIRECT_REPORT")" == direct ]]
+[[ "$(field memory_mib_per_job "$CONSUMER_DIRECT_REPORT")" == 8192 ]]
+[[ "$(field memory_reserve_mib "$CONSUMER_DIRECT_REPORT")" == 16384 ]]
+[[ "$(field profile_max_jobs "$CONSUMER_DIRECT_REPORT")" == 4 ]]
 [[ "$(field jobs "$CONSUMER_DIRECT_REPORT")" == 1 ]]
-if env \
-    PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_DIRECT_REPORT")" == \
+  resource_report_verified=consumer ]]
+if run_aggregate_fixture env \
     PARADOX_VERIFY_ASSIGNED_CPUS=4 \
-    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=4095 \
-    PARADOX_RESOURCE_TEST_MODE=true \
-    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
-    PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
-    PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
-    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=2047 \
     "$HELPER" consumer > "$SCRATCH/consumer-small.out" \
       2> "$SCRATCH/consumer-small.err"; then
   printf '%s\n' \
@@ -162,6 +202,25 @@ if env \
 fi
 grep -q 'assigned memory envelope cannot fit one consumer job' \
   "$SCRATCH/consumer-small.err"
+# The environment marker alone must never unlock the aggregate policy: a
+# process outside the dedicated service leaf fails closed.
+if env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" consumer > "$SCRATCH/consumer-forged.out" \
+      2> "$SCRATCH/consumer-forged.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: aggregate marker outside the service was accepted' >&2
+  exit 1
+fi
+grep -q 'aggregate containment marker without the aggregate service cgroup' \
+  "$SCRATCH/consumer-forged.err"
 
 if env \
     PARADOX_VERIFY_ASSIGNED_CPUS=3 \
