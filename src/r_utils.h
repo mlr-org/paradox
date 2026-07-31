@@ -313,6 +313,15 @@ attribute_hidden int paradox_public_table_row_count(
   R_xlen_t *row_count
 );
 
+/* Count-only validation over a row.names carrier already captured from one
+ * exact metadata generation. Stable ALTREP pays one Length observation and
+ * no element observation; `row_count` is a required destination and the
+ * caller owns any required post-callback generation recapture. */
+attribute_hidden int paradox_public_row_names_count(
+  SEXP row_names,
+  R_xlen_t *row_count
+);
+
 /* Normalize an admitted ALTREP public data.frame/data.table shell once.
  * Interpreted names metadata and a canonical class suffix are owned before
  * callback-capable Length/Elt observations, row labels are normalized to their

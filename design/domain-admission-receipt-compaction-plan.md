@@ -1096,9 +1096,12 @@ Implement the following in order:
    row names, self-reference, and representation instead of rescanning the
    table attributes. The callback-capable row-name `Length` path must still
    recapture and reroot the complete generation afterward.
-4. Let the shape probe obtain class, names, ID, and row count from one exact
-   shape capture. The canonical empty-Domain validator retains its separate
-   exact four-cell contract.
+4. Let the shape probe obtain class, names, ID, and its sizing row count from
+   the ID carrier in one exact shape capture. It must not observe `row.names`:
+   admission remains the sole owner of callback-capable row-name `Length`,
+   after all sixteen column shells have validated, so a row-name callback
+   cannot repair malformed schema before it is rejected. The canonical
+   empty-Domain validator retains its separate exact four-cell contract.
 5. Resolve canonical built-in kinds in two phases: all interned pointer
    identities first, then byte fallback for foreign ordinary spellings. Share
    the same pointer-fast canonical class-tail resolver between shape and
@@ -1136,3 +1139,117 @@ stably more than 1.10x the exact baseline, no Domain workload may be stably
 more than 1.02x the faithful pre-scalar control, and all earlier bulk
 allocation/timing gates remain binding. If the unified capture does not
 recover the profiled work, stop and review rather than weakening the proof.
+
+### 11.5 Implemented unified capture and focused proof
+
+The bounded recovery is implemented.  One common hard-bounded capture now
+selects the exact five supported outer Domain metadata cells.  Admission and
+terminal proof select columns from their own captured names carriers and
+count their own captured row-name carriers; package initialization interns
+`.internal.selfref` and `repr` once.  Built-in kind and canonical class-tail
+resolution try all interned pointer identities before the byte fallback.  The
+shape generation obtains its sizing row count from the selected ID column and
+does not observe `row.names`.  Admission remains the sole owner of a
+callback-capable row-name `Length`, after all sixteen column shells have
+passed structural validation.  The pre-callback shape, post-callback
+admission, and allocation-free terminal generations therefore remain exact
+and distinct.
+
+Review found and closed four issues during implementation:
+
+- the first shape draft observed an ALTREP row-name carrier before column
+  validation, which could have let its callback repair a malformed column;
+  the shape path no longer observes it, and a focused regression proves the
+  callback count remains zero on that rejection;
+- typed class resolution initially tested the empty-class case before its
+  pointer-fast typed case and repeated one predicate; the final resolver is
+  typed-first and has one predicate owner;
+- malformed factor `levels` such as an environment could reach
+  `XLENGTH()` and expose a raw R diagnostic; a narrow type gate now produces
+  the existing informative field diagnostic, while `NULL` levels retain
+  their earlier short-circuit and valid paths gain no duplicate semantic
+  engine; and
+- a proposed runtime fixture for a genuinely cyclic raw attribute spine would
+  itself have required the forbidden `SET_ATTRIB` API.  No policy exception
+  or package fixture was added.  That unconstructible-through-public-API case
+  remains at the reviewed hard-bound/static-proof boundary; duplicate,
+  overlong, callback-replaced, and terminally replaced metadata retain direct
+  runtime regressions.
+
+The exact package-source and test hashes for this focused batch are:
+
+- `src/domain_admission.h`:
+  `068f8948faa95dd0dd8873b0e215413182390e1b4bb76ffd130305ef77350a00`;
+- `src/domain_construct.c`:
+  `139b2e66c65dd903e74bdfadb31a356d24ba80e26f8a59c91e607786f5810da5`;
+- `src/domain_kernels.c`:
+  `bc9ee970fad781990425977dad914431239677e32e22aa6a8db6401eb2aaff01`;
+- `src/domain_row_admission.c`:
+  `a3f3e39f45284cd27df30f3f7ed672d1b5d9dd9bbc1eff484b12283753e514b0`;
+- `src/paramset_domain_common.c`:
+  `ec6d1312317b9b3fe5a628950f2a5af900f1d0371608aad939aace21709fcd0c`;
+- `src/paramset_domain_common.h`:
+  `f27f809cfcc068923f50a34dae9b628e978921f007e831860d59fc0e48a2f8da`;
+- `src/r_utils.c`:
+  `5afdba33cb976889f2804ffbde7a94a9a858d26a61ec3899bce65015642bf840`;
+- `src/r_utils.h`:
+  `aea56d6530c81e783f160156ea81abad564c473b5c4dc60178302db51505fd01`;
+  and
+- `tests/testthat/test-native-domain-kernels.R`:
+  `4d416f6b2c8883ff1ca7fb2b258abc7be1d87b7b56620523e7d46d351b8fd73e`.
+
+The textual `git diff` over exactly those nine package-facing source/test
+files against plan commit `aa0bff7` has SHA-256
+`8413a97b358ba9a13a45e1137559dd1a4d4d7477a5562d5180f026d82701ac98`.
+The focused current-R evidence is retained under
+`.local/tmp/domain-capture-final.JVRYbq`.  Strict GNU C99 GCC and Clang install
+logs have SHA-256 values
+`584609789585a6f8d49141b742938f3bd12cc7d7203f23b9a26f87b8f60c5e3a`
+and
+`9b81d1accc20458fdaa079d714abb8a2ea60c5865aefacda9ec2ca174955bf01`.
+The focused current-R test log ended `DONE` and has SHA-256
+`30125069780d5c650055436a9a168092cbaf4f4bd8428db41d1705716861e78b`.
+The registered plain native probe inventory contains 230 pre-summary records
+and zero failures; its empty diagnostic log and TSV have SHA-256 values
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+and
+`63c1bcf383aefec6ae729cee086ef775651e22865f5c6f2d654f1c4e7b5f1366`.
+The public-API audit passed, with report SHA-256
+`2a68d9c8376847945c88837caa2342ac184fb8f0b180f64d1e05f53f57a7febc`.
+
+The corrected actual-R-3.6.3 final evidence is retained separately under
+`.local/tmp/domain-capture-final-r36.lljfGr`.  Its `install-final.log` and
+`tests-focused-final.log` have SHA-256 values
+`9b905c9f57f46009f289be8dc5d8cd6f402c0e11c4874283635fe52cae14e3b9`
+and
+`11a3146ba597a593faf31845e1e59314d962e0423db7ebea34e5414851f46589`.
+The tests ended `DONE`; their only three skips are the expected pre-R-4.3
+list-ALTREP fixture-capability skips.
+
+Pinned Callgrind measurements show that the intended work was removed:
+
+| Workload | Final | Rejected candidate | Final / rejected | `e923c1a` baseline | Final / baseline |
+|---|---:|---:|---:|---:|---:|
+| double check | 15,520.245 Ir/call | 21,993 | 0.706x | 15,821 | 0.981x |
+| utility sanitize | 11,355.074 Ir/call | 18,787 | 0.604x | 13,059 | 0.870x |
+
+The admission-only portions are 12,188.521 versus 17,060 Ir/call for check
+and 9,630.074 versus 15,366 for utility sanitize.  The final bulk probe uses
+31,015,173 instructions over 50 calls versus 31,279,825 at exact `aa0bff7`,
+a 0.99154x total ratio and a 0.98914x C-entry ratio.  The final direct-check,
+direct-sanitize, final-bulk, and exact-`aa0bff7`-bulk Callgrind reports have
+SHA-256 values, respectively,
+`8f8e6a68bc16a1c70469f6ea944acb04dda124fcdd7e799a98b7540b62e98898`,
+`54b31a72e4deb17b399c2a18f2892b235cf57126ff7427983d8fe819937fe4d6`,
+`a4a710ee103597f5b0bb3279c71c281e546707683c9826039402379950bb9766`,
+and
+`5292ddb5661cab24d7357d2c90bb38869a94d5b0155044b2b8c66a154391781c`.
+
+These exact hashes, tests, audits, and instruction profiles are focused
+development evidence only.  They do not promote a mutable worktree, satisfy
+the corrected source-bound three-way wall-time policy, or replace any complete
+compiler, memory, every-supported-R-minor, portability, reverse-dependency,
+or release gate.  The failed
+`refs/paradox-release/candidate-20260731T124039Z` ref remains diagnostic only.
+Freeze a replacement immutable candidate and rerun the corrected three-way
+comparison before starting the complete release gates.

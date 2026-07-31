@@ -352,6 +352,10 @@ static const char *const admitted_kind_storage[5] = {
 };
 static SEXP interned_kind_classes[5];
 static SEXP interned_kind_storage[5];
+static const char *const admitted_domain_class_tail[3] = {
+  "Domain", "data.table", "data.frame"
+};
+static SEXP interned_domain_class_tail[3];
 
 void paradox_domain_admission_intern(void) {
   for (int index = 0; index < 5; ++index) {
@@ -362,16 +366,20 @@ void paradox_domain_admission_intern(void) {
     R_PreserveObject(storage_name);
     interned_kind_storage[index] = storage_name;
   }
+  for (int index = 0; index < 3; ++index) {
+    SEXP class_name = Rf_mkChar(admitted_domain_class_tail[index]);
+    R_PreserveObject(class_name);
+    interned_domain_class_tail[index] = class_name;
+  }
 }
 
 static int admitted_kind_index_from_class_char(SEXP class_name) {
   if (TYPEOF(class_name) != CHARSXP || class_name == NA_STRING) return -1;
   for (int index = 0; index < 5; ++index) {
-    if (class_name == interned_kind_classes[index] ||
-        paradox_domain_string_is(
-          class_name,
-          admitted_kind_classes[index]
-        )) {
+    if (class_name == interned_kind_classes[index]) return index;
+  }
+  for (int index = 0; index < 5; ++index) {
+    if (paradox_domain_string_is(class_name, admitted_kind_classes[index])) {
       return index;
     }
   }
@@ -397,6 +405,58 @@ paradox_builtin_domain_kind_t paradox_resolve_builtin_domain_kind_chars(
     return PARADOX_BUILTIN_DOMAIN_UNKNOWN;
   }
   return admitted_kind_order[index];
+}
+
+static int exact_ordinary_class_vector(SEXP classes, R_xlen_t size) {
+  return TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
+    !Rf_isS4(classes) && !Rf_isObject(classes) &&
+    paradox_api_has_no_attributes(classes) && XLENGTH(classes) == size;
+}
+
+paradox_builtin_domain_kind_t paradox_resolve_builtin_domain_table_class(
+    SEXP classes) {
+  if (!exact_ordinary_class_vector(classes, 4)) {
+    return PARADOX_BUILTIN_DOMAIN_UNKNOWN;
+  }
+  const int index = admitted_kind_index_from_class_char(
+    STRING_ELT(classes, 0)
+  );
+  if (index < 0) return PARADOX_BUILTIN_DOMAIN_UNKNOWN;
+
+  int pointer_tail = TRUE;
+  for (R_xlen_t offset = 0; offset < 3; ++offset) {
+    if (STRING_ELT(classes, offset + 1) !=
+        interned_domain_class_tail[offset]) {
+      pointer_tail = FALSE;
+      break;
+    }
+  }
+  if (!pointer_tail) {
+    for (R_xlen_t offset = 0; offset < 3; ++offset) {
+      if (!paradox_domain_string_is(
+          STRING_ELT(classes, offset + 1),
+          admitted_domain_class_tail[offset]
+        )) {
+        return PARADOX_BUILTIN_DOMAIN_UNKNOWN;
+      }
+    }
+  }
+  return admitted_kind_order[index];
+}
+
+int paradox_is_empty_domain_table_class(SEXP classes) {
+  if (!exact_ordinary_class_vector(classes, 2)) return FALSE;
+  if (STRING_ELT(classes, 0) == interned_domain_class_tail[1] &&
+      STRING_ELT(classes, 1) == interned_domain_class_tail[2]) {
+    return TRUE;
+  }
+  return paradox_domain_string_is(
+      STRING_ELT(classes, 0),
+      admitted_domain_class_tail[1]
+    ) && paradox_domain_string_is(
+      STRING_ELT(classes, 1),
+      admitted_domain_class_tail[2]
+    );
 }
 
 static paradox_builtin_domain_kind_t domain_kind(

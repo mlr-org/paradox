@@ -30,6 +30,50 @@ test_that("closed Domain kernels have forced registered entry points", {
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
 })
 
+test_that("outward Domain metadata capture rejects unsupported tags", {
+  domain = p_dbl(0, 1)
+  attr(domain, "repr") = NULL
+  attr(domain, "paradox.domain.unexpected") = TRUE
+
+  expect_error(
+    domain_check(domain, list(0.5)),
+    "outer metadata must be ordinary and bounded",
+    fixed = TRUE
+  )
+})
+
+test_that("outward Domain metadata capture rejects duplicate tags", {
+  domain = p_dbl(0, 1)
+  attr(domain, "repr") = NULL
+  attr(domain, "zzzzz") = "duplicate class tag"
+  bytes = serialize(domain, NULL, version = 2L)
+  marker = charToRaw("zzzzz")
+  offsets = which(vapply(
+    seq_len(length(bytes) - length(marker) + 1L),
+    function(offset) {
+      identical(
+        bytes[offset:(offset + length(marker) - 1L)],
+        marker
+      )
+    },
+    logical(1L)
+  ))
+  expect_length(offsets, 1L)
+  bytes[offsets[[1L]]:(offsets[[1L]] + length(marker) - 1L)] =
+    charToRaw("class")
+  domain = unserialize(bytes)
+  expect_identical(
+    names(attributes(domain)),
+    c("class", "row.names", ".internal.selfref", "names", "class")
+  )
+
+  expect_error(
+    domain_check(domain, list(0.5)),
+    "Unsupported Domain class",
+    fixed = TRUE
+  )
+})
+
 test_that("Domain admission rejects finalizer changes after all-row capture", {
   admission_reentry = native_domain_symbol("test_domain_admission_reentry")
   column_mutator = native_domain_symbol("test_gc_column_mutator")
@@ -497,6 +541,46 @@ test_that("Domain grouping is rechecked after row-name Length reentry", {
     state$domain$grouping,
     c("\"a\",\"b\"", "changed-group")
   )
+})
+
+test_that("Domain row-name Length follows complete column-shell admission", {
+  namespace = asNamespace("paradox")
+  skip_if_not(
+    exists(
+      "C_test_stateful_altrep_row_names_rearm",
+      envir = namespace,
+      inherits = FALSE
+    ),
+    "the internal raw row-name ALTREP fixture is unavailable"
+  )
+
+  state = new.env(parent = emptyenv())
+  state$callbacks = 0L
+  row_names = native_stateful_altrep(
+    "row-a",
+    "row-a",
+    callback = function() {
+      state$callbacks = state$callbacks + 1L
+      data.table::set(state$domain, j = "lower", value = 0)
+    }
+  )
+  state$domain = p_dbl(0, 1)
+  data.table::set(state$domain, j = "lower", value = list(list(0)))
+  expect_identical(typeof(state$domain$lower), "list")
+  attr(state$domain, "row.names") = row_names
+  invisible(.Call(
+    get("C_test_stateful_altrep_row_names_rearm", envir = namespace),
+    state$domain,
+    c(NA_integer_, 0L)
+  ))
+
+  expect_error(
+    domain_check(state$domain, list(0.5)),
+    "`lower` must be numeric",
+    fixed = TRUE
+  )
+  expect_identical(state$callbacks, 0L)
+  expect_identical(typeof(state$domain$lower), "list")
 })
 
 test_that("Domain admission rejects row-name replacement during Length", {

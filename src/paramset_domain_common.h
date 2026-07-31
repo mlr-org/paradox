@@ -37,6 +37,32 @@ attribute_hidden extern const SEXPTYPE
  * can decide a canonical name with one pointer comparison. */
 attribute_hidden void paradox_domain_intern_column_names(void);
 
+/* One exact, allocation-free capture of the complete supported outward
+ * Domain metadata generation.  The mapper admits only names, class,
+ * row.names, .internal.selfref, and repr, rejects duplicates and malformed
+ * cells, and hard-bounds the complete attribute spine at five cells.  Every
+ * member is borrowed from `domain`; `metadata` is a required destination and
+ * callers must root retained members before any allocation or callback-capable
+ * observation. */
+typedef struct {
+  SEXP names;
+  SEXP classes;
+  SEXP row_names;
+  SEXP selfref;
+  SEXP repr;
+  R_xlen_t count;
+  int valid;
+} paradox_domain_outer_metadata_t;
+
+attribute_hidden int paradox_domain_capture_outer_metadata(
+  SEXP domain,
+  paradox_domain_outer_metadata_t *metadata
+);
+
+/* The package-load-interned non-global metadata tag used by the separate
+ * exact empty-Domain validator. */
+attribute_hidden SEXP paradox_domain_selfref_symbol(void);
+
 /* Select every requested canonical column of one outward table in a single
  * allocation-free pass over its names. `required_mask` holds one bit per
  * `enum paradox_domain_column`; requested slots of `columns` receive the exact
@@ -64,6 +90,19 @@ attribute_hidden void paradox_domain_select_columns_with_positions(
   R_xlen_t *positions
 );
 
+/* Generation-local selector companion. `names` must be the carrier returned
+ * by the same exact outer-metadata capture as `table`; this entry therefore
+ * performs no second attribute traversal. */
+attribute_hidden void paradox_domain_select_captured_columns_with_positions(
+  SEXP table,
+  SEXP names,
+  const char *corrupt_context,
+  const char *storage_name,
+  unsigned int required_mask,
+  SEXP *columns,
+  R_xlen_t *positions
+);
+
 /*
  * Allocation-free terminal companion to the selector above. The initial
  * selector has already proved that `positions` is a bijection from the
@@ -74,6 +113,17 @@ attribute_hidden void paradox_domain_select_columns_with_positions(
  */
 attribute_hidden int paradox_domain_selected_columns_current(
   SEXP table,
+  const SEXP *columns,
+  const R_xlen_t *positions,
+  R_xlen_t row_count
+);
+
+/* Terminal receipt over the names carrier captured in the same terminal
+ * generation. It is allocation-free and never authenticates another
+ * generation or a cached caller decision. */
+attribute_hidden int paradox_domain_captured_columns_current(
+  SEXP table,
+  SEXP names,
   const SEXP *columns,
   const R_xlen_t *positions,
   R_xlen_t row_count

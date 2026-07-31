@@ -52,58 +52,18 @@ static inline void periodic_interrupt(R_xlen_t iteration) {
   }
 }
 
-static domain_kind_t class_kind(SEXP param) {
-  if (TYPEOF(param) != VECSXP || ALTREP(param) || Rf_isS4(param)) {
-    return DOMAIN_KIND_UNKNOWN;
+static domain_kind_t class_kind(SEXP classes) {
+  switch (paradox_resolve_builtin_domain_table_class(classes)) {
+  case PARADOX_BUILTIN_DOMAIN_DBL: return DOMAIN_KIND_DBL;
+  case PARADOX_BUILTIN_DOMAIN_INT: return DOMAIN_KIND_INT;
+  case PARADOX_BUILTIN_DOMAIN_FCT: return DOMAIN_KIND_FCT;
+  case PARADOX_BUILTIN_DOMAIN_LGL: return DOMAIN_KIND_LGL;
+  case PARADOX_BUILTIN_DOMAIN_UTY: return DOMAIN_KIND_UTY;
+  case PARADOX_BUILTIN_DOMAIN_UNKNOWN: break;
   }
-  SEXP classes = R_NilValue;
-  if (!paradox_api_ordinary_class_snapshot(param, &classes) ||
-      TYPEOF(classes) != STRSXP || ALTREP(classes) ||
-      Rf_isS4(classes) || Rf_isObject(classes) ||
-      !paradox_api_has_no_attributes(classes)) {
-    return DOMAIN_KIND_UNKNOWN;
-  }
-
-  if (XLENGTH(classes) == 2 &&
-      paradox_domain_string_is(STRING_ELT(classes, 0), "data.table") &&
-      paradox_domain_string_is(STRING_ELT(classes, 1), "data.frame")) {
-    return DOMAIN_KIND_EMPTY;
-  }
-  if (XLENGTH(classes) != 4) {
-    return DOMAIN_KIND_UNKNOWN;
-  }
-
-  static const char *const tail[] = {
-    "Domain", "data.table", "data.frame"
-  };
-  for (R_xlen_t index = 0; index < 3; ++index) {
-    SEXP value = STRING_ELT(classes, index + 1);
-    if (value == NA_STRING || strcmp(CHAR(value), tail[index]) != 0) {
-      return DOMAIN_KIND_UNKNOWN;
-    }
-  }
-
-  SEXP first = STRING_ELT(classes, 0);
-  if (first == NA_STRING) {
-    return DOMAIN_KIND_UNKNOWN;
-  }
-  const char *name = CHAR(first);
-  if (strcmp(name, "ParamDbl") == 0) {
-    return DOMAIN_KIND_DBL;
-  }
-  if (strcmp(name, "ParamInt") == 0) {
-    return DOMAIN_KIND_INT;
-  }
-  if (strcmp(name, "ParamFct") == 0) {
-    return DOMAIN_KIND_FCT;
-  }
-  if (strcmp(name, "ParamLgl") == 0) {
-    return DOMAIN_KIND_LGL;
-  }
-  if (strcmp(name, "ParamUty") == 0) {
-    return DOMAIN_KIND_UTY;
-  }
-  return DOMAIN_KIND_UNKNOWN;
+  return paradox_is_empty_domain_table_class(classes)
+    ? DOMAIN_KIND_EMPTY
+    : DOMAIN_KIND_UNKNOWN;
 }
 
 static paradox_builtin_domain_kind_t builtin_domain_kind(domain_kind_t kind) {
@@ -172,7 +132,7 @@ static void validate_empty_domain(SEXP param) {
    * generation; in particular, neither special row-name lookup nor a later
    * raw selector can allocate and let an old-R finalizer splice generations.
    */
-  SEXP selfref_symbol = Rf_install(".internal.selfref");
+  SEXP selfref_symbol = paradox_domain_selfref_symbol();
   if (TYPEOF(param) != VECSXP || ALTREP(param) || Rf_isS4(param) ||
       XLENGTH(param) != column_count) {
     Rf_error("Corrupt empty Domain storage");
@@ -210,9 +170,7 @@ static void validate_empty_domain(SEXP param) {
       TYPEOF(classes) != STRSXP || ALTREP(classes) ||
       Rf_isS4(classes) || Rf_isObject(classes) ||
       !paradox_api_has_no_attributes(classes) ||
-      XLENGTH(classes) != 2 ||
-      !paradox_domain_string_is(STRING_ELT(classes, 0), "data.table") ||
-      !paradox_domain_string_is(STRING_ELT(classes, 1), "data.frame") ||
+      !paradox_is_empty_domain_table_class(classes) ||
       TYPEOF(row_names) != INTSXP ||
       ALTREP(row_names) || Rf_isS4(row_names) ||
       Rf_isObject(row_names) ||
@@ -246,7 +204,69 @@ static void validate_empty_domain(SEXP param) {
  * fail there without repeating class/storage/grouping and per-row scans here.
  */
 static domain_shape_t domain_shape(SEXP param) {
-  const domain_kind_t kind = class_kind(param);
+  if (TYPEOF(param) != VECSXP || ALTREP(param) || Rf_isS4(param)) {
+    Rf_error(
+      "Unsupported Domain class; expected one of ParamDbl, ParamInt, "
+      "ParamFct, ParamLgl, or ParamUty"
+    );
+  }
+  paradox_domain_outer_metadata_t metadata;
+  if (!paradox_domain_capture_outer_metadata(param, &metadata)) {
+    /* Preserve the established failure diagnostics without burdening the
+     * valid path with another scan. A recognizable empty Domain still enters
+     * its dedicated four-cell validator; an overbound class lookup remains
+     * an unsupported shell exactly as before. */
+    SEXP failure_classes = R_NilValue;
+    if (!paradox_api_ordinary_class_snapshot(param, &failure_classes)) {
+      Rf_error(
+        "Unsupported Domain class; expected one of ParamDbl, ParamInt, "
+        "ParamFct, ParamLgl, or ParamUty"
+      );
+    }
+    if (paradox_is_empty_domain_table_class(failure_classes)) {
+      validate_empty_domain(param);
+    }
+    if (paradox_resolve_builtin_domain_table_class(failure_classes) ==
+        PARADOX_BUILTIN_DOMAIN_UNKNOWN) {
+      Rf_error(
+        "Unsupported Domain class; expected one of ParamDbl, ParamInt, "
+        "ParamFct, ParamLgl, or ParamUty"
+      );
+    }
+    /* A recognized typed shell historically reached the ID selector before
+     * admission inspected unrelated outer metadata. Reproduce that ordering
+     * only after the fused capture has failed, so missing/malformed names and
+     * malformed IDs keep their exact diagnostics at zero valid-path cost. */
+    SEXP failure_columns[PARADOX_DOMAIN_COLUMN_COUNT];
+    paradox_domain_select_columns(
+      param,
+      "Domain storage",
+      "Domain",
+      1U << PARADOX_DOMAIN_ID,
+      failure_columns
+    );
+    SEXP failure_ids = PROTECT(failure_columns[PARADOX_DOMAIN_ID]);
+    if (TYPEOF(failure_ids) != STRSXP) {
+      Rf_error("Corrupt Domain storage: `id` must have type `character`");
+    }
+    if (ALTREP(failure_ids)) {
+      Rf_error(
+        "Corrupt Domain storage: `id` must use an ordinary character representation"
+      );
+    }
+    paradox_require_column_checked(
+      failure_ids,
+      STRSXP,
+      XLENGTH(failure_ids),
+      "Domain storage",
+      "id"
+    );
+    UNPROTECT(1);
+    Rf_error(
+      "Corrupt Domain storage: outer metadata must be ordinary and bounded"
+    );
+  }
+  const domain_kind_t kind = class_kind(metadata.classes);
   if (kind == DOMAIN_KIND_UNKNOWN) {
     Rf_error(
       "Unsupported Domain class; expected one of ParamDbl, ParamInt, "
@@ -260,12 +280,14 @@ static domain_shape_t domain_shape(SEXP param) {
   }
 
   SEXP columns[PARADOX_DOMAIN_COLUMN_COUNT];
-  paradox_domain_select_columns(
+  paradox_domain_select_captured_columns_with_positions(
     param,
+    metadata.names,
     "Domain storage",
     "Domain",
     1U << PARADOX_DOMAIN_ID,
-    columns
+    columns,
+    NULL
   );
   SEXP ids = PROTECT(columns[PARADOX_DOMAIN_ID]);
   if (TYPEOF(ids) != STRSXP) {

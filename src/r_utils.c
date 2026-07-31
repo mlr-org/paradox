@@ -235,7 +235,7 @@ paradox_public_table_kind_t paradox_public_table_kind(SEXP table) {
       : PARADOX_PUBLIC_TABLE_NONE;
 }
 
-static int public_row_names_count(SEXP row_names, R_xlen_t *row_count) {
+int paradox_public_row_names_count(SEXP row_names, R_xlen_t *row_count) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(row_names);
   if ((type != INTSXP && type != STRSXP) || Rf_isS4(row_names) ||
       Rf_isObject(row_names) || !paradox_api_has_no_attributes(row_names)) {
@@ -276,7 +276,7 @@ int paradox_public_table_row_count(SEXP table, R_xlen_t *row_count) {
   SEXP row_names = PROTECT(has_row_names
     ? paradox_api_raw_attribute(table, R_RowNamesSymbol)
     : R_NilValue);
-  const int valid = public_row_names_count(row_names, row_count);
+  const int valid = paradox_public_row_names_count(row_names, row_count);
   UNPROTECT(1);
   return valid;
 }
@@ -338,7 +338,7 @@ int paradox_capture_list_identities(SEXP source, SEXP stable_names,
 SEXP paradox_test_public_row_names_count(SEXP row_names) {
   PROTECT(row_names);
   R_xlen_t rows = 0;
-  if (!public_row_names_count(row_names, &rows)) {
+  if (!paradox_public_row_names_count(row_names, &rows)) {
     UNPROTECT(1);
     Rf_error("Test row-name metadata is invalid");
   }
@@ -415,7 +415,8 @@ SEXP paradox_materialize_public_table_shell(SEXP table) {
   }
 
   R_xlen_t rows = 0;
-  if (!public_row_names_count(source_row_names, &rows) || rows > INT_MAX) {
+  if (!paradox_public_row_names_count(source_row_names, &rows) ||
+      rows > INT_MAX) {
     UNPROTECT(5);
     return table;
   }

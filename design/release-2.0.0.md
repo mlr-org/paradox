@@ -2,12 +2,14 @@
 
 ## Status
 
-**The focused adversarial source review is closed. The first new immutable
-candidate was rejected by the targeted direct one-row performance gate, so
-source is reopened for the bounded unified-capture recovery recorded in
-section 11 of the Domain admission plan. The earlier candidates and all of
-their release evidence are historical until a replacement ref passes the
-fresh C17/C23, every-minor runtime, and remaining release gates below.**
+**The focused adversarial source review and bounded unified-capture recovery
+are closed. Focused current-R/R-3.6 tests, strict GNU C99 builds, native probes,
+API audit, and Callgrind attribution are green, but this is development
+evidence over a mutable worktree. The first new immutable candidate remains
+rejected by its targeted direct one-row performance gate. Freeze a replacement
+candidate, pass the corrected source-bound comparison, and then run the fresh
+C17/C23, every-minor runtime, memory, compatibility, and remaining release
+gates below.**
 The bounded indexed-root Domain admission compaction is governed by
 [`domain-admission-receipt-compaction-plan.md`](domain-admission-receipt-compaction-plan.md).
 Its implementation and focused correctness proof are complete; the plan's
@@ -17,6 +19,43 @@ first source-bound three-way timing attempt used
 and allocation gates but rejected direct one-row ratios of 1.213x and 1.141x
 against `e923c1a`. That ref is diagnostic evidence, not the release candidate;
 the replacement must repeat the corrected comparison.
+
+Section 11.5 records the implemented recovery and exact focused evidence.  A
+single five-cell metadata capture now feeds generation-local names/column,
+row-count, class, self-reference, and representation receipts; the shape path
+sizes from ID and never observes callback-capable row names; and pointer-first
+built-in dispatch removes the profiled repeated work without weakening the
+three-generation proof. Review also fixed early ALTREP row-name observation,
+duplicated typed-class resolution, and malformed factor-level type admission.
+A genuine raw cyclic attribute spine cannot be constructed by the supported
+public APIs without the forbidden `SET_ATTRIB`; it remains at the reviewed
+hard-bound/static-proof boundary rather than creating a package policy
+exception.
+
+The exact source/test diff against plan commit `aa0bff7` has SHA-256
+`8413a97b358ba9a13a45e1137559dd1a4d4d7477a5562d5180f026d82701ac98`.
+The current-R focused test, native-probe TSV, and public-API audit hashes are
+`30125069780d5c650055436a9a168092cbaf4f4bd8428db41d1705716861e78b`,
+`63c1bcf383aefec6ae729cee086ef775651e22865f5c6f2d654f1c4e7b5f1366`,
+and
+`2a68d9c8376847945c88837caa2342ac184fb8f0b180f64d1e05f53f57a7febc`.
+The corrected actual-R-3.6.3 final install and focused-test logs are
+`9b905c9f57f46009f289be8dc5d8cd6f402c0e11c4874283635fe52cae14e3b9`
+and
+`11a3146ba597a593faf31845e1e59314d962e0423db7ebea34e5414851f46589`;
+the tests ended `DONE` with only the three expected pre-R-4.3 list-ALTREP
+fixture skips. Strict GNU C99 GCC/Clang logs are
+`584609789585a6f8d49141b742938f3bd12cc7d7203f23b9a26f87b8f60c5e3a`
+and
+`9b81d1accc20458fdaa079d714abb8a2ea60c5865aefacda9ec2ca174955bf01`.
+
+Callgrind reports 15,520.245 instructions per direct double check and
+11,355.074 per no-op utility sanitize: 0.706x and 0.604x the rejected
+candidate, and 0.981x and 0.870x the exact `e923c1a` baseline.  The bulk total
+is 0.99154x exact `aa0bff7` and its C-entry ratio is 0.98914x.  Exact report
+hashes and all package-file hashes are in section 11.5 of the Domain plan.
+These instruction results do not substitute for the corrected immutable
+three-way wall-time comparison or any full release gate.
 
 The exact focused closure snapshot is
 `.local/checks/integrated-selectors-r9-20260731T122010Z`, with source-manifest

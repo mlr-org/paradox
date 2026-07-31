@@ -71,6 +71,17 @@ paradox_resolve_builtin_domain_class_char(SEXP cls);
 attribute_hidden paradox_builtin_domain_kind_t
 paradox_resolve_builtin_domain_kind_chars(SEXP cls, SEXP storage);
 
+/* Resolve the exact ordinary c(ParamXxx, "Domain", "data.table",
+ * "data.frame") outward dispatch class. Canonical class vectors use only
+ * interned pointer comparisons; foreign ordinary spellings retain the exact
+ * byte-compatible fallback. */
+attribute_hidden paradox_builtin_domain_kind_t
+paradox_resolve_builtin_domain_table_class(SEXP classes);
+
+/* Exact canonical zero-row data.table/data.frame dispatch class used only by
+ * the separate empty-Domain validator. */
+attribute_hidden int paradox_is_empty_domain_table_class(SEXP classes);
+
 /* Kind-resolved companion to special-value preparation. The public Domain
  * adapter has already frozen and resolved its representative class/storage
  * before nested ownership; constructor callers retain the SEXP wrapper

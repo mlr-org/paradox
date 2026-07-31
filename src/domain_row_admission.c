@@ -34,89 +34,6 @@ enum domain_admission_root {
   DOMAIN_ADMISSION_ROOT_COUNT
 };
 
-typedef struct {
-  SEXP names;
-  SEXP classes;
-  SEXP row_names;
-  SEXP selfref;
-  SEXP repr;
-  SEXP selfref_symbol;
-  SEXP repr_symbol;
-  R_xlen_t count;
-  int valid;
-} domain_outer_metadata_t;
-
-static void capture_domain_outer_attribute(
-    SEXP tag, SEXP value, void *data) {
-  domain_outer_metadata_t *metadata = data;
-  if (!metadata->valid || TYPEOF(tag) != SYMSXP ||
-      value == R_NilValue) {
-    metadata->valid = FALSE;
-    return;
-  }
-  SEXP *destination = NULL;
-  if (tag == R_NamesSymbol) {
-    destination = &metadata->names;
-  } else if (tag == R_ClassSymbol) {
-    destination = &metadata->classes;
-  } else if (tag == R_RowNamesSymbol) {
-    destination = &metadata->row_names;
-  } else if (tag == metadata->selfref_symbol) {
-    destination = &metadata->selfref;
-  } else if (tag == metadata->repr_symbol) {
-    destination = &metadata->repr;
-  } else {
-    metadata->valid = FALSE;
-    return;
-  }
-  if (*destination != R_NilValue) {
-    metadata->valid = FALSE;
-    return;
-  }
-  *destination = value;
-  ++metadata->count;
-}
-
-/*
- * Capture the complete supported caller-owned outer Domain metadata
- * generation in one allocation-free, hard-bounded pass. The exact five-name
- * allow-list makes every later raw selector safe for this generation and
- * rejects a rogue, duplicate, cyclic, or overlong pairlist before it can
- * reach R's unbounded compatibility accessor on an old runtime.
- */
-static int capture_domain_outer_metadata(
-    SEXP domain, SEXP selfref_symbol, SEXP repr_symbol,
-    domain_outer_metadata_t *metadata) {
-  *metadata = (domain_outer_metadata_t) {
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    selfref_symbol,
-    repr_symbol,
-    0,
-    TRUE
-  };
-  R_xlen_t count = 0;
-  if (!paradox_api_map_bounded_stored_attributes(
-      domain,
-      5,
-      capture_domain_outer_attribute,
-      metadata,
-      &count
-    ) || !metadata->valid || metadata->count != count ||
-      metadata->names == R_NilValue ||
-      metadata->classes == R_NilValue ||
-      metadata->row_names == R_NilValue) {
-    return FALSE;
-  }
-  const R_xlen_t expected = 3 +
-    (metadata->selfref != R_NilValue) +
-    (metadata->repr != R_NilValue);
-  return count == expected;
-}
-
 static int ordinary_string_vector(SEXP value) {
   return TYPEOF(value) == STRSXP && !ALTREP(value) && !Rf_isS4(value) &&
     !Rf_isObject(value) && paradox_api_has_no_attributes(value);
@@ -380,28 +297,6 @@ static int numeric_column_receipt_current(SEXP source,
   return TRUE;
 }
 
-static int exact_domain_class(SEXP classes,
-    paradox_builtin_domain_kind_t kind) {
-  static const char *const tail[] = {
-    "Domain", "data.table", "data.frame"
-  };
-  if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
-      Rf_isS4(classes) || Rf_isObject(classes) ||
-      !paradox_api_has_no_attributes(classes) ||
-      XLENGTH(classes) != 4 ||
-      paradox_resolve_builtin_domain_class_char(
-        STRING_ELT(classes, 0)
-      ) != kind) {
-    return FALSE;
-  }
-  for (R_xlen_t index = 0; index < 3; ++index) {
-    if (!paradox_domain_string_is(STRING_ELT(classes, index + 1), tail[index])) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
 enum domain_admission_test_phase {
   DOMAIN_ADMISSION_AFTER_CAPTURE = 0,
   DOMAIN_ADMISSION_AFTER_OWNERSHIP = 1
@@ -442,10 +337,6 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     paradox_admitted_domain_table_t *table,
     R_xlen_t *work_since_interrupt,
     SEXP capture_hook) {
-  /* Intern every optional attribute selector before allocating any receipt
-   * destination. Later capture and terminal comparison are allocation-free. */
-  SEXP selfref_symbol = Rf_install(".internal.selfref");
-  SEXP repr_symbol = Rf_install("repr");
   if (row_count < 0 ||
       row_count > R_XLEN_T_MAX / PARADOX_ADMITTED_ROW_STRIDE) {
     Rf_error("Corrupt Domain storage: unsupported Domain row count");
@@ -510,19 +401,15 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
   }
   SEXP selected_columns[PARADOX_DOMAIN_COLUMN_COUNT];
   R_xlen_t selected_positions[PARADOX_DOMAIN_COLUMN_COUNT];
-  domain_outer_metadata_t outward_metadata;
-  if (!capture_domain_outer_metadata(
-      domain,
-      selfref_symbol,
-      repr_symbol,
-      &outward_metadata
-    )) {
+  paradox_domain_outer_metadata_t outward_metadata;
+  if (!paradox_domain_capture_outer_metadata(domain, &outward_metadata)) {
     Rf_error(
       "Corrupt Domain storage: outer metadata must be ordinary and bounded"
     );
   }
-  paradox_domain_select_columns_with_positions(
+  paradox_domain_select_captured_columns_with_positions(
     domain,
+    outward_metadata.names,
     "Domain storage",
     "Domain",
     selected_mask,
@@ -586,7 +473,10 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     root_indices[DOMAIN_ADMISSION_ROOT_ROW_NAMES]
   );
   R_xlen_t outward_row_count = 0;
-  if (!paradox_public_table_row_count(domain, &outward_row_count)) {
+  if (!paradox_public_row_names_count(
+      outward_row_names,
+      &outward_row_count
+    )) {
     Rf_error("Domain changed during admission");
   }
   double *lower_values = NULL;
@@ -617,16 +507,15 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
   int selection_is_current = !callback_capable_row_names;
   for (;;) {
     if (!selection_is_current) {
-      if (!capture_domain_outer_metadata(
+      if (!paradox_domain_capture_outer_metadata(
           domain,
-          selfref_symbol,
-          repr_symbol,
           &outward_metadata
         ) || outward_metadata.row_names != outward_row_names) {
         Rf_error("Domain changed during admission");
       }
-      paradox_domain_select_columns_with_positions(
+      paradox_domain_select_captured_columns_with_positions(
         domain,
+        outward_metadata.names,
         "Domain storage",
         "Domain",
         selected_mask,
@@ -679,7 +568,7 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     const R_xlen_t outward_attribute_count = outward_metadata.count;
     expected_attribute_count = 3 +
       (outward_selfref != R_NilValue) + (outward_repr != R_NilValue);
-    if (!exact_domain_class(outward_class, kind)) {
+    if (paradox_resolve_builtin_domain_table_class(outward_class) != kind) {
       Rf_error("Domain shape changed during admission");
     }
     if (outward_attribute_count != expected_attribute_count ||
@@ -908,6 +797,20 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
         rows,
         offset + PARADOX_ADMITTED_LEVELS
       ));
+      /* XLENGTH() errors for environments, closures, and several other
+       * malformed row leaves. Canonical levels can only be character,
+       * logical, or NULL; reject every other non-NULL type before observing
+       * length so the semantic owner keeps its stable field diagnostic. The
+       * common numeric NULL path performs no additional type read. */
+      if (source != R_NilValue &&
+          TYPEOF(source) != STRSXP && TYPEOF(source) != LGLSXP) {
+        report_row_failure(
+          kind,
+          PARADOX_DOMAIN_FIELD_LEVELS,
+          source,
+          R_NilValue
+        );
+      }
       if (source != R_NilValue &&
           (ALTREP(source) || XLENGTH(source) != 0)) {
         const int next_reuses = row + 1 < row_count &&
@@ -1155,11 +1058,9 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
    * the row receipts below catch in-place mutation of a retained column or
    * nested field.
    */
-  domain_outer_metadata_t current_metadata;
-  int current = capture_domain_outer_metadata(
+  paradox_domain_outer_metadata_t current_metadata;
+  int current = paradox_domain_capture_outer_metadata(
     domain,
-    selfref_symbol,
-    repr_symbol,
     &current_metadata
   );
   SEXP current_class = current_metadata.classes;
@@ -1168,15 +1069,16 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
   SEXP current_repr = current_metadata.repr;
   const R_xlen_t current_attribute_count = current_metadata.count;
   R_xlen_t current_row_count = row_count;
-  current = current && paradox_domain_selected_columns_current(
+  current = current && paradox_domain_captured_columns_current(
       domain,
+      current_metadata.names,
       selected_columns,
       selected_positions,
       row_count
     ) &&
     current_attribute_count == expected_attribute_count &&
     current_class == outward_class &&
-    exact_domain_class(current_class, kind) &&
+    paradox_resolve_builtin_domain_table_class(current_class) == kind &&
     current_row_names == outward_row_names &&
     current_selfref == outward_selfref &&
     current_repr == outward_repr &&
@@ -1189,7 +1091,10 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     !Rf_isS4(current_row_names) && !Rf_isObject(current_row_names) &&
     paradox_api_has_no_attributes(current_row_names);
   if (current && !ALTREP(current_row_names)) {
-    current = paradox_public_table_row_count(domain, &current_row_count) &&
+    current = paradox_public_row_names_count(
+        current_row_names,
+        &current_row_count
+      ) &&
       current_row_count == row_count;
   }
   if (current && (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS)) {

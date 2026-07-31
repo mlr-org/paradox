@@ -221,8 +221,9 @@ The later Domain admission carrier compaction is a distinct bounded follow-up
 governed by
 [`design/domain-admission-receipt-compaction-plan.md`](design/domain-admission-receipt-compaction-plan.md).
 It does not reopen the P1--P5 slice experiments above. Its indexed-root and
-focused correctness work is complete, but its own source-bound three-way
-comparison remains mandatory once one immutable candidate exists.
+focused correctness work and the subsequent unified-capture recovery are
+complete, but its corrected source-bound three-way comparison remains
+mandatory once a replacement immutable candidate exists.
 
 The exact focused adversarial review closure is retained at
 `.local/checks/integrated-selectors-r9-20260731T122010Z`; its source-manifest
@@ -267,7 +268,51 @@ avoidable instructions per call to repeated names/row-names recovery around
 the three exact outer-metadata generations that actually are required.
 Section 11 of the Domain compaction plan freezes the bounded unified-capture
 recovery and the corrected timing-harness requirements before implementation.
-Source is reopened; every complete release gate remains pending.
+That recovery now uses one exact five-cell outer-metadata capture per required
+generation, capture-local column and row-count receipts, package-load-interned
+metadata symbols, pointer-first built-in kind/class resolution, and an ID-based
+shape count that never observes callback-capable row names. The three required
+shape, admission, and terminal generations remain distinct.
+
+Review fixed an early ALTREP row-name observation that could have repaired a
+malformed column, duplicate/poorly ordered typed-class resolution, and a raw
+`XLENGTH(environment)` failure for malformed factor levels. A proposed genuine
+cyclic-attribute-spine fixture would itself require forbidden `SET_ATTRIB`, so
+there is no runtime-policy exception: that public-API-unconstructible case
+remains at the hard-bounded static-proof boundary while constructible metadata
+hazards have direct regressions.
+
+The exact package-source/test diff against plan commit `aa0bff7` has SHA-256
+`8413a97b358ba9a13a45e1137559dd1a4d4d7477a5562d5180f026d82701ac98`.
+Focused current-R tests, the 230-record/zero-failure native probe inventory,
+and the public-API audit have hashes
+`30125069780d5c650055436a9a168092cbaf4f4bd8428db41d1705716861e78b`,
+`63c1bcf383aefec6ae729cee086ef775651e22865f5c6f2d654f1c4e7b5f1366`,
+and
+`2a68d9c8376847945c88837caa2342ac184fb8f0b180f64d1e05f53f57a7febc`.
+The corrected actual-R-3.6.3 final install/test log hashes are
+`9b905c9f57f46009f289be8dc5d8cd6f402c0e11c4874283635fe52cae14e3b9`
+and
+`11a3146ba597a593faf31845e1e59314d962e0423db7ebea34e5414851f46589`;
+the only three skips are the expected pre-R-4.3 list-ALTREP fixture skips.
+Strict GNU C99 GCC/Clang install logs have hashes
+`584609789585a6f8d49141b742938f3bd12cc7d7203f23b9a26f87b8f60c5e3a`
+and
+`9b81d1accc20458fdaa079d714abb8a2ea60c5865aefacda9ec2ca174955bf01`.
+
+Callgrind now measures 15,520.245 instructions per direct double check and
+11,355.074 per no-op utility sanitize, respectively 0.706x/0.604x the rejected
+candidate and 0.981x/0.870x the exact `e923c1a` baseline. The final bulk total
+is 0.99154x exact `aa0bff7`, with a 0.98914x C-entry ratio. The direct-check,
+direct-sanitize, final-bulk, and comparison-bulk reports have SHA-256 values
+`8f8e6a68bc16a1c70469f6ea944acb04dda124fcdd7e799a98b7540b62e98898`,
+`54b31a72e4deb17b399c2a18f2892b235cf57126ff7427983d8fe819937fe4d6`,
+`a4a710ee103597f5b0bb3279c71c281e546707683c9826039402379950bb9766`,
+and
+`5292ddb5661cab24d7357d2c90bb38869a94d5b0155044b2b8c66a154391781c`.
+All of this is focused development evidence only. Source remains reopened;
+the failed ref remains diagnostic, the corrected immutable three-way timing is
+pending, and every complete release gate remains pending.
 
 The final compatibility batch is governed by
 [`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).
