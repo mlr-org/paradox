@@ -681,9 +681,11 @@ static void report_duplicate_id(SEXP id, SEXP changed_owner) {
   );
 }
 
+static void run_add_test_hook(SEXP hook);
+
 static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
     SEXP tag_params, SEXP tag_override, int postfix,
-    const char *names_argument, SEXP changed_owner) {
+    const char *names_argument, SEXP changed_owner, SEXP capture_hook) {
   R_xlen_t work_since_interrupt = 0;
   /*
    * Allocate both carriers before capturing the caller-owned list.  A pending
@@ -722,6 +724,10 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
     names_argument,
     &work_since_interrupt
   );
+  /* Test-only boundary: the one supported mutation window between the stable
+   * name/child capture above and child admission below. Production callers
+   * pass R_NilValue. */
+  run_add_test_hook(capture_hook);
   const R_xlen_t child_count = XLENGTH(stable_sets);
   if (child_count > INT_MAX ||
       child_count > R_XLEN_T_MAX / CONSTRUCTOR_ROOT_STRIDE) {
@@ -800,6 +806,44 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
         "Cannot construct ParamSetCollection from unsupported or corrupt "
         "ParamSet child state"
       );
+    }
+    /*
+     * Constructor admission is the reader's admission: the flatten above
+     * consumes `.params`/`.tags`/`.trafos`, but a child whose remaining
+     * payload fields are corrupt would otherwise construct a collection every
+     * later read rejects. Admission is strictly read-only -- SHADOW children
+     * are previewed, never refreshed. A committing admission installs a new
+     * capsule per validated occurrence, which invalidates the neighboring
+     * refresh signatures and turns a shared alternating shadow/collection
+     * graph exponential; healing stays where it always was, at read time.
+     */
+    {
+      PROTECT_INDEX admission_roots_index;
+      SEXP admission_roots;
+      PROTECT_WITH_INDEX(
+        admission_roots = R_NilValue,
+        &admission_roots_index
+      );
+      if (paradox_core_kind(child->core) == PARADOX_CORE_COLLECTION) {
+        paradox_collection_graph_t admission_graph;
+        paradox_collection_graph_build_readonly(
+          child->private_environment,
+          child->self,
+          &admission_graph,
+          &admission_roots,
+          admission_roots_index,
+          &work_since_interrupt
+        );
+      } else {
+        paradox_collection_validate_single_node_readonly(
+          child->private_environment,
+          child->self,
+          &admission_roots,
+          admission_roots_index,
+          &work_since_interrupt
+        );
+      }
+      UNPROTECT(1);
     }
     const int edge_tag_sets = LOGICAL_ELT(tag_sets, child_index);
     const int edge_tag_params = LOGICAL_ELT(tag_params, child_index);
@@ -1112,8 +1156,9 @@ static SEXP uniform_edge_flags(int flag, R_xlen_t count) {
   return result;
 }
 
-SEXP paradox_param_set_collection_construct(SEXP sets, SEXP tag_sets_sexp,
-    SEXP tag_params_sexp, SEXP postfix_sexp) {
+static SEXP param_set_collection_construct_impl(SEXP sets,
+    SEXP tag_sets_sexp, SEXP tag_params_sexp, SEXP postfix_sexp,
+    SEXP capture_hook) {
   const int tag_sets = checked_flag(tag_sets_sexp, "tag_sets");
   const int tag_params = checked_flag(tag_params_sexp, "tag_params");
   const int postfix = checked_flag(postfix_sexp, "postfix_names");
@@ -1127,10 +1172,40 @@ SEXP paradox_param_set_collection_construct(SEXP sets, SEXP tag_sets_sexp,
   SEXP edge_tag_params = PROTECT(uniform_edge_flags(tag_params, child_count));
   SEXP result = PROTECT(build_collection_static_state(
     sets, edge_tag_sets, edge_tag_params, R_NilValue, postfix,
-    "`sets` names", R_NilValue
+    "`sets` names", R_NilValue, capture_hook
   ));
   UNPROTECT(3);
   return result;
+}
+
+SEXP paradox_param_set_collection_construct(SEXP sets, SEXP tag_sets_sexp,
+    SEXP tag_params_sexp, SEXP postfix_sexp) {
+  return param_set_collection_construct_impl(
+    sets,
+    tag_sets_sexp,
+    tag_params_sexp,
+    postfix_sexp,
+    R_NilValue
+  );
+}
+
+/* Test-only construction entry: `capture_hook` runs at the boundary between
+ * the stable name/child capture and child admission, so a regression test can
+ * mutate the caller's `sets` at the exact window a pending finalizer could
+ * occupy, deterministically. */
+SEXP paradox_test_param_set_collection_construct_reentry(SEXP sets,
+    SEXP tag_sets_sexp, SEXP tag_params_sexp, SEXP postfix_sexp,
+    SEXP capture_hook) {
+  if (capture_hook != R_NilValue && !Rf_isFunction(capture_hook)) {
+    Rf_error("Collection construction reentry hook must be a function");
+  }
+  return param_set_collection_construct_impl(
+    sets,
+    tag_sets_sexp,
+    tag_params_sexp,
+    postfix_sexp,
+    capture_hook
+  );
 }
 
 typedef struct {
@@ -1645,6 +1720,7 @@ static SEXP param_set_collection_add_impl(SEXP private_environment, SEXP self,
     R_NilValue,
     root->postfix,
     "`n`",
+    R_NilValue,
     R_NilValue
   ));
 
@@ -1997,7 +2073,8 @@ SEXP paradox_collection_reflatten(SEXP private_environment, SEXP core,
     VECTOR_ELT(edges, PARADOX_COLLECTION_EDGE_TAG_OVERRIDE),
     postfix,
     "`sets` names",
-    changed_owner
+    changed_owner,
+    R_NilValue
   ));
 
   SEXP fields[PARADOX_CORE_FIELD_COUNT];

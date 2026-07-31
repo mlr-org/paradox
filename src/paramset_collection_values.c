@@ -648,6 +648,56 @@ void paradox_collection_validate_single_node(SEXP private_environment,
   UNPROTECT(1);
 }
 
+/* The read-only sibling of the validator above: it admits the node's current
+ * generation -- previewing a SHADOW's authoritative projection instead of
+ * committing a refresh -- and installs nothing. Committing here is not only
+ * unnecessary for admission, it is what turned a shared alternating
+ * shadow/collection graph exponential: every install invalidates the
+ * neighboring signatures, so each admission re-healed the complete subtree. */
+void paradox_collection_validate_single_node_readonly(
+    SEXP private_environment, SEXP self, SEXP *roots,
+    PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
+  if (TYPEOF(private_environment) != ENVSXP ||
+      Rf_isS4(private_environment) ||
+      TYPEOF(self) != ENVSXP || Rf_isS4(self) ||
+      !paradox_domain_owns_private_environment(self, private_environment)) {
+    Rf_error("Corrupt ParamSet child shell");
+  }
+  SEXP source_core = PROTECT(paradox_core_from_private(private_environment));
+  PROTECT_INDEX operation_index;
+  SEXP operation_core;
+  PROTECT_WITH_INDEX(operation_core = source_core, &operation_index);
+  if (paradox_core_kind(source_core) == PARADOX_CORE_SHADOW) {
+    REPROTECT(
+      operation_core = paradox_shadow_preview_authoritative(
+        self,
+        private_environment
+      ),
+      operation_index
+    );
+  }
+  paradox_collection_graph_node_t node;
+  if ((paradox_core_kind(operation_core) != PARADOX_CORE_BASE &&
+       paradox_core_kind(operation_core) != PARADOX_CORE_SHADOW) ||
+      !initialize_new_node(
+        self,
+        private_environment,
+        operation_core,
+        source_core,
+        R_XLEN_T_MAX,
+        R_XLEN_T_MAX,
+        &node,
+        roots,
+        roots_index,
+        work_since_interrupt,
+        FALSE
+      )) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSet child capsule state");
+  }
+  UNPROTECT(2);
+}
+
 static int initialize_node(SEXP self, SEXP private_environment,
     SEXP operation_core, SEXP source_core, R_xlen_t parent,
     R_xlen_t parent_child, R_xlen_t previous,

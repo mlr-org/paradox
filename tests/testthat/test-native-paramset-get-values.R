@@ -22,7 +22,10 @@ native_get_values_copy_table = function(table) {
   structure(
     lapply(table, identity),
     names = names(table),
-    row.names = attr(table, "row.names"),
+    # The internal spelling, not `attr(table, "row.names")`: the plain read
+    # expands compact row names into an ALTREP sequence, and the capsule
+    # validators reject ALTREP row names by design.
+    row.names = .row_names_info(table, 0L),
     class = "data.frame"
   )
 }

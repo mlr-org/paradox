@@ -1200,7 +1200,11 @@ static SEXP heal_graph(SEXP root_self, SEXP root_private) {
         if (private_environment == R_UnboundValue) {
           Rf_error("Corrupt ParamSet node in capsule graph");
         }
-        core = paradox_shadow_refresh_authoritative(
+        /* This walk is post-order: the shadow's origin subtree was healed
+         * before this frame, so the refresh must not re-heal it -- doing so
+         * once per shadow occurrence is what made shared alternating graphs
+         * exponential. */
+        core = paradox_shadow_refresh_authoritative_prehealed(
           frame->self,
           private_environment
         );

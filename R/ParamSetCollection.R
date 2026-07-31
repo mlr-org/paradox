@@ -302,7 +302,10 @@ param_set_shadow_disable_internal_tuning = function(param_set, ids) {
 
 param_set_internal_tuning_rows = function(params) {
   which(vapply(params$cargo, function(cargo) {
-    !is.null(cargo) &&
+    # Only plain list cargo can name internal tuning: on a classed cargo the
+    # `$` and `length()` reads below would dispatch user methods inside this
+    # orchestration path, before any plan receipt exists.
+    is.list(cargo) && !is.object(cargo) &&
       (!is.null(cargo$in_tune_fn) || length(cargo$disable_in_tune))
   }, logical(1L)))
 }

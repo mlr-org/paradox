@@ -31,6 +31,24 @@ enum paradox_domain_column {
 attribute_hidden extern const char *const
   paradox_domain_column_names[PARADOX_DOMAIN_COLUMN_COUNT];
 
+/* Intern the canonical column names once at package load, so column selection
+ * can decide a canonical name with one pointer comparison. */
+attribute_hidden void paradox_domain_intern_column_names(void);
+
+/* Select every requested canonical column of one outward table in a single
+ * allocation-free pass over its names. `required_mask` holds one bit per
+ * `enum paradox_domain_column`; requested slots of `columns` receive the exact
+ * selected column, unrequested slots `R_NilValue`. Container diagnostics,
+ * missing-column and duplicate-column rejection are byte-for-byte those of
+ * `paradox_get_named_column_checked()`, applied in ascending column order. */
+attribute_hidden void paradox_domain_select_columns(
+  SEXP table,
+  const char *corrupt_context,
+  const char *storage_name,
+  unsigned int required_mask,
+  SEXP *columns
+);
+
 typedef struct {
   SEXP table;
   SEXP ids;

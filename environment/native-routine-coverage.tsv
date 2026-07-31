@@ -103,3 +103,4 @@ test_gc_column_mutator	3	fixture	fixture-dynamic	direct_test_gc_column_mutator,h
 test_tune_token_gc_mutation_snapshot	4	fixture	fixture-dynamic	direct_test_tune_token_gc_mutation_snapshot	Internal fixture makes a finalizer mutate TuneToken content during its exact native snapshot
 test_gc_attribute_mutator	3	fixture	fixture-dynamic	direct_test_gc_attribute_mutator	Internal fixture arms a finalizer which rewrites one attribute of a live caller object in place
 test_param_set_collection_add_reentry	8	fixture	fixture-dynamic	direct_test_param_set_collection_add_reentry	Internal fixture drives the atomic COLLECTION add transaction with a reentry hook at its graph and topology snapshot boundaries
+test_param_set_collection_construct_reentry	5	fixture	fixture-dynamic	direct_test_param_set_collection_construct_reentry	Internal fixture drives COLLECTION construction with a reentry hook between the stable name capture and child admission

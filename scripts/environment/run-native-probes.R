@@ -1933,6 +1933,20 @@ main <- function() {
       check(identical(result, collection) &&
         identical(collection$ids(), c("existing.x", "added.y")),
         "collection add reentry fixture differs")
+    },
+    direct_test_param_set_collection_construct_reentry = function() {
+      fired <- 0L
+      result <- .Call(
+        symbol("test_param_set_collection_construct_reentry"),
+        list(child = ps(x = p_int())),
+        FALSE,
+        FALSE,
+        FALSE,
+        function() fired <<- fired + 1L
+      )
+      check(identical(fired, 1L) &&
+        identical(result$params$id, "child.x"),
+        "collection construct reentry fixture differs")
     }
   )
 

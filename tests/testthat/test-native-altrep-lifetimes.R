@@ -981,13 +981,9 @@ test_that("the domain_check() internal flag is observed exactly once", {
   )
 })
 
-test_that("a Domain id column re-read on the failure path is revalidated", {
+test_that("a hostile ALTREP special leaf is rejected or contained by admission", {
   altrep2_skip_without_helpers()
 
-  # `special_vals` membership uses identical(), which dispatches a hostile
-  # ALTREP special's Length method and so re-enters R after the Domain shape
-  # was admitted. The failure path then re-reads the `id` column; it must be
-  # bound to the admitted row count instead of being indexed blind.
   mutate_column = function(table, name, value) {
     discarded = .Call(
       altrep2_symbol("test_gc_column_mutator"),
@@ -999,23 +995,42 @@ test_that("a Domain id column re-read on the failure path is revalidated", {
     for (round in seq_len(3L)) invisible(gc(full = TRUE))
   }
 
-  for (case in list(
-    list(domain = p_dbl(0, 1), values = list(5)),
-    list(domain = p_uty(custom_check = function(x) "rejected"), values = list(1))
-  )) {
-    domain = case$domain
-    calls = 0L
-    hostile = native_stateful_altrep(
-      c(99, 98), c(99, 98),
-      callback = function() {
-        calls <<- calls + 1L
-        mutate_column(domain, "id", character(0))
-      },
-      callback_after = c(NA_integer_, 0L)
-    )
-    mutate_column(domain, "special_vals", list(list(hostile)))
+  # Typed kinds reject an ALTREP special leaf before observing an element, so
+  # the hostile callback can never run at all.
+  dbl_domain = p_dbl(0, 1)
+  dbl_calls = 0L
+  dbl_hostile = native_stateful_altrep(
+    c(99, 98), c(99, 98),
+    callback = function() {
+      dbl_calls <<- dbl_calls + 1L
+      mutate_column(dbl_domain, "id", character(0))
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  mutate_column(dbl_domain, "special_vals", list(list(dbl_hostile)))
+  expect_error(
+    domain_check(dbl_domain, list(5)),
+    "Corrupt Domain storage: `special_vals` is not canonical",
+    fixed = TRUE
+  )
+  expect_identical(dbl_calls, 0L)
 
-    expect_error(domain_check(domain, case$values), "Corrupt Domain storage")
-    expect_identical(calls, 1L)
-  }
+  # ParamUty specials are opaque, so membership observes the hostile leaf and
+  # its callback GC-rewrites the `id` column mid-operation. The kernel
+  # completes against its admitted row, so the ordinary diagnostic survives
+  # the rewrite instead of an out-of-bounds re-read of the live column.
+  uty_domain = p_uty(custom_check = function(x) "rejected")
+  uty_calls = 0L
+  uty_hostile = native_stateful_altrep(
+    c(99, 98), c(99, 98),
+    callback = function() {
+      uty_calls <<- uty_calls + 1L
+      mutate_column(uty_domain, "id", character(0))
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  mutate_column(uty_domain, "special_vals", list(list(uty_hostile)))
+  result = domain_check(uty_domain, list(1))
+  expect_match(result, "rejected")
+  expect_identical(uty_calls, 1L)
 })

@@ -276,3 +276,39 @@ test_that("restored prerelease Shadow base targets route to Shadow behavior", {
     list(tune = 11L)
   )
 })
+
+test_that("in_tune_fn receives detached owner values", {
+  # `param_vals` crosses the package boundary into a user callback. Before the
+  # snapshot detached it, this exact callback corrupted the child's canonical
+  # `.values` store in place and permanently bricked the set.
+  hostile = function(domain, param_vals) {
+    if (length(param_vals)) {
+      data.table::setattr(
+        param_vals,
+        "names",
+        rep("HACKED", length(param_vals))
+      )
+      data.table::setattr(param_vals[[1L]], "rogue", TRUE)
+    }
+    domain$upper
+  }
+  child = ps(
+    a = p_dbl(
+      1, 2,
+      tags = "internal_tuning",
+      in_tune_fn = hostile,
+      disable_in_tune = list(),
+      aggr = function(x) x[[1L]]
+    ),
+    b = p_dbl(0, 1)
+  )
+  child$values = list(b = 0.5)
+  collection = ParamSetCollection$new(list(sub = child))
+
+  converted = collection$convert_internal_search_space(
+    ps(sub.a = p_dbl(1, 2))
+  )
+  expect_identical(converted, list(sub.a = 2))
+  expect_identical(child$values, list(b = 0.5))
+  expect_identical(collection$values, list(sub.b = 0.5))
+})

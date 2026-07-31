@@ -130,8 +130,18 @@ test_that("ALTREP table row-name reentry cannot precede spine capture", {
   # therefore materialize the copied row-name ALTREP while constructing the
   # outer list ALTREP. Reinstall the exact row-name fixture by reference
   # before rearming it; the test is about the consumer's capture order, not
-  # the constructor's attribute-duplication policy.
-  data.table::setattr(state$outer, "row.names", row_names)
+  # the constructor's attribute-duplication policy. `data.table::setattr()`
+  # cannot do this: it materializes a referenced replacement value, so the
+  # fixture would arrive as an ordinary copy. The package's finalizer-armed
+  # attribute mutator installs the exact object instead.
+  installer = .Call(
+    get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
+    state$outer,
+    "row.names",
+    row_names
+  )
+  rm(installer)
+  invisible(gc())
   invisible(.Call(
     get(
       "C_test_stateful_altrep_row_names_rearm",

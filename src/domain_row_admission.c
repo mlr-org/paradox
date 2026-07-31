@@ -191,6 +191,7 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
    * selected: a public projection legitimately carries a stored TuneToken in
    * `.init`, and no Domain operation reads any of them.
    */
+  unsigned int selected_mask = 0U;
   for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     if (column == PARADOX_DOMAIN_DEFAULT ||
         column == PARADOX_DOMAIN_REQUIREMENTS ||
@@ -198,12 +199,21 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
         column == PARADOX_DOMAIN_INIT) {
       continue;
     }
-    SEXP value = paradox_get_named_column_checked(
-      domain,
-      "Domain storage",
-      "Domain",
-      paradox_domain_column_names[column]
-    );
+    selected_mask |= 1U << column;
+  }
+  SEXP selected_columns[PARADOX_DOMAIN_COLUMN_COUNT];
+  paradox_domain_select_columns(
+    domain,
+    "Domain storage",
+    "Domain",
+    selected_mask,
+    selected_columns
+  );
+  for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
+    if (!((selected_mask >> column) & 1U)) {
+      continue;
+    }
+    SEXP value = selected_columns[column];
     if (domain_column_types[column] == REALSXP) {
       paradox_require_numeric_column(
         value,
@@ -255,6 +265,11 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
     Rf_error("Corrupt Domain storage: schema columns must be ordinary vectors");
   }
 
+  SEXP levels_column = VECTOR_ELT(columns, PARADOX_DOMAIN_LEVELS);
+  SEXP special_column = VECTOR_ELT(columns, PARADOX_DOMAIN_SPECIAL_VALS);
+  SEXP cargo_column = VECTOR_ELT(columns, PARADOX_DOMAIN_CARGO);
+  SEXP tags_column = VECTOR_ELT(columns, PARADOX_DOMAIN_TAGS);
+  SEXP trafo_column = VECTOR_ELT(columns, PARADOX_DOMAIN_TRAFO);
   for (R_xlen_t row = 0; row < row_count; ++row) {
     paradox_account_work(work_since_interrupt);
     /*
@@ -267,36 +282,45 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
     SET_VECTOR_ELT(
       rows,
       offset + PARADOX_ADMITTED_LEVELS,
-      VECTOR_ELT(VECTOR_ELT(columns, PARADOX_DOMAIN_LEVELS), row)
+      VECTOR_ELT(levels_column, row)
     );
     SET_VECTOR_ELT(
       rows,
       offset + PARADOX_ADMITTED_SPECIAL_VALS,
-      VECTOR_ELT(VECTOR_ELT(columns, PARADOX_DOMAIN_SPECIAL_VALS), row)
+      VECTOR_ELT(special_column, row)
     );
     SET_VECTOR_ELT(
       rows,
       offset + PARADOX_ADMITTED_CARGO,
-      VECTOR_ELT(VECTOR_ELT(columns, PARADOX_DOMAIN_CARGO), row)
+      VECTOR_ELT(cargo_column, row)
     );
     SET_VECTOR_ELT(
       rows,
       offset + PARADOX_ADMITTED_TAGS,
-      VECTOR_ELT(VECTOR_ELT(columns, PARADOX_DOMAIN_TAGS), row)
+      VECTOR_ELT(tags_column, row)
     );
     SET_VECTOR_ELT(
       rows,
       offset + PARADOX_ADMITTED_TRAFO,
-      VECTOR_ELT(VECTOR_ELT(columns, PARADOX_DOMAIN_TRAFO), row)
+      VECTOR_ELT(trafo_column, row)
     );
 
     SET_REAL_ELT(lower_carrier, 0, lower_values[row]);
     SET_REAL_ELT(upper_carrier, 0, upper_values[row]);
     SET_REAL_ELT(tolerance_carrier, 0, tolerance_values[row]);
     SET_STRING_ELT(id_carrier, 0, STRING_ELT(ids, row));
-    SET_STRING_ELT(cls_carrier, 0, STRING_ELT(classes, row));
-    SET_STRING_ELT(grouping_carrier, 0, STRING_ELT(groupings, row));
-    SET_STRING_ELT(storage_carrier, 0, STRING_ELT(storages, row));
+    /* The three uniform schema strings repeat the same interned CHARSXP on
+     * every row of a canonical table; rewriting an unchanged element would
+     * only pay the write barrier again. */
+    if (STRING_ELT(cls_carrier, 0) != STRING_ELT(classes, row)) {
+      SET_STRING_ELT(cls_carrier, 0, STRING_ELT(classes, row));
+    }
+    if (STRING_ELT(grouping_carrier, 0) != STRING_ELT(groupings, row)) {
+      SET_STRING_ELT(grouping_carrier, 0, STRING_ELT(groupings, row));
+    }
+    if (STRING_ELT(storage_carrier, 0) != STRING_ELT(storages, row)) {
+      SET_STRING_ELT(storage_carrier, 0, STRING_ELT(storages, row));
+    }
 
     SEXP levels = VECTOR_ELT(rows, offset + PARADOX_ADMITTED_LEVELS);
     SEXP special_values = VECTOR_ELT(

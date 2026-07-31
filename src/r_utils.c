@@ -1081,9 +1081,13 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
     UNPROTECT(protect_count);
     Rf_error("Semantic vector structure changed while being snapshotted");
   }
+  /* Deferred-string and wrapper ALTREP names are ordinary base-R output
+   * (`names(x) <- as.character(...)`), so the names shell admits ALTREP; the
+   * capture below observes each name exactly once, before any semantic
+   * element, so a dispatching name read can only precede value capture. */
   if ((source_names != R_NilValue) != has_names ||
       (has_names && (TYPEOF(source_names) != STRSXP ||
-        ALTREP(source_names) || Rf_isS4(source_names) ||
+        Rf_isS4(source_names) ||
         Rf_isObject(source_names) ||
         !paradox_api_has_no_attributes(source_names) ||
         XLENGTH(source_names) != size))) {
@@ -1113,7 +1117,11 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
     return result;
   }
 
-  if (semantic_altrep && stable_names != R_NilValue) {
+  /* Names are captured completely before the first semantic element, for
+   * every representation: an ALTREP name read may dispatch, so confining all
+   * name observations to this stage means the element capture below always
+   * reads one post-names generation. */
+  if (stable_names != R_NilValue) {
     for (R_xlen_t index = 0; index < size; ++index) {
       SET_STRING_ELT(
         stable_names,
@@ -1121,18 +1129,17 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
         STRING_ELT(source_names, index)
       );
     }
+    if ((SEXPTYPE) TYPEOF(value) != type || Rf_isS4(value) ||
+        (!semantic_altrep &&
+          (ALTREP(value) || XLENGTH(value) != size))) {
+      UNPROTECT(protect_count);
+      Rf_error("Semantic vector changed while being snapshotted");
+    }
   }
   for (R_xlen_t index = 0; index < size; ++index) {
     if (index != 0 &&
         index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
       R_CheckUserInterrupt();
-    }
-    if (!semantic_altrep && stable_names != R_NilValue) {
-      SET_STRING_ELT(
-        stable_names,
-        index,
-        STRING_ELT(source_names, index)
-      );
     }
     switch (type) {
     case LGLSXP:

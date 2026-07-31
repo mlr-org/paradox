@@ -15,7 +15,10 @@ test_that("composite ParamSet accessors consume one captured state", {
     },
     .package = "paradox"
   )
-  expect_identical(reads, 1L)
+  # `$data` derives every column, including `.tags`, from the one detached
+  # `$params` projection; it must never take the R-level capsule-state route,
+  # which could pair that projection with a newer graph generation.
+  expect_identical(reads, 0L)
   expect_identical(data$tags[[1L]], c("first", "second"))
   expect_identical(data$tags[[2L]], character())
 

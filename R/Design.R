@@ -67,13 +67,16 @@ Design = R6Class("Design",
       self$data = data
       for (index in seq_along(native$fixed_columns)) {
         value = native$fixed_values[[index]]
+        # The replacement is always passed as a one-column list: a bare list
+        # value of length one would take data.table's unwrap path and store
+        # the leaf's content instead of the wrapped leaf in a 1-row design.
         set(
           self$data,
           j = native$fixed_columns[[index]],
           value = if (native$fixed_plain[[index]]) {
             value
           } else {
-            rep(list(value), nrow(self$data))
+            list(rep(list(value), nrow(self$data)))
           }
         )
       }

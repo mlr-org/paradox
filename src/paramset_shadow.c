@@ -1820,7 +1820,7 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
 }
 
 static SEXP shadow_refresh_authoritative(SEXP self,
-    SEXP private_environment, int commit) {
+    SEXP private_environment, int commit, int origin_authoritative) {
   PROTECT(self);
   PROTECT(private_environment);
   if (!paradox_domain_owns_private_environment(self, private_environment)) {
@@ -1861,7 +1861,7 @@ static SEXP shadow_refresh_authoritative(SEXP self,
   SEXP origin_core = PROTECT(origin_private_and_core(
     origin,
     &origin_private,
-    commit
+    commit && !origin_authoritative
   ));
   PROTECT(origin_private);
   const paradox_core_kind_t kind = paradox_core_kind(origin_core);
@@ -1926,7 +1926,13 @@ static SEXP shadow_refresh_authoritative(SEXP self,
     SEXP roots;
     PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
     paradox_collection_graph_t graph;
-    if (commit) {
+    /* When the caller just healed the origin subtree (the post-order graph
+     * heal), every reachable node is already authoritative: committing
+     * refreshes here would re-heal that subtree once per shadow occurrence,
+     * which is what made a shared alternating shadow/collection graph cost
+     * Theta(4^depth) to construct. The read-only receipted build still
+     * captures the exact signatures the currency comparison below needs. */
+    if (commit && !origin_authoritative) {
       paradox_collection_graph_build_receipted(
         origin_private,
         origin,
@@ -2010,10 +2016,17 @@ static SEXP shadow_refresh_authoritative(SEXP self,
 
 SEXP paradox_shadow_refresh_authoritative(SEXP self,
     SEXP private_environment) {
-  return shadow_refresh_authoritative(self, private_environment, TRUE);
+  return shadow_refresh_authoritative(self, private_environment, TRUE, FALSE);
+}
+
+/* The graph heal's entry: it has just walked the shadow's origin subtree in
+ * post-order, so the origin is resolved read-only instead of re-healed. */
+SEXP paradox_shadow_refresh_authoritative_prehealed(SEXP self,
+    SEXP private_environment) {
+  return shadow_refresh_authoritative(self, private_environment, TRUE, TRUE);
 }
 
 SEXP paradox_shadow_preview_authoritative(SEXP self,
     SEXP private_environment) {
-  return shadow_refresh_authoritative(self, private_environment, FALSE);
+  return shadow_refresh_authoritative(self, private_environment, FALSE, FALSE);
 }

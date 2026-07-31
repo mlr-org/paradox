@@ -50,13 +50,6 @@ param_set_data_table_facade = function(x) {
   finalize_domain_data_table(table)
 }
 
-param_set_tags_from_state = function(params, tags) {
-  split(
-    tags$tag,
-    factor(tags$id, levels = params$id)
-  )
-}
-
 param_set_table_rows = function(table, rows) {
   param_set_internal_table(table[rows, , drop = FALSE])
 }

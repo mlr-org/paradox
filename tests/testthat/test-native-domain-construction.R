@@ -947,7 +947,15 @@ test_that("built-in value snapshots own payload and arbitrary attributes", {
   replacement = new.env(parent = emptyenv())
   value = structure(0.5, names = "selected", marker = marker)
 
-  domain = p_dbl(0, 1, default = value, init = value)
+  # Initializing to the declared default is the exact pattern the advisory
+  # warning exists to flag; the warning is part of the pinned behavior here,
+  # and the identical carrier is what proves both snapshots detach from it.
+  domain = NULL
+  expect_warning(
+    domain <- p_dbl(0, 1, default = value, init = value),
+    "Initial value and 'default' value seem to be the same",
+    fixed = TRUE
+  )
   value[[1L]] = 0.75
   data.table::setattr(value, "names", "changed")
   data.table::setattr(value, "marker", replacement)
@@ -986,8 +994,16 @@ test_that("ALTREP value snapshots reject an attribute-generation tear", {
   data.table::setattr(state$value, "marker", state$before)
   native_stateful_altrep_rearm(state$value, 0L)
 
+  # The public wrapper's printable-representation capture may reject this
+  # fixture first (R's deparser requests a data pointer the fixture
+  # deliberately does not provide), so the tear pin drives the native
+  # constructor directly, like the other direct-admission tests here.
+  numeric = domain2_args(p_dbl(0, 1))
   expect_error(
-    p_dbl(0, 1, default = state$value),
+    do.call(
+      domain2_construct,
+      domain2_replace(numeric, "default_value", state$value)
+    ),
     "Built-in value attributes changed while being snapshotted",
     fixed = TRUE
   )

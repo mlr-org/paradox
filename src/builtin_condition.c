@@ -438,9 +438,14 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
     Rf_error("Condition comparison requires a plain atomic vector");
   }
   const R_xlen_t initial_size = XLENGTH(x);
+  /* Deferred-string and wrapper ALTREP names are ordinary base-R output
+   * (`names(x) <- as.character(...)`), so the names shell admits ALTREP.
+   * This boundary never reads a name element: the ordinary path attaches the
+   * caller's own names object to the fresh result by identity, and the
+   * snapshot path owns its names before observing any semantic element. */
   SEXP initial_names = paradox_api_raw_attribute(x, R_NamesSymbol);
   if (initial_names != R_NilValue &&
-      (TYPEOF(initial_names) != STRSXP || ALTREP(initial_names) ||
+      (TYPEOF(initial_names) != STRSXP ||
         Rf_isS4(initial_names) || Rf_isObject(initial_names) ||
         XLENGTH(initial_names) != initial_size ||
         !paradox_api_has_no_attributes(initial_names))) {
@@ -501,7 +506,7 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
     R_NamesSymbol
   ));
   if (names != R_NilValue) {
-    if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+    if (TYPEOF(names) != STRSXP || Rf_isS4(names) ||
         Rf_isObject(names) || XLENGTH(names) != size ||
         !paradox_api_has_no_attributes(names)) {
       UNPROTECT(5);

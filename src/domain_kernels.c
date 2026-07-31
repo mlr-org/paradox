@@ -216,12 +216,16 @@ static domain_info_t domain_info(SEXP param) {
     return empty;
   }
 
-  SEXP ids = PROTECT(paradox_get_named_column_checked(
+  SEXP schema_columns[PARADOX_DOMAIN_COLUMN_COUNT];
+  paradox_domain_select_columns(
     param,
     "Domain storage",
     "Domain",
-    "id"
-  ));
+    (1U << PARADOX_DOMAIN_ID) | (1U << PARADOX_DOMAIN_CLS) |
+      (1U << PARADOX_DOMAIN_GROUPING) | (1U << PARADOX_DOMAIN_STORAGE_TYPE),
+    schema_columns
+  );
+  SEXP ids = PROTECT(schema_columns[PARADOX_DOMAIN_ID]);
   if (TYPEOF(ids) != STRSXP) {
     Rf_error("Corrupt Domain storage: `id` must have type `character`");
   }
@@ -231,24 +235,9 @@ static domain_info_t domain_info(SEXP param) {
     );
   }
   const R_xlen_t size = XLENGTH(ids);
-  SEXP classes = PROTECT(paradox_get_named_column_checked(
-    param,
-    "Domain storage",
-    "Domain",
-    "cls"
-  ));
-  SEXP grouping = PROTECT(paradox_get_named_column_checked(
-    param,
-    "Domain storage",
-    "Domain",
-    "grouping"
-  ));
-  SEXP storage = PROTECT(paradox_get_named_column_checked(
-    param,
-    "Domain storage",
-    "Domain",
-    "storage_type"
-  ));
+  SEXP classes = PROTECT(schema_columns[PARADOX_DOMAIN_CLS]);
+  SEXP grouping = PROTECT(schema_columns[PARADOX_DOMAIN_GROUPING]);
+  SEXP storage = PROTECT(schema_columns[PARADOX_DOMAIN_STORAGE_TYPE]);
   paradox_require_column_checked(
     ids,
     STRSXP,
@@ -294,6 +283,11 @@ static domain_info_t domain_info(SEXP param) {
     (kind == DOMAIN_KIND_FCT ? "character" :
     (kind == DOMAIN_KIND_LGL ? "logical" : "list")));
   SEXP first_group = size == 0 ? R_NilValue : STRING_ELT(grouping, 0);
+  /* Every row of a canonical table stores the same interned class and storage
+   * strings, so after one byte comparison the accepted CHARSXP answers all
+   * later rows by identity. */
+  SEXP accepted_cls = NA_STRING;
+  SEXP accepted_storage = NA_STRING;
   for (R_xlen_t row = 0; row < size; ++row) {
     periodic_interrupt(row);
     SEXP id = STRING_ELT(ids, row);
@@ -303,14 +297,23 @@ static domain_info_t domain_info(SEXP param) {
     if (id == NA_STRING) {
       Rf_error("Corrupt Domain storage: `id` contains a missing value");
     }
-    if (cls == NA_STRING || strcmp(CHAR(cls), expected_class) != 0) {
-      Rf_error("Corrupt Domain storage: `cls` is inconsistent with its class");
+    if (cls != accepted_cls) {
+      if (cls == NA_STRING || strcmp(CHAR(cls), expected_class) != 0) {
+        Rf_error(
+          "Corrupt Domain storage: `cls` is inconsistent with its class"
+        );
+      }
+      accepted_cls = cls;
     }
-    if (storage_value == NA_STRING ||
-        strcmp(CHAR(storage_value), expected_storage) != 0) {
-      Rf_error(
-        "Corrupt Domain storage: `storage_type` is inconsistent with its class"
-      );
+    if (storage_value != accepted_storage) {
+      if (storage_value == NA_STRING ||
+          strcmp(CHAR(storage_value), expected_storage) != 0) {
+        Rf_error(
+          "Corrupt Domain storage: `storage_type` is inconsistent with its "
+          "class"
+        );
+      }
+      accepted_storage = storage_value;
     }
     if (group == NA_STRING || !paradox_domain_strings_equal(group, first_group)) {
       grouped = FALSE;

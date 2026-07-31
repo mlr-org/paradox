@@ -247,6 +247,177 @@ for this slice, all from a clean staged install of the worktree:
 - Not run for this slice: the R 3.6.3 runtime behavior stage, GCT/Valgrind,
   and the deferred compatibility, memory, portability, and release matrices.
 
+## Post-commit review wave (87c24ba + 214fdf3)
+
+Both hunt commits were re-reviewed after landing: one adversarial self-review
+of `87c24ba` and six independent review lanes over the `214fdf3` checkpoint
+(paramset_check, design/condition, core/collection/shadow, domain/value,
+R-side core, samplers/atomicity/environment), each verifying its findings
+against the installed build. Confirmed defects, all fixed in this wave with
+focused regressions:
+
+- **Live capsule `.values` published to user callbacks** (introduced by
+  214fdf3; the wave's most severe finding). The internal-tuning snapshot
+  stored `node->values` -- the live capsule list -- in `owner_values`, which
+  `convert_internal_search_space()` hands verbatim to every documented
+  `in_tune_fn` cargo callback. A by-reference `data.table::setattr()` inside
+  the callback renamed canonical package-owned state and permanently bricked
+  the child ParamSet (both reads thereafter: "Corrupt ParamSet capsule").
+  `paradox_param_set_internal_tuning_snapshot` now publishes the public
+  accessor's outward form: fresh list and name carriers with
+  `paradox_detach_stored_value_leaf()` applied per leaf (`ParamUty` leaves
+  keep identity). This also detaches the `hidden_values` slice a flattened
+  Shadow forwards into the same callbacks.
+- **Collection constructor admitted children every later read rejects.** The
+  three `test-core-state-contract.R` results the convergence slice reported
+  as pre-existing were diagnosed: one implementation defect --
+  `initialize_child()` validated only `.params`/`.tags`/`.trafos`, so a child
+  whose `.postfix`/`.values`/`.deps` were corrupt constructed a dead-on-
+  arrival collection -- and two test-fixture defects (`data.table::setattr()`
+  materializes a referenced ALTREP fixture before installing it, and
+  `seq_along()` row names are compact-sequence ALTREP the capsule validator
+  rejects by design). Construction now routes every child through the
+  reader's admission in its read-only form -- the new
+  `paradox_collection_validate_single_node_readonly()` for BASE/SHADOW
+  children, `paradox_collection_graph_build_readonly()` for COLLECTION
+  children; see the exponential-construction finding below for why admission
+  must not commit -- and the S4 pins were extended to `.values` and
+  `.deps`.
+- **Design masker crashed on an infeasible stored-value predicate.** The
+  plain-fixed-value path in `parameter_condition_matches()` skipped the
+  operand-type guard, so a bulk-installed dependency whose RHS type can never
+  equal the parent's (`CondEqual$new(1)` over a `p_fct` parent with a stored
+  value) aborted `generate_design_random()` with `STRING_ELT ... not a
+  'double'` instead of masking the child inactive. Plain and non-plain leaves
+  now take the same `paradox_builtin_condition_scalar_supported()` admission,
+  matching the list-basis activity kernel's verdict.
+- **`condition_test()` rejected ordinary base-R names.** The checkpoint's
+  hardening rejected ALTREP names outright, but `names(x) <-
+  as.character(...)` stores a deferred-string ALTREP, so ordinary input
+  errored "Condition comparison names are malformed". The names shell now
+  admits ALTREP; `paradox_snapshot_semantic_vector()` captures all names
+  before the first semantic element (one observation each), and the
+  comparison boundary attaches the caller's names to the fresh result by
+  identity without reading an element.
+- **Out-of-bounds factor read under a nonconforming user RNG.** The
+  `Sampler1DUnif` fill loop indexed levels with `paradox_qunif_level_index()`
+  without checking its `R_XLEN_T_MAX` sentinel; a user-supplied RNG returning
+  `NaN` read out of bounds. It now degrades to `NA` like the numeric
+  branches, because raising would longjmp between `GetRNGstate()` and
+  `PutRNGstate()`.
+- **1-row Designs unwrapped non-plain fixed values.** `data.table::set()`
+  unwraps a bare list value of length one, so a wrapped special-value leaf
+  (`list(a = 1)`) was stored as its content. The replacement is now always
+  passed as a one-column list. Pre-existing before 214fdf3, kept by its
+  rewrite of the same loop.
+- **Classed cargo dispatched user methods inside flatten.** The checkpoint
+  dropped the plain-cargo guard, so `cargo$in_tune_fn` on a hand-built
+  capsule with a classed cargo dispatched `$.rogue` inside
+  `flatten()`/`disable_internal_tuning()` before any plan receipt exists. The
+  per-row guard is restored (`is.list(cargo) && !is.object(cargo)`).
+
+Test-side repairs beyond the above: the eager-`deparse1` pin now drives the
+native constructor directly (`R/Domain.R` legitimately deparses the default
+for `repr` before native admission, and the sibling test documents that safe
+rejection); the init-equals-default advisory warning is pinned with
+`expect_warning`; the snapshot-atomicity rearm test installs its fixture
+through the finalizer-armed attribute mutator (`data.table::setattr()`
+duplicates a referenced value, so the exact fixture never arrived); the
+`$data` state-read mock expects zero R-level capsule reads (the accessor
+derives everything from one detached `$params` projection); the gctorture
+finalizer fixture for construction -- which can never fire, because
+per-allocation collections are young-generation only -- was replaced by a
+registered construction reentry seam (`test_param_set_collection_construct_
+reentry`, arity 5, ledgered and probed) mirroring the add seam, and its test
+no longer needs `skip_on_cran()`; two vacuous `private_forced`/`super_forced`
+assertions in the gateway test now superassign from the stub frame; a
+checkpoint-era stale adversarial test in `test-native-altrep-lifetimes.R` was
+rewritten to pin the P3 contract (typed kinds reject the hostile ALTREP
+special before observation, `calls == 0`; ParamUty observes it and completes
+from the admitted row). The unused `param_set_tags_from_state()` helper was
+removed. Completing the full suite (possible only after the exponential fix
+below) exposed three more checkpoint-era failures the convergence slice's
+narrower selections had never run, all test defects, all reproduced
+identically on clean `214fdf3` and `87c24ba` builds:
+`native_get_values_copy_table()` installed `attr(table, "row.names")` --
+the plain read expands compact row names into an ALTREP sequence the
+capsule validators reject by design, which failed the mixed-encoding
+`get_values()` test and masked the malformed-Condition test's intended
+"Unsupported Condition class" diagnostic behind a blanket `.deps`
+rejection (the helper now uses `.row_names_info(table, 0L)`, and the
+encoding test proves the implementation handled equivalent mixed encodings
+correctly all along); and the ids-engine classed-column test pinned a
+"callback-free" wording that the checkpoint's unified column checks
+replaced with "must use an ordinary character representation" (the
+dispatch-count pin, `callbacks == 0`, was and stays the real assertion).
+With these, every one of the eleven previously failing pre-existing
+results -- the convergence slice's seven, the `$data` mock, and these
+three -- passes.
+
+**Exponential construction of shared shadow/collection graphs (pre-existing,
+suite-blocking).** Running the complete unit suite for this wave exposed that
+it has been unable to finish since the checkpoint landed:
+`test-regression-barren-subtree-prune.R`'s second fixture -- eighteen levels
+of `Collection(a = shared, b = shared)` over a shared
+`Shadow(Collection(...))` -- constructs in Theta(4^depth) on a clean
+`214fdf3` build (measured 0.47s at depth 7 doubling twice per level; depth
+18 is days). The two "full focused-wave processes that ran more than two
+hours without completing" in the convergence slice were this defect, not
+machine load. The driver is mutual recursion with no terminating cache:
+nothing at or above a SHADOW can ever hold a verification stamp (the
+signature carrier is rewritable in place, deliberately), so the post-order
+capsule-graph heal re-enters `paradox_shadow_refresh_authoritative` for
+every shadow occurrence, whose committing origin-graph build re-runs
+`paradox_core_refresh` -- the full heal -- for every contained shadow of a
+subtree the outer walk had just finished healing. The fix keeps the stamp
+semantics untouched and removes the redundant recursion instead: the heal
+now enters the new `paradox_shadow_refresh_authoritative_prehealed()`,
+which resolves the just-healed origin read-only (the read-only receipted
+build still captures every signature the currency comparison needs) while
+committing exactly as before. Construction admission in the collection
+constructor is read-only for the same reason
+(`paradox_collection_graph_build_readonly` plus the new
+`paradox_collection_validate_single_node_readonly()`): a committing
+admission installs a capsule per validated occurrence and invalidates the
+neighboring refresh signatures. Depth-18 construction now takes 0.64
+seconds, and `check(list())` on the result 0.06 seconds.
+
+**Performance recovery.** Callgrind attributed the admission overhead to
+column-name selection: sixteen full name-vector scans per public call (four
+in `domain_info()`, twelve in the adapter), each an `Rf_getAttrib` plus a
+strcmp sweep. The canonical column names are now interned once at package
+load (`paradox_domain_intern_column_names()`), and one
+`paradox_domain_select_columns()` pass selects all requested columns by
+CHARSXP pointer identity with a byte-comparison fallback, preserving the
+exact container diagnostics. `domain_info()` also self-interns the accepted
+`cls`/`storage_type` per call, the adapter hoists per-row column lookups and
+skips rewriting unchanged carrier strings. Interleaved three-round medians
+against a `214fdf3` build on an idle machine: one-row public operations fall
+from 2.2--2.9x to 1.25--1.8x of baseline (about +1--2 microseconds absolute;
+`domain_check()` 4.0 to 5.0, `domain_sanitize()` 3.2 to 4.3,
+`domain_is_bounded()` 2.5 to 3.8), `ParamSet` hot paths stay unchanged
+(0.96--0.98x), and the 512-row Domain improves from 5.4x/11.5x to
+4.7x/9.5x (check/quantile) -- the remaining cost is the per-row semantic
+admission that is the P3 repair itself.
+
+Evidence for this wave: the R-API compatibility gate passes (7 pinned R
+releases x 39 translation units x 2 compilers); the plain registered-native
+inventory passes 224 records with the verifier accepting the result
+(including the new construction-reentry row); `scripts/native-check` with
+strict GCC, strict Clang, the Clang static analyzer, and per-mode probes is
+green after two corrections it demanded itself: the rewritten construction
+test no longer skips on CRAN (restoring the analyzer corpus to its ten
+reviewed skips), and a checkpoint-era dead store in
+`paradox_param_set_construct()` -- the caller's name attribute was protected
+and immediately superseded by the shared capture -- was removed with the
+function's protection counts renumbered. The complete unit suite passes
+under `NOT_CRAN=true` -- 111 files, 8784 assertions, zero failures, zero
+errors, zero warnings -- for the first time since the checkpoint landed
+(the exponential-construction defect below had blocked every complete run
+in between). Still not run, as
+before: the R 3.6.3 runtime behavior stage, GCT/Valgrind, and the deferred
+compatibility, memory, portability, and release matrices.
+
 ## Completion criteria
 
 - Every confirmed defect has a focused regression and a reviewed fix.

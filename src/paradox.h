@@ -106,6 +106,13 @@ attribute_hidden SEXP paradox_test_param_set_collection_add_reentry(
   SEXP graph_hook,
   SEXP topology_hook
 );
+attribute_hidden SEXP paradox_test_param_set_collection_construct_reentry(
+  SEXP sets,
+  SEXP tag_sets,
+  SEXP tag_params,
+  SEXP postfix_names,
+  SEXP capture_hook
+);
 attribute_hidden SEXP paradox_param_set_collection_detach_plan(
   SEXP private_environment,
   SEXP self,

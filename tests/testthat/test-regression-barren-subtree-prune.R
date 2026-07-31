@@ -27,14 +27,21 @@ test_that("a shared parameter-free subtree is expanded once, not once per path",
 })
 
 test_that("shared alternating shadow/collection graphs stay flat", {
-  graph = ps()
-  for (level in seq_len(18L)) {
-    shared = ParamSetShadow$new(
-      ParamSetCollection$new(list(n = graph)),
-      character(0)
-    )
-    graph = ParamSetCollection$new(list(a = shared, b = shared))
-  }
+  # Construction is part of the pinned bound: nothing at or above a Shadow
+  # can hold a verification stamp, and the post-order capsule-graph heal once
+  # re-healed the shared origin subtree per shadow occurrence, which made
+  # this exact loop cost Theta(4^depth).
+  construction = system.time({
+    graph = ps()
+    for (level in seq_len(18L)) {
+      shared = ParamSetShadow$new(
+        ParamSetCollection$new(list(n = graph)),
+        character(0)
+      )
+      graph = ParamSetCollection$new(list(a = shared, b = shared))
+    }
+  })[["elapsed"]]
+  expect_lt(construction, 5)
   elapsed = system.time({
     expect_true(graph$check(list()))
     expect_identical(graph$values, named_list())

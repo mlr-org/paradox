@@ -35,6 +35,16 @@ attribute_hidden SEXP paradox_shadow_refresh_authoritative(
   SEXP private_environment
 );
 
+/* The committing refresh for a caller that has just healed the complete
+ * origin subtree (the post-order capsule-graph heal): the origin is resolved
+ * and rebuilt read-only instead of being re-healed through every contained
+ * shadow, which is what made shared alternating shadow/collection graphs
+ * exponential to construct. */
+attribute_hidden SEXP paradox_shadow_refresh_authoritative_prehealed(
+  SEXP self,
+  SEXP private_environment
+);
+
 /* Build and validate the generation an ordinary refresh would select, but do
  * not install it. Used by all-roots-before-commit migration preflight. */
 attribute_hidden SEXP paradox_shadow_preview_authoritative(

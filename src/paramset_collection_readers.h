@@ -146,6 +146,19 @@ attribute_hidden void paradox_collection_validate_single_node(
   R_xlen_t *work_since_interrupt
 );
 
+/* The read-only form of the validator above: SHADOW nodes are admitted
+ * against their previewed authoritative projection and nothing is committed.
+ * Admission-only callers must use this form -- a committing admission
+ * invalidates neighboring refresh signatures and re-heals shared subtrees
+ * once per occurrence. */
+attribute_hidden void paradox_collection_validate_single_node_readonly(
+  SEXP private_environment,
+  SEXP self,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
 /* Resolve one dependency endpoint spelled in `node_index`'s own namespace into
  * the spelling the root of this graph exposes: the name is translated outward
  * at the first enclosing namespace that knows it, and passed on verbatim while

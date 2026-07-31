@@ -248,3 +248,40 @@ test_that("positive-row Sobol rejects empty factors before RNG entry", {
   )
   expect_identical(.Random.seed, before)
 })
+
+test_that("an infeasible stored-value predicate masks the child inactive", {
+  # A bulk-installed dependency may carry a right-hand side no parent value
+  # can ever equal. With the parent stored as a fixed value, the Design
+  # masker must reach the same verdict as the list-basis activity kernel --
+  # the child is permanently inactive -- instead of re-reading the leaf
+  # through the right-hand side's typed accessor.
+  set = ps(p = p_fct(c("a", "b")), ch = p_dbl(0, 1))
+  set$deps = data.table(id = "ch", on = "p", cond = list(CondEqual$new(1)))
+  set$values = list(p = "a")
+  design = generate_design_random(set, 3L)
+  expect_identical(design$data$ch, rep(NA_real_, 3L))
+
+  reversed = ps(p = p_dbl(0, 1), ch = p_fct(c("a", "b")))
+  reversed$deps = data.table(
+    id = "ch",
+    on = "p",
+    cond = list(CondEqual$new("x"))
+  )
+  reversed$values = list(p = 0.5)
+  masked = generate_design_random(reversed, 3L)
+  expect_identical(masked$data$ch, rep(NA_character_, 3L))
+})
+
+test_that("a 1-row design keeps non-plain fixed values wrapped", {
+  # data.table's `set()` unwraps a bare list value of length one, so a 1-row
+  # design used to store the leaf's content instead of the wrapped leaf.
+  set = ps(
+    fixed = p_dbl(0, 1, special_vals = list(list(a = 1))),
+    free = p_lgl()
+  )
+  set$values = list(fixed = list(a = 1))
+  single = generate_design_random(set, 1L)
+  expect_identical(single$data$fixed, list(list(a = 1)))
+  several = generate_design_random(set, 3L)
+  expect_identical(several$data$fixed, rep(list(list(a = 1)), 3L))
+})

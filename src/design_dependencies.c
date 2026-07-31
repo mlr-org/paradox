@@ -615,10 +615,17 @@ static int parameter_condition_matches(
     if (Rf_inherits(fixed, "TuneToken")) {
       return TRUE;
     }
-    if (fixed == R_NilValue ||
-        !paradox_builtin_condition_scalar_supported(fixed, edge->rhs)) {
+    if (fixed == R_NilValue) {
       return FALSE;
     }
+  }
+  /* Plain and non-plain leaves take the same comparator admission: a stored
+   * value whose type the right-hand side can never equal is an ordinary
+   * unsatisfied predicate -- the child masks inactive, exactly as the shared
+   * list-basis activity kernel decides it -- never a typed re-read of the
+   * wrong representation. */
+  if (!paradox_builtin_condition_scalar_supported(fixed, edge->rhs)) {
+    return FALSE;
   }
   return paradox_builtin_condition_element_matches(
     fixed,

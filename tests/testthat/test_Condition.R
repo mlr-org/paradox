@@ -327,3 +327,23 @@ test_that("dependency evaluation gives the same answer as condition_test", {
     fixed = TRUE
   )
 })
+
+test_that("condition_test accepts deferred ALTREP names on its input", {
+  # `names(x) <- as.character(...)` stores an unmaterialized deferred-string
+  # ALTREP; ordinary base-R input must not be rejected as malformed.
+  x = c(1, 2)
+  names(x) = as.character(1:2)
+  expect_identical(
+    condition_test(CondEqual$new(1), x),
+    c(`1` = TRUE, `2` = FALSE)
+  )
+
+  # The character operand takes the owned-snapshot path, whose names capture
+  # precedes every semantic element observation.
+  y = c("a", "b")
+  names(y) = as.character(1:2)
+  expect_identical(
+    condition_test(CondAnyOf$new("a"), y),
+    c(`1` = TRUE, `2` = FALSE)
+  )
+})

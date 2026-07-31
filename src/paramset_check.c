@@ -17,6 +17,7 @@
 #include "domain_admission.h"
 #include "paramset_activity.h"
 #include "paramset_domain_common.h"
+#include "paramset_params_internal.h"
 #include "paramset_shadow.h"
 #include "parameter_suggestion.h"
 #include "r_api_compat.h"
@@ -1908,7 +1909,44 @@ SEXP paradox_param_set_internal_tuning_snapshot(
   for (R_xlen_t owner = 0; owner < owner_count; ++owner) {
     const check_node_t *node = &graph.nodes[owner_nodes[owner]];
     SET_VECTOR_ELT(owners, owner, node->self);
-    SET_VECTOR_ELT(owner_values, owner, node->values);
+    /*
+     * `owner_values` crosses the package boundary: it is the `param_vals`
+     * argument of every documented `in_tune_fn` cargo callback. Publish the
+     * public accessor's outward form -- fresh list and name carriers, typed
+     * leaves detached, ParamUty leaves identity-preserving -- instead of the
+     * capsule's own `.values` list, which a by-reference callback mutation
+     * would silently corrupt.
+     */
+    const R_xlen_t stored_count = node->checked_values.size;
+    SEXP outward_values = PROTECT(Rf_allocVector(VECSXP, stored_count));
+    SEXP outward_names = PROTECT(Rf_allocVector(STRSXP, stored_count));
+    for (R_xlen_t stored = 0; stored < stored_count; ++stored) {
+      paradox_account_work(&work_since_interrupt);
+      SEXP stored_name = STRING_ELT(node->checked_values.names, stored);
+      int typed = TRUE;
+      for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
+        if (paradox_domain_strings_equal(
+            STRING_ELT(node->checked_params.ids, row),
+            stored_name
+          )) {
+          typed = !paradox_domain_string_is(
+            STRING_ELT(node->checked_params.classes, row),
+            "ParamUty"
+          );
+          break;
+        }
+      }
+      SEXP detached = PROTECT(paradox_detach_stored_value_leaf(
+        VECTOR_ELT(node->checked_values.values, stored),
+        typed
+      ));
+      SET_VECTOR_ELT(outward_values, stored, detached);
+      SET_STRING_ELT(outward_names, stored, stored_name);
+      UNPROTECT(1);
+    }
+    Rf_setAttrib(outward_values, R_NamesSymbol, outward_names);
+    SET_VECTOR_ELT(owner_values, owner, outward_values);
+    UNPROTECT(2);
     SET_VECTOR_ELT(owner_ids, owner, node->checked_params.ids);
   }
 

@@ -250,7 +250,7 @@ test_that("the direct engine validates canonical tables without dispatch", {
   )
   expect_error(
     .Call(symbol, params, tags, "ParamInt", NULL, NULL),
-    "callback-free"
+    "ordinary character representation"
   )
   expect_identical(callbacks, 0L)
 })

@@ -234,7 +234,17 @@ static void fill_table(SEXP table, const sampler_spec_t *specs,
           unif_rand(),
           level_count
         );
-        SET_STRING_ELT(output, row, STRING_ELT(spec->levels, selected));
+        /* A user-supplied RNG may violate R's (0,1) contract. Raising here
+         * would longjmp between GetRNGstate() and PutRNGstate(), so a
+         * nonconforming draw degrades to NA exactly like the numeric
+         * branches -- never an out-of-bounds level read. */
+        SET_STRING_ELT(
+          output,
+          row,
+          selected == R_XLEN_T_MAX
+            ? NA_STRING
+            : STRING_ELT(spec->levels, selected)
+        );
       }
       break;
     }

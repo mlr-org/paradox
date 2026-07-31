@@ -185,11 +185,11 @@ test_that("legacy gateways preserve omitted snapshot defaults", {
     search_gateway(
       self = self,
       private = {
-        private_forced = TRUE
+        private_forced <<- TRUE
         stop("detached private promise was forced")
       },
       super = {
-        super_forced = TRUE
+        super_forced <<- TRUE
         stop("detached super promise was forced")
       },
       values = values
@@ -223,11 +223,11 @@ test_that("legacy gateways preserve omitted snapshot defaults", {
     subspaces_gateway(
       self = self,
       private = {
-        private_forced = TRUE
+        private_forced <<- TRUE
         stop("detached private promise was forced")
       },
       super = {
-        super_forced = TRUE
+        super_forced <<- TRUE
         stop("detached super promise was forced")
       },
       ids = ids

@@ -1,6 +1,7 @@
 #include "paradox.h"
 #include "r_utils.h"
 #include "core_state.h"
+#include "paramset_domain_common.h"
 #include "paramset_shadow.h"
 #include "upgrade_graph.h"
 #include <R_ext/Rdynload.h>
@@ -190,6 +191,8 @@ static const R_CallMethodDef call_methods[] = {
     (DL_FUNC) &paradox_test_gc_attribute_mutator, 3},
   {"test_param_set_collection_add_reentry",
     (DL_FUNC) &paradox_test_param_set_collection_add_reentry, 8},
+  {"test_param_set_collection_construct_reentry",
+    (DL_FUNC) &paradox_test_param_set_collection_construct_reentry, 5},
 #if defined(PARADOX_TEST_CORE_GRAPH_ROOTS)
   {"test_core_graph_root_barrier_counts",
     (DL_FUNC) &paradox_test_core_graph_root_barrier_counts, 1},
@@ -203,6 +206,7 @@ static const R_CallMethodDef call_methods[] = {
 #endif
 
 void attribute_visible R_init_paradox(DllInfo *dll) {
+  paradox_domain_intern_column_names();
   paradox_test_altrep_initialize(dll);
   R_registerRoutines(dll, NULL, call_methods, NULL, NULL);
   R_useDynamicSymbols(dll, FALSE);

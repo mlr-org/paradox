@@ -34,6 +34,113 @@ int paradox_domain_string_is(SEXP string, const char *expected) {
   return string != NA_STRING && strcmp(CHAR(string), expected) == 0;
 }
 
+/* Interned CHARSXPs for the sixteen canonical column names. R's global
+ * CHARSXP cache stores one object per exact string, so a canonically built
+ * table name is pointer-identical to its entry here; the byte comparison in
+ * the selector below only runs for names this table does not know. */
+static SEXP interned_domain_column_names[PARADOX_DOMAIN_COLUMN_COUNT];
+
+void paradox_domain_intern_column_names(void) {
+  for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
+    SEXP name = Rf_mkChar(paradox_domain_column_names[column]);
+    R_PreserveObject(name);
+    interned_domain_column_names[column] = name;
+  }
+}
+
+void paradox_domain_select_columns(SEXP table, const char *corrupt_context,
+    const char *storage_name, unsigned int required_mask, SEXP *columns) {
+  if (TYPEOF(table) != VECSXP || Rf_isS4(table)) {
+    Rf_error("Corrupt %s: `%s` must be a list", corrupt_context, storage_name);
+  }
+  if (ALTREP(table)) {
+    Rf_error(
+      "Corrupt %s: `%s` must use an ordinary list representation",
+      corrupt_context,
+      storage_name
+    );
+  }
+
+  SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
+  const R_xlen_t n_columns = XLENGTH(table);
+  if (TYPEOF(names) != STRSXP || Rf_isS4(names) ||
+      Rf_isObject(names) || !paradox_api_has_no_attributes(names)) {
+    Rf_error(
+      "Corrupt %s: `%s` must be a named list",
+      corrupt_context,
+      storage_name
+    );
+  }
+  if (ALTREP(names)) {
+    Rf_error(
+      "Corrupt %s: `%s` names must use an ordinary character representation",
+      corrupt_context,
+      storage_name
+    );
+  }
+  if (XLENGTH(names) != n_columns) {
+    Rf_error(
+      "Corrupt %s: `%s` must be a named list",
+      corrupt_context,
+      storage_name
+    );
+  }
+
+  int counts[PARADOX_DOMAIN_COLUMN_COUNT] = {0};
+  for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
+    columns[target] = R_NilValue;
+  }
+  for (R_xlen_t index = 0; index < n_columns; ++index) {
+    SEXP name = STRING_ELT(names, index);
+    if (name == NA_STRING) {
+      continue;
+    }
+    int matched = -1;
+    for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
+      if (name == interned_domain_column_names[target]) {
+        matched = target;
+        break;
+      }
+    }
+    if (matched < 0) {
+      /* A name that is not the interned object may still spell a canonical
+       * name in a foreign representation; bytes decide, exactly as the
+       * single-column selector always has. */
+      for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
+        if (strcmp(CHAR(name), paradox_domain_column_names[target]) == 0) {
+          matched = target;
+          break;
+        }
+      }
+    }
+    if (matched < 0 || !((required_mask >> matched) & 1U)) {
+      continue;
+    }
+    columns[matched] = VECTOR_ELT(table, index);
+    ++counts[matched];
+  }
+  for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
+    if (!((required_mask >> target) & 1U) || counts[target] == 1) {
+      continue;
+    }
+    if (counts[target] > 1) {
+      Rf_error(
+        "Corrupt %s: `%s` has more than one `%s` column",
+        corrupt_context,
+        storage_name,
+        paradox_domain_column_names[target]
+      );
+    }
+    Rf_error(
+      "Corrupt %s: `%s` has no `%s` column",
+      corrupt_context,
+      storage_name,
+      paradox_domain_column_names[target]
+    );
+  }
+  UNPROTECT(1);
+}
+
 SEXP paradox_domain_character_vector(const char *const *values,
     R_xlen_t size) {
   SEXP result = PROTECT(Rf_allocVector(STRSXP, size));

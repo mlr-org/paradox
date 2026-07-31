@@ -52,6 +52,10 @@ test_that("collection constructor routines have fixed registered interfaces", {
   expect_identical(affix_probe$numParameters, 2L)
   add_reentry = collection2_symbol("test_param_set_collection_add_reentry")
   expect_identical(add_reentry$numParameters, 8L)
+  construct_reentry = collection2_symbol(
+    "test_param_set_collection_construct_reentry"
+  )
+  expect_identical(construct_reentry$numParameters, 5L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
   expect_error(
     .Call("param_set_collection_construct", PACKAGE = "paradox"),
@@ -191,24 +195,33 @@ test_that("native construction creates exact canonical collection state", {
 })
 
 test_that("collection construction keeps each child paired with one name generation", {
-  skip_on_cran()
-
+  # A finalizer dropped under gctorture() cannot pin this window: the per-
+  # allocation collections are young-generation only, so a promoted trigger
+  # never finalizes inside the constructor. The registered reentry seam runs
+  # the same mutation deterministically at the exact boundary between the
+  # stable name/child capture and child admission.
   state = new.env(parent = emptyenv())
   state$sets = list(old = ps(x = p_int()))
   state$fired = FALSE
-  previous = gctorture(TRUE)
-  on.exit(gctorture(previous), add = TRUE)
 
-  trigger = new.env(parent = emptyenv())
-  reg.finalizer(trigger, function(unused) {
-    state$fired = TRUE
-    data.table::setattr(state$sets, "names", "new")
-  })
-  trigger = NULL
-
-  native = collection2_construct(state$sets)
-  gctorture(previous)
+  native = .Call(
+    collection2_symbol("test_param_set_collection_construct_reentry"),
+    state$sets,
+    FALSE,
+    FALSE,
+    FALSE,
+    function() {
+      state$fired = TRUE
+      data.table::setattr(state$sets, "names", "new")
+    }
+  )
   expect_true(state$fired)
+  expect_identical(names(state$sets), "new")
+
+  # The stable capture precedes the mutation window, so every derived name
+  # belongs to the captured generation; nothing pairs an old child with the
+  # new name or the other way around.
+  expect_identical(names(native$sets), "old")
   expect_identical(
     native$params$id,
     paste0(names(native$sets), ".x")

@@ -633,13 +633,14 @@ SEXP paradox_param_set_construct(SEXP domains,
     Rf_error("ParamSet contains too many parameters");
   }
 
-  SEXP ids = PROTECT(paradox_stored_attribute(domains, R_NamesSymbol));
-
+  /* The caller's own name attribute is only ever read through the shared
+   * capture below; the captured `stable_ids` is the one name carrier this
+   * constructor consumes. */
   SEXP stable_ids = PROTECT(Rf_allocVector(STRSXP, size));
   SEXP domain_snapshots = PROTECT(Rf_allocVector(VECSXP, size));
   if (Rf_isObject(domains) ||
       !paradox_api_has_only_attributes(domains, names_only, 1)) {
-    UNPROTECT(3);
+    UNPROTECT(2);
     Rf_error("ParamSet parameters must be supplied as an ordinary named list");
   }
   if (!paradox_capture_list_identities(
@@ -647,7 +648,7 @@ SEXP paradox_param_set_construct(SEXP domains,
         stable_ids,
         domain_snapshots
       )) {
-    UNPROTECT(3);
+    UNPROTECT(2);
     Rf_error("ParamSet parameters must have ordinary character names");
   }
 
@@ -670,7 +671,7 @@ SEXP paradox_param_set_construct(SEXP domains,
     }
     SEXP id = STRING_ELT(stable_ids, row);
     if (!paradox_string_is_strict_id(id)) {
-      UNPROTECT(3);
+      UNPROTECT(2);
       Rf_error(
         "ParamSet parameter names must be nonempty, non-missing strict ASCII IDs"
       );
@@ -679,7 +680,7 @@ SEXP paradox_param_set_construct(SEXP domains,
     paradox_domain_field_t failed_field = PARADOX_DOMAIN_FIELD_NONE;
     SEXP snapshot = PROTECT(snapshot_domain(domain, &failed_field));
     if (snapshot == R_NilValue) {
-      UNPROTECT(5);
+      UNPROTECT(4);
       if (failed_field != PARADOX_DOMAIN_FIELD_NONE) {
         Rf_error(
           "ParamSet parameter Domain has noncanonical field `%s`",
@@ -700,7 +701,7 @@ SEXP paradox_param_set_construct(SEXP domains,
 
     SEXP tags = VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_TAGS), 0);
     if (!checked_add(&tag_count, XLENGTH(tags))) {
-      UNPROTECT(5);
+      UNPROTECT(4);
       Rf_error("ParamSet tag state exceeds the supported size");
     }
     if (VECTOR_ELT(VECTOR_ELT(snapshot, PARADOX_DOMAIN_TRAFO), 0) != R_NilValue) {
@@ -711,7 +712,7 @@ SEXP paradox_param_set_construct(SEXP domains,
     }
     UNPROTECT(2);
   }
-  ids = stable_ids;
+  SEXP ids = stable_ids;
 
   R_xlen_t *order = NULL;
   R_xlen_t *workspace = NULL;
@@ -732,7 +733,7 @@ SEXP paradox_param_set_construct(SEXP domains,
           CHAR(STRING_ELT(ids, order[index - 1])),
           CHAR(STRING_ELT(ids, order[index]))
         ) == 0) {
-        UNPROTECT(3);
+        UNPROTECT(2);
         Rf_error("ParamSet parameter names must be unique");
       }
     }
@@ -881,6 +882,6 @@ SEXP paradox_param_set_construct(SEXP domains,
   SEXP names = PROTECT(paradox_domain_character_vector(result_names, RESULT_COUNT));
   Rf_setAttrib(result, R_NamesSymbol, names);
 
-  UNPROTECT(11);
+  UNPROTECT(10);
   return result;
 }

@@ -354,12 +354,17 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
     install_base_state(mutate(fresh_base_state()))
   }
 
-  state = fresh_base_state()
-  state$.postfix = asS4(state$.postfix)
-  install_base_state(
-    state,
-    function(set) ParamSetCollection$new(list(child = set))
-  )
+  # Constructor admission must cover the complete child payload: these fields
+  # are not consumed by the flatten itself, but a child that every later read
+  # rejects must not construct at all.
+  for (field in c(".postfix", ".values", ".deps")) {
+    state = fresh_base_state()
+    state[[field]] = asS4(state[[field]])
+    install_base_state(
+      state,
+      function(set) ParamSetCollection$new(list(child = set))
+    )
+  }
 
   install_collection_state = function(mutate) {
     collection = ParamSetCollection$new(list(child = ps(x = p_int())))
@@ -408,7 +413,10 @@ test_that("$params rejects noncanonical stored row-name carriers unobserved", {
     },
     callback_after = 0L
   )
-  data.table::setattr(state$.params, "row.names", wrong_length)
+  # Base attr<- installs the fixture without touching its data pointer;
+  # data.table::setattr() materializes a referenced value and would replace
+  # the fixture with an ordinary copy before the capsule ever sees it.
+  attr(state$.params, "row.names") = wrong_length
   private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
 
   expect_error(set$params, "Corrupt ParamSet parameter state capsule")
@@ -496,7 +504,10 @@ test_that("capsule table columns must use ordinary representations", {
   attributes(params) = list(
     names = names(state$.params),
     class = "data.frame",
-    row.names = seq_along(params$id)
+    # Materialized on purpose: `seq_along()` yields a compact ALTREP sequence,
+    # and the capsule validator rejects ALTREP row names by design (see the
+    # sibling tests above).
+    row.names = c(1L, 2L)
   )
   state$.params = params
   assign(
