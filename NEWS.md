@@ -67,7 +67,11 @@ hazards that Paradox 2 is intended to remove.
   unbounded `p_uty()` or zero-level `p_fct()` Domain is rejected as a tuning
   range. Zero-level factors remain valid for the typed empty operations below.
   Other bounded typed Domains can still retain admitted opaque leaves, and
-  the exact BASE-ParamSet form can construct an opaque target value.
+  the exact BASE-ParamSet form can construct an opaque target value. The
+  printable Domain `repr` carrier is itself ordinary non-ALTREP/non-S4 but is
+  retained as one exact opaque presentation identity; this keeps documented
+  function-valued factor tokens assignable without weakening generic
+  data-table metadata validation.
 * Operations force documented arguments once, materialize stable semantic
   ALTREP vectors once at native admission, snapshot their state/callbacks, and
   execute callbacks exactly once. A callback's mutation of Paradox state does
@@ -269,8 +273,10 @@ hazards that Paradox 2 is intended to remove.
   Public detached built-in metadata supports ordinary acyclic graphs up to 64
   attributes/recursive frames and 65,536 nodes; setter-invalid raw spellings,
   cycles, closures/`DOTSXP` used as presentation metadata, and overbound graphs
-  reject cleanly. Quantile and typed-list compatibility retain shallow nested
-  metadata identity while applying the same 64-attribute top-level bound.
+  reject cleanly. The already-receipted Domain `repr` carrier above is the
+  sole package-defined opaque exception. Quantile and typed-list compatibility
+  retain shallow nested metadata identity while applying the same
+  64-attribute top-level bound.
 * Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small
   serializable mapping closures directly instead of compiling a fresh
   `crate()` closure for every Domain instance.

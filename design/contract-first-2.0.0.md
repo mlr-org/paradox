@@ -210,13 +210,18 @@ static property vectors, raw `$values`, and `$get_values()` results own every
 mutable interpreted carrier and every built-in typed atomic value leaf,
 including its complete supported ordinary, acyclic, bounded nested attribute
 metadata, that they expose. Mutating such a result by reference cannot mutate
-the capsule. A closure recursively embedded in presentation metadata is not a
-supported metadata node and rejects cleanly: supported old R has no
+the capsule. A closure recursively embedded in general presentation metadata
+is not a supported metadata node and rejects cleanly: supported old R has no
 allocation-free public receipt for the closure shell that R's deep duplicator
-would create. This does not affect a function supplied as a semantic value,
-default, initialization value, special value, or callback; those leaves retain
-the exact identity or source-normalization behavior documented for their
-semantic position.
+would create. A Domain's printable `repr` attribute is the one explicit
+exception. Its carrier is ordinary non-ALTREP/non-S4, its exact top-level
+identity is selected and receipted with the Domain metadata generation, and it
+is retained opaquely rather than passed to the general recursive owner. That
+exception is required for documented arbitrary factor-level representations
+such as `to_tune(list(square = function(x) x^2))`; it carries no Domain
+semantics. A function supplied as a semantic value, default, initialization
+value, special value, or callback likewise retains the exact identity or
+source-normalization behavior documented for its semantic position.
 These outward ownership paths never give a caller-owned attribute spine or
 nested presentation graph to R's shallow/deep duplicators. A package-owned
 copier bounds each attribute spine and recursive path at 64 and the complete
@@ -224,8 +229,9 @@ graph at 65,536 nodes, roots every selected edge before recursion, installs
 attributes through public setters in one fixed dependency-safe order, and
 finishes with an allocation-free graph receipt. Raw spellings normalized by a
 public setter reject instead of disappearing. Closure and `DOTSXP`
-presentation nodes are outside the supported graph; semantic functions remain
-opaque. Operations whose historical contract is shallow metadata identity,
+presentation nodes are outside the supported general graph; the exact
+Domain-`repr` carrier and semantic functions remain opaque. Operations whose
+historical contract is shallow metadata identity,
 not outward detachment (notably direct quantile mapping and typed list-leaf
 snapshotting), use a separate bounded top-level tag/value copier: nested values
 remain identical, valid-cell cycles/overlength reject, and the attr-free path

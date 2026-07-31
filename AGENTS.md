@@ -537,13 +537,20 @@ operator action.
   properties, raw `$values`, and `$get_values()`: mutable list carriers and
   built-in typed atomic leaves, including their complete supported ordinary,
   acyclic, bounded nested attribute metadata, are detached. A closure
-  recursively embedded as presentation metadata is unsupported and rejects
-  cleanly; semantic function-valued leaves and callbacks are not metadata and
+  recursively embedded as general presentation metadata is unsupported and
+  rejects cleanly. The sole package-defined exception is a Domain's printable
+  `repr` attribute: its top-level carrier must itself be ordinary non-ALTREP
+  and non-S4, but the complete value is an opaque exact identity after one
+  bounded top-level attribute-generation receipt. This preserves arbitrary
+  semantic factor-level representations, including function-valued levels,
+  without asking the general metadata owner to duplicate a closure shell.
+  Semantic function-valued leaves and callbacks are likewise not metadata and
   retain their separately documented identity behavior. ParamUty leaves,
-  callbacks, environments, external pointers, typed S4 identity tokens, and ParamSet
-  children remain exact opaque identities. `$sets` therefore owns its named
-  outer carrier but not its child shells. This cost belongs only to outward
-  construction; internal planning and mutation use retained capsules directly.
+  callbacks, environments, external pointers, typed S4 identity tokens, and
+  ParamSet children remain exact opaque identities. `$sets` therefore owns its
+  named outer carrier but not its child shells. This cost belongs only to
+  outward construction; internal planning and mutation use retained capsules
+  directly.
   No caller-owned attribute spine in these ownership paths is passed to R's
   shallow or recursive duplicator. The package-owned copier hard-bounds each
   attribute spine and recursive path at 64 edges/frames and the complete graph
@@ -551,8 +558,9 @@ operator action.
   and installs attributes with public setters in the fixed
   `dim`/middle/`dimnames`/`class` order. A setter-normalized raw spelling,
   post-selection mutation, cycle, overbound graph, closure, or `DOTSXP`
-  presentation node rejects at the terminal receipt. Qunif metadata and typed
-  list-leaf compatibility deliberately retain shallow nested metadata identity,
+  presentation node rejects at the terminal receipt, apart from the exact
+  Domain-`repr` exception above. Qunif metadata and typed list-leaf
+  compatibility deliberately retain shallow nested metadata identity,
   but use the same bounded top-level tag/value selection and public setters;
   their ordinary attr-free path allocates no metadata carrier. On R >= 4.6 the
   bounded facade stops `R_mapAttrib()` with a guaranteed non-NULL global

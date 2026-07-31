@@ -188,7 +188,8 @@ static int exact_domain_outer_attributes(SEXP domain) {
     (metadata.selfref == R_NilValue ||
       (TYPEOF(metadata.selfref) == EXTPTRSXP &&
         !Rf_isS4(metadata.selfref))) &&
-    (metadata.repr == R_NilValue || !Rf_isS4(metadata.repr));
+    (metadata.repr == R_NilValue ||
+      (!ALTREP(metadata.repr) && !Rf_isS4(metadata.repr)));
 }
 
 static int exact_domain_column_names(SEXP domain) {
@@ -576,9 +577,11 @@ SEXP paradox_snapshot_builtin_domain(SEXP domain,
    * Reuse the admitted outward metadata, but never expose its caller-owned
    * raw pairlist to R's shallow duplicator. `snapshot` is a fresh
    * attribute-free shell; the bounded copier retains the exact top-level
-   * metadata identities and rejects a finalizer splice. The finalizer below
-   * then owns the result shell and names vector and installs a public
-   * data.table self-reference for that detached shell.
+   * metadata identities and rejects a finalizer splice. `repr` is the one
+   * package-defined opaque presentation attribute: it may legitimately contain
+   * closures (for example a function-valued factor token), so retain its exact
+   * selected identity outside the general metadata owner. Every structural
+   * attribute and column still passes through that strict owner.
    */
   paradox_copy_bounded_shallow_attributes(
     snapshot,
@@ -595,9 +598,19 @@ SEXP paradox_snapshot_builtin_domain(SEXP domain,
     UNPROTECT(1);
     return R_NilValue;
   }
-  Rf_setAttrib(snapshot, Rf_install(".internal.selfref"), R_NilValue);
+  domain_outer_metadata_t metadata;
+  if (!capture_domain_outer_metadata(snapshot, &metadata)) {
+    UNPROTECT(1);
+    return R_NilValue;
+  }
+  SEXP repr = PROTECT(metadata.repr);
+  Rf_setAttrib(snapshot, metadata.selfref_symbol, R_NilValue);
+  Rf_setAttrib(snapshot, metadata.repr_symbol, R_NilValue);
   SEXP result = PROTECT(paradox_finalize_data_table(snapshot));
-  UNPROTECT(2);
+  if (repr != R_NilValue) {
+    Rf_setAttrib(result, metadata.repr_symbol, repr);
+  }
+  UNPROTECT(3);
   return result;
 }
 

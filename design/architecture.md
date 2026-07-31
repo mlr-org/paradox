@@ -415,10 +415,14 @@ The same rule applies to nested public projections. `$params`, `$domains`,
 `$data`, property vectors, raw `$values`, and `$get_values()` detach their list
 carriers and built-in typed atomic leaves, including complete supported
 ordinary, acyclic, bounded nested attribute metadata. A closure recursively
-embedded as presentation metadata rejects cleanly because the R-3.6-compatible
-terminal receipt cannot authenticate the fresh closure shell made by R's deep
-duplicator without allocating. A function that is itself a semantic leaf or
-callback remains opaque and retains its documented identity behavior.
+embedded as general presentation metadata rejects cleanly because the
+R-3.6-compatible terminal receipt cannot authenticate the fresh closure shell
+made by R's deep duplicator without allocating. The sole narrow exception is
+the already-receipted, ordinary top-level Domain `repr` carrier, which remains
+an exact opaque identity so representations of arbitrary factor leaves do not
+become a second semantic admission problem. A function that is itself a
+semantic leaf or callback remains opaque and retains its documented identity
+behavior.
 Condition shells/RHS vectors,
 levels, defaults, initialization values, special-value lists, and interpreted
 cargo therefore cannot be used as a by-reference route back into capsule

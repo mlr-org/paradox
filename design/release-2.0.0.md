@@ -2,13 +2,44 @@
 
 ## Status
 
-**The corrected source-bound Domain performance obligation is closed, but the
-most recent immutable candidate is rejected by its diagnostic `release-core`
-run. Source is reopened for the reviewed C23 inventory-format repair, refreshed
-differential ledger, formal-S4 semantic-leaf correction, and coherent legacy
-table snapshot. Freeze a replacement only after those source/test/documentation
-changes converge, then run C17/C23, the complete R 3.6-through-current minor
-matrix, memory, compatibility, and all remaining release gates below.**
+**The corrected source-bound Domain performance obligation is closed. Candidate
+`d6ad5c60af10887b07f406464b551a3007d1a9c5` is rejected by its diagnostic
+`release-core` run: every completed harness, C23, API-header, and differential
+row passed, but `R CMD check` exposed the documented function-valued
+`to_tune(list(...))` example failing at the overly general Domain-`repr`
+metadata owner. The every-minor runtime task was correctly blocked before
+starting. Source is reopened only for the narrow reviewed Domain-`repr`
+correction and its contract/regression updates. Freeze a replacement after
+that delta converges, then run C17/C23, the complete R
+3.6-through-current minor matrix, memory, compatibility, and all remaining
+release gates below.**
+
+The rejected ref is
+`refs/paradox-release/candidate-20260731T211009Z`, commit
+`d6ad5c60af10887b07f406464b551a3007d1a9c5`, tree
+`4083e33553d8a33efe1d4a0545150f90ecfb5519`. In
+`.local/verify/runs/release-candidate-d6ad5c6`, the four harness tasks,
+C23 compatibility under GCC 15.2 and Clang 22, the complete API-header matrix,
+and all 33 differential cases passed. `native-release` passed both full test
+executions and failed only when `R CMD check --as-cran` reached the
+function-valued `to_tune()` example; `runtime-supported` therefore never
+started. Completion, JSON-summary, and TSV-summary SHA-256 values are
+`88f813e9afa670c872cbd9a45847f3317e1f2039a2e7c5df8070cf0400c6d63f`,
+`3a60e34d549b9152cdba8a48039f7a0604e2ba20cf15ff68709c787fe50a745b`,
+and
+`e9a63e05f14c79408ad96b7cd0821332b767e8b34787893c509eaf83391041f3`.
+The run is diagnostic only and transfers no candidate acceptance.
+
+The narrow replacement delta has a strict mutable-worktree preflight at
+`.local/checks/release-tune-repr-preflight-20260731-r1`: strict GCC and Clang
+GNU C99 builds, all focused tests, and both native-probe inventories pass. The
+complete `test_to_tune.R` file also passes against that strict-GCC install.
+Completion and source-manifest SHA-256 values are
+`31a267cb2ca84a632a84e20f154d144c8be5c5408c04ab95c4008a4bc89bb06f`
+and
+`8d5c6970427dd7c87aae8f978c7ed07c837076e0dd0b6fc434fdf1bb9194364b`.
+This is development evidence only; the replacement immutable candidate still
+owns every release gate.
 The bounded indexed-root Domain admission compaction is governed by
 [`domain-admission-receipt-compaction-plan.md`](domain-admission-receipt-compaction-plan.md).
 Its implementation and focused correctness proof are complete; the plan's

@@ -18,6 +18,49 @@ test_that("TuneToken printers", {
 
 })
 
+test_that("function-valued factor tokens survive checked assignment", {
+  square = function(x) x^2
+  token = to_tune(list(identity = identity, square = square))
+  original_repr = attr(token$content, "repr", exact = TRUE)
+  params = ps(value = p_uty())
+
+  params$values = list(value = token)
+
+  stored = params$values$value
+  expect_s3_class(stored, "ObjectTuneToken")
+  expect_identical(
+    attr(stored$content, "repr", exact = TRUE),
+    original_repr
+  )
+  expect_identical(
+    data.table::address(attr(stored$content, "repr", exact = TRUE)),
+    data.table::address(original_repr)
+  )
+  expect_output(print(stored), "p_fct\\(levels = list")
+
+  search_space = params$search_space()
+  transformed = search_space$trafo(list(value = "square"))
+  expect_identical(transformed$value, square)
+})
+
+test_that("TuneToken Domain representation carriers stay structural", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  token = to_tune(p_int(0, 1))
+  attr(token$content, "repr") = native_stateful_altrep(1L, 1L)
+  params = ps(value = p_uty())
+
+  expect_error(
+    {
+      params$values = list(value = token)
+    },
+    "Malformed ObjectTuneToken Domain candidate",
+    fixed = TRUE
+  )
+})
+
 test_that("validity checks", {
 
   expect_error(to_tune(p_dbl(2, 1)), "must not be greater than")
