@@ -237,7 +237,7 @@ awk -F '\t' '
       $4 != "Reason: R < 4.0 cannot safely inspect active-binding functions" &&
       $4 != "Reason: R < 4.3 cannot construct list ALTREP test fixtures") ||
     seen[$1 FS $2 FS $3]++ {exit 1}
-  $4 == "Reason: On CRAN" {count[$1]++}
+  $4 == "Reason: On CRAN" {exit 1}
   $4 == "Reason: R < 4.0 cannot safely inspect active-binding functions" {
     active[$1]++
   }
@@ -245,13 +245,7 @@ awk -F '\t' '
     list_altrep[$1]++
   }
   END {
-    if (count["3.6.3"] != count["4.0.5"] ||
-        count["4.0.5"] != count["4.1.3"] ||
-        count["4.1.3"] != count["4.2.3"] ||
-        count["4.2.3"] != count["4.3.3"] ||
-        count["4.3.3"] != count["4.4.3"] ||
-        count["4.4.3"] != count["4.5.2"] ||
-        active["3.6.3"] < 1 ||
+    if (active["3.6.3"] < 1 ||
         list_altrep["3.6.3"] < 1 ||
         list_altrep["4.0.5"] < 1 || list_altrep["4.1.3"] < 1 ||
         list_altrep["4.2.3"] < 1 ||
@@ -261,20 +255,6 @@ awk -F '\t' '
         list_altrep["4.5.2"]) exit 1
   }
 ' "$result_skips"
-diff -u \
-  <(awk -F '\t' '$1 == "3.6.3" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
-  <(awk -F '\t' '$1 == "4.0.5" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
-  >/dev/null || {
-  echo "Runtime result-skip baseline inventories differ between R 3.6 and R 4.0" >&2
-  exit 1
-}
-diff -u \
-  <(awk -F '\t' '$1 == "4.0.5" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
-  <(awk -F '\t' '$1 == "4.3.3" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
-  >/dev/null || {
-  echo "Runtime result-skip baseline inventories differ between R 4.0 and R 4.3" >&2
-  exit 1
-}
 for peer_runtime in 4.1.3 4.2.3; do
   diff -u \
     <(awk -F '\t' '$1 == "4.0.5" {print $2 "\t" $3 "\t" $4}' \
@@ -319,7 +299,11 @@ Rscript --vanilla \
   echo "Runtime source-test inventory is empty or contains a non-regular input" >&2
   exit 1
 }
-rg -q 'Sys.setenv\(NOT_CRAN = "false"\)' \
+rg -q 'Sys.setenv\(NOT_CRAN = "true"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -q 'Sys.unsetenv\("PARADOX_SKIP_CHARACTERIZATION_GCT"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -q 'Sys.unsetenv\("LC_ALL"\)' \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
 rg -q 'Sys.setenv\(NOT_CRAN = "true"\)' \
   "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R"
@@ -417,7 +401,7 @@ rg -Fq 'current-v2-from-r-4.0.5.rds' \
   "$ROOT/scripts/environment/run-runtime-matrix-cross-serialization"
 rg -q 'PARADOX_MBO_CONFIG_ROOT is required by the complete runtime suite' \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
-rg -Fq 'NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT"' \
+rg -Fq 'NOT_CRAN=true PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT"' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
 rg -Fq 'verify_mbo_config_evidence "$top_metadata"' \
   "$ROOT/scripts/verify-runtime-matrix-evidence"
@@ -892,24 +876,12 @@ local({
   exclusion_path <- file.path(
     fixture, "environment", "runtime-matrix-pre46-exclusions.tsv"
   )
-  valid <- rbind(
-    data.frame(
-      runtime = c(
-        "3.6.3", "4.0.5", "4.1.3", "4.2.3", "4.3.3", "4.4.3",
-        "4.5.2"
-      ),
-      file = "test-fixture.R",
-      test = "fixture result skip",
-      reason = "Reason: On CRAN",
-      stringsAsFactors = FALSE
-    ),
-    data.frame(
-      runtime = c("3.6.3", "4.0.5", "4.1.3", "4.2.3"),
-      file = "test-fixture.R",
-      test = "fixture list ALTREP skip",
-      reason = "Reason: R < 4.3 cannot construct list ALTREP test fixtures",
-      stringsAsFactors = FALSE
-    )
+  valid <- data.frame(
+    runtime = c("3.6.3", "4.0.5", "4.1.3", "4.2.3"),
+    file = "test-fixture.R",
+    test = "fixture list ALTREP skip",
+    reason = "Reason: R < 4.3 cannot construct list ALTREP test fixtures",
+    stringsAsFactors = FALSE
   )
   valid <- valid[do.call(order, c(
     valid[c("runtime", "file", "test", "reason")], list(method = "radix")
@@ -1005,11 +977,23 @@ local({
     grepl("exclusion manifest is malformed", conditionMessage(exclusion_error))
   )
   writeLines("context\treason", exclusion_path)
-  missing_baseline <- valid[-which(valid$reason == "Reason: On CRAN")[[1L]],
-    , drop = FALSE]
+  unexpected_cran_skip <- rbind(
+    valid,
+    data.frame(
+      runtime = "3.6.3",
+      file = "test-fixture.R",
+      test = "fixture result skip",
+      reason = "Reason: On CRAN",
+      stringsAsFactors = FALSE
+    )
+  )
+  unexpected_cran_skip <- unexpected_cran_skip[do.call(order, c(
+    unexpected_cran_skip[c("runtime", "file", "test", "reason")],
+    list(method = "radix")
+  )), , drop = FALSE]
   expect_policy_error(
-    missing_baseline,
-    "differs from current skip_on_cran test titles"
+    unexpected_cran_skip,
+    "unreviewed version-specific skip"
   )
   wrong_version <- rbind(
     valid,

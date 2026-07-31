@@ -36,8 +36,8 @@ Options:
   -h, --help         Show this help.
 
 Each stage builds a source archive, installs it in a fresh run-specific
-library, executes a focused r_api_compat probe and the authenticated supported
-source-test scope with NOT_CRAN=false, audits the DSO's version-specific
+library, executes a focused r_api_compat probe and the authenticated complete
+source-test scope with NOT_CRAN=true, audits the DSO's version-specific
 undefined public R symbols, and seals all retained artifacts below
 .local/checks/ID/.  R 3.6 and R 4.0 additionally execute the authenticated,
 source-derived old-runtime GC/reentry slice with NOT_CRAN=true.  A complete
@@ -303,7 +303,7 @@ for version in "${versions[@]}"; do
     fi
     printf 'focused\tRscript runtime-matrix-probe.R LIBRARY\n'
     printf 'symbols\tauthenticated prefix NM -D --undefined-only paradox.so\n'
-    printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
+    printf 'tests\tNOT_CRAN=true Rscript run-runtime-matrix-tests.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
     if [[ "$version" == 3.6.3 || "$version" == 4.0.5 ]]; then
       printf 'old-runtime-stress\tNOT_CRAN=true Rscript run-runtime-matrix-old-r-stress.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
     fi

@@ -1722,7 +1722,14 @@ descriptor before the first build or R subprocess. A runtime-only directory
 must never be created later through the closed descriptor, and the descriptor
 must never leak into a child.
 
-R 3.6.3 and R 4.0.5 additionally run the bounded `NOT_CRAN=true`
+Every supported-runtime stage runs its complete main source suite with
+`NOT_CRAN=true`; a `Reason: On CRAN` result is therefore a harness failure, not
+an admitted skip. The runner also removes the characterization-GCT override so
+an inherited developer setting cannot silently shrink that suite. Only the
+source-derived active-binding and list-ALTREP capability skips remain in
+`runtime-matrix-result-skips.tsv`.
+
+R 3.6.3 and R 4.0.5 additionally replay the bounded
 `runtime-matrix-old-r-stress.tsv` slice. Its literal test titles are validated
 against the authenticated source, and a deterministically regenerated final
 test helper leaves top-level setup intact while declining to force every
@@ -1730,14 +1737,14 @@ unselected `test_that()` body. The retained staged sources, title filter,
 per-block ledger, log, and counts must replay exactly. Each old runtime first
 proves that an unselected body is unforced and that a selected braced
 expression still receives testthat's isolated evaluation environment;
-selected targets may neither skip nor warn. Do not replace this with full-file
-`NOT_CRAN=true` runs
-or a frozen expected target count, and do not repeat it on newer runtimes.
+selected targets may neither skip nor warn. This focused replay does not
+substitute for the full main suite and must not use a frozen expected target
+count or be repeated on newer runtimes.
 The old testthat/withr releases key their language setup from `LANG`. Their
-source and stress launchers therefore use `LANG=C` while the stage's
+main and stress launchers therefore use `LANG=C` while the stage's
 `LC_ALL=C.UTF-8` establishes the deterministic UTF-8 process locale. The
-stress runner clears `LC_ALL` only after R startup so temporary locale changes
-are not overridden. This prevents thousands of no-op framework warnings
+main and stress runners clear `LC_ALL` only after R startup so temporary locale
+changes are not overridden. This prevents thousands of no-op framework warnings
 without changing package semantics or weakening the warning-free contract.
 Old R's shell front end also expands backslash escapes while transporting an
 inline `Rscript -e` expression. Inline harness expressions must therefore use
@@ -1759,8 +1766,10 @@ artifact.
 
 `scripts/test-runtime-matrix` validates both the deliberately empty pre-R-4.6
 exclusion policy and the reviewed result-skip manifest against the exact
-extracted candidate's current `skip_on_cran` test titles before resource
-admission or any runtime build/install worker starts. Keep that source-derived
+extracted candidate's current runtime-capability guards before resource
+admission or any runtime build/install worker starts. The preflight still
+discovers `skip_on_cran()` titles and ordering, but it rejects every `On CRAN`
+ledger row because the main suite admits those blocks. Keep that source-derived
 policy preflight shared with the old-runtime test runner. The coordinator also
 stages and authenticates the mandatory `mbo_config` upgrade inputs before that
 same boundary, so the fixture test must execute and may not become an

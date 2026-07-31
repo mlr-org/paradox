@@ -1013,7 +1013,9 @@ verify_source_scope() {
     "$result_skips" == "$(log_value "$log" result_test_blocks_skipped)" &&
     "$total_skips" == "$(log_value "$log" total_test_skips)" ]] ||
     fail "Retained expectation accounting differs from the source-test log"
-  [[ $(log_value "$log" not_cran) == false &&
+  [[ $(log_value "$log" not_cran) == true &&
+    $(log_value "$log" lc_all) == unset &&
+    $(log_value "$log" characterization_gct_override) == unset &&
     $(log_value "$log" test_scope) == complete-source-suite &&
     $(log_value "$log" test_scope_manifest) == source-test-scope/scope.tsv &&
     $(log_value "$log" whole_file_skip_manifest) == \

@@ -242,16 +242,13 @@ runtime_matrix_validate_result_skip_policy <- function(
   if (anyDuplicated(source_rows)) {
     stop("source contains duplicate skip_on_cran test titles", call. = FALSE)
   }
-  expected_baseline <- do.call(rbind, lapply(reviewed_runtimes, function(runtime) {
-    data.frame(
-      runtime = rep(runtime, nrow(source_rows)),
-      file = source_rows$file,
-      test = source_rows$test,
-      reason = rep("Reason: On CRAN", nrow(source_rows)),
-      stringsAsFactors = FALSE
-    )
-  }))
-  extra <- policy[policy$reason != "Reason: On CRAN", , drop = FALSE]
+  # The supported-runtime suite deliberately runs with NOT_CRAN=true. Keep
+  # discovering skip_on_cran() blocks so duplicate literal identities and
+  # guard ordering remain authenticated, but do not admit "On CRAN" as an
+  # expected result: those blocks must execute. Only genuine runtime
+  # capabilities may remain in the result-skip ledger.
+  expected_baseline <- policy[FALSE, , drop = FALSE]
+  extra <- policy
   allowed_extra_reasons <- c(
     active_binding =
       "Reason: R < 4.0 cannot safely inspect active-binding functions",
@@ -456,7 +453,7 @@ runtime_matrix_validate_result_skip_policy <- function(
   row.names(expected) <- NULL
   if (!identical(policy, expected)) {
     stop(
-      "result-skip manifest differs from current skip_on_cran test titles",
+      "result-skip manifest differs from current runtime-capability guards",
       call. = FALSE
     )
   }

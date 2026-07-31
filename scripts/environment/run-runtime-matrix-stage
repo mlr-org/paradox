@@ -468,7 +468,8 @@ audit_symbols "$VERSION" "$STAGE_LIBRARY/paradox/libs/paradox.so" \
   "$STAGE_LOGS/r-api-symbol-audit.log"
 audit_r45_compiled_code_policy "$VERSION" "$STAGE_LIBRARY/paradox" \
   "$STAGE_LOGS/r45-compiled-code-policy.log"
-LANG=C NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
+unset PARADOX_SKIP_CHARACTERIZATION_GCT
+LANG=C NOT_CRAN=true PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
   Rscript --vanilla \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
   "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/source-test-scope" \

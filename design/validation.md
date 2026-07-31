@@ -741,8 +741,11 @@ current R 4.6.1 complete test execution is owned by the local full native lane
 rather than duplicated here.
 Each stage
 has a fresh candidate library, builds/installs Paradox once, runs the complete
-supported test inventory, audits DSO symbols, records package/compiler/session
+supported test inventory with `NOT_CRAN=true`, audits DSO symbols, records package/compiler/session
 identity, and seals the source/build/library/log tree.
+The exact result ledger rejects `Reason: On CRAN`; only source-derived runtime
+capability skips are admitted. The runner also clears any inherited
+characterization-GCT override before testing.
 
 Before the supported-R workers are admitted, the coordinator also stages the two
 mandatory historical `mbo_config` objects through the shared authenticated

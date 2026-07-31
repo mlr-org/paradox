@@ -1,65 +1,28 @@
 runtime	file	test	reason
-3.6.3	test-ParamSetShadow.R	the shadow constraint adapter admits only ordinary names	Reason: On CRAN
-3.6.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
-3.6.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
-3.6.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
 3.6.3	test-native-altrep-lifetimes.R	Design columns materialize while trafo shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-altrep-lifetimes.R	Domain vectors materialize once and constructor shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-altrep-lifetimes.R	check rejects structural ALTREP before selecting capsule state	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-altrep-lifetimes.R	constructor rejects ALTREP nested structure before observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-altrep-lifetimes.R	deferred receipts reject list ALTREP before any observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-altrep-lifetimes.R	exotic ALTREP state is rejected before dispatch	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
 3.6.3	test-native-altrep-lifetimes.R	public tables snapshot ALTREP shells while other shells reject	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-altrep-lifetimes.R	value merge alone snapshots shells while preserving opaque leaves	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-domain-construction.R	ALTREP value snapshots reject an attribute-generation tear	Reason: On CRAN
-3.6.3	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
-3.6.3	test-native-domain-construction.R	Domain requirements retain rows and row fields before RHS reentry	Reason: On CRAN
-3.6.3	test-native-domain-construction.R	a snapshotted value leaf keeps its own materialized names	Reason: On CRAN
 3.6.3	test-native-domain-construction.R	interpreted Domain list shells reject ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-domain-construction.R	semantic snapshots do not launder structure added by ALTREP reentry	Reason: On CRAN
 3.6.3	test-native-domain-kernels.R	Domain checks reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-domain-kernels.R	Domain sanitizers reject structural list ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
 3.6.3	test-native-domain-kernels.R	typed Domain checks reject ALTREP list leaves without observing them	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
-3.6.3	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
 3.6.3	test-native-paramset-check.R	typed structural ALTREP list leaves are rejected without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
-3.6.3	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
-3.6.3	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
-3.6.3	test-native-paramset-qunif.R	frame input names and columns come from one generation	Reason: On CRAN
-3.6.3	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
-3.6.3	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
-3.6.3	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
-3.6.3	test-native-paramset-value-mutation.R	ObjectTuneToken receipts stay rooted across later validation work	Reason: On CRAN
 3.6.3	test-native-paramset-value-mutation.R	graph set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-paramset-value-mutation.R	set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-paramset-value-mutation.R	value transactions reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-paramsetcollection-callback-detach.R	detachment affixes stay rooted while the plan is built	Reason: On CRAN
-3.6.3	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
-3.6.3	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
 3.6.3	test-native-public-table-wrappers.R	additive data.table classes are inert across every table ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-public-table-wrappers.R	real data.table key and index carriers pass every public ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-public-table-wrappers.R	wide ALTREP table admission observes each top-level element once	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: On CRAN
-3.6.3	test-native-snapshot-atomicity.R	ParamSet construction captures each name with its Domain	Reason: On CRAN
-3.6.3	test-native-snapshot-atomicity.R	data.table finalization captures one column/name generation	Reason: On CRAN
-3.6.3	test-native-snapshot-atomicity.R	dependency assignment captures names with exact columns	Reason: On CRAN
-3.6.3	test-native-snapshot-atomicity.R	dependency snapshots capture every Condition row before RHS reentry	Reason: On CRAN
-3.6.3	test-native-snapshot-atomicity.R	public table consumers keep names paired with captured columns	Reason: On CRAN
-3.6.3	test-native-snapshot-atomicity.R	tag assignment captures each name with its value vector	Reason: On CRAN
-3.6.3	test-regression-barren-subtree-prune.R	pruned graphs survive gctorture	Reason: On CRAN
-3.6.3	test-regression-diagnostic-encoding.R	mismarked diagnostics survive transient allocation under collection	Reason: On CRAN
+3.6.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-upgrade-paradox-object-graph.R	authentic Paradox 1 shells upgrade everywhere by identity	Reason: R < 4.0 cannot safely inspect active-binding functions
-3.6.3	test-upgrade-paradox-object-graph.R	environment boundary policy comes from the selected generation	Reason: On CRAN
-3.6.3	test-upgrade-paradox-object-graph.R	environment discovery uses two equal complete edge snapshots	Reason: On CRAN
-3.6.3	test-upgrade-paradox-object-graph.R	graph discovery never splices vector attributes and elements	Reason: On CRAN
 3.6.3	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-3.6.3	test-upgrade-paradox-object-graph.R	legacy callback-carrier snapshots keep names paired with elements	Reason: On CRAN
 3.6.3	test-upgrade-paradox-object-graph.R	legacy shells inside a current capsule are upgraded in place	Reason: R < 4.0 cannot safely inspect active-binding functions
-3.6.3	test-upgrade-paradox-object-graph.R	legacy table snapshots keep names, columns, and attributes together	Reason: On CRAN
 3.6.3	test-upgrade-paradox-object-graph.R	native graph discovery is iterative, identity-aware, and inert	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object-graph.R	serialized Design transpose gets the first-use gateway	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	a partially refreshed shell remains discoverable and retryable	Reason: R < 4.0 cannot safely inspect active-binding functions
@@ -87,300 +50,75 @@ runtime	file	test	reason
 3.6.3	test-upgrade-paradox-object.R	terminal transplant receipt rejects public-method replacement	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	the single-object API refuses to return an invalid prepared graph	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	upgraded collections keep generating the tags Paradox 1 recorded	Reason: R < 4.0 cannot safely inspect active-binding functions
-4.0.5	test-ParamSetShadow.R	the shadow constraint adapter admits only ordinary names	Reason: On CRAN
-4.0.5	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
-4.0.5	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
-4.0.5	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
 4.0.5	test-native-altrep-lifetimes.R	Design columns materialize while trafo shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-altrep-lifetimes.R	Domain vectors materialize once and constructor shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-altrep-lifetimes.R	check rejects structural ALTREP before selecting capsule state	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-altrep-lifetimes.R	constructor rejects ALTREP nested structure before observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-altrep-lifetimes.R	deferred receipts reject list ALTREP before any observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-altrep-lifetimes.R	exotic ALTREP state is rejected before dispatch	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
 4.0.5	test-native-altrep-lifetimes.R	public tables snapshot ALTREP shells while other shells reject	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-altrep-lifetimes.R	value merge alone snapshots shells while preserving opaque leaves	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-domain-construction.R	ALTREP value snapshots reject an attribute-generation tear	Reason: On CRAN
-4.0.5	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
-4.0.5	test-native-domain-construction.R	Domain requirements retain rows and row fields before RHS reentry	Reason: On CRAN
-4.0.5	test-native-domain-construction.R	a snapshotted value leaf keeps its own materialized names	Reason: On CRAN
 4.0.5	test-native-domain-construction.R	interpreted Domain list shells reject ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-domain-construction.R	semantic snapshots do not launder structure added by ALTREP reentry	Reason: On CRAN
 4.0.5	test-native-domain-kernels.R	Domain checks reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-domain-kernels.R	Domain sanitizers reject structural list ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
 4.0.5	test-native-domain-kernels.R	typed Domain checks reject ALTREP list leaves without observing them	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
-4.0.5	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
 4.0.5	test-native-paramset-check.R	typed structural ALTREP list leaves are rejected without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
-4.0.5	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
-4.0.5	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
-4.0.5	test-native-paramset-qunif.R	frame input names and columns come from one generation	Reason: On CRAN
-4.0.5	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
-4.0.5	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
-4.0.5	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
-4.0.5	test-native-paramset-value-mutation.R	ObjectTuneToken receipts stay rooted across later validation work	Reason: On CRAN
 4.0.5	test-native-paramset-value-mutation.R	graph set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-paramset-value-mutation.R	set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-paramset-value-mutation.R	value transactions reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-paramsetcollection-callback-detach.R	detachment affixes stay rooted while the plan is built	Reason: On CRAN
-4.0.5	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
-4.0.5	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
 4.0.5	test-native-public-table-wrappers.R	additive data.table classes are inert across every table ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-public-table-wrappers.R	real data.table key and index carriers pass every public ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-public-table-wrappers.R	wide ALTREP table admission observes each top-level element once	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: On CRAN
-4.0.5	test-native-snapshot-atomicity.R	ParamSet construction captures each name with its Domain	Reason: On CRAN
-4.0.5	test-native-snapshot-atomicity.R	data.table finalization captures one column/name generation	Reason: On CRAN
-4.0.5	test-native-snapshot-atomicity.R	dependency assignment captures names with exact columns	Reason: On CRAN
-4.0.5	test-native-snapshot-atomicity.R	dependency snapshots capture every Condition row before RHS reentry	Reason: On CRAN
-4.0.5	test-native-snapshot-atomicity.R	public table consumers keep names paired with captured columns	Reason: On CRAN
-4.0.5	test-native-snapshot-atomicity.R	tag assignment captures each name with its value vector	Reason: On CRAN
-4.0.5	test-regression-barren-subtree-prune.R	pruned graphs survive gctorture	Reason: On CRAN
-4.0.5	test-regression-diagnostic-encoding.R	mismarked diagnostics survive transient allocation under collection	Reason: On CRAN
-4.0.5	test-upgrade-paradox-object-graph.R	environment boundary policy comes from the selected generation	Reason: On CRAN
-4.0.5	test-upgrade-paradox-object-graph.R	environment discovery uses two equal complete edge snapshots	Reason: On CRAN
-4.0.5	test-upgrade-paradox-object-graph.R	graph discovery never splices vector attributes and elements	Reason: On CRAN
+4.0.5	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.0.5	test-upgrade-paradox-object-graph.R	legacy callback-carrier snapshots keep names paired with elements	Reason: On CRAN
-4.0.5	test-upgrade-paradox-object-graph.R	legacy table snapshots keep names, columns, and attributes together	Reason: On CRAN
 4.0.5	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-upgrade-paradox-object.R	legacy interpreted structural lists reject ALTREP inertly	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-ParamSetShadow.R	the shadow constraint adapter admits only ordinary names	Reason: On CRAN
-4.1.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
-4.1.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
-4.1.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
 4.1.3	test-native-altrep-lifetimes.R	Design columns materialize while trafo shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-altrep-lifetimes.R	Domain vectors materialize once and constructor shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-altrep-lifetimes.R	check rejects structural ALTREP before selecting capsule state	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-altrep-lifetimes.R	constructor rejects ALTREP nested structure before observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-altrep-lifetimes.R	deferred receipts reject list ALTREP before any observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-altrep-lifetimes.R	exotic ALTREP state is rejected before dispatch	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
 4.1.3	test-native-altrep-lifetimes.R	public tables snapshot ALTREP shells while other shells reject	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-altrep-lifetimes.R	value merge alone snapshots shells while preserving opaque leaves	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-domain-construction.R	ALTREP value snapshots reject an attribute-generation tear	Reason: On CRAN
-4.1.3	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
-4.1.3	test-native-domain-construction.R	Domain requirements retain rows and row fields before RHS reentry	Reason: On CRAN
-4.1.3	test-native-domain-construction.R	a snapshotted value leaf keeps its own materialized names	Reason: On CRAN
 4.1.3	test-native-domain-construction.R	interpreted Domain list shells reject ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-domain-construction.R	semantic snapshots do not launder structure added by ALTREP reentry	Reason: On CRAN
 4.1.3	test-native-domain-kernels.R	Domain checks reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-domain-kernels.R	Domain sanitizers reject structural list ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
 4.1.3	test-native-domain-kernels.R	typed Domain checks reject ALTREP list leaves without observing them	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
-4.1.3	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
 4.1.3	test-native-paramset-check.R	typed structural ALTREP list leaves are rejected without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
-4.1.3	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
-4.1.3	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
-4.1.3	test-native-paramset-qunif.R	frame input names and columns come from one generation	Reason: On CRAN
-4.1.3	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
-4.1.3	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
-4.1.3	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
-4.1.3	test-native-paramset-value-mutation.R	ObjectTuneToken receipts stay rooted across later validation work	Reason: On CRAN
 4.1.3	test-native-paramset-value-mutation.R	graph set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-paramset-value-mutation.R	set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-paramset-value-mutation.R	value transactions reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-paramsetcollection-callback-detach.R	detachment affixes stay rooted while the plan is built	Reason: On CRAN
-4.1.3	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
-4.1.3	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
 4.1.3	test-native-public-table-wrappers.R	additive data.table classes are inert across every table ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-public-table-wrappers.R	real data.table key and index carriers pass every public ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-public-table-wrappers.R	wide ALTREP table admission observes each top-level element once	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: On CRAN
-4.1.3	test-native-snapshot-atomicity.R	ParamSet construction captures each name with its Domain	Reason: On CRAN
-4.1.3	test-native-snapshot-atomicity.R	data.table finalization captures one column/name generation	Reason: On CRAN
-4.1.3	test-native-snapshot-atomicity.R	dependency assignment captures names with exact columns	Reason: On CRAN
-4.1.3	test-native-snapshot-atomicity.R	dependency snapshots capture every Condition row before RHS reentry	Reason: On CRAN
-4.1.3	test-native-snapshot-atomicity.R	public table consumers keep names paired with captured columns	Reason: On CRAN
-4.1.3	test-native-snapshot-atomicity.R	tag assignment captures each name with its value vector	Reason: On CRAN
-4.1.3	test-regression-barren-subtree-prune.R	pruned graphs survive gctorture	Reason: On CRAN
-4.1.3	test-regression-diagnostic-encoding.R	mismarked diagnostics survive transient allocation under collection	Reason: On CRAN
-4.1.3	test-upgrade-paradox-object-graph.R	environment boundary policy comes from the selected generation	Reason: On CRAN
-4.1.3	test-upgrade-paradox-object-graph.R	environment discovery uses two equal complete edge snapshots	Reason: On CRAN
-4.1.3	test-upgrade-paradox-object-graph.R	graph discovery never splices vector attributes and elements	Reason: On CRAN
+4.1.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.1.3	test-upgrade-paradox-object-graph.R	legacy callback-carrier snapshots keep names paired with elements	Reason: On CRAN
-4.1.3	test-upgrade-paradox-object-graph.R	legacy table snapshots keep names, columns, and attributes together	Reason: On CRAN
 4.1.3	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-upgrade-paradox-object.R	legacy interpreted structural lists reject ALTREP inertly	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-ParamSetShadow.R	the shadow constraint adapter admits only ordinary names	Reason: On CRAN
-4.2.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
-4.2.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
-4.2.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
 4.2.3	test-native-altrep-lifetimes.R	Design columns materialize while trafo shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-altrep-lifetimes.R	Domain vectors materialize once and constructor shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-altrep-lifetimes.R	check rejects structural ALTREP before selecting capsule state	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-altrep-lifetimes.R	constructor rejects ALTREP nested structure before observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-altrep-lifetimes.R	deferred receipts reject list ALTREP before any observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-altrep-lifetimes.R	exotic ALTREP state is rejected before dispatch	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
 4.2.3	test-native-altrep-lifetimes.R	public tables snapshot ALTREP shells while other shells reject	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-altrep-lifetimes.R	value merge alone snapshots shells while preserving opaque leaves	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-domain-construction.R	ALTREP value snapshots reject an attribute-generation tear	Reason: On CRAN
-4.2.3	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
-4.2.3	test-native-domain-construction.R	Domain requirements retain rows and row fields before RHS reentry	Reason: On CRAN
-4.2.3	test-native-domain-construction.R	a snapshotted value leaf keeps its own materialized names	Reason: On CRAN
 4.2.3	test-native-domain-construction.R	interpreted Domain list shells reject ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-domain-construction.R	semantic snapshots do not launder structure added by ALTREP reentry	Reason: On CRAN
 4.2.3	test-native-domain-kernels.R	Domain checks reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-domain-kernels.R	Domain sanitizers reject structural list ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
 4.2.3	test-native-domain-kernels.R	typed Domain checks reject ALTREP list leaves without observing them	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
-4.2.3	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
 4.2.3	test-native-paramset-check.R	typed structural ALTREP list leaves are rejected without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
-4.2.3	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
-4.2.3	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
-4.2.3	test-native-paramset-qunif.R	frame input names and columns come from one generation	Reason: On CRAN
-4.2.3	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
-4.2.3	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
-4.2.3	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
-4.2.3	test-native-paramset-value-mutation.R	ObjectTuneToken receipts stay rooted across later validation work	Reason: On CRAN
 4.2.3	test-native-paramset-value-mutation.R	graph set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-paramset-value-mutation.R	set_values does not overwrite a commit during its merge	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-paramset-value-mutation.R	value transactions reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-paramsetcollection-callback-detach.R	detachment affixes stay rooted while the plan is built	Reason: On CRAN
-4.2.3	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
-4.2.3	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
 4.2.3	test-native-public-table-wrappers.R	additive data.table classes are inert across every table ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-public-table-wrappers.R	real data.table key and index carriers pass every public ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-public-table-wrappers.R	wide ALTREP table admission observes each top-level element once	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: On CRAN
-4.2.3	test-native-snapshot-atomicity.R	ParamSet construction captures each name with its Domain	Reason: On CRAN
-4.2.3	test-native-snapshot-atomicity.R	data.table finalization captures one column/name generation	Reason: On CRAN
-4.2.3	test-native-snapshot-atomicity.R	dependency assignment captures names with exact columns	Reason: On CRAN
-4.2.3	test-native-snapshot-atomicity.R	dependency snapshots capture every Condition row before RHS reentry	Reason: On CRAN
-4.2.3	test-native-snapshot-atomicity.R	public table consumers keep names paired with captured columns	Reason: On CRAN
-4.2.3	test-native-snapshot-atomicity.R	tag assignment captures each name with its value vector	Reason: On CRAN
-4.2.3	test-regression-barren-subtree-prune.R	pruned graphs survive gctorture	Reason: On CRAN
-4.2.3	test-regression-diagnostic-encoding.R	mismarked diagnostics survive transient allocation under collection	Reason: On CRAN
-4.2.3	test-upgrade-paradox-object-graph.R	environment boundary policy comes from the selected generation	Reason: On CRAN
-4.2.3	test-upgrade-paradox-object-graph.R	environment discovery uses two equal complete edge snapshots	Reason: On CRAN
-4.2.3	test-upgrade-paradox-object-graph.R	graph discovery never splices vector attributes and elements	Reason: On CRAN
+4.2.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.2.3	test-upgrade-paradox-object-graph.R	legacy callback-carrier snapshots keep names paired with elements	Reason: On CRAN
-4.2.3	test-upgrade-paradox-object-graph.R	legacy table snapshots keep names, columns, and attributes together	Reason: On CRAN
 4.2.3	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-upgrade-paradox-object.R	legacy interpreted structural lists reject ALTREP inertly	Reason: R < 4.3 cannot construct list ALTREP test fixtures
-4.3.3	test-ParamSetShadow.R	the shadow constraint adapter admits only ordinary names	Reason: On CRAN
-4.3.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
-4.3.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
-4.3.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
-4.3.3	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
-4.3.3	test-native-domain-construction.R	ALTREP value snapshots reject an attribute-generation tear	Reason: On CRAN
-4.3.3	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
-4.3.3	test-native-domain-construction.R	Domain requirements retain rows and row fields before RHS reentry	Reason: On CRAN
-4.3.3	test-native-domain-construction.R	a snapshotted value leaf keeps its own materialized names	Reason: On CRAN
-4.3.3	test-native-domain-construction.R	semantic snapshots do not launder structure added by ALTREP reentry	Reason: On CRAN
-4.3.3	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
-4.3.3	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
-4.3.3	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
-4.3.3	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
-4.3.3	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
-4.3.3	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
-4.3.3	test-native-paramset-qunif.R	frame input names and columns come from one generation	Reason: On CRAN
-4.3.3	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
-4.3.3	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
-4.3.3	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
-4.3.3	test-native-paramset-value-mutation.R	ObjectTuneToken receipts stay rooted across later validation work	Reason: On CRAN
-4.3.3	test-native-paramsetcollection-callback-detach.R	detachment affixes stay rooted while the plan is built	Reason: On CRAN
-4.3.3	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
-4.3.3	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
-4.3.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: On CRAN
-4.3.3	test-native-snapshot-atomicity.R	ParamSet construction captures each name with its Domain	Reason: On CRAN
-4.3.3	test-native-snapshot-atomicity.R	data.table finalization captures one column/name generation	Reason: On CRAN
-4.3.3	test-native-snapshot-atomicity.R	dependency assignment captures names with exact columns	Reason: On CRAN
-4.3.3	test-native-snapshot-atomicity.R	dependency snapshots capture every Condition row before RHS reentry	Reason: On CRAN
-4.3.3	test-native-snapshot-atomicity.R	public table consumers keep names paired with captured columns	Reason: On CRAN
-4.3.3	test-native-snapshot-atomicity.R	tag assignment captures each name with its value vector	Reason: On CRAN
-4.3.3	test-regression-barren-subtree-prune.R	pruned graphs survive gctorture	Reason: On CRAN
-4.3.3	test-regression-diagnostic-encoding.R	mismarked diagnostics survive transient allocation under collection	Reason: On CRAN
-4.3.3	test-upgrade-paradox-object-graph.R	environment boundary policy comes from the selected generation	Reason: On CRAN
-4.3.3	test-upgrade-paradox-object-graph.R	environment discovery uses two equal complete edge snapshots	Reason: On CRAN
-4.3.3	test-upgrade-paradox-object-graph.R	graph discovery never splices vector attributes and elements	Reason: On CRAN
-4.3.3	test-upgrade-paradox-object-graph.R	legacy callback-carrier snapshots keep names paired with elements	Reason: On CRAN
-4.3.3	test-upgrade-paradox-object-graph.R	legacy table snapshots keep names, columns, and attributes together	Reason: On CRAN
-4.4.3	test-ParamSetShadow.R	the shadow constraint adapter admits only ordinary names	Reason: On CRAN
-4.4.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
-4.4.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
-4.4.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
-4.4.3	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
-4.4.3	test-native-domain-construction.R	ALTREP value snapshots reject an attribute-generation tear	Reason: On CRAN
-4.4.3	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
-4.4.3	test-native-domain-construction.R	Domain requirements retain rows and row fields before RHS reentry	Reason: On CRAN
-4.4.3	test-native-domain-construction.R	a snapshotted value leaf keeps its own materialized names	Reason: On CRAN
-4.4.3	test-native-domain-construction.R	semantic snapshots do not launder structure added by ALTREP reentry	Reason: On CRAN
-4.4.3	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
-4.4.3	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
-4.4.3	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
-4.4.3	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
-4.4.3	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
-4.4.3	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
-4.4.3	test-native-paramset-qunif.R	frame input names and columns come from one generation	Reason: On CRAN
-4.4.3	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
-4.4.3	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
-4.4.3	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
-4.4.3	test-native-paramset-value-mutation.R	ObjectTuneToken receipts stay rooted across later validation work	Reason: On CRAN
-4.4.3	test-native-paramsetcollection-callback-detach.R	detachment affixes stay rooted while the plan is built	Reason: On CRAN
-4.4.3	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
-4.4.3	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
-4.4.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: On CRAN
-4.4.3	test-native-snapshot-atomicity.R	ParamSet construction captures each name with its Domain	Reason: On CRAN
-4.4.3	test-native-snapshot-atomicity.R	data.table finalization captures one column/name generation	Reason: On CRAN
-4.4.3	test-native-snapshot-atomicity.R	dependency assignment captures names with exact columns	Reason: On CRAN
-4.4.3	test-native-snapshot-atomicity.R	dependency snapshots capture every Condition row before RHS reentry	Reason: On CRAN
-4.4.3	test-native-snapshot-atomicity.R	public table consumers keep names paired with captured columns	Reason: On CRAN
-4.4.3	test-native-snapshot-atomicity.R	tag assignment captures each name with its value vector	Reason: On CRAN
-4.4.3	test-regression-barren-subtree-prune.R	pruned graphs survive gctorture	Reason: On CRAN
-4.4.3	test-regression-diagnostic-encoding.R	mismarked diagnostics survive transient allocation under collection	Reason: On CRAN
-4.4.3	test-upgrade-paradox-object-graph.R	environment boundary policy comes from the selected generation	Reason: On CRAN
-4.4.3	test-upgrade-paradox-object-graph.R	environment discovery uses two equal complete edge snapshots	Reason: On CRAN
-4.4.3	test-upgrade-paradox-object-graph.R	graph discovery never splices vector attributes and elements	Reason: On CRAN
-4.4.3	test-upgrade-paradox-object-graph.R	legacy callback-carrier snapshots keep names paired with elements	Reason: On CRAN
-4.4.3	test-upgrade-paradox-object-graph.R	legacy table snapshots keep names, columns, and attributes together	Reason: On CRAN
-4.5.2	test-ParamSetShadow.R	the shadow constraint adapter admits only ordinary names	Reason: On CRAN
-4.5.2	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
-4.5.2	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
-4.5.2	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
-4.5.2	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
-4.5.2	test-native-domain-construction.R	ALTREP value snapshots reject an attribute-generation tear	Reason: On CRAN
-4.5.2	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
-4.5.2	test-native-domain-construction.R	Domain requirements retain rows and row fields before RHS reentry	Reason: On CRAN
-4.5.2	test-native-domain-construction.R	a snapshotted value leaf keeps its own materialized names	Reason: On CRAN
-4.5.2	test-native-domain-construction.R	semantic snapshots do not launder structure added by ALTREP reentry	Reason: On CRAN
-4.5.2	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
-4.5.2	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
-4.5.2	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
-4.5.2	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
-4.5.2	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
-4.5.2	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
-4.5.2	test-native-paramset-qunif.R	frame input names and columns come from one generation	Reason: On CRAN
-4.5.2	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
-4.5.2	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
-4.5.2	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
-4.5.2	test-native-paramset-value-mutation.R	ObjectTuneToken receipts stay rooted across later validation work	Reason: On CRAN
-4.5.2	test-native-paramsetcollection-callback-detach.R	detachment affixes stay rooted while the plan is built	Reason: On CRAN
-4.5.2	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
-4.5.2	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
-4.5.2	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: On CRAN
-4.5.2	test-native-snapshot-atomicity.R	ParamSet construction captures each name with its Domain	Reason: On CRAN
-4.5.2	test-native-snapshot-atomicity.R	data.table finalization captures one column/name generation	Reason: On CRAN
-4.5.2	test-native-snapshot-atomicity.R	dependency assignment captures names with exact columns	Reason: On CRAN
-4.5.2	test-native-snapshot-atomicity.R	dependency snapshots capture every Condition row before RHS reentry	Reason: On CRAN
-4.5.2	test-native-snapshot-atomicity.R	public table consumers keep names paired with captured columns	Reason: On CRAN
-4.5.2	test-native-snapshot-atomicity.R	tag assignment captures each name with its value vector	Reason: On CRAN
-4.5.2	test-regression-barren-subtree-prune.R	pruned graphs survive gctorture	Reason: On CRAN
-4.5.2	test-regression-diagnostic-encoding.R	mismarked diagnostics survive transient allocation under collection	Reason: On CRAN
-4.5.2	test-upgrade-paradox-object-graph.R	environment boundary policy comes from the selected generation	Reason: On CRAN
-4.5.2	test-upgrade-paradox-object-graph.R	environment discovery uses two equal complete edge snapshots	Reason: On CRAN
-4.5.2	test-upgrade-paradox-object-graph.R	graph discovery never splices vector attributes and elements	Reason: On CRAN
-4.5.2	test-upgrade-paradox-object-graph.R	legacy callback-carrier snapshots keep names paired with elements	Reason: On CRAN
-4.5.2	test-upgrade-paradox-object-graph.R	legacy table snapshots keep names, columns, and attributes together	Reason: On CRAN

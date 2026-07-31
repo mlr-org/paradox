@@ -635,7 +635,9 @@ builds and installs paradox into a fresh stage library, runs the focused
 public-R-API facade probe and an authenticated supported source-test scope, and
 audits undefined DSO symbols against that release's allowed accessor set. All
 supported interpreters stage the complete discovered public, characterization,
-regression, and native source suite. The header-only
+regression, and native source suite with `NOT_CRAN=true`. The runner removes an
+inherited characterization-GCT override and clears `LC_ALL` only after R has
+established the stage's deterministic UTF-8 process locale. The header-only
 `environment/runtime-matrix-pre46-exclusions.tsv` authenticates that there are
 no remaining pre-R-4.6 implementation exclusions. The coordinator validates
 that zero-row contract from the exact extracted candidate before admitting
@@ -655,15 +657,15 @@ before binding inspection. The two ConfigSpace
 files that stop at their absent-reticulate guard remain staged and are audited
 separately through `environment/runtime-matrix-whole-file-skips.tsv`, including
 the old file's preceding available `callr` guard; they are not silently treated
-as executed result files. Every result-block skip title and reason is likewise
-derived from the current block-scoped `skip_on_cran()` source and matched
-against `environment/runtime-matrix-result-skips.tsv` for every runtime. The
+as executed result files. Every `skip_on_cran()` block is admitted, so an
+`On CRAN` result is forbidden. The current active-binding and list-ALTREP
+guards instead derive the exact capability rows matched against
+`environment/runtime-matrix-result-skips.tsv` for every runtime. The
 suite must be clean and nonempty; file, context, support, and skip counts are
 joined to their retained inventories instead of frozen prose floors. The stage
 retains the exact scope ledger, staged source copies, testthat-reported
 inventory, skip ledgers, counts, and hashes.
-R 3.6.3 and R 4.0.5 then run one additional bounded slice with
-`NOT_CRAN=true`. Its reviewed
+R 3.6.3 and R 4.0.5 then run one additional bounded focused replay. Its reviewed
 `environment/runtime-matrix-old-r-stress.tsv` rows name exact literal
 `test_that()` titles from nine selected source files: the skipped gctorture
 cases cover native entry points, Domain callback reentry, ParamSet values,

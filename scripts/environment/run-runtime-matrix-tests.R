@@ -71,7 +71,20 @@ if (!file.exists(result_audit_helper) || dir.exists(result_audit_helper) ||
 }
 source(result_audit_helper, local = TRUE)
 
-Sys.setenv(NOT_CRAN = "false")
+Sys.setenv(NOT_CRAN = "true")
+Sys.unsetenv("PARADOX_SKIP_CHARACTERIZATION_GCT")
+if (!identical(Sys.getenv("NOT_CRAN", unset = ""), "true") ||
+    nzchar(Sys.getenv("PARADOX_SKIP_CHARACTERIZATION_GCT", unset = ""))) {
+  stop("could not establish the complete runtime-suite policy", call. = FALSE)
+}
+# R has already established the deterministic C.UTF-8 process locale supplied
+# by the stage.  Clear the overriding selector before testthat/withr temporarily
+# changes locale categories; old releases otherwise emit thousands of no-op
+# locale warnings once the normally CRAN-skipped stress blocks are admitted.
+Sys.unsetenv("LC_ALL")
+if (nzchar(Sys.getenv("LC_ALL", unset = ""))) {
+  stop("could not clear LC_ALL for the complete runtime suite", call. = FALSE)
+}
 options(
   warn = 1L,
   warnPartialMatchArgs = TRUE,
@@ -83,6 +96,8 @@ library("paradox", character.only = TRUE, lib.loc = candidate_library)
 cat("runtime=", as.character(getRversion()), "\n", sep = "")
 cat("installed_path=", installed, "\n", sep = "")
 cat("not_cran=", Sys.getenv("NOT_CRAN"), "\n", sep = "")
+cat("lc_all=unset\n")
+cat("characterization_gct_override=unset\n")
 cat("mbo_config_fixture_count=", length(mbo_config_files), "\n", sep = "")
 cat("mbo_config_fixture_source=retained-reviewed-git-objects\n")
 

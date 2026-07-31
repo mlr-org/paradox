@@ -621,7 +621,10 @@ release-ready and do not transfer an earlier candidate's green gates.
   full native/package acceptance, both explicit C23 compiler modes, all seven
   supported runtimes—exactly one complete stage for every minor line at R
   3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2—all pinned header
-  axes, and the differential gate;
+  axes, and the differential gate. A complete supported-runtime stage means
+  the full main source suite ran with `NOT_CRAN=true`, no
+  `PARADOX_SKIP_CHARACTERIZATION_GCT` override, and no admitted `On CRAN`
+  result; only exact source-derived runtime-capability skips remain;
 - [ ] create a fresh replayable source donor and complete combined memory
   analysis against the new candidate;
 - [ ] install one fresh candidate-owned

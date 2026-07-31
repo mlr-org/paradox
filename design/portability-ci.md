@@ -45,6 +45,9 @@ scripts/verify-runtime-matrix-evidence \
 The seven runtime stages use isolated libraries and caches and may overlap only when
 the memory-aware resource report admits the workers. Nested make, testthat,
 parallel/future, BLAS, and OpenMP pools remain one.
+Each stage runs the complete main source suite with `NOT_CRAN=true`; exact
+evidence rejects CRAN-policy skips while retaining genuine runtime-capability
+skips.
 
 Micromamba's ordinary hard-link mode is forbidden for these persistent
 prefixes. Provisioning uses `--always-copy`, and the prefix receipt refuses
