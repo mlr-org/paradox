@@ -1531,7 +1531,11 @@ private stub formals `Sampler1D$as_dt_col(x)` and
 after applying the same embedded-graph gate, they call the versioned
 lower-level targets directly with the already selected Domain fields. They
 never pass Paradox-2-only arguments through a historical stub, and current
-samplers continue to call their versioned `.sample()` targets directly.
+samplers continue to call their versioned `.sample()` targets directly. Both
+generated bridge environments bind the exact callable versioned
+`sample_truncated` target because their common syntactic body contains that
+call. The categorical branch is exact and never invokes it; a `NULL` binding
+is not an allowed serialized gateway shape.
 
 Legacy third-party ParamSet subclasses are admitted only through
 `register_paradox_object_upgrader()`. Registration is exact and narrow:

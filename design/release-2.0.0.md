@@ -3,18 +3,37 @@
 ## Status
 
 **The corrected source-bound Domain performance obligation is closed. Candidate
-`d6ad5c60af10887b07f406464b551a3007d1a9c5` is rejected by its diagnostic
-`release-core` run: every completed harness, C23, API-header, and differential
-row passed, but `R CMD check` exposed the documented function-valued
-`to_tune(list(...))` example failing at the overly general Domain-`repr`
-metadata owner. The every-minor runtime task was correctly blocked before
-starting. Source is reopened only for the narrow reviewed Domain-`repr`
-correction and its contract/regression updates. Freeze a replacement after
-that delta converges, then run C17/C23, the complete R
-3.6-through-current minor matrix, memory, compatibility, and all remaining
-release gates below.**
+`41dc51dc4f6de4d92999a34cbd2cab6f17364db7` is rejected by its diagnostic
+`release-core` run. All four harness rows, differential, C23, the complete
+API-header matrix, both full native test executions, examples, and every
+substantive `R CMD check --as-cran` stage passed. The check nevertheless ended
+with one NOTE: the cold categorical Paradox-1 sampler gateway's shared body
+contains a syntactic `sample_truncated()` call while its generated environment
+bound that name to `NULL`. The every-minor runtime task was correctly blocked.
+Source is reopened only to bind the exact callable versioned target in both
+gateway environments and regress that serialized-closure contract. Freeze a
+replacement after this delta converges, then run C17/C23, the complete real R
+3.6, 4.0, 4.1, 4.2, 4.3, 4.4, 4.5, and current 4.6 runtime matrix, memory,
+compatibility, and all remaining release gates below.**
 
 The rejected ref is
+`refs/paradox-release/candidate-20260731T215429Z`, commit
+`41dc51dc4f6de4d92999a34cbd2cab6f17364db7`, tree
+`85f2bf5e84a9df32143e1b9d3e404c74be831de9`. In
+`.local/verify/runs/release-candidate-41dc51d`, seven tasks passed:
+the four harness tasks, C23 compatibility under GCC 15.2 and Clang 22, the
+complete API-header matrix, and all 33 differential cases. `native-release`
+passed both full test executions and all functional check stages, then failed
+release policy solely because `R CMD check --as-cran` ended with the one
+code-analysis NOTE above; `runtime-supported` therefore never started.
+Completion, JSON-summary, and TSV-summary SHA-256 values are
+`c46f32dad37d5d6b2fb8dab1287433eb4bfc30ecbe911c449259052d957f167f`,
+`23b1a0374a849d26fc96b79b4dc2b36ef96372bfed822270da4cc62d520d889a`,
+and
+`cf9bcef5fe4784fb85fc5297f2ee43e83776279abd51ede3181e6c04c119f96e`.
+This run is diagnostic only and transfers no candidate acceptance.
+
+The preceding rejected ref is
 `refs/paradox-release/candidate-20260731T211009Z`, commit
 `d6ad5c60af10887b07f406464b551a3007d1a9c5`, tree
 `4083e33553d8a33efe1d4a0545150f90ecfb5519`. In

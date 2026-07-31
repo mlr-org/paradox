@@ -382,13 +382,15 @@
     envir = namespace,
     inherits = FALSE
   )
-  sample_truncated = if (identical(sampler_kind, "rfun")) {
-    get(
-      .paradox_lean_target_name("Sampler1DRfun", "sample_truncated"),
-      envir = namespace,
-      inherits = FALSE
-    )
-  }
+  # Both generated bodies contain the syntactic call below. Keep its lexical
+  # target callable in both closure environments so R's package usage analysis
+  # can prove the symbol is resolved; the exact `sampler_kind` branch means the
+  # categorical gateway never invokes it.
+  sample_truncated = get(
+    .paradox_lean_target_name("Sampler1DRfun", "sample_truncated"),
+    envir = namespace,
+    inherits = FALSE
+  )
 
   function(self, private, super, n) {
     param = .paradox_legacy_embedded_param_set(self, old_name)

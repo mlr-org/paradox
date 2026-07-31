@@ -170,7 +170,12 @@ Sampler bridges: Paradox 1's private `Sampler1D$as_dt_col` and
 versions. Cold unversioned `Sampler1DRfun$.sample` (including Normal) and
 `Sampler1DCateg$.sample` targets select the current Domain once and invoke the
 versioned lower-level targets directly; no Paradox-2-only argument is sent
-through an old stub, and current sampling paths remain unchanged.
+through an old stub, and current sampling paths remain unchanged. Their shared
+syntactic body contains the `sample_truncated()` call, so both generated
+gateway environments capture the exact callable versioned target even though
+the exact categorical branch never invokes it. This keeps each serialized
+gateway closure lexically complete and visible to R's package usage analysis;
+it adds no current-path dispatch.
 
 The migration implementation has three layers:
 

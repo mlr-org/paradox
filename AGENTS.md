@@ -20,6 +20,26 @@ package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
 The most recent frozen package-facing ref is the rejected diagnostic candidate
+`refs/paradox-release/candidate-20260731T215429Z`, commit
+`41dc51dc4f6de4d92999a34cbd2cab6f17364db7`, tree
+`85f2bf5e84a9df32143e1b9d3e404c74be831de9`. Its
+`release-candidate-41dc51d` coordinator passed all four harness rows,
+differential, the complete API-header matrix, and explicit C23 builds under GCC
+15.2 and Clang 22. The full native test executions and every substantive
+`R CMD check --as-cran` stage passed; the check ended with one code-analysis
+NOTE because the cold categorical Paradox-1 sampler gateway left the
+syntactically present `sample_truncated` symbol bound to `NULL`. The
+every-minor runtime task was correctly blocked. Completion, JSON-summary, and
+TSV-summary SHA-256 values are respectively
+`c46f32dad37d5d6b2fb8dab1287433eb4bfc30ecbe911c449259052d957f167f`,
+`23b1a0374a849d26fc96b79b4dc2b36ef96372bfed822270da4cc62d520d889a`,
+and
+`cf9bcef5fe4784fb85fc5297f2ee43e83776279abd51ede3181e6c04c119f96e`.
+This is diagnostic evidence only. Source is reopened for the narrow cold
+gateway binding repair and its focused regression; freeze and fully execute a
+new immutable candidate afterward.
+
+The preceding rejected diagnostic candidate was
 `refs/paradox-release/candidate-20260731T150816Z`, commit
 `a153faeeed8735c4aeeba512a70fb71b11235469`, tree
 `2fe241b90b0e86381a6f884fd29d3a80baab6b7b`. Its corrected source-bound Domain
@@ -1433,7 +1453,11 @@ operator action.
   `Sampler1DCateg$.sample` targets must call the versioned lower-level targets
   directly after the embedded-graph gate; never send their additional
   Domain-derived arguments through the historical stubs or add this bridge to
-  a current versioned sampling path.
+  a current versioned sampling path. Both generated gateway environments bind
+  the exact callable versioned `sample_truncated` target because their shared
+  syntactic body contains that call; the exact categorical branch never
+  invokes it. Do not replace that binding with `NULL`, which makes the
+  serialized closure incomplete and produces a package code-analysis NOTE.
 - `register_paradox_object_upgrader()` is the sole narrow owner-package
   extension for serialized ParamSet subclasses. It exact-matches one full
   `c(<owner class>, "ParamSet", "R6")` vector and records only an authenticated

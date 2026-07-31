@@ -1633,6 +1633,18 @@ test_that("serialized Paradox 1 Sampler1D stubs replay changed private formals",
       ".__Sampler1DRfun__.sample",
       ".__Sampler1DCateg__.sample")) {
     legacy = get(target, envir = namespace, inherits = FALSE)
+    expect_identical(
+      get(
+        "sample_truncated",
+        envir = environment(legacy),
+        inherits = FALSE
+      ),
+      get(
+        ".__paradox2_Sampler1DRfun__sample_truncated",
+        envir = namespace,
+        inherits = FALSE
+      )
+    )
     expect_match(
       paste(deparse(body(legacy)), collapse = "\n"),
       ".paradox_legacy_embedded_param_set",
