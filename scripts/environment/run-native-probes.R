@@ -1947,6 +1947,19 @@ main <- function() {
       check(identical(fired, 1L) &&
         identical(result$params$id, "child.x"),
         "collection construct reentry fixture differs")
+    },
+    direct_test_domain_interpretation_closure = function() {
+      closure <- function(mask) {
+        .Call(symbol("test_domain_interpretation_closure"), mask)
+      }
+      # cargo pulls in tags and trafo; special values pull in trafo; the
+      # bounds and levels declarations stand alone.
+      check(identical(closure(0L), 0L) &&
+        identical(closure(8L), 56L) &&
+        identical(closure(4L), 36L) &&
+        identical(closure(3L), 3L) &&
+        identical(closure(63L), 63L),
+        "Domain interpretation closure differs")
     }
   )
 

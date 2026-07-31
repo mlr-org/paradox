@@ -133,12 +133,16 @@ static void report_row_failure(paradox_builtin_domain_kind_t kind,
 
 SEXP paradox_admit_public_domain_table(SEXP domain,
     paradox_builtin_domain_kind_t kind, R_xlen_t row_count,
+    unsigned int interpreted,
     paradox_admitted_domain_table_t *table,
     R_xlen_t *work_since_interrupt) {
   if (row_count < 0 ||
       row_count > R_XLEN_T_MAX / PARADOX_ADMITTED_ROW_STRIDE) {
     Rf_error("Corrupt Domain storage: unsupported Domain row count");
   }
+  /* The owner's closure decides what the declaration implies; expanding it
+   * here as well lets the capture below skip fields no rule will read. */
+  interpreted = paradox_domain_interpretation_closure(interpreted);
   /*
    * Allocate every destination first. The capture pass below then pairs each
    * canonical column name with the exact column it selected without another
@@ -177,10 +181,13 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
   }
 
   const R_xlen_t buffer_size = row_count == 0 ? 1 : row_count;
-  double *numeric_storage = paradox_temporary_alloc(
-    buffer_size,
-    3U * sizeof(*numeric_storage)
-  );
+  double *numeric_storage = NULL;
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
+    numeric_storage = paradox_temporary_alloc(
+      buffer_size,
+      3U * sizeof(*numeric_storage)
+    );
+  }
 
   /*
    * The interpreted column selection is one allocation-free pass. Column shape
@@ -233,17 +240,22 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
     SET_VECTOR_ELT(columns, column, value);
   }
 
-  double *lower_values = numeric_storage;
-  double *upper_values = numeric_storage + buffer_size;
-  double *tolerance_values = numeric_storage + 2 * buffer_size;
-  SEXP lower_column = VECTOR_ELT(columns, PARADOX_DOMAIN_LOWER);
-  SEXP upper_column = VECTOR_ELT(columns, PARADOX_DOMAIN_UPPER);
-  SEXP tolerance_column = VECTOR_ELT(columns, PARADOX_DOMAIN_TOLERANCE);
-  for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_account_work(work_since_interrupt);
-    lower_values[row] = paradox_numeric_elt(lower_column, row);
-    upper_values[row] = paradox_numeric_elt(upper_column, row);
-    tolerance_values[row] = paradox_numeric_elt(tolerance_column, row);
+  double *lower_values = NULL;
+  double *upper_values = NULL;
+  double *tolerance_values = NULL;
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
+    lower_values = numeric_storage;
+    upper_values = numeric_storage + buffer_size;
+    tolerance_values = numeric_storage + 2 * buffer_size;
+    SEXP lower_column = VECTOR_ELT(columns, PARADOX_DOMAIN_LOWER);
+    SEXP upper_column = VECTOR_ELT(columns, PARADOX_DOMAIN_UPPER);
+    SEXP tolerance_column = VECTOR_ELT(columns, PARADOX_DOMAIN_TOLERANCE);
+    for (R_xlen_t row = 0; row < row_count; ++row) {
+      paradox_account_work(work_since_interrupt);
+      lower_values[row] = paradox_numeric_elt(lower_column, row);
+      upper_values[row] = paradox_numeric_elt(upper_column, row);
+      tolerance_values[row] = paradox_numeric_elt(tolerance_column, row);
+    }
   }
 
   SEXP lower_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_LOWER);
@@ -279,35 +291,49 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
      * owner admitted.
      */
     const R_xlen_t offset = row * PARADOX_ADMITTED_ROW_STRIDE;
-    SET_VECTOR_ELT(
-      rows,
-      offset + PARADOX_ADMITTED_LEVELS,
-      VECTOR_ELT(levels_column, row)
-    );
-    SET_VECTOR_ELT(
-      rows,
-      offset + PARADOX_ADMITTED_SPECIAL_VALS,
-      VECTOR_ELT(special_column, row)
-    );
-    SET_VECTOR_ELT(
-      rows,
-      offset + PARADOX_ADMITTED_CARGO,
-      VECTOR_ELT(cargo_column, row)
-    );
-    SET_VECTOR_ELT(
-      rows,
-      offset + PARADOX_ADMITTED_TAGS,
-      VECTOR_ELT(tags_column, row)
-    );
-    SET_VECTOR_ELT(
-      rows,
-      offset + PARADOX_ADMITTED_TRAFO,
-      VECTOR_ELT(trafo_column, row)
-    );
+    /* Fields outside the closure stay `R_NilValue` in the captured row: no
+     * rule will read them, and the declaring kernel must not either. */
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_LEVELS) {
+      SET_VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_LEVELS,
+        VECTOR_ELT(levels_column, row)
+      );
+    }
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+      SET_VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_SPECIAL_VALS,
+        VECTOR_ELT(special_column, row)
+      );
+    }
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO) {
+      SET_VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_CARGO,
+        VECTOR_ELT(cargo_column, row)
+      );
+    }
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_TAGS) {
+      SET_VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_TAGS,
+        VECTOR_ELT(tags_column, row)
+      );
+    }
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_TRAFO) {
+      SET_VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_TRAFO,
+        VECTOR_ELT(trafo_column, row)
+      );
+    }
 
-    SET_REAL_ELT(lower_carrier, 0, lower_values[row]);
-    SET_REAL_ELT(upper_carrier, 0, upper_values[row]);
-    SET_REAL_ELT(tolerance_carrier, 0, tolerance_values[row]);
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
+      SET_REAL_ELT(lower_carrier, 0, lower_values[row]);
+      SET_REAL_ELT(upper_carrier, 0, upper_values[row]);
+      SET_REAL_ELT(tolerance_carrier, 0, tolerance_values[row]);
+    }
     SET_STRING_ELT(id_carrier, 0, STRING_ELT(ids, row));
     /* The three uniform schema strings repeat the same interned CHARSXP on
      * every row of a canonical table; rewriting an unchanged element would
@@ -328,20 +354,24 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
       offset + PARADOX_ADMITTED_SPECIAL_VALS
     );
     paradox_special_values_receipt_t receipt;
-    if (!paradox_prepare_builtin_special_values(
-        cls_carrier,
-        storage_carrier,
-        special_values,
-        &receipt,
-        work_since_interrupt
-      )) {
-      UNPROTECT(1);
-      report_row_failure(
-        kind,
-        PARADOX_DOMAIN_FIELD_SPECIAL_VALUES,
-        levels,
-        special_values
-      );
+    paradox_special_values_receipt_t *selected_receipt = NULL;
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+      if (!paradox_prepare_builtin_special_values(
+          cls_carrier,
+          storage_carrier,
+          special_values,
+          &receipt,
+          work_since_interrupt
+        )) {
+        UNPROTECT(1);
+        report_row_failure(
+          kind,
+          PARADOX_DOMAIN_FIELD_SPECIAL_VALUES,
+          levels,
+          special_values
+        );
+      }
+      selected_receipt = &receipt;
     }
     paradox_builtin_domain_kind_t admitted_kind =
       PARADOX_BUILTIN_DOMAIN_UNKNOWN;
@@ -366,7 +396,8 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
         storage_carrier,
         VECTOR_ELT(rows, offset + PARADOX_ADMITTED_TAGS),
         VECTOR_ELT(rows, offset + PARADOX_ADMITTED_TRAFO),
-        &receipt,
+        selected_receipt,
+        interpreted,
         &admitted_kind,
         NULL,
         &failure,

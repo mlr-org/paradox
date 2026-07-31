@@ -306,12 +306,45 @@ static int cargo_names_are_canonical(SEXP cargo) {
   return TRUE;
 }
 
+/* The five closed kinds in one fixed order, with their class and storage
+ * names interned at package load: a canonical table stores exactly these
+ * CHARSXPs, so row admission resolves the kind by pointer identity and the
+ * byte comparison below only runs for foreign spellings. */
+static const domain_kind_t admitted_kind_order[5] = {
+  DOMAIN_KIND_DBL, DOMAIN_KIND_INT, DOMAIN_KIND_FCT,
+  DOMAIN_KIND_LGL, DOMAIN_KIND_UTY
+};
+static const char *const admitted_kind_classes[5] = {
+  "ParamDbl", "ParamInt", "ParamFct", "ParamLgl", "ParamUty"
+};
+static const char *const admitted_kind_storage[5] = {
+  "numeric", "integer", "character", "logical", "list"
+};
+static SEXP interned_kind_classes[5];
+static SEXP interned_kind_storage[5];
+
+void paradox_domain_admission_intern(void) {
+  for (int index = 0; index < 5; ++index) {
+    SEXP class_name = Rf_mkChar(admitted_kind_classes[index]);
+    R_PreserveObject(class_name);
+    interned_kind_classes[index] = class_name;
+    SEXP storage_name = Rf_mkChar(admitted_kind_storage[index]);
+    R_PreserveObject(storage_name);
+    interned_kind_storage[index] = storage_name;
+  }
+}
+
 static domain_kind_t domain_kind_from_class(SEXP cls) {
   if (!scalar_string(cls)) {
     return DOMAIN_KIND_UNKNOWN;
   }
 
   SEXP class_name = STRING_ELT(cls, 0);
+  for (int index = 0; index < 5; ++index) {
+    if (class_name == interned_kind_classes[index]) {
+      return admitted_kind_order[index];
+    }
+  }
   if (paradox_domain_string_is(class_name, "ParamDbl")) {
     return DOMAIN_KIND_DBL;
   }
@@ -351,8 +384,19 @@ static const char *domain_storage_name(domain_kind_t kind) {
 static domain_kind_t domain_kind(SEXP cls, SEXP storage_type) {
   const domain_kind_t kind = domain_kind_from_class(cls);
   const char *expected_storage = domain_storage_name(kind);
-  if (expected_storage == NULL || !scalar_string(storage_type) ||
-      !paradox_domain_string_is(STRING_ELT(storage_type, 0), expected_storage)) {
+  if (expected_storage == NULL || !scalar_string(storage_type)) {
+    return DOMAIN_KIND_UNKNOWN;
+  }
+  SEXP storage_name = STRING_ELT(storage_type, 0);
+  for (int index = 0; index < 5; ++index) {
+    if (admitted_kind_order[index] == kind) {
+      if (storage_name == interned_kind_storage[index]) {
+        return kind;
+      }
+      break;
+    }
+  }
+  if (!paradox_domain_string_is(storage_name, expected_storage)) {
     return DOMAIN_KIND_UNKNOWN;
   }
   return kind;
@@ -836,24 +880,49 @@ int paradox_prepare_builtin_special_values(SEXP cls, SEXP storage,
 }
 
 /*
+ * The rule-dependency closure of an interpretation declaration. Fields
+ * validate against each other, so an operation's mask cannot be a free
+ * choice: cargo rules read the tags (the internal-tuning triple) and the
+ * transformation (the logscale pairing); the special-value rules read the
+ * transformation (nonempty specials forbid one). Expanding the declaration
+ * here -- in the translation unit that owns the rules -- keeps every mask's
+ * correctness auditable in one place. The identity spine has no bit: it is
+ * always admitted.
+ */
+unsigned int paradox_domain_interpretation_closure(unsigned int interpreted) {
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO) {
+    interpreted |=
+      PARADOX_DOMAIN_INTERPRET_TAGS | PARADOX_DOMAIN_INTERPRET_TRAFO;
+  }
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+    interpreted |= PARADOX_DOMAIN_INTERPRET_TRAFO;
+  }
+  return interpreted & PARADOX_DOMAIN_INTERPRET_ALL;
+}
+
+/*
  * The schema half of canonical row admission: identity, closed kind, grouping,
  * tags, cargo, transformation, special values, bounds, and levels. It is the
  * complete rule set for the fields an operation on an existing Domain
  * interprets, and `paradox_admit_builtin_domain_row()` below is its only
  * extension -- the default/requirement/initialization rules a constructor
  * additionally owns. Splitting the owner here keeps one implementation of
- * every rule; it does not create a second admission mode.
+ * every rule; it does not create a second admission mode. `interpreted`
+ * selects declared fields and is closure-expanded on entry; a rule outside
+ * the closure is skipped whole, never restated elsewhere.
  */
 int paradox_admit_builtin_domain_schema_row(SEXP id, SEXP cls, SEXP grouping,
     SEXP cargo, SEXP lower, SEXP upper, SEXP tolerance, SEXP levels,
     SEXP special_values, SEXP storage, SEXP tags, SEXP trafo,
     const paradox_special_values_receipt_t *special_receipt,
+    unsigned int interpreted,
     paradox_builtin_domain_kind_t *kind, double *admitted_bounds,
     paradox_domain_field_t *failure, R_xlen_t *work_since_interrupt) {
 #define REJECT_DOMAIN_FIELD(field_) do { \
   *failure = (field_); \
   return FALSE; \
 } while (0)
+  interpreted = paradox_domain_interpretation_closure(interpreted);
   *kind = PARADOX_BUILTIN_DOMAIN_UNKNOWN;
   *failure = PARADOX_DOMAIN_FIELD_NONE;
   if (id != R_NilValue &&
@@ -872,68 +941,79 @@ int paradox_admit_builtin_domain_schema_row(SEXP id, SEXP cls, SEXP grouping,
       ))) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_GROUPING);
   }
-  if (TYPEOF(tags) != STRSXP || ALTREP(tags) || Rf_isS4(tags) ||
-      Rf_isObject(tags) ||
-      !paradox_api_has_no_attributes(tags)) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS);
-  }
-  for (R_xlen_t index = 0; index < XLENGTH(tags); ++index) {
-    paradox_account_work(work_since_interrupt);
-    if (STRING_ELT(tags, index) == NA_STRING) {
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_TAGS) {
+    if (TYPEOF(tags) != STRSXP || ALTREP(tags) || Rf_isS4(tags) ||
+        Rf_isObject(tags) ||
+        !paradox_api_has_no_attributes(tags)) {
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS);
     }
+    for (R_xlen_t index = 0; index < XLENGTH(tags); ++index) {
+      paradox_account_work(work_since_interrupt);
+      if (STRING_ELT(tags, index) == NA_STRING) {
+        REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS);
+      }
+    }
+    if (strings_have_duplicates(tags)) {
+      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS_DUPLICATE);
+    }
   }
-  if (strings_have_duplicates(tags)) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS_DUPLICATE);
-  }
-  {
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO) {
     paradox_domain_field_t cargo_failure = PARADOX_DOMAIN_FIELD_CARGO;
     if (!cargo_is_canonical(cargo, tags, private_kind, &cargo_failure)) {
       REJECT_DOMAIN_FIELD(cargo_failure);
     }
   }
-  if (!function_or_null(trafo)) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TRAFO);
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_TRAFO) {
+    if (!function_or_null(trafo)) {
+      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TRAFO);
+    }
   }
-  SEXP logscale = named_element(cargo, "logscale");
-  if (logscale != R_NilValue &&
-      (private_kind != DOMAIN_KIND_DBL || trafo == R_NilValue)) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_CARGO);
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO) {
+    SEXP logscale = named_element(cargo, "logscale");
+    if (logscale != R_NilValue &&
+        (private_kind != DOMAIN_KIND_DBL || trafo == R_NilValue)) {
+      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_CARGO);
+    }
   }
-  const int typed = private_kind != DOMAIN_KIND_UTY;
-  if (special_receipt == NULL ||
-      special_receipt->special_values != special_values ||
-      special_receipt->typed != typed) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
-  }
-  if (XLENGTH(special_values) != 0 && trafo != R_NilValue) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+    const int typed = private_kind != DOMAIN_KIND_UTY;
+    if (special_receipt == NULL ||
+        special_receipt->special_values != special_values ||
+        special_receipt->typed != typed) {
+      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
+    }
+    if (XLENGTH(special_values) != 0 && trafo != R_NilValue) {
+      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
+    }
   }
 
   double admitted_lower = NA_REAL;
   double admitted_upper = NA_REAL;
   double admitted_tolerance = NA_REAL;
-  if (private_kind == DOMAIN_KIND_DBL || private_kind == DOMAIN_KIND_INT) {
-    if (!plain_scalar_number_value(lower, &admitted_lower) ||
-        !plain_scalar_number_value(upper, &admitted_upper) ||
-        !plain_scalar_number_value(tolerance, &admitted_tolerance) ||
-        admitted_lower > admitted_upper || !R_FINITE(admitted_tolerance) ||
-        admitted_tolerance < 0.0 ||
-        (private_kind == DOMAIN_KIND_INT &&
-          (!plain_integer_bound(admitted_lower) ||
-            !plain_integer_bound(admitted_upper) ||
-            admitted_tolerance > 0.5))) {
-      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_BOUNDS);
+  const int numeric_kind =
+    private_kind == DOMAIN_KIND_DBL || private_kind == DOMAIN_KIND_INT;
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
+    if (numeric_kind) {
+      if (!plain_scalar_number_value(lower, &admitted_lower) ||
+          !plain_scalar_number_value(upper, &admitted_upper) ||
+          !plain_scalar_number_value(tolerance, &admitted_tolerance) ||
+          admitted_lower > admitted_upper || !R_FINITE(admitted_tolerance) ||
+          admitted_tolerance < 0.0 ||
+          (private_kind == DOMAIN_KIND_INT &&
+            (!plain_integer_bound(admitted_lower) ||
+              !plain_integer_bound(admitted_upper) ||
+              admitted_tolerance > 0.5))) {
+        REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_BOUNDS);
+      }
+    } else {
+      if (!canonical_scalar_missing_number(lower) ||
+          !canonical_scalar_missing_number(upper) ||
+          !canonical_scalar_missing_number(tolerance)) {
+        REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_BOUNDS);
+      }
     }
-    if (levels != R_NilValue) {
-      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_LEVELS);
-    }
-  } else {
-    if (!canonical_scalar_missing_number(lower) ||
-        !canonical_scalar_missing_number(upper) ||
-        !canonical_scalar_missing_number(tolerance)) {
-      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_BOUNDS);
-    }
+  }
+  if (interpreted & PARADOX_DOMAIN_INTERPRET_LEVELS) {
     if (private_kind == DOMAIN_KIND_FCT && TYPEOF(levels) == STRSXP &&
         !ALTREP(levels) && !Rf_isS4(levels) && !Rf_isObject(levels) &&
         paradox_api_has_no_attributes(levels) && XLENGTH(levels) != 0 &&
@@ -949,13 +1029,28 @@ int paradox_admit_builtin_domain_schema_row(SEXP id, SEXP cls, SEXP grouping,
   /* Publish the values this admission actually accepted. Re-reading the
    * caller's scalars afterwards would reopen the window the tags and levels
    * hash tables above leave for a pending finalizer. */
-  if (admitted_bounds != NULL) {
+  if (admitted_bounds != NULL &&
+      (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS)) {
     admitted_bounds[0] = admitted_lower;
     admitted_bounds[1] = admitted_upper;
     admitted_bounds[2] = admitted_tolerance;
   }
   return TRUE;
 #undef REJECT_DOMAIN_FIELD
+}
+
+/* Test-only view of the closure, so the mask contract stays pinned: the
+ * declared-to-validated expansion is public behavior of the admission
+ * boundary, not an implementation detail a refactor may drift. */
+SEXP paradox_test_domain_interpretation_closure(SEXP mask) {
+  if (TYPEOF(mask) != INTSXP || ALTREP(mask) || XLENGTH(mask) != 1 ||
+      INTEGER_ELT(mask, 0) == NA_INTEGER || INTEGER_ELT(mask, 0) < 0 ||
+      INTEGER_ELT(mask, 0) > (int) PARADOX_DOMAIN_INTERPRET_ALL) {
+    Rf_error("Invalid Domain interpretation mask");
+  }
+  return Rf_ScalarInteger((int) paradox_domain_interpretation_closure(
+    (unsigned int) INTEGER_ELT(mask, 0)
+  ));
 }
 
 int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
@@ -995,6 +1090,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
       tags,
       trafo,
       special_receipt,
+      PARADOX_DOMAIN_INTERPRET_ALL,
       kind,
       admitted_bounds,
       failure,

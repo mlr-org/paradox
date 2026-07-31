@@ -814,8 +814,9 @@ SEXP paradox_domain_check_builtin(SEXP param, SEXP values, SEXP internal) {
   }
   /*
    * Route the complete outward Domain through the canonical row owner before
-   * any operation-specific work. The special-value fast path below may skip a
-   * row's value check, but it may not skip that row's schema admission.
+   * any operation-specific work. `check` is the one operation that certifies
+   * the entire row -- the special-value fast path below may skip a row's
+   * value check, but it may not skip any part of that row's admission.
    */
   R_xlen_t work_since_interrupt = 0;
   paradox_admitted_domain_table_t table;
@@ -823,6 +824,7 @@ SEXP paradox_domain_check_builtin(SEXP param, SEXP values, SEXP internal) {
     param,
     builtin_domain_kind(info.kind),
     info.size,
+    PARADOX_DOMAIN_INTERPRET_ALL,
     &table,
     &work_since_interrupt
   ));
@@ -1001,10 +1003,12 @@ SEXP paradox_domain_sanitize_builtin(SEXP param, SEXP values) {
   }
   R_xlen_t work_since_interrupt = 0;
   paradox_admitted_domain_table_t table;
+  /* Sanitizing interprets only the numeric schema. */
   PROTECT(paradox_admit_public_domain_table(
     param,
     builtin_domain_kind(info.kind),
     info.size,
+    PARADOX_DOMAIN_INTERPRET_BOUNDS,
     &table,
     &work_since_interrupt
   ));
@@ -1056,12 +1060,23 @@ SEXP paradox_domain_property_builtin(SEXP param, SEXP property) {
     );
   }
 
+  /* Each property declares what it reads: the kind alone for the class
+   * predicates, the numeric schema for boundedness, and for level counts the
+   * numeric schema (ParamInt) together with the levels (ParamFct). */
+  unsigned int interpreted = PARADOX_DOMAIN_INTERPRET_NONE;
+  if (requested == PARADOX_PROPERTY_IS_BOUNDED) {
+    interpreted = PARADOX_DOMAIN_INTERPRET_BOUNDS;
+  } else if (requested == PARADOX_PROPERTY_NLEVELS) {
+    interpreted =
+      PARADOX_DOMAIN_INTERPRET_BOUNDS | PARADOX_DOMAIN_INTERPRET_LEVELS;
+  }
   R_xlen_t work_since_interrupt = 0;
   paradox_admitted_domain_table_t table;
   PROTECT(paradox_admit_public_domain_table(
     param,
     builtin_domain_kind(kind),
     info.size,
+    interpreted,
     &table,
     &work_since_interrupt
   ));
@@ -1384,10 +1399,13 @@ SEXP paradox_domain_qunif_builtin(SEXP param, SEXP x) {
 
   R_xlen_t work_since_interrupt = 0;
   paradox_admitted_domain_table_t table;
+  /* Quantile mapping reads the numeric schema (dbl/int) or the levels
+   * (fct); the mask is kind-independent so every branch is covered. */
   PROTECT(paradox_admit_public_domain_table(
     param,
     builtin_domain_kind(info.kind),
     info.size,
+    PARADOX_DOMAIN_INTERPRET_BOUNDS | PARADOX_DOMAIN_INTERPRET_LEVELS,
     &table,
     &work_since_interrupt
   ));

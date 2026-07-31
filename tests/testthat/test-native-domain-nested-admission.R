@@ -1,7 +1,19 @@
-# Public Domain operations route the complete outward table through the single
+# Public Domain operations route the outward table through the single
 # canonical Domain-row admission owner before any operation-specific work.
-# These regressions pin that every public operation rejects the same corrupt
-# nested state, and that nothing an ordinary Domain can express changed.
+# Each operation declares the fields it interprets and the owner expands that
+# declaration to its rule closure; the identity spine (`id`, `cls`,
+# `grouping`, `storage_type`) is always admitted, and `domain_check()` is the
+# one operation that certifies the entire row. These regressions pin the
+# accept/reject matrix that contract implies, and that nothing an ordinary
+# Domain can express changed.
+#
+#   check      -> everything
+#   nlevels    -> bounds + levels
+#   is_bounded -> bounds
+#   is_number  -> spine only
+#   is_categ   -> spine only
+#   sanitize   -> bounds
+#   qunif      -> bounds + levels
 
 nested_corrupt = function(domain, column, value) {
   attrs = attributes(domain)
@@ -17,6 +29,7 @@ nested_operations = function(domain, value) {
     check = function() domain_check(domain, list(value)),
     nlevels = function() domain_nlevels(domain),
     is_bounded = function() domain_is_bounded(domain),
+    is_number = function() domain_is_number(domain),
     is_categ = function() domain_is_categ(domain),
     sanitize = function() domain_sanitize(domain, list(value)),
     qunif = function() domain_qunif(domain, 0.5)
@@ -32,6 +45,29 @@ expect_corrupt_everywhere = function(domain, value, pattern = "Corrupt Domain st
       pattern,
       info = paste(label, name, sep = "/")
     )
+  }
+}
+
+# The masked contract: operations named in `rejecting` interpret the corrupt
+# field (directly or through its closure) and must reject; every other
+# operation does not interpret it and must complete.
+expect_corrupt_matrix = function(domain, value, rejecting,
+    pattern = "Corrupt Domain storage", label = "case") {
+  operations = nested_operations(domain, value)
+  for (name in names(operations)) {
+    if (name %in% rejecting) {
+      expect_error(
+        operations[[name]](),
+        pattern,
+        info = paste(label, name, sep = "/")
+      )
+    } else {
+      expect_error(
+        operations[[name]](),
+        NA,
+        info = paste(label, name, sep = "/")
+      )
+    }
   }
 }
 
@@ -64,8 +100,9 @@ test_that("a special-value match does not suppress factor-level admission", {
   expect_error(domain_check(duplicated, list("special")), "Corrupt Domain storage")
 })
 
-test_that("factor levels are admitted identically by every public operation", {
+test_that("factor levels are admitted identically by every interpreting operation", {
   domain = p_fct(c("a", "b"))
+  interprets_levels = c("check", "nlevels", "qunif")
   cases = list(
     missing = c("a", NA_character_),
     duplicated = c("a", "a"),
@@ -77,9 +114,10 @@ test_that("factor levels are admitted identically by every public operation", {
     wrong_type = 1:2
   )
   for (case in names(cases)) {
-    expect_corrupt_everywhere(
+    expect_corrupt_matrix(
       nested_corrupt(domain, "levels", list(cases[[case]])),
       "a",
+      rejecting = interprets_levels,
       label = case
     )
   }
@@ -92,15 +130,16 @@ test_that("factor levels are admitted identically by every public operation", {
     callback = function() observations <<- observations + 1L,
     callback_after = 0L
   )
-  expect_corrupt_everywhere(
+  expect_corrupt_matrix(
     nested_corrupt(domain, "levels", list(altrep_levels)),
     "a",
+    rejecting = interprets_levels,
     label = "altrep"
   )
   expect_identical(observations, 0L)
 })
 
-test_that("logical levels are admitted identically by every public operation", {
+test_that("logical levels are admitted identically by every interpreting operation", {
   domain = p_lgl()
   cases = list(
     reversed = c(FALSE, TRUE),
@@ -112,9 +151,10 @@ test_that("logical levels are admitted identically by every public operation", {
     wrong_type = c("TRUE", "FALSE")
   )
   for (case in names(cases)) {
-    expect_corrupt_everywhere(
+    expect_corrupt_matrix(
       nested_corrupt(domain, "levels", list(cases[[case]])),
       TRUE,
+      rejecting = c("check", "nlevels", "qunif"),
       label = case
     )
   }
@@ -130,15 +170,13 @@ test_that("special-value row shells are ordinary unclassed lists", {
     wrong_type = "auto"
   )
   for (case in names(cases)) {
+    # `check` is the only operation that interprets special values.
     corrupt = nested_corrupt(domain, "special_vals", list(cases[[case]]))
     expect_error(domain_check(corrupt, list("auto")), "Corrupt Domain storage",
       info = case)
     expect_error(domain_check(corrupt, list(0.5)), "Corrupt Domain storage",
       info = case)
-    expect_error(domain_qunif(corrupt, 0.5), "Corrupt Domain storage", info = case)
-    expect_error(domain_nlevels(corrupt), "Corrupt Domain storage", info = case)
-    expect_error(domain_sanitize(corrupt, list(0.5)), "Corrupt Domain storage",
-      info = case)
+    expect_corrupt_matrix(corrupt, 0.5, rejecting = "check", label = case)
   }
 })
 
@@ -178,13 +216,13 @@ test_that("Domain cargo is admitted by the canonical owner", {
     )
   )
   for (case in names(utility_cases)) {
+    # `check` is the only operation that interprets cargo; `qunif` on a
+    # ParamUty errors before admission for its own reason.
     corrupt = nested_corrupt(utility, "cargo", list(utility_cases[[case]]))
     expect_error(domain_check(corrupt, list(1)), "Corrupt Domain storage",
       info = case)
-    expect_error(domain_nlevels(corrupt), "Corrupt Domain storage", info = case)
-    expect_error(domain_qunif(corrupt, 0.5), "Corrupt Domain storage", info = case)
-    expect_error(domain_sanitize(corrupt, list(1)), "Corrupt Domain storage",
-      info = case)
+    expect_error(domain_nlevels(corrupt), NA, info = case)
+    expect_error(domain_sanitize(corrupt, list(1)), NA, info = case)
   }
 
   # Cargo of the wrong kind used never to be fetched at all, so a stray
@@ -195,9 +233,10 @@ test_that("Domain cargo is admitted by the canonical owner", {
     logscale_without_trafo = list(logscale = TRUE)
   )
   for (case in names(numeric_cases)) {
-    expect_corrupt_everywhere(
+    expect_corrupt_matrix(
       nested_corrupt(p_dbl(0, 1), "cargo", list(numeric_cases[[case]])),
       0.5,
+      rejecting = "check",
       label = case
     )
   }
@@ -229,14 +268,16 @@ test_that("numeric bounds and tolerance are admitted by every operation", {
     expect_error(domain_nlevels(corrupt), "invalid numeric bounds", fixed = TRUE)
   }
   # Kind-inappropriate schema entries are corrupt, not ignored.
-  expect_corrupt_everywhere(
+  expect_corrupt_matrix(
     nested_corrupt(p_dbl(0, 1), "levels", list(c("a", "b"))),
     0.5,
+    rejecting = c("check", "nlevels", "qunif"),
     label = "numeric_levels"
   )
-  expect_corrupt_everywhere(
+  expect_corrupt_matrix(
     nested_corrupt(p_fct(c("a", "b")), "lower", 0),
     "a",
+    rejecting = c("check", "nlevels", "is_bounded", "sanitize", "qunif"),
     label = "categorical_bounds"
   )
   # Identity and grouping likewise.
@@ -250,6 +291,39 @@ test_that("numeric bounds and tolerance are admitted by every operation", {
     0.5,
     label = "grouping"
   )
+})
+
+test_that("interpretation closures are pinned and cover the rule set", {
+  closure = function(mask) {
+    .Call(
+      get(
+        "C_test_domain_interpretation_closure",
+        envir = asNamespace("paradox")
+      ),
+      mask
+    )
+  }
+  bounds = 1L; levels = 2L; specials = 4L; cargo = 8L
+  tags = 16L; trafo = 32L; all = 63L
+
+  # Declarations that stand alone.
+  expect_identical(closure(0L), 0L)
+  expect_identical(closure(bounds), bounds)
+  expect_identical(closure(levels), levels)
+  expect_identical(closure(tags), tags)
+  expect_identical(closure(trafo), trafo)
+  # Cargo rules read the tags and the transformation; special-value rules
+  # read the transformation.
+  expect_identical(closure(cargo), bitwOr(bitwOr(cargo, tags), trafo))
+  expect_identical(closure(specials), bitwOr(specials, trafo))
+  expect_identical(closure(all), all)
+  # Idempotent: expanding an expansion adds nothing.
+  for (mask in 0:63) {
+    expect_identical(closure(closure(mask)), closure(mask))
+  }
+  # `check` declares everything, so every field keeps at least one public
+  # operation that certifies it.
+  expect_identical(closure(all), all)
 })
 
 test_that("nested admission preserves every canonical Domain operation", {

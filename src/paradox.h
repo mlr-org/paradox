@@ -113,6 +113,7 @@ attribute_hidden SEXP paradox_test_param_set_collection_construct_reentry(
   SEXP postfix_names,
   SEXP capture_hook
 );
+attribute_hidden SEXP paradox_test_domain_interpretation_closure(SEXP mask);
 attribute_hidden SEXP paradox_param_set_collection_detach_plan(
   SEXP private_environment,
   SEXP self,

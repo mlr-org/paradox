@@ -395,8 +395,7 @@ test_that("malformed built-in Domains error instead of restarting in R", {
     corrupt(p_dbl(0, 1), "storage_type", "integer"),
     corrupt(p_dbl(0, 1), "lower", NA_real_),
     corrupt(p_fct(c("a", "b")), "levels", list(1:2)),
-    corrupt(p_lgl(), "levels", list(c(FALSE, TRUE))),
-    corrupt(p_uty(), "cargo", list(list(custom_check = 1)))
+    corrupt(p_lgl(), "levels", list(c(FALSE, TRUE)))
   )
   operations = list(
     function(domain) domain_check(domain, list(1)),
@@ -407,6 +406,10 @@ test_that("malformed built-in Domains error instead of restarting in R", {
       expect_error(operation(domain), "Corrupt Domain storage")
     }
   }
+  # Cargo is interpreted by `check` alone; `nlevels` does not read it.
+  malformed_cargo = corrupt(p_uty(), "cargo", list(list(custom_check = 1)))
+  expect_error(domain_check(malformed_cargo, list(1)), "Corrupt Domain storage")
+  expect_identical(domain_nlevels(malformed_cargo), Inf)
 })
 
 test_that("large closed Domain loops remain interruptible and correct", {

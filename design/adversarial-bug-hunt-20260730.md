@@ -418,6 +418,36 @@ in between). Still not run, as
 before: the R 3.6.3 runtime behavior stage, GCT/Valgrind, and the deferred
 compatibility, memory, portability, and release matrices.
 
+## Masked public-Domain admission (maintainer decision, 2026-07-31)
+
+The maintainer accepted a refinement of the P3 boundary contract to recover
+the remaining public-Domain overhead: each public operation now declares the
+fields it interprets, and the row owner expands that declaration to its
+rule-dependency closure (`paradox_domain_interpretation_closure()` -- cargo
+pulls in tags and the transformation, special values pull in the
+transformation; the identity spine is always admitted). `domain_check()`
+declares everything and remains the one operation that certifies the entire
+row; `domain_sanitize()` declares the numeric schema, `domain_qunif()` and
+the level-count property declare the numeric schema plus levels,
+boundedness declares the numeric schema, and the class predicates declare
+nothing beyond the spine. This is not a return to pre-P3 per-operation
+checks: there is still exactly one implementation of every rule, a rule
+outside the closure is skipped whole rather than restated, and mask
+correctness is owned by the same translation unit as the rules and pinned
+by a registered closure fixture (`test_domain_interpretation_closure`,
+including idempotence over all 64 masks). The visible consequence is
+deliberate: a corrupt field outside an operation's closure is diagnosed by
+the first operation that interprets it -- `check` always does -- instead of
+by every operation; the accept/reject matrix is pinned in
+`test-native-domain-nested-admission.R`. The kind and storage names are
+additionally interned at load, so canonical rows resolve their kind by
+CHARSXP identity. Interleaved medians against the `214fdf3` baseline after
+the change: one-row operations 1.23--1.74x (from 1.25--1.93x; the
+remaining one-row cost is the per-call fixed part, which masks do not
+touch), 512-row `domain_qunif()` 3.67x (from 8.75x, 292 to 183
+microseconds), 512-row `domain_check()` unchanged at ~4.7x by design, and
+`ParamSet` hot paths unchanged.
+
 ## Completion criteria
 
 - Every confirmed defect has a focused regression and a reviewed fix.
