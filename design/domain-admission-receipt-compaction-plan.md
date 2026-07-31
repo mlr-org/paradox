@@ -981,3 +981,158 @@ The source-bound three-way timing is still unrun and must bind the next clean
 immutable candidate. The exact every-minor supported-runtime selection—R
 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, plus current R 4.6.1 in
 the full native lane—and every other full release gate remain pending.
+
+## 11. First immutable-candidate timing and final recovery plan
+
+### 11.1 Exact failed attempt
+
+The first immutable candidate for this comparison was
+`refs/paradox-release/candidate-20260731T124039Z`, commit
+`024e28f770f8dd7a8802b70a4a8e866ac2cb344f`, tree
+`25bd8a930099dd0bb8d0f0ce78eb901be9546c2c`. The source-bound helper archives
+that ref and the exact `e923c1a` baseline with `git archive`; it never copies
+the live worktree. Its pre-scalar derivative changes the candidate archive
+only at `src/domain_admission.h`, `src/domain_construct.c`, and
+`src/domain_row_admission.c`, plus a mechanically restored historical
+`paradox_api_stored_attribute_count()` declaration and definition in
+`src/r_api_compat.[ch]`. The three original Domain files and both restored
+function bodies are hash-pinned. The restoration preserves the pre-scalar
+source's three cross-translation-unit calls and exact `R_mapAttrib()` traversal
+instead of giving that control the candidate's newer bounded-mapper fast path.
+
+The first helper invocation exposed and fixed two harness-only defects before
+measurement: it had inherited `CONDA_PREFIX` from the calling shell, and the
+pre-scalar source referred to the compatibility function removed after its
+snapshot. Neither reached a benchmark. The repaired helper sets the exact
+repository-local toolchain prefix itself and records the bounded compatibility
+adapter. Its adapter receipt SHA-256 is
+`4402d941dc4c3862f89bdeaf543338c8e628f5a92c45744dabd573d8d41f2e5f`.
+
+The six-permutation run then completed all eighteen processes and failed its
+timing policy, so its directory remains deliberately named
+`.local/perf/domain-indexed-root-final-threeway-20260731/results.incomplete`.
+It is diagnostic evidence, not acceptance. The exact round, summary, gate, and
+summarizer-log SHA-256 values are respectively
+`a4a854c70d33eff92db7e9fe3cf0e55686ec7d282214096bef07c263076e711c`,
+`57ffc3939920747d7812c6cf40f54992729d81eb18b8918d70c5b408aa41c46d`,
+`eb9b833b26b03a06f3b9a7d8e355e91f369b1db9e65375bd4ff5085d9cc25209`,
+and
+`3042fdd8daf1c3128e53e92ec956df8b1daba2d9e7177b3db9872d9fd675fabe`.
+
+The direct candidate-versus-baseline regressions are real and stable:
+
+| Workload | Candidate / baseline | Candidate / pre-scalar | Allocation delta vs baseline |
+|---|---:|---:|---:|
+| `domain_check_dbl_one` | 1.213x | 0.829x | 0 bytes |
+| `domain_sanitize_uty_noop` | 1.141x | 0.844x | 0 bytes |
+
+All bulk Domain timing and allocation gates pass; the indexed-root candidate
+also removes the pre-scalar control's fixed 216-byte allocation on both
+one-row paths. The remaining cost is therefore CPU work in the proof, not
+allocation or a failure of the indexed-root redesign.
+
+The ParamSet guard timing against the synthetic pre-scalar DSO is not a valid
+causal gate. The reached ParamSet source is byte-identical, current executes
+0.55% fewer Callgrind instructions, and the relevant symbols have
+instruction-identical bodies shifted by 704 bytes. On this Ivy Bridge host the
+shift produces 1.42% more simulated I1 misses and 7.98% more conditional branch
+mispredictions. This explains wall-time guard ratios as high as 1.172x without
+extra semantic work or allocation. Do not pad or align source for one
+architecture-specific linker layout. The final whole-candidate release
+benchmark remains the product-level performance authority.
+
+### 11.2 Profile attribution
+
+Pinned-CPU Callgrind measurements over 2,000 direct native entries give:
+
+| Workload | Baseline | Pre-scalar | Candidate |
+|---|---:|---:|---:|
+| double check | 15,821 Ir/call | 27,611 | 21,993 |
+| utility sanitize | 13,059 Ir/call | 23,233 | 18,787 |
+
+The pre-callback shape probe is already slightly cheaper than the baseline:
+3,171 versus 3,228 Ir/call for check and 3,286 versus 3,328 for sanitize.
+Almost the entire remaining excess is row admission: 17,060 versus 11,333
+Ir/call for check and 15,366 versus 9,658 for sanitize.
+
+The adapter currently traverses the same five-cell outward Domain attribute
+spine thirteen times: class selection, shape names proof/selection, initial
+outer capture, admission names proof/selection, two row-count
+proof/selections, terminal outer capture, terminal names proof/selection, and
+the second row-count proof/selection. The duplicate selector and row-count
+layers cost about 5,700 instructions per call. They do not prove independent
+semantic facts; they repeatedly recover names and row names already selected
+by one of the three generation captures that really are required.
+
+Canonical kind dispatch is a second bounded inefficiency. It interleaves
+pointer and byte comparisons, so a canonical `ParamUty` pays four failed
+`strcmp()` calls before its pointer match. Exact property profiles rise
+monotonically from 17,135 Ir/call for `ParamDbl` to 18,195 for `ParamUty`.
+Repeated `.internal.selfref`/`repr` interning and byte-only built-in class-tail
+checks add smaller avoidable costs.
+
+### 11.3 Implementation batch
+
+This batch must preserve three distinct exact outward generations:
+
+1. the pre-callback shape generation;
+2. the post-allocation, pre-ownership admission generation; and
+3. the allocation-free terminal receipt generation.
+
+It may fuse observations within one generation, but it must never reuse the
+shape capture after an allocation or callback, reuse the admission capture as
+the terminal receipt, or weaken complete sixteen-column structural admission.
+
+Implement the following in order:
+
+1. Move the exact supported outward-Domain metadata record and its hard-bounded
+   five-cell capture into the common Domain module. Intern
+   `.internal.selfref` and `repr` once during package initialization.
+2. Add allocation-free column-selection and selected-column-receipt entries
+   that consume the names carrier from that exact capture. Existing general
+   selectors remain for unrelated callers.
+3. Add a count-only row-name helper over the captured row-name carrier.
+   Admission and terminal proof consume their own captured names, class,
+   row names, self-reference, and representation instead of rescanning the
+   table attributes. The callback-capable row-name `Length` path must still
+   recapture and reroot the complete generation afterward.
+4. Let the shape probe obtain class, names, ID, and row count from one exact
+   shape capture. The canonical empty-Domain validator retains its separate
+   exact four-cell contract.
+5. Resolve canonical built-in kinds in two phases: all interned pointer
+   identities first, then byte fallback for foreign ordinary spellings. Share
+   the same pointer-fast canonical class-tail resolver between shape and
+   admission. This changes neither accepted bytes nor diagnostics.
+
+No capsule verification stamp, caller-trust metadata, cached admission
+decision, skipped generation, R fallback, or special one-row semantic path is
+permitted.
+
+### 11.4 Focused proof and corrected timing
+
+Before another full release gate:
+
+- add focused current-R and actual-R-3.6 regressions for malformed, duplicate,
+  cyclic, overlong, callback-replaced, and terminally replaced outer metadata;
+- run strict GNU C99 GCC and Clang builds plus the relevant registered native
+  and GCT probes;
+- confirm with Callgrind that the direct admission layer removes the predicted
+  repeated traversals and does not add work to bulk paths; and
+- rerun a fresh source-bound comparison against a replacement immutable
+  candidate.
+
+The timing helper must also be corrected before that rerun. Persist full
+deterministic input and output fingerprints, read assigned values back from
+the ParamSet, suppress patch backup files, and assert the exact five-file
+synthetic diff. Isolate workloads or rotate their order across processes, add
+an exact-package A/A path-copy control and a sham-relink control, and classify
+ParamSet rows in this Domain-specific comparison as review guards. A guard
+hard-fails here for allocation or executed-instruction growth or for evidence
+that changed code is reached; the independent sealed release benchmark owns
+whole-product wall-time regression policy.
+
+The direct one-row gates remain unchanged: neither direct workload may be
+stably more than 1.10x the exact baseline, no Domain workload may be stably
+more than 1.02x the faithful pre-scalar control, and all earlier bulk
+allocation/timing gates remain binding. If the unified capture does not
+recover the profiled work, stop and review rather than weakening the proof.

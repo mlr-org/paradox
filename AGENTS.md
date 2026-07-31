@@ -255,9 +255,19 @@ and
 The r9 C/R implementation is byte-identical to r8 manifest
 `6ed37e6c07ca17d8f487a949cfc2e4cf510eaded448e89fc1b11c7750a114634`,
 which owns the strict GCC/Clang GNU99 and current/R-3.6 package-install proof.
-All of this is focused development evidence only. There is no current frozen
-candidate; the Domain three-way timing and every complete release gate remain
-pending.
+All of this is focused development evidence only. The first immutable timing
+candidate,
+`refs/paradox-release/candidate-20260731T124039Z` at
+`024e28f770f8dd7a8802b70a4a8e866ac2cb344f`, failed the targeted direct
+one-row performance policy and is diagnostic evidence, not the active release
+candidate. `domain_check_dbl_one` and `domain_sanitize_uty_noop` were
+respectively 1.213x and 1.141x the exact `e923c1a` baseline despite zero
+allocation growth; bulk Domain gates passed. Callgrind localized about 5,700
+avoidable instructions per call to repeated names/row-names recovery around
+the three exact outer-metadata generations that actually are required.
+Section 11 of the Domain compaction plan freezes the bounded unified-capture
+recovery and the corrected timing-harness requirements before implementation.
+Source is reopened; every complete release gate remains pending.
 
 The final compatibility batch is governed by
 [`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).

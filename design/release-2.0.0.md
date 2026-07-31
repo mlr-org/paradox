@@ -2,16 +2,21 @@
 
 ## Status
 
-**The focused adversarial source review is closed, but source remains reopened
-until it is committed and frozen as a new immutable candidate. The earlier
-candidate and all of its release evidence are historical until that new ref
-passes the fresh C17/C23, every-minor runtime, and remaining release gates
-below.**
+**The focused adversarial source review is closed. The first new immutable
+candidate was rejected by the targeted direct one-row performance gate, so
+source is reopened for the bounded unified-capture recovery recorded in
+section 11 of the Domain admission plan. The earlier candidates and all of
+their release evidence are historical until a replacement ref passes the
+fresh C17/C23, every-minor runtime, and remaining release gates below.**
 The bounded indexed-root Domain admission compaction is governed by
 [`domain-admission-receipt-compaction-plan.md`](domain-admission-receipt-compaction-plan.md).
 Its implementation and focused correctness proof are complete; the plan's
-source-bound three-way timing comparison remains pending and must use the next
-immutable candidate.
+first source-bound three-way timing attempt used
+`refs/paradox-release/candidate-20260731T124039Z` at
+`024e28f770f8dd7a8802b70a4a8e866ac2cb344f`. It passed all bulk Domain timing
+and allocation gates but rejected direct one-row ratios of 1.213x and 1.141x
+against `e923c1a`. That ref is diagnostic evidence, not the release candidate;
+the replacement must repeat the corrected comparison.
 
 The exact focused closure snapshot is
 `.local/checks/integrated-selectors-r9-20260731T122010Z`, with source-manifest
