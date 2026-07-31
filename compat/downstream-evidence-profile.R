@@ -221,6 +221,11 @@ downstream_evidence_profile <- function(root, profile = "default",
   dependency_repositories <- dependency_repositories[
     dependency_repositories$action == "clone", , drop = FALSE
   ]
+  if (!identical(profile, "default") &&
+      !setequal(dependency_repositories$repository, install_order)) {
+    stop("non-default profile dependency manifest differs from its install order",
+      call. = FALSE)
+  }
   dependency_index <- match(dependency_repositories$repository,
     dependency_snapshots$repository)
   if (anyNA(dependency_index) ||

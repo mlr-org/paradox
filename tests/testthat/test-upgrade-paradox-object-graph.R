@@ -1155,6 +1155,34 @@ test_that("current graph preflight does not refresh stale Shadows", {
   }
 })
 
+test_that("joint current-root preflight retains read-only Shadow previews", {
+  skip_on_cran()
+
+  first = ps(x = p_int())
+  origin = ps(hidden = p_int(), visible = p_dbl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  private = mlr3misc::get_private(shadow)
+  origin$values = list(hidden = 1L, visible = 0.5)
+  before = private$.core
+
+  previous = gctorture2(10L)
+  on.exit(gctorture2(previous), add = TRUE)
+  for (iteration in seq_len(8L)) {
+    result = .Call(
+      paradox:::C_param_set_validate_current_roots,
+      list(first, shadow),
+      NULL
+    )
+    # Keep the forced-GC allocation schedule focused on the native entry;
+    # testthat's rich expectations allocate heavily under gctorture2().
+    if (!identical(result, TRUE) || !identical(private$.core, before)) {
+      stop("joint current-root validation changed its Shadow generation")
+    }
+  }
+  gctorture2(previous)
+  expect_identical(private$.core, before)
+})
+
 test_that("graph preflight admits a Shadow over a dangling-dependency origin", {
   origin = ps(hidden = p_int(), visible = p_dbl())
   origin$add_dep("visible", "future", CondEqual(1L),
@@ -1785,6 +1813,122 @@ test_that("legacy table snapshots keep names, columns, and attributes together",
   expect_true(state$fired)
 })
 
+test_that("legacy table snapshots cannot splice post-receipt column writes", {
+  skip_on_cran()
+  skip_if(getRversion() < "4.6.0",
+    "deterministic pending-finalizer scheduling requires current R")
+
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  state$old_leaf = new.env(parent = emptyenv())
+  state$new_leaf = new.env(parent = emptyenv())
+  state$leaf = structure(1L, generation = state$old_leaf)
+  state$old_repr = new.env(parent = emptyenv())
+  state$new_repr = new.env(parent = emptyenv())
+  callback = function() {
+    trigger = new.env(parent = emptyenv())
+    reg.finalizer(trigger, function(unused) {
+      state$fired = TRUE
+      # These writes are one source generation. The callback is armed by the
+      # final native ALTREP Length receipt, so the finalizer can run only
+      # after the native result is complete. A shallow list-column snapshot
+      # used to expose its atomic leaf to the allocating R migration layer,
+      # producing new-leaf/old-repr output that never existed in the source.
+      data.table::setnames(state$table, "tag", "changed")
+      data.table::set(
+        state$table,
+        i = 1L,
+        j = 2L,
+        value = "new"
+      )
+      data.table::setattr(state$leaf, "generation", state$new_leaf)
+      data.table::setattr(state$table, "repr", state$new_repr)
+    })
+    invisible(NULL)
+  }
+  ids = native_stateful_altrep(
+    c("a", "b"),
+    c("a", "b"),
+    callback = callback,
+    callback_after = c(NA_integer_, 2L)
+  )
+  state$table = structure(
+    list(
+      id = ids,
+      tag = c("old", "old"),
+      payload = list(state$leaf, state$leaf)
+    ),
+    class = c("data.table", "data.frame"),
+    repr = state$old_repr
+  )
+
+  result = paradox:::.upgrade_paradox_table(
+    state$table,
+    c("id", "tag", "payload"),
+    "adversarial table",
+    extra_attributes = "repr",
+    .after_snapshot = function() {
+      for (iteration in seq_len(4L)) {
+        if (state$fired) break
+        gc(full = TRUE)
+      }
+      if (!state$fired) {
+        stop("pending post-snapshot finalizer did not run")
+      }
+    }
+  )
+  expect_identical(names(result), c("id", "tag", "payload"))
+  expect_identical(result$tag, c("old", "old"))
+  expect_true(all(vapply(
+    result$payload,
+    function(value) identical(attr(value, "generation"), state$old_leaf),
+    logical(1L)
+  )))
+  expect_identical(attr(result, ".paradox_upgrade_repr"), state$old_repr)
+  expect_identical(names(state$table), c("id", "changed", "payload"))
+  expect_identical(state$table$changed, c("new", "old"))
+  expect_identical(attr(state$leaf, "generation"), state$new_leaf)
+  expect_identical(attr(state$table, "repr"), state$new_repr)
+})
+
+test_that("legacy table receipts finish later ALTREP callbacks first", {
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  state$old_repr = new.env(parent = emptyenv())
+  state$new_repr = new.env(parent = emptyenv())
+  callback = function() {
+    state$fired = TRUE
+    # The ordinary payload has already been copied and, in the former
+    # interleaved receipt, compared before this later column's final Length.
+    # Changing payload first and repr second means old payload/new repr never
+    # coexisted in the source table.
+    data.table::set(state$table, i = 1L, j = 1L, value = "new")
+    data.table::setattr(state$table, "repr", state$new_repr)
+  }
+  ids = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = callback,
+    callback_after = c(NA_integer_, 2L)
+  )
+  state$table = structure(
+    list(tag = c("old", "old"), id = ids),
+    class = c("data.table", "data.frame"),
+    repr = state$old_repr
+  )
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    state$table,
+    c("data.table", "data.frame"),
+    TRUE
+  )
+  expect_true(state$fired)
+  expect_identical(state$table$tag, c("new", "old"))
+  expect_identical(attr(state$table, "repr"), state$new_repr)
+  expect_null(snapshot)
+})
+
 test_that("legacy table snapshots admit only coherent historical row metadata", {
   empty = data.table::data.table(value = integer())
   data.table::setattr(empty, "row.names", NULL)
@@ -1809,12 +1953,349 @@ test_that("legacy table snapshots admit only coherent historical row metadata", 
     FALSE
   ))
 
-  missing = data.table::copy(table)
-  data.table::setattr(missing, "row.names", NULL)
-  expect_null(.Call(
+  # Paradox 1 built its keyed private tables from a classed list and then
+  # called setkeyv().  data.table deliberately leaves row.names absent in that
+  # spelling even when columns are populated; the equal-length columns are the
+  # sole row-count authority.
+  missing = structure(
+    list(value = 1:2),
+    class = c("data.table", "data.frame")
+  )
+  data.table::setkeyv(missing, "value")
+  expect_null(attr(missing, "row.names", exact = TRUE))
+  missing_snapshot = .Call(
     paradox:::C_upgrade_table_list_snapshot,
     missing,
     c("data.table", "data.frame"),
     FALSE
+  )
+  expect_identical(missing_snapshot$table$value, 1:2)
+
+  old_leaf = new.env(parent = emptyenv())
+  new_leaf = new.env(parent = emptyenv())
+  leaf = structure(1L, generation = old_leaf)
+  nested = structure(
+    list(payload = list(leaf)),
+    row.names = 1L,
+    class = c("data.table", "data.frame")
+  )
+  nested_snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    nested,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  data.table::setattr(leaf, "generation", new_leaf)
+  expect_identical(
+    attr(nested_snapshot$table$payload[[1L]], "generation"),
+    old_leaf
+  )
+  expect_identical(attr(nested$payload[[1L]], "generation"), new_leaf)
+
+  nested_receipt = new.env(parent = emptyenv())
+  nested_receipt$fired = FALSE
+  nested_receipt$old_generation = new.env(parent = emptyenv())
+  nested_receipt$new_generation = new.env(parent = emptyenv())
+  nested_receipt$leaf = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = function() {
+      nested_receipt$fired = TRUE
+      data.table::setattr(
+        nested_receipt$leaf,
+        "generation",
+        nested_receipt$new_generation
+      )
+    },
+    # Three internal Length observations close the leaf's own payload and
+    # metadata snapshot; the fourth is the table-wide terminal barrier.
+    callback_after = c(NA_integer_, 3L)
+  )
+  data.table::setattr(
+    nested_receipt$leaf,
+    "generation",
+    nested_receipt$old_generation
+  )
+  nested_receipt$table = structure(
+    list(payload = list(nested_receipt$leaf)),
+    row.names = 1L,
+    class = c("data.table", "data.frame")
+  )
+  nested_receipt$result = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    nested_receipt$table,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_true(nested_receipt$fired)
+  expect_identical(
+    attr(nested_receipt$leaf, "generation"),
+    nested_receipt$new_generation
+  )
+  expect_null(nested_receipt$result)
+
+  formal_class = "ParadoxMigrationOpaqueListLeaf"
+  if (!methods::isClass(formal_class)) {
+    methods::setClass(formal_class, slots = c(payload = "integer"))
+  }
+  formal_leaf = methods::new(formal_class, payload = 1L)
+  formal = structure(
+    list(payload = list(formal_leaf)),
+    row.names = 1L,
+    class = c("data.table", "data.frame")
+  )
+  formal_snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    formal,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_identical(formal_snapshot$table$payload[[1L]], formal_leaf)
+
+  inconsistent = structure(
+    list(left = 1:2, right = 1L),
+    class = c("data.table", "data.frame")
+  )
+  expect_error(
+    paradox:::.upgrade_paradox_table(
+      inconsistent,
+      c("left", "right"),
+      "inconsistent table"
+    ),
+    "table columns have inconsistent lengths",
+    fixed = TRUE
+  )
+})
+
+test_that("legacy value snapshots follow the owning parameter kind", {
+  typed_old = new.env(parent = emptyenv())
+  typed_new = new.env(parent = emptyenv())
+  utility_old = new.env(parent = emptyenv())
+  utility_new = new.env(parent = emptyenv())
+  typed = structure(1L, generation = typed_old)
+  utility = structure(2L, generation = utility_old)
+  source = list(x = typed, u = utility)
+
+  snapshot = .Call(
+    paradox:::C_upgrade_values_snapshot,
+    source,
+    c("x", "u"),
+    c("ParamInt", "ParamUty")
+  )
+  data.table::setattr(typed, "generation", typed_new)
+  data.table::setattr(utility, "generation", utility_new)
+  data.table::setattr(source, "names", c("changed", "u"))
+
+  expect_identical(names(snapshot), c("x", "u"))
+  expect_identical(attr(snapshot$x, "generation"), typed_old)
+  # ParamUty values are opaque even when their outward representation is an
+  # atomic vector: migration must preserve this exact identity.
+  expect_identical(attr(snapshot$u, "generation"), utility_new)
+})
+
+test_that("legacy interpreted table carriers are owned by their native schema", {
+  opaque = list(payload = 1L)
+  special = list(opaque)
+  disable = list(flag = opaque)
+  cargo = list(disable_in_tune = disable, repr = "utility")
+  requirement = list(on = "parent", cond = CondEqual(1L))
+  domain = p_uty(special_vals = special)
+  data.table::set(domain, i = 1L, j = "cargo", value = list(cargo))
+  data.table::set(
+    domain,
+    i = 1L,
+    j = ".requirements",
+    value = list(list(list(requirement)))
+  )
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    domain,
+    class(domain),
+    TRUE
+  )$table
+  data.table::setattr(special, "names", "changed")
+  data.table::setattr(disable, "names", "changed")
+  data.table::setattr(requirement, "names", c("changed", "cond"))
+  marker = new.env(parent = emptyenv())
+  data.table::setattr(opaque, "marker", marker)
+
+  expect_null(names(snapshot$special_vals[[1L]]))
+  expect_identical(
+    attr(snapshot$special_vals[[1L]][[1L]], "marker"),
+    marker
+  )
+  expect_identical(names(snapshot$cargo[[1L]]$disable_in_tune), "flag")
+  expect_identical(
+    names(snapshot$.requirements[[1L]][[1L]]),
+    c("on", "cond")
+  )
+})
+
+test_that("legacy nested semantic callbacks cannot splice table generations", {
+  state = new.env(parent = emptyenv())
+  state$first = CondEqual(1L)
+  late_rhs = native_stateful_altrep(
+    2L,
+    2L,
+    callback = function() {
+      data.table::setattr(state$first[[1L]], "changed", TRUE)
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  second = structure(
+    list(rhs = late_rhs, condition_format_string = "%s == %s"),
+    class = c("CondEqual", "Condition")
+  )
+  source = structure(
+    list(
+      id = c("child", "other"),
+      on = c("parent", "parent"),
+      cond = list(state$first, second)
+    ),
+    class = c("data.table", "data.frame")
+  )
+
+  expect_null(.Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    source,
+    c("data.table", "data.frame"),
+    FALSE
+  ))
+})
+
+test_that("legacy Condition Length retains a self-detached RHS", {
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  rhs = native_stateful_altrep(
+    1L,
+    1L,
+    callback = function() {
+      state$fired = TRUE
+      # Remove the exact ALTREP whose Length method is executing from every
+      # caller-owned parent, then collect.  The native receipt must retain its
+      # selected RHS independently of the mutable Condition owner graph.
+      invisible(.Call(
+        data.table:::Csetlistelt,
+        state$condition,
+        1L,
+        2L
+      ))
+      gc(full = TRUE)
+    },
+    # Snapshot materialization owns the first Length observation; dispatch on
+    # the table-wide terminal Length barrier that follows it.
+    callback_after = c(NA_integer_, 1L)
+  )
+  state$condition = structure(
+    list(rhs = rhs, condition_format_string = "%s == %s"),
+    class = c("CondEqual", "Condition")
+  )
+  source = structure(
+    list(id = "child", on = "parent", cond = list(state$condition)),
+    class = c("data.table", "data.frame")
+  )
+  rm(rhs)
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    source,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_true(state$fired)
+  expect_identical(state$condition[[1L]], 2L)
+  expect_null(snapshot)
+})
+
+test_that("legacy requirement Length retains its detached Condition sibling", {
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  state$sentinel_finalized = FALSE
+  state$new_condition = CondEqual(2L)
+  sentinel = new.env(parent = emptyenv())
+  reg.finalizer(sentinel, function(unused) {
+    state$sentinel_finalized = TRUE
+  })
+  retain_sentinel = local({
+    retained = sentinel
+    function() invisible(retained)
+  })
+  old_rhs = native_stateful_altrep(
+    1L,
+    1L,
+    callback = retain_sentinel,
+    callback_after = c(NA_integer_, NA_integer_)
+  )
+  on = native_stateful_altrep(
+    "parent",
+    "parent",
+    callback = function() {
+      state$fired = TRUE
+      # The selected Condition is a sibling of the dispatching `on` leaf. Once
+      # this by-reference replacement occurs, only the native receipt may keep
+      # the old Condition alive for the immediately following check.
+      invisible(.Call(
+        data.table:::Csetlistelt,
+        state$requirement,
+        2L,
+        state$new_condition
+      ))
+      gc(full = TRUE)
+      if (state$sentinel_finalized) {
+        stop("detached Condition finalized during requirement receipt")
+      }
+    },
+    callback_after = c(NA_integer_, 1L)
+  )
+  old_condition = structure(
+    list(rhs = old_rhs, condition_format_string = "%s == %s"),
+    class = c("CondEqual", "Condition")
+  )
+  state$requirement = list(on = on, cond = old_condition)
+  domain = p_int()
+  data.table::set(domain, i = 1L, j = "id", value = "child")
+  data.table::set(
+    domain,
+    i = 1L,
+    j = ".requirements",
+    value = list(list(list(state$requirement)))
+  )
+  rm(sentinel, retain_sentinel, old_rhs, on, old_condition)
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    domain,
+    class(domain),
+    TRUE
+  )
+  expect_true(state$fired)
+  expect_identical(state$requirement$cond, state$new_condition)
+  expect_null(snapshot)
+  for (iteration in seq_len(8L)) {
+    if (state$sentinel_finalized) break
+    gc(full = TRUE)
+  }
+  expect_true(state$sentinel_finalized)
+})
+
+test_that("legacy value callbacks cannot splice typed leaf generations", {
+  state = new.env(parent = emptyenv())
+  state$first = structure(1L, generation = "old")
+  second = native_stateful_altrep(
+    2L,
+    2L,
+    callback = function() {
+      data.table::setattr(state$first, "generation", "new")
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  source = list(x = state$first, y = second)
+
+  expect_null(.Call(
+    paradox:::C_upgrade_values_snapshot,
+    source,
+    c("x", "y"),
+    c("ParamInt", "ParamInt")
   ))
 })

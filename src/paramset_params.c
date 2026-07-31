@@ -262,8 +262,19 @@ static int param_row_has_typed_values(
  * general value store: an opaque ParamUty payload is allowed to have any
  * class, including the outward NoDefault spelling. */
 static SEXP detach_domain_schema_value_leaf(SEXP value, int typed) {
-  if (Rf_inherits(value, "NoDefault")) {
-    return Rf_duplicate(value);
+  /* The exact marker is necessarily an ordinary non-S4 object. Preserve the
+   * allocation-free common/opaque paths, but use the same bounded class
+   * capture as canonical admission before interpreting an outward class
+   * spelling. In particular, never walk a malformed raw attribute spine here
+   * on old R. */
+  if (Rf_isObject(value) && !Rf_isS4(value)) {
+    SEXP classes = R_NilValue;
+    if (!paradox_api_ordinary_class_snapshot(value, &classes)) {
+      Rf_error("Corrupt ParamSet state: invalid Domain value class metadata");
+    }
+    if (paradox_domain_exact_no_default_marker(value, classes) == 1) {
+      return Rf_duplicate(value);
+    }
   }
   return typed ? paradox_snapshot_builtin_value_leaf(value) : value;
 }

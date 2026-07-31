@@ -626,7 +626,7 @@ static SEXP fixed_value(const dependency_snapshot_t *snapshot,
 
 static int design_value_is_tune_token(SEXP value) {
   int token = FALSE;
-  if (!paradox_api_ordinary_class_matches(
+  if (!paradox_api_opaque_leaf_class_matches(
       value,
       "TuneToken",
       &token

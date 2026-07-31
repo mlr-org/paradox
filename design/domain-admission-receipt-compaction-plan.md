@@ -1,14 +1,13 @@
 # Domain admission receipt-compaction plan
 
-Status (2026-07-31): **indexed-root receipt compaction and exact r9 focused
-review complete; final source-bound timing pending the immutable candidate**.
+Status (2026-07-31): **indexed-root receipt compaction, exact r9 focused
+review, and the corrected immutable source-bound comparison are complete**.
 The implementation passed focused current-R and actual R 3.6 tests plus the
 recorded strict GCC and Clang development builds.  Its first balanced A/B
 recovered the intended bulk allocation cost but did not recover enough elapsed
 time; sections 8--10 record the subsequent bounded recovery and indexed-root
-redesign.  The final three-way comparison is deliberately deferred until
-shared package source converges, because a benchmark against a moving source
-tree would not be release evidence.  Speed is not permission to weaken the
+redesign.  Candidate `a153fae` passed the corrected source-bound three-way
+comparison recorded in section 11.6. Speed is not permission to weaken the
 finalizer, generation, ownership, or closed-dispatch guarantees added by the
 final adversarial review.
 
@@ -1251,5 +1250,36 @@ the corrected source-bound three-way wall-time policy, or replace any complete
 compiler, memory, every-supported-R-minor, portability, reverse-dependency,
 or release gate.  The failed
 `refs/paradox-release/candidate-20260731T124039Z` ref remains diagnostic only.
-Freeze a replacement immutable candidate and rerun the corrected three-way
-comparison before starting the complete release gates.
+The required next step was to freeze a replacement immutable candidate and
+rerun the corrected three-way comparison before complete release gates.
+Section 11.6 records that completion.
+
+### 11.6 Corrected immutable comparison
+
+The replacement comparison is complete against
+`refs/paradox-release/candidate-20260731T150816Z`, commit
+`a153faeeed8735c4aeeba512a70fb71b11235469`, tree
+`2fe241b90b0e86381a6f884fd29d3a80baab6b7b`. Retained results are under
+`.local/perf/domain-indexed-root-final-threeway-candidate-a153fae-repaired-r5/results`.
+All eight gates pass:
+
+- Domain timing versus the faithful pre-scalar control;
+- bulk and one-row allocation versus the exact baseline;
+- bulk and one-row timing versus the exact baseline; and
+- ParamSet review-guard allocation, package-self instructions, and absence of
+  changed-code execution versus the pre-scalar control.
+
+The completion, gate, round, summary, layout-control, and review-guard
+SHA-256 values are respectively
+`379d4c1839c2d05f8c7c8c9d867f492d68355ef3fc22eae46fdf36a389a417d7`,
+`e87450b0ab084a0f43867daeb6aee7473eea888b952af9a306c894fa7f89dce2`,
+`0cfb24b08727eb930ee34f42384242abaece108181e70e66bbc1bddea7c60d8c`,
+`ed1d3d6efc8f311d80e8371e0d055aebcdc87f3f5c19d6d1950ab3386672cd43`,
+`117aa75c0a0379efbfeee486d8042061f481b62f40146ecd0f3b3759df3d7c67`,
+and
+`1f34721e4f83322d9c3a78855f8f06b827546ef679996106b0b826bb91cd4a04`.
+The before/after library receipts are byte-identical. This closes the bounded
+performance obligation. The later rejection of `a153fae` by unrelated C23
+harness and formal-S4/legacy-migration correctness findings does not reopen
+these slices; final whole-product benchmarking remains a separate release
+gate.

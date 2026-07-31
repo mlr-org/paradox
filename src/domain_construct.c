@@ -649,7 +649,7 @@ static int canonical_opaque_list(SEXP value) {
   return valid;
 }
 
-static int exact_no_default(SEXP value, SEXP classes) {
+int paradox_domain_exact_no_default_marker(SEXP value, SEXP classes) {
   static const char *const allowed[] = {"class"};
   static const char *const expected[] = {"NoDefault"};
   if (!paradox_api_ordinary_class_contains(classes, "NoDefault")) return 0;
@@ -774,6 +774,140 @@ SEXP paradox_snapshot_builtin_requirements(SEXP requirements,
   }
   UNPROTECT(1);
   return result;
+}
+
+static int requirement_snapshot_parts(SEXP requirement,
+    SEXP *on, SEXP *condition) {
+  static const char *const allowed[] = {"names"};
+  static const char *const expected_names[] = {"on", "cond"};
+  if (TYPEOF(requirement) != VECSXP || ALTREP(requirement) ||
+      Rf_isS4(requirement) || Rf_isObject(requirement) ||
+      XLENGTH(requirement) != 2 ||
+      !paradox_api_has_only_attributes(requirement, allowed, 1)) {
+    return FALSE;
+  }
+  SEXP names = paradox_api_raw_attribute(requirement, R_NamesSymbol);
+  R_xlen_t work_since_interrupt = 0;
+  if (!paradox_domain_exact_string_vector(
+      names,
+      expected_names,
+      2,
+      &work_since_interrupt
+    )) {
+    return FALSE;
+  }
+  *on = VECTOR_ELT(requirement, 0);
+  *condition = VECTOR_ELT(requirement, 1);
+  return TRUE;
+}
+
+static int requirement_on_lengths_current(SEXP source, SEXP snapshot) {
+  const int valid = TYPEOF(source) == STRSXP && TYPEOF(snapshot) == STRSXP &&
+    !Rf_isS4(source) && !Rf_isObject(source) &&
+    paradox_api_has_no_attributes(source) && !ALTREP(snapshot) &&
+    !Rf_isS4(snapshot) && !Rf_isObject(snapshot) &&
+    paradox_api_has_no_attributes(snapshot);
+  if (!valid || !ALTREP(source)) return valid;
+  /* A dispatching Length method can replace this exact `on` cell in its
+   * requirement.  Retain the selected generation independently until the
+   * callback has returned. */
+  PROTECT(source);
+  PROTECT(snapshot);
+  const int current = XLENGTH(source) == XLENGTH(snapshot);
+  UNPROTECT(2);
+  return current;
+}
+
+int paradox_builtin_requirements_snapshot_lengths_current(
+    SEXP source, SEXP snapshot) {
+  if (source == R_NilValue || snapshot == R_NilValue) {
+    return source == snapshot;
+  }
+  if (TYPEOF(source) != VECSXP || TYPEOF(snapshot) != VECSXP ||
+      ALTREP(source) || ALTREP(snapshot) || Rf_isS4(source) ||
+      Rf_isS4(snapshot) || Rf_isObject(source) || Rf_isObject(snapshot) ||
+      !paradox_api_has_no_attributes(source) ||
+      !paradox_api_has_no_attributes(snapshot) ||
+      XLENGTH(source) != XLENGTH(snapshot)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    SEXP source_on = R_NilValue;
+    SEXP source_condition = R_NilValue;
+    SEXP snapshot_on = R_NilValue;
+    SEXP snapshot_condition = R_NilValue;
+    if (!requirement_snapshot_parts(
+        VECTOR_ELT(source, index),
+        &source_on,
+        &source_condition
+      ) || !requirement_snapshot_parts(
+        VECTOR_ELT(snapshot, index),
+        &snapshot_on,
+        &snapshot_condition
+      )) {
+      return FALSE;
+    }
+    /* The `on` Length callback may replace the sibling `cond` cell and
+     * collect before the Condition check begins. Retain the complete selected
+     * source/snapshot row, not only whichever ALTREP is dispatching now. */
+    PROTECT(source_on);
+    PROTECT(source_condition);
+    PROTECT(snapshot_on);
+    PROTECT(snapshot_condition);
+    const int current =
+      requirement_on_lengths_current(source_on, snapshot_on) &&
+      paradox_builtin_condition_snapshot_lengths_current(
+        source_condition,
+        snapshot_condition
+      );
+    UNPROTECT(4);
+    if (!current) return FALSE;
+  }
+  return TRUE;
+}
+
+int paradox_builtin_requirements_snapshot_is_current(
+    SEXP source, SEXP snapshot) {
+  if (source == R_NilValue || snapshot == R_NilValue) {
+    return source == snapshot;
+  }
+  if (TYPEOF(source) != VECSXP || TYPEOF(snapshot) != VECSXP ||
+      ALTREP(source) || ALTREP(snapshot) || Rf_isS4(source) ||
+      Rf_isS4(snapshot) || Rf_isObject(source) || Rf_isObject(snapshot) ||
+      !paradox_api_has_no_attributes(source) ||
+      !paradox_api_has_no_attributes(snapshot) ||
+      XLENGTH(source) != XLENGTH(snapshot)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    SEXP source_on = R_NilValue;
+    SEXP source_condition = R_NilValue;
+    SEXP snapshot_on = R_NilValue;
+    SEXP snapshot_condition = R_NilValue;
+    if (!requirement_snapshot_parts(
+        VECTOR_ELT(source, index),
+        &source_on,
+        &source_condition
+      ) || !requirement_snapshot_parts(
+        VECTOR_ELT(snapshot, index),
+        &snapshot_on,
+        &snapshot_condition
+      ) || (ALTREP(source_on)
+        ? !paradox_altrep_builtin_value_leaf_metadata_is_current(
+            source_on,
+            snapshot_on
+          )
+        : !paradox_builtin_value_leaf_receipt_current(
+            source_on,
+            snapshot_on
+          )) || !paradox_builtin_condition_snapshot_is_current(
+          source_condition,
+          snapshot_condition
+        )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
 }
 
 static int canonical_requirements(SEXP requirements,
@@ -1289,7 +1423,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_DEFAULT);
   }
   SEXP default_classes = R_NilValue;
-  if (!paradox_api_ordinary_class_snapshot(
+  if (!paradox_api_opaque_leaf_class_snapshot(
       default_value,
       &default_classes
     ) || paradox_api_ordinary_class_contains(
@@ -1298,7 +1432,10 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     )) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_DEFAULT);
   }
-  const int marker = exact_no_default(default_value, default_classes);
+  const int marker = paradox_domain_exact_no_default_marker(
+    default_value,
+    default_classes
+  );
   if (marker < 0) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_DEFAULT);
   }
@@ -1338,7 +1475,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_INIT);
   }
   SEXP init_classes = R_NilValue;
-  if (!paradox_api_ordinary_class_snapshot(init_value, &init_classes) ||
+  if (!paradox_api_opaque_leaf_class_snapshot(init_value, &init_classes) ||
       paradox_api_ordinary_class_contains(init_classes, "TuneToken")) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_INIT);
   }

@@ -1809,7 +1809,7 @@ static void capture_builtin_metadata_copy_attribute(SEXP tag, SEXP value,
   ++capture->count;
 }
 
-static NORET void builtin_metadata_copy_error(
+NORET static void builtin_metadata_copy_error(
     const builtin_metadata_copy_t *copy) {
   Rf_error("%s", copy->failure_message);
 }
@@ -2973,6 +2973,24 @@ static int builtin_metadata_attributes_receipt_current(
     &receipt,
     1U
   );
+}
+
+int paradox_altrep_builtin_value_leaf_metadata_is_current(
+    SEXP source, SEXP snapshot) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+  if (!ALTREP(source) || ALTREP(snapshot) || Rf_isS4(source) ||
+      Rf_isS4(snapshot) || (SEXPTYPE) TYPEOF(snapshot) != type ||
+      (type != LGLSXP && type != INTSXP && type != REALSXP &&
+        type != CPLXSXP && type != STRSXP && type != RAWSXP) ||
+      (Rf_isObject(source) != FALSE) !=
+        (Rf_isObject(snapshot) != FALSE)) {
+    return FALSE;
+  }
+  /* The snapshot helper has already materialized the stable semantic payload
+   * and independently owned this complete ordinary metadata graph. Raw stored-
+   * attribute traversal cannot invoke ALTREP methods, allocate, or evaluate R,
+   * so it is safe in the callback-free terminal receipt phase. */
+  return builtin_metadata_attributes_receipt_current(source, snapshot);
 }
 
 static void run_builtin_metadata_copy_hook(SEXP hook) {

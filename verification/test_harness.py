@@ -509,6 +509,11 @@ class ManifestTests(unittest.TestCase):
             focused.environment["PARADOX_VERIFY_ATTEMPT_ID"], "{attempt_id}"
         )
         self.assertIn("--resume", focused.command)
+        repository_option = focused.command.index("--repositories")
+        self.assertEqual(
+            focused.command[repository_option + 1],
+            "bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda",
+        )
         self.assertEqual(focused.resources.memory_mib, 8192)
         self.assertEqual(focused.resources.minimum_memory_mib, 4096)
         phase_30 = tuple(
@@ -580,6 +585,19 @@ class ManifestTests(unittest.TestCase):
             r_utils,
         )
         self.assertNotIn("attribute_hidden NORET void", r_utils)
+        for name, declaration in (
+            (
+                "r_utils.c",
+                "NORET static void builtin_metadata_copy_error",
+            ),
+            (
+                "upgrade_graph.c",
+                "NORET static void upgrade_table_column_error",
+            ),
+        ):
+            source = (root / "src" / name).read_text(encoding="utf-8")
+            self.assertIn(declaration, source)
+            self.assertNotIn("static NORET void", source)
 
         configurations = (
             "Makevars-check-analyzer-gcc",

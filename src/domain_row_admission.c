@@ -187,7 +187,8 @@ static int cargo_nested_name(SEXP name) {
       paradox_domain_string_is(name, "repr"));
 }
 
-static int cargo_receipt_current(SEXP source, SEXP snapshot) {
+int paradox_domain_cargo_snapshot_is_current(
+    SEXP source, SEXP snapshot) {
   if (source == R_NilValue || snapshot == R_NilValue) {
     return source == snapshot;
   }
@@ -262,6 +263,33 @@ static int special_values_receipt_current(SEXP source, SEXP snapshot,
     SEXP right = VECTOR_ELT(snapshot, index);
     if (typed
         ? !paradox_builtin_value_leaf_receipt_current(left, right)
+        : left != right) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+int paradox_domain_special_values_snapshot_is_current(
+    SEXP source, SEXP snapshot, int typed) {
+  SEXP snapshot_names = exact_optional_names(snapshot);
+  if (snapshot_names == R_UnboundValue || TYPEOF(source) != VECSXP ||
+      TYPEOF(snapshot) != VECSXP || ALTREP(source) || ALTREP(snapshot) ||
+      Rf_isS4(source) || Rf_isS4(snapshot) || Rf_isObject(source) ||
+      Rf_isObject(snapshot) || XLENGTH(source) != XLENGTH(snapshot) ||
+      !exact_names_equal(source, snapshot)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    SEXP left = VECTOR_ELT(source, index);
+    SEXP right = VECTOR_ELT(snapshot, index);
+    if (typed
+        ? (ALTREP(left)
+          ? !paradox_altrep_builtin_value_leaf_metadata_is_current(
+              left,
+              right
+            )
+          : !paradox_builtin_value_leaf_receipt_current(left, right))
         : left != right) {
       return FALSE;
     }
@@ -1234,7 +1262,10 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
       SEXP snapshot = VECTOR_ELT(rows, offset + PARADOX_ADMITTED_CARGO);
       if (!(have_prior_cargo && source == prior_live_cargo &&
           snapshot == prior_owned_cargo)) {
-        current = cargo_receipt_current(source, snapshot);
+        current = paradox_domain_cargo_snapshot_is_current(
+          source,
+          snapshot
+        );
       }
       prior_live_cargo = source;
       prior_owned_cargo = snapshot;

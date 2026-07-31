@@ -616,20 +616,38 @@ clean_file_count=8
 clean_blocks=3
 clean_not_cran_files=5
 mkdir -p "$CLEAN_SOURCE/tests/testthat"
+printf '%s\n' \
+  'skip_if_no_old_r_binding_existence_path = function() {' \
+  '  testthat::skip_if(' \
+  '    getRversion() >= "4.2.0",' \
+  '    "R >= 4.2 has a public non-evaluating binding-existence operation"' \
+  '  )' \
+  '}' > "$CLEAN_SOURCE/tests/testthat/helper.R"
 for file_index in $(seq 1 "$clean_file_count"); do
   if [[ "$file_index" -eq "$clean_file_count" ]]; then
     clean_file="$CLEAN_SOURCE/tests/testthat/test_to_tune.R"
   elif (( file_index == clean_file_count - 1 )); then
     clean_file="$CLEAN_SOURCE/tests/testthat/test-paramset-equality.R"
+  elif (( file_index == clean_file_count - 2 )); then
+    clean_file="$CLEAN_SOURCE/tests/testthat/test-ParamSetShadow.R"
   else
     clean_file=$(printf '%s/tests/testthat/test-native-clean-%03d.R' \
       "$CLEAN_SOURCE" "$file_index")
   fi
   for block_index in $(seq 1 "$clean_blocks"); do
-    printf 'test_that("clean %03d %03d", {\n' \
-      "$file_index" "$block_index" >> "$clean_file"
+    if (( file_index == clean_file_count - 2 && block_index == 1 )); then
+      printf '%s\n' \
+        'test_that("old-R Shadow generation receipts never enter the evaluator", {' \
+        >> "$clean_file"
+    else
+      printf 'test_that("clean %03d %03d", {\n' \
+        "$file_index" "$block_index" >> "$clean_file"
+    fi
     if [[ "$file_index" -le "$clean_not_cran_files" && "$block_index" -eq 1 ]]; then
       printf '  skip_on_cran()\n' >> "$clean_file"
+    fi
+    if (( file_index == clean_file_count - 2 && block_index == 1 )); then
+      printf '  skip_if_no_old_r_binding_existence_path()\n' >> "$clean_file"
     fi
     printf '%s\n' \
       '  expect_true(TRUE)' \
@@ -665,6 +683,99 @@ env -i \
   --selection=focused \
   "--expected-dso-sha256=$DSO_SHA256" \
   > "$TEST_ROOT/clean-verifier.log"
+
+# The current-R Shadow exclusion is a required capability receipt, not merely
+# an allowed skip. Removing it while preserving internally consistent ledger
+# and worker aggregates must therefore fail the trusted verifier.
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  NR == 1 { print; next }
+  $6 == "test-ParamSetShadow.R" { $11 = $11 + 1; $13 = $13 - 1 }
+  { print }
+' "$TEST_ROOT/clean-ledger-workers.tsv" \
+  > "$TEST_ROOT/shadow-missing-workers.tsv"
+shadow_missing_workers_sha=$(
+  sha256sum "$TEST_ROOT/shadow-missing-workers.tsv" | cut -d ' ' -f 1
+)
+awk -F '\t' -v OFS='\t' -v sha="$shadow_missing_workers_sha" '
+  $1 == "test" && $6 == "test-ParamSetShadow.R" &&
+      $8 == "old-R Shadow generation receipts never enter the evaluator" {
+    $10 = $10 + 1
+    $12 = 0
+    $15 = "-"
+  }
+  $1 == "summary" {
+    $10 = $10 + 1
+    $12 = $12 - 1
+    sub(/worker_evidence_sha256=[^;]+/,
+      "worker_evidence_sha256=" sha, $16)
+  }
+  { print }
+' "$CLEAN_LEDGER" > "$TEST_ROOT/shadow-missing.tsv"
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+  "--source=$CLEAN_SOURCE" "--ledger=$TEST_ROOT/shadow-missing.tsv" \
+  --selection=focused \
+  "--expected-dso-sha256=$DSO_SHA256" \
+  > "$TEST_ROOT/shadow-missing.log" 2>&1
+shadow_missing_status=$?
+set -e
+[[ "$shadow_missing_status" -ne 0 ]] || {
+  printf '%s\n' 'test-native-test-batch: missing required Shadow skip was accepted' >&2
+  exit 1
+}
+grep -Fq 'runtime capability skip differs' \
+  "$TEST_ROOT/shadow-missing.log" || {
+  cat "$TEST_ROOT/shadow-missing.log" >&2
+  printf '%s\n' 'test-native-test-batch: missing Shadow skip failed ambiguously' >&2
+  exit 1
+}
+
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "test" && $6 == "test-ParamSetShadow.R" &&
+      $8 == "old-R Shadow generation receipts never enter the evaluator" {
+    $15 = "Reason: wrong Shadow capability boundary"
+  }
+  { print }
+' "$CLEAN_LEDGER" > "$TEST_ROOT/shadow-wrong-reason.tsv"
+cp -- "$TEST_ROOT/clean-ledger-workers.tsv" \
+  "$TEST_ROOT/shadow-wrong-reason-workers.tsv"
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+  "--source=$CLEAN_SOURCE" \
+  "--ledger=$TEST_ROOT/shadow-wrong-reason.tsv" \
+  --selection=focused \
+  "--expected-dso-sha256=$DSO_SHA256" \
+  > "$TEST_ROOT/shadow-wrong-reason.log" 2>&1
+shadow_wrong_reason_status=$?
+set -e
+[[ "$shadow_wrong_reason_status" -ne 0 ]] || {
+  printf '%s\n' 'test-native-test-batch: wrong Shadow skip reason was accepted' >&2
+  exit 1
+}
+grep -Fq 'ledger contains an unreviewed skip' \
+  "$TEST_ROOT/shadow-wrong-reason.log" || {
+  cat "$TEST_ROOT/shadow-wrong-reason.log" >&2
+  printf '%s\n' 'test-native-test-batch: wrong Shadow reason failed ambiguously' >&2
+  exit 1
+}
 grep -Fq $'\ttest_to_tune.R\t' "$CLEAN_LEDGER" || {
   printf '%s\n' 'test-native-test-batch: promoted focused suite was not executed' >&2
   exit 1
@@ -718,8 +829,13 @@ grep -Fq 'isolated scheduler used an unexpected worker count' \
 }
 
 awk -F '\t' 'BEGIN { OFS = "\t" }
-  NR == 2 { $10 = $10 - 1; $12 = 1; $15 = "unreviewed synthetic skip" }
-  $1 == "summary" { $10 = $10 - 1; $12 = 1 }
+  $1 == "test" && $6 == "test-native-clean-001.R" &&
+      $8 == "clean 001 001" {
+    $10 = $10 - 1
+    $12 = 1
+    $15 = "unreviewed synthetic skip"
+  }
+  $1 == "summary" { $10 = $10 - 1; $12 = $12 + 1 }
   { print }
 ' "$CLEAN_LEDGER" > "$TEST_ROOT/unreviewed-skip.tsv"
 set +e
@@ -757,4 +873,5 @@ printf '%s\n' \
   'native functional wrong-DSO, bounded timeout, and process-tree cleanup passed' \
   "native functional clean ledger passed: files=$clean_file_count; blocks=$((clean_file_count * clean_blocks)); expectations=$((clean_file_count * clean_blocks * 3))" \
   'native functional runner/verifier focused inventory remained synchronized' \
+  'native functional required Shadow capability skip accepted and enforced' \
   'native functional unreviewed skip rejected'

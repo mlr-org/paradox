@@ -13,6 +13,22 @@ frozen candidate. Freeze one new clean ref only after source, tests,
 documentation, downstream bridges, and harness inputs converge; every
 applicable source-bound acceptance gate then runs against that ref.
 
+The rejected diagnostic ref
+`refs/paradox-release/candidate-20260731T150816Z` (`a153fae`) passed its
+corrected bounded Domain comparison, but `release-candidate-a153fae` finished
+five tasks passing, three failing, and one dependency-blocked. All four harness
+rows and the API-header matrix passed. C23 stopped before compilation on a
+stale micromamba-output assumption; differential completed 33 cases with zero
+unexpected changes but seven stale candidate hashes; strict GCC found one
+stale expected diagnostic plus formal-S4 and authentic populated missing-
+`row.names` migration defects. The every-minor runtime task never started.
+Completion/JSON-summary/TSV-summary SHA-256 values are
+`83140b9737809c8b8db6457160938bdc5a39b6db4531fef42962508b61e3e165`,
+`e73d372b7533782ba66f922948c7acb4764aa115cafe02c9a64973a531b5269f`,
+and
+`f912757fe598e4e5fa269e6511f93969b20ebf7aee9d22c9fbd3881626755737`.
+It is not an acceptance run or memory donor.
+
 ### Historical `dbbdcc1` evidence
 
 Package-facing feature work previously converged at the frozen ref
@@ -487,7 +503,11 @@ families.
   `special_vals` list; typed special leaves reject ALTREP, typed S4
   special/default/init matching is pointer-only, and ParamUty opaque S4 leaves
   retain identity with base-`identical()` special membership as the sole
-  no-dispatch observation;
+  no-dispatch observation. Genuine formal-S4 leaves are also proved non-token
+  through checked/unchecked graph stores, dependency activity, value-type
+  filters, fixed designs, and both stored and explicit search-space
+  extraction, while an S4-marked ordinary TuneToken remains a structural
+  rejection;
 - CondEqual/CondAnyOf admission, mutation/detachment, evaluation, formatting,
   and unknown-kind rejection; standalone evaluation covers `NULL`, all four
   supported atomic families, names, stable ALTREP operands, separate operand
@@ -635,9 +655,12 @@ families.
   callbacks, both pinned `mbo_config` fixtures, authentic mlr3/gallery
   containing-object snapshots, registered bbotk/miesmuschel extensions, and
   rejected unknown legacy extensions. Legacy table snapshots admit the
-  authentic missing-row-name spelling only for zero rows, and reject it for a
-  nonempty table as well as rejecting callback-capable or noncanonical integer
-  row metadata and a row count inconsistent with the exact selected columns;
+  authentic missing-row-name spelling for empty and populated keyed tables,
+  because equal-length independently owned columns are then the sole row-count
+  authority. Present metadata remains mandatory ordinary canonical integer
+  metadata matching that count. Coverage also rejects inconsistent column
+  lengths and proves that a deferred by-reference source-column write cannot
+  splice a pre-receipt name with a post-receipt payload;
 - constructor representation, Design, sampler, subset/flatten/union, and
   ordinary edge diagnostics. Subset coverage pins the compatible
   `keep_trafo = TRUE` default and verifies independent transformation stripping
@@ -727,6 +750,12 @@ capability exclusion for the adversarial VECSXP ALTREP fixture, because R did
 not expose list ALTREP classes until R 4.3. No production behavior is waived:
 list ALTREP objects cannot exist on the excluded runtime and the corresponding
 production branch is vacuous.
+
+The old optional-binding Shadow generation-receipt regression has the inverse
+capability boundary. It executes on R 3.6--4.1, where absence-tolerant lookup
+enters the evaluator, and records one exact source-derived skip on R 4.2--4.5.
+Those runtimes expose the public non-evaluating binding-existence operation, so
+the old branch cannot be entered; no package behavior is waived.
 
 Primary drivers are `scripts/native-check` and
 `scripts/check-r-api-compatibility`. Use their current `--help`; their retained
@@ -884,19 +913,18 @@ candidate ref/commit/tree/version tuple, and `paradox1` uses a separate
 run-local candidate receipt for released Paradox 1.0.1, so P1 observations
 cannot be presented as Paradox-2 candidate evidence.
 
-The `release-refresh-20260720` profile installs its complete eight-package
+The `release-refresh-20260720` profile installs its complete nine-package
 dependency order. Its final broad repository stage executes the complete
 priority-zero/one corpus once with `jobs = 2`; the active retained execution
 used 14 admitted waves and completed 20 of 28 exact repositories, with eight
 reviewed non-Paradox/environmental exclusions. The additional exact
-source-package check stage selects bbotk, miesmuschel, mlr3mbo, celecx, and
-mlr3fda: bbotk and miesmuschel own serialized-object bridges, while the other
-three retain reviewed Paradox-2 adaptations. The final exact Paradox-2 stage is
-independently verified with five green rows and five final `Status: OK`
-results. The overlay still authenticates the exact reviewed mlr3,
-mlr3pipelines, and mlr3fselect heads, and their behavior is covered by the broad
-repository stage without rebuilding a second source-package check corpus. Both
-axes retain profile/axis registries and
+source-package check stage selects all seven changed PR heads: bbotk,
+mlr3tuning, miesmuschel, mlr3pipelines, mlr3mbo, celecx, and mlr3fda. The last
+retained exact stage predates this expansion and remains historical evidence
+for its five green rows; it does not satisfy the seven-head release gate. The
+overlay still authenticates the exact reviewed mlr3 and mlr3fselect support
+heads, and their behavior is covered by the broad repository stage. Both axes
+retain profile/axis registries and
 selected input hashes, reject path, symlink, head, tree, and ancestry
 mismatches before work, and publish profile-specific overlays with the same
 no-clobber protocol. Use one outer worker for this focused release

@@ -438,7 +438,7 @@ test_that("data.table finalization rejects S4 structural carriers", {
   expect_true(isS4(attr(malformed_names, "names")))
   expect_error(
     .Call(paradox:::C_finalize_data_table, malformed_names),
-    "expected ordinary data.table names",
+    "expected bounded data.table metadata",
     fixed = TRUE
   )
 })

@@ -9,6 +9,10 @@ umask 077
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 VALIDATOR="$ROOT/scripts/environment/validate-c23-evidence"
 RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+TOOLCHAIN="$ROOT/.local/toolchain"
+TOOLCHAIN_LOCK="$ROOT/environment/toolchain-linux-64.lock"
+MAMBA_ROOT="$ROOT/.local/micromamba"
 TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/c23-evidence-validator.XXXXXX")
 
 cleanup() {
@@ -41,6 +45,13 @@ expect_failure() {
   fail "validator is absent, non-executable, or symbolic"
 [[ -f "$RSCRIPT" && -x "$RSCRIPT" ]] ||
   fail "repository-local Rscript is absent"
+[[ -f "$MICROMAMBA" && -x "$MICROMAMBA" && ! -L "$MICROMAMBA" ]] ||
+  fail "repository-local micromamba is absent, non-executable, or symbolic"
+[[ -d "$TOOLCHAIN" && ! -L "$TOOLCHAIN" &&
+  -d "$MAMBA_ROOT" && ! -L "$MAMBA_ROOT" ]] ||
+  fail "repository-local toolchain or micromamba state root is absent or symbolic"
+[[ -f "$TOOLCHAIN_LOCK" && ! -L "$TOOLCHAIN_LOCK" ]] ||
+  fail "repository-local toolchain lock is absent or symbolic"
 
 SOURCE="$TEST_ROOT/source.tar.gz"
 printf '%s\n' canonical > "$SOURCE"
@@ -80,12 +91,17 @@ script_directory=${0%/*}
 cat "$script_directory/../inventory"
 EOF
 chmod 0755 "$FAKE_MICROMAMBA"
-cat > "$FAKE_INVENTORY" <<'EOF'
+{
+  printf 'List of packages in environment: "%s"\n\n' "$FAKE_PREFIX"
+  cat <<'EOF'
+https://example.invalid/linux-64/compiler-1.0-0.conda#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+EOF
+} > "$FAKE_INVENTORY"
+cat > "$FAKE_LOCK" <<'EOF'
 # platform: linux-64
 @EXPLICIT
 https://example.invalid/linux-64/compiler-1.0-0.conda#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 EOF
-cp -- "$FAKE_INVENTORY" "$FAKE_LOCK"
 "$VALIDATOR" toolchain-inventory \
   "$FAKE_MICROMAMBA" "$FAKE_PREFIX" "$FAKE_LOCK" "$FAKE_HOME" \
   "/usr/bin:/bin" "$FAKE_MAMBA_ROOT" \
@@ -100,6 +116,45 @@ expect_failure wrong-toolchain-inventory \
   "$FAKE_HOME" "/usr/bin:/bin" "$FAKE_MAMBA_ROOT" \
   "$TEST_ROOT/toolchain-wrong-raw.log" \
   "$TEST_ROOT/toolchain-wrong-observed.lock"
+cp -- "$FAKE_INVENTORY" "$TEST_ROOT/toolchain-valid-inventory"
+{
+  printf 'List of packages in environment: "%s"\n\n' \
+    "$FAKE_ROOT/wrong-prefix"
+  sed -n '3,$p' "$TEST_ROOT/toolchain-valid-inventory"
+} > "$FAKE_INVENTORY"
+expect_failure wrong-toolchain-prefix \
+  "$VALIDATOR" toolchain-inventory \
+  "$FAKE_MICROMAMBA" "$FAKE_PREFIX" "$FAKE_LOCK" "$FAKE_HOME" \
+  "/usr/bin:/bin" "$FAKE_MAMBA_ROOT" \
+  "$TEST_ROOT/toolchain-wrong-prefix-raw.log" \
+  "$TEST_ROOT/toolchain-wrong-prefix-observed.lock"
+{
+  printf 'List of packages in environment: "%s"\nnot-empty\n' \
+    "$FAKE_PREFIX"
+  sed -n '3,$p' "$TEST_ROOT/toolchain-valid-inventory"
+} > "$FAKE_INVENTORY"
+expect_failure nonempty-toolchain-banner-separator \
+  "$VALIDATOR" toolchain-inventory \
+  "$FAKE_MICROMAMBA" "$FAKE_PREFIX" "$FAKE_LOCK" "$FAKE_HOME" \
+  "/usr/bin:/bin" "$FAKE_MAMBA_ROOT" \
+  "$TEST_ROOT/toolchain-nonempty-separator-raw.log" \
+  "$TEST_ROOT/toolchain-nonempty-separator-observed.lock"
+cp -- "$TEST_ROOT/toolchain-valid-inventory" "$FAKE_INVENTORY"
+
+# Exercise the pinned micromamba's real output as well as the synthetic
+# adversarial cases above.  This is a read-only inventory operation: output and
+# HOME are private fixture paths, while the installed prefix and exact lock are
+# only observed.  Keeping this in the cheap validator test prevents a future
+# CLI/fixture format mismatch from surviving until the compiler gate.
+LIVE_HOME="$TEST_ROOT/live-toolchain-home"
+mkdir -- "$LIVE_HOME"
+"$VALIDATOR" toolchain-inventory \
+  "$MICROMAMBA" "$TOOLCHAIN" "$TOOLCHAIN_LOCK" "$LIVE_HOME" \
+  "$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin" "$MAMBA_ROOT" \
+  "$TEST_ROOT/live-toolchain-raw.log" \
+  "$TEST_ROOT/live-toolchain-observed.lock"
+cmp -s -- "$TOOLCHAIN_LOCK" "$TEST_ROOT/live-toolchain-observed.lock" ||
+  fail "live main-toolchain inventory was not retained exactly"
 
 COMPILER="$TEST_ROOT/compiler"
 : > "$COMPILER"

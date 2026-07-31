@@ -60,6 +60,17 @@ link command, and every such command must contain exactly one standard token:
 failure, not C23 evidence. Both helper and fixture are authenticated active
 inputs of the real gate.
 
+Pinned micromamba 2.5 emits its explicit inventory with the exact two-line
+prefix
+`List of packages in environment: "<canonical toolchain prefix>"` followed by
+one empty line, then the package URLs. The validator authenticates that dynamic
+canonical prefix and separator and normalizes only the URL rows beneath the
+canonical lock's `# platform: linux-64` / `@EXPLICIT` header before exact
+comparison. The cheap adversarial fixture exercises wrong-prefix and nonempty-
+separator failures and also invokes the pinned repository-local micromamba
+read-only against the real toolchain and lock. A synthetic fixture therefore
+cannot silently drift from the CLI format until the expensive compiler gate.
+
 The C23 slice runs only on current local R. It is deliberately not crossed
 with old R, every sanitizer, every supported runtime, or downstream packages:
 those gates establish different contracts and continue to use their existing
@@ -85,6 +96,9 @@ commands, and PR text locally; the maintainer performs every remote write.
 ## Acceptance
 
 - Both declarations in `src/r_utils.h` use `NORET attribute_hidden void`.
+- Internal non-returning definitions place `NORET` before `static`, as
+  required when current R headers expand it to the C23 `[[noreturn]]`
+  attribute.
 - The built package records exactly `SystemRequirements: USE_C17`.
 - All existing strict GNU C99 modes remain visibly `-std=gnu99`.
 - GCC is at least 15 and Clang is a recent pinned compiler in the C23 slice.

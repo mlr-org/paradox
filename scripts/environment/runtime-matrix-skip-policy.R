@@ -43,6 +43,27 @@ runtime_matrix_named_call_sequence <- function(value) {
   sequence
 }
 
+runtime_matrix_direct_test_expressions <- function(test_call) {
+  if (!is.call(test_call) || length(test_call) < 3L) return(list())
+  body <- test_call[[3L]]
+  if (is.call(body) && is.name(body[[1L]]) &&
+      identical(as.character(body[[1L]]), "{")) {
+    return(runtime_matrix_skip_policy_children(body)[-1L])
+  }
+  list(body)
+}
+
+runtime_matrix_leading_guard_sequence <- function(test_call, guard_names) {
+  sequence <- character()
+  for (expression in runtime_matrix_direct_test_expressions(test_call)) {
+    if (!is.call(expression) || !is.name(expression[[1L]])) break
+    name <- as.character(expression[[1L]])
+    if (!name %in% guard_names) break
+    sequence <- c(sequence, name)
+  }
+  sequence
+}
+
 runtime_matrix_literal_test_blocks <- function(path) {
   blocks <- list()
   walk <- function(value) {
@@ -253,7 +274,12 @@ runtime_matrix_validate_result_skip_policy <- function(
     active_binding =
       "Reason: R < 4.0 cannot safely inspect active-binding functions",
     list_altrep =
-      "Reason: R < 4.3 cannot construct list ALTREP test fixtures"
+      "Reason: R < 4.3 cannot construct list ALTREP test fixtures",
+    old_binding_existence =
+      paste0(
+        "Reason: R >= 4.2 has a public non-evaluating ",
+        "binding-existence operation"
+      )
   )
   active_binding_runtimes <- reviewed_runtimes[
     vapply(
@@ -269,12 +295,22 @@ runtime_matrix_validate_result_skip_policy <- function(
       logical(1L)
     )
   ]
+  old_binding_existence_runtimes <- reviewed_runtimes[
+    vapply(
+      reviewed_runtimes,
+      function(runtime) utils::compareVersion(runtime, "4.2.0") >= 0L,
+      logical(1L)
+    )
+  ]
   valid_extra_runtime <- (
     extra$reason == allowed_extra_reasons[["active_binding"]] &
       extra$runtime %in% active_binding_runtimes
   ) | (
     extra$reason == allowed_extra_reasons[["list_altrep"]] &
       extra$runtime %in% list_altrep_runtimes
+  ) | (
+    extra$reason == allowed_extra_reasons[["old_binding_existence"]] &
+      extra$runtime %in% old_binding_existence_runtimes
   )
   if (any(!extra$reason %in% allowed_extra_reasons) ||
       any(!valid_extra_runtime)) {
@@ -285,12 +321,29 @@ runtime_matrix_validate_result_skip_policy <- function(
     test_files)
   reviewed_triggers <- c(
     "skip_on_cran", "skip_if_no_active_binding_inspection",
-    "skip_if_no_list_altrep"
+    "skip_if_no_list_altrep", "skip_if_no_old_r_binding_existence_path"
   )
   for (blocks in source_blocks) {
     for (block in blocks) {
-      sequence <- runtime_matrix_named_call_sequence(block$call)
-      positions <- match(reviewed_triggers, sequence)
+      recursive_sequence <- runtime_matrix_named_call_sequence(block$call)
+      leading_sequence <- runtime_matrix_leading_guard_sequence(
+        block$call, reviewed_triggers
+      )
+      occurrences <- vapply(
+        reviewed_triggers,
+        function(trigger) sum(recursive_sequence == trigger),
+        integer(1L)
+      )
+      if (any(occurrences > 0L & (
+          occurrences != 1L |
+            !reviewed_triggers %in% leading_sequence
+        ))) {
+        stop(
+          "version-specific and CRAN skip helpers must be unique leading guards",
+          call. = FALSE
+        )
+      }
+      positions <- match(reviewed_triggers, leading_sequence)
       if (!is.na(positions[[1L]]) &&
           any(positions[[1L]] > positions[-1L], na.rm = TRUE)) {
         stop("skip_on_cran must precede version-specific skip guards",
@@ -299,6 +352,16 @@ runtime_matrix_validate_result_skip_policy <- function(
       if (!is.na(positions[[2L]]) && !is.na(positions[[3L]]) &&
           positions[[2L]] > positions[[3L]]) {
         stop("active-binding skip must precede the list-ALTREP skip",
+          call. = FALSE)
+      }
+      if (!is.na(positions[[2L]]) && !is.na(positions[[4L]]) &&
+          positions[[2L]] > positions[[4L]]) {
+        stop("active-binding skip must precede the old-binding-existence skip",
+          call. = FALSE)
+      }
+      if (!is.na(positions[[3L]]) && !is.na(positions[[4L]]) &&
+          positions[[3L]] > positions[[4L]]) {
+        stop("list-ALTREP skip must precede the old-binding-existence skip",
           call. = FALSE)
       }
     }
@@ -317,14 +380,15 @@ runtime_matrix_validate_result_skip_policy <- function(
     blocks[[positions[[1L]]]]$call
   })
   for (index in seq_len(nrow(extra))) {
-    expected_call <- if (identical(
-        extra$reason[[index]], allowed_extra_reasons[["active_binding"]]
+    expected_call <- switch(
+      match(extra$reason[[index]], allowed_extra_reasons),
+      "skip_if_no_active_binding_inspection",
+      "skip_if_no_list_altrep",
+      "skip_if_no_old_r_binding_existence_path"
+    )
+    if (!expected_call %in% runtime_matrix_leading_guard_sequence(
+        extra_calls[[index]], reviewed_triggers
       )) {
-      "skip_if_no_active_binding_inspection"
-    } else {
-      "skip_if_no_list_altrep"
-    }
-    if (!runtime_matrix_contains_named_call(extra_calls[[index]], expected_call)) {
       stop("version-specific result skip does not contain its reviewed trigger",
         call. = FALSE)
     }
@@ -334,9 +398,10 @@ runtime_matrix_validate_result_skip_policy <- function(
     titles <- vapply(
       blocks[vapply(
         blocks,
-        function(block) runtime_matrix_contains_named_call(
-          block$call, "skip_if_no_active_binding_inspection"
-        ),
+        function(block) "skip_if_no_active_binding_inspection" %in%
+          runtime_matrix_leading_guard_sequence(
+            block$call, reviewed_triggers
+          ),
         logical(1L)
       )],
       `[[`,
@@ -394,9 +459,10 @@ runtime_matrix_validate_result_skip_policy <- function(
     titles <- vapply(
       blocks[vapply(
         blocks,
-        function(block) runtime_matrix_contains_named_call(
-          block$call, "skip_if_no_list_altrep"
-        ),
+        function(block) "skip_if_no_list_altrep" %in%
+          runtime_matrix_leading_guard_sequence(
+            block$call, reviewed_triggers
+          ),
         logical(1L)
       )],
       `[[`,
@@ -445,7 +511,86 @@ runtime_matrix_validate_result_skip_policy <- function(
     stop("list-ALTREP result skips differ from current guarded tests",
       call. = FALSE)
   }
-  expected <- rbind(expected_baseline, active_rows, list_altrep_rows)
+  old_binding_existence_rows <- lapply(names(source_blocks), function(file) {
+    blocks <- source_blocks[[file]]
+    titles <- vapply(
+      blocks[vapply(
+        blocks,
+        function(block) "skip_if_no_old_r_binding_existence_path" %in%
+          runtime_matrix_leading_guard_sequence(
+            block$call, reviewed_triggers
+          ),
+        logical(1L)
+      )],
+      `[[`,
+      character(1L),
+      "title"
+    )
+    if (!length(titles)) return(NULL)
+    do.call(rbind, lapply(
+      old_binding_existence_runtimes,
+      function(runtime) {
+        data.frame(
+          runtime = rep(runtime, length(titles)),
+          file = rep(file, length(titles)),
+          test = titles,
+          reason = rep(
+            allowed_extra_reasons[["old_binding_existence"]],
+            length(titles)
+          ),
+          stringsAsFactors = FALSE
+        )
+      }
+    ))
+  })
+  old_binding_existence_rows <- do.call(rbind, old_binding_existence_rows)
+  if (is.null(old_binding_existence_rows)) {
+    old_binding_existence_rows <- extra[FALSE, , drop = FALSE]
+  }
+  old_binding_existence_rows <- old_binding_existence_rows[
+    !paste(
+      old_binding_existence_rows$runtime,
+      old_binding_existence_rows$file,
+      old_binding_existence_rows$test,
+      sep = "\t"
+    ) %in% c(
+      baseline_keys,
+      paste(active_rows$runtime, active_rows$file, active_rows$test, sep = "\t"),
+      paste(
+        list_altrep_rows$runtime,
+        list_altrep_rows$file,
+        list_altrep_rows$test,
+        sep = "\t"
+      )
+    ),
+    ,
+    drop = FALSE
+  ]
+  recorded_old_binding_existence <- extra[
+    extra$reason == allowed_extra_reasons[["old_binding_existence"]],
+    ,
+    drop = FALSE
+  ]
+  old_binding_existence_rows <- active_order(old_binding_existence_rows)
+  recorded_old_binding_existence <-
+    active_order(recorded_old_binding_existence)
+  row.names(old_binding_existence_rows) <- NULL
+  row.names(recorded_old_binding_existence) <- NULL
+  if (!identical(
+      recorded_old_binding_existence,
+      old_binding_existence_rows
+    )) {
+    stop(
+      "old binding-existence result skips differ from current guarded tests",
+      call. = FALSE
+    )
+  }
+  expected <- rbind(
+    expected_baseline,
+    active_rows,
+    list_altrep_rows,
+    old_binding_existence_rows
+  )
   expected <- expected[do.call(order, c(
     expected[c("runtime", "file", "test", "reason")],
     list(method = "radix")

@@ -13,13 +13,13 @@ the user performs the listed manual actions:
 
 | Repository | Exact head | Current remote state | Remaining manual action |
 |---|---|---|---|
-| bbotk | `29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0` | local branch is two commits ahead of `origin/codex/public-paramsetcollection-sets` | push, then create or update the PR |
-| mlr3tuning | `15a972a3582fea955b80bb0200ddab58793451e1` | new local `codex/paradox2-dormant-values-current` branch from current upstream `b65a409` | push, then create the PR |
-| miesmuschel | `ecd7c69e22b5fd73670393155781bdcd638445fd` | local branch is five commits ahead of `origin/codex/paradox-paramsetshadow-bridge` | push, then create or update the PR |
-| mlr3mbo | `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` | exact head is already at `origin/codex/paradox2-transformless-subset` | no push is needed; create or update the PR and release manually |
-| celecx | `6da5102ca948b8182aae13575c48a932812b05c6` | local branch is one commit ahead of `origin/codex/paradox2-diagnostics` | push after the mlr3mbo bridge is available, then create or update the PR |
-| mlr3pipelines | `13610d39e06639ce96f0b76862f76acd794c0dc8` | new current-upstream branch `codex/paradox-diagnostic-compat-current`; the old remote migration branch remains untouched | push and create a replacement PR; close or supersede any old-branch PR |
-| mlr3fda | `c1cdad5a78913c9a47fec1003de8d4309275c80c` | local branch is two commits ahead of `origin/paradox2-snapshots` | push, then create or update the PR |
+| bbotk | `b9925122e444015b65c4d548150764300c9c0637` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| mlr3tuning | `0ec4f40033a393d41c7842541c2d5f8173dfb6bd` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| miesmuschel | `ecd7c69e22b5fd73670393155781bdcd638445fd` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| mlr3mbo | `85dd8a5ada86aacafe93637711e3b1f2e91ba219` | migration branch is absent remotely | push, create and merge the PR, then release as at least 1.2.2 |
+| celecx | `3a8291a9e2058323f4af93452141f6f1e46b5295` | migration branch is absent remotely | push after the mlr3mbo release, then create and merge the PR |
+| mlr3pipelines | `13610d39e06639ce96f0b76862f76acd794c0dc8` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| mlr3fda | `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
 
@@ -169,7 +169,7 @@ evidence transfers to candidate `8797f11`.
 - The checked assignment in `mlr3tuning::AutoTuner` refit no longer fails merely
   because a tuned child became inactive in the selected branch. No downstream
   workaround should disable Domain validation to solve that failure class.
-  The `15a972a` test-only branch removes an accidental helper default so two
+  The `0ec4f40` test-only branch removes an accidental helper default so two
   strict store-blind assertions remain meaningful on both majors, and
   version-gates only the TuneToken-child expectation whose semantics changed.
 - `lrn(...)` and `$configure()` may now retain a dependency-inactive setting
@@ -191,18 +191,23 @@ evidence transfers to candidate `8797f11`.
   version-appropriate assignment result rather than recreating a second Shadow
   activity implementation. Head `ecd7c69` now carries that exact regression.
 
-Publish and merge the dual-version bridge PRs before Paradox 2. Land and
-release mlr3mbo as 1.1.2 before celecx, whose DESCRIPTION intentionally
-requires that bridge. The other retained PRs are independent apart from their
-shared Paradox-2 boundary. After each push, the `gh pr create --web` command
+Publish and merge all retained PRs first. Release the six CRAN reverse-
+dependency adaptations—bbotk, mlr3tuning, miesmuschel, mlr3mbo,
+mlr3pipelines, and mlr3fda—before Paradox 2, so CRAN and ordinary dependency
+resolution select compatible versions. Release mlr3mbo as at least 1.2.2, then
+publish the GitHub-only celecx bridge. The prepared celecx branch requires the
+exact bridge development line `mlr3mbo >= 1.2.1.9000`, which admits that
+release but excludes released 1.2.0/1.2.1 without the bridge. The other
+retained PRs are independent apart from their shared Paradox-2 boundary.
+After each push, the `gh pr create --web` command
 below opens the exact comparison when a PR is not already open; otherwise push
 the recorded branch and update the existing PR. Copy the immediately preceding
 proposed body into the form when creating one.
 
 ## bbotk
 
-- base: `905901b45d4dd9445efc0ffa49e663ab5ae534cb`
-- head: `29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0`
+- base: `74515a792243a0f62a95f8ba3452be6290278c8c`
+- head: `b9925122e444015b65c4d548150764300c9c0637`
 - branch: `codex/public-paramsetcollection-sets`
 - target branch: `main`
 - proposed title: `Use Paradox 2 public ParamSet state safely`
@@ -285,11 +290,9 @@ gh pr create --web --repo mlr-org/miesmuschel --base master --head codex/paradox
 
 ## mlr3mbo
 
-- base: `d1ce6189b637dd552fac95d56c53a39503bae889`
-- runtime change: `a8a988a64b66e651043b75f63dfdfb4604185e3f`
-- head: `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067`
-- remote state: the exact head is already at
-  `origin/codex/paradox2-transformless-subset`; no push is currently needed
+- base: `4471f6fc4a8aa217fffb6ce5a45d3e525e96dc44`
+- runtime change: `185b2298216eef47b0f976667c4e8949c069dff4`
+- head: `85dd8a5ada86aacafe93637711e3b1f2e91ba219`
 - branch: `codex/paradox2-transformless-subset`
 - target branch: `main`
 - proposed title: `Use the public transform-free subset API on Paradox 2`
@@ -308,21 +311,23 @@ Proposed body:
 Publish it manually with:
 
 ```sh
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3mbo push --set-upstream origin codex/paradox2-transformless-subset
 gh pr create --web --repo mlr-org/mlr3mbo --base main --head codex/paradox2-transformless-subset --title 'Use the public transform-free subset API on Paradox 2'
 ```
 
 ## celecx
 
 - base: `8fc8a8dbaf15e72010b0e721a2167c5db9984810`
-- head: `6da5102ca948b8182aae13575c48a932812b05c6`
+- head: `3a8291a9e2058323f4af93452141f6f1e46b5295`
 - branch: `codex/paradox2-diagnostics`
 - target branch: `master`
 - proposed title: `Use the Paradox 2 mlr3mbo bridge`
 
 Proposed body:
 
-> Require the compatible mlr3mbo development bridge so CRAN mlr3mbo 1.1.1
-> cannot select its unsupported private-Domain path on Paradox 2. Keep the
+> Require mlr3mbo >= 1.2.1.9000, the compatible development bridge and
+> predecessor of the intended >= 1.2.2 release, so released 1.2.0/1.2.1 cannot
+> select their unsupported private-Domain path on Paradox 2. Keep the
 > design-grid comparison meaningful on both Paradox generations: Paradox 2's
 > native dependency planner and celecx reject the same cycle at different
 > boundaries, so assert each package-owned cycle diagnostic instead of
@@ -338,8 +343,8 @@ gh pr create --web --repo mlr-org/celecx --base master --head codex/paradox2-dia
 
 ## mlr3tuning
 
-- base: `b65a40959fe9f2e806edd6f4697a7061977f1a1a`
-- head: `15a972a3582fea955b80bb0200ddab58793451e1`
+- base: `5ac566dc53480e2fd3fa0497f70f2cb038412863`
+- head: `0ec4f40033a393d41c7842541c2d5f8173dfb6bd`
 - branch: `codex/paradox2-dormant-values-current`
 - target branch: `main`
 - proposed title: `Test Paradox 2 dormant dependency values`
@@ -370,6 +375,22 @@ open. After removing their temporary diagnostic gates, each effective
 package-facing source tree is identical to its target base (`f70c001` and
 `cd12d77`, respectively). There is therefore no commit to publish and no
 replacement PR to create.
+
+The final live-head review does not create a new mlr3fselect branch or probe.
+Current main `29fa095` only removes its obsolete Paradox `set_id` compatibility
+test in favor of the already-covered public `p_dbl()` path; its other changes
+are unrelated and its updated tests require mlr3's separate diabetes-task
+refresh. The exact pinned Paradox-facing path therefore remains the smaller,
+more informative compatibility subject.
+
+The same read-only review compared the pinned mlr3 support head `f70c001`
+against current main `7cb6a08` on 2026-07-31. The two intervening commits cache
+class frequencies in `TaskClassif` and replace the removed `pima` data task
+with the synthetic `diabetes` task across examples, snapshots, and tests; none
+changes a Paradox import, ParamSet path, parameter value path, or Paradox-facing
+test. Keeping `f70c001` paired with the reviewed mlr3fselect snapshot therefore
+avoids importing a 67-file unrelated corpus refresh without omitting a known
+Paradox contract.
 
 ## mlr3pipelines
 
@@ -403,8 +424,8 @@ gh pr create --web --repo mlr-org/mlr3pipelines --base master --head codex/parad
 
 ## mlr3fda
 
-- base: `5e6204d0d3a3c21325a71eda4402c30b31209eef`
-- head: `c1cdad5a78913c9a47fec1003de8d4309275c80c`
+- base: `8960c9292221e7065e5175762e12354c6eb08607`
+- head: `0df56f51b5d7fd751e16575fbd897b1c7f449c5e`
 - branch: `paradox2-snapshots`
 - target branch: `main`
 - proposed title: `Support Paradox 2 diagnostics in FDA snapshots`

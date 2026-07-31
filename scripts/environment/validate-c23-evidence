@@ -89,7 +89,7 @@ validate_description() {
 
 validate_toolchain_inventory() {
   local micromamba=$1 prefix=$2 lock=$3 home=$4 clean_path=$5
-  local mamba_root=$6 raw_log=$7 output=$8 output_stage
+  local mamba_root=$6 raw_log=$7 output=$8 output_stage expected_banner
 
   require_plain_file "$micromamba" "micromamba executable"
   [[ -x "$micromamba" ]] ||
@@ -114,8 +114,9 @@ validate_toolchain_inventory() {
       > "$raw_log" 2>&1; then
     fail "could not obtain the live toolchain inventory; see $raw_log"
   fi
-  [[ "$(sed -n '1p' "$raw_log")" == '# platform: linux-64' &&
-    "$(sed -n '2p' "$raw_log")" == @EXPLICIT ]] ||
+  expected_banner="List of packages in environment: \"$prefix\""
+  [[ "$(sed -n '1p' "$raw_log")" == "$expected_banner" &&
+    -z "$(sed -n '2p' "$raw_log")" ]] ||
     fail "live toolchain inventory has an unexpected header"
 
   output_stage=$(mktemp "${output}.new.XXXXXX")

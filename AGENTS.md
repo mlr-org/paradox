@@ -19,7 +19,43 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The previous frozen package-facing candidate was
+The most recent frozen package-facing ref is the rejected diagnostic candidate
+`refs/paradox-release/candidate-20260731T150816Z`, commit
+`a153faeeed8735c4aeeba512a70fb71b11235469`, tree
+`2fe241b90b0e86381a6f884fd29d3a80baab6b7b`. Its corrected source-bound Domain
+comparison under
+`.local/perf/domain-indexed-root-final-threeway-candidate-a153fae-repaired-r5/results`
+passed all eight timing, allocation, instruction, and changed-code gates; its
+completion, gate, round, and summary SHA-256 values are respectively
+`379d4c1839c2d05f8c7c8c9d867f492d68355ef3fc22eae46fdf36a389a417d7`,
+`e87450b0ab084a0f43867daeb6aee7473eea888b952af9a306c894fa7f89dce2`,
+`0cfb24b08727eb930ee34f42384242abaece108181e70e66bbc1bddea7c60d8c`,
+and
+`ed1d3d6efc8f311d80e8371e0d055aebcdc87f3f5c19d6d1950ab3386672cd43`.
+That bounded performance obligation is closed and must not be rerun for
+unrelated cleanup.
+
+The subsequent `release-candidate-a153fae` coordinator passed five tasks,
+failed three, and dependency-blocked the every-minor runtime task before it
+started. The four harness rows and API-header matrix passed. C23 stopped before
+compilation because the validator expected an obsolete micromamba inventory
+header; differential completed all 33 cases with zero unexpected differences
+but found seven stale candidate hashes; strict GCC completed the package suite
+and exposed six errors—one stale expected diagnostic, one genuine formal-S4
+leaf misclassification, and four authentic populated Paradox-1 transformation
+tables whose keyed spelling omitted `row.names`. The completion, JSON summary,
+and TSV summary SHA-256 values are respectively
+`83140b9737809c8b8db6457160938bdc5a39b6db4531fef42962508b61e3e165`,
+`e73d372b7533782ba66f922948c7acb4764aa115cafe02c9a64973a531b5269f`,
+and
+`f912757fe598e4e5fa269e6511f93969b20ebf7aee9d22c9fbd3881626755737`.
+This run is diagnostic only and is not a memory donor. Source is reopened for
+the reviewed C23-inventory repair, refreshed differential ledger, one shared
+formal-S4 semantic-leaf classifier, and coherent independently owned legacy
+table snapshots. Freeze and fully execute a replacement candidate after these
+changes converge.
+
+The earlier frozen package-facing candidate was
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
 `b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. It includes the managed
@@ -222,8 +258,9 @@ governed by
 [`design/domain-admission-receipt-compaction-plan.md`](design/domain-admission-receipt-compaction-plan.md).
 It does not reopen the P1--P5 slice experiments above. Its indexed-root and
 focused correctness work and the subsequent unified-capture recovery are
-complete, but its corrected source-bound three-way comparison remains
-mandatory once a replacement immutable candidate exists.
+complete, and candidate `a153fae` passed its corrected source-bound three-way
+comparison. That bounded obligation is closed; do not rerun it for unrelated
+cleanup.
 
 The exact focused adversarial review closure is retained at
 `.local/checks/integrated-selectors-r9-20260731T122010Z`; its source-manifest
@@ -310,9 +347,11 @@ direct-sanitize, final-bulk, and comparison-bulk reports have SHA-256 values
 `a4a710ee103597f5b0bb3279c71c281e546707683c9826039402379950bb9766`,
 and
 `5292ddb5661cab24d7357d2c90bb38869a94d5b0155044b2b8c66a154391781c`.
-All of this is focused development evidence only. Source remains reopened;
-the failed ref remains diagnostic, the corrected immutable three-way timing is
-pending, and every complete release gate remains pending.
+The focused implementation evidence remains development evidence, while the
+corrected immutable three-way timing is complete under the sealed `a153fae`
+results recorded near the top of this file. Source remains reopened because
+the subsequent `release-core` run exposed unrelated C23-harness and native
+correctness defects; every complete release gate remains pending.
 
 The final compatibility batch is governed by
 [`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).
@@ -519,8 +558,9 @@ operator action.
   bounded facade stops `R_mapAttrib()` with a guaranteed non-NULL global
   symbol; older R uses the one reviewed `ATTRIB` loop with the same edge bound.
   Interpret `"NoDefault"` as the package marker only at a schema default/init
-  position; an identically classed general ParamUty stored value is opaque and
-  retains exact identity.
+  position, and only for its exact ordinary, non-S4 zero-length marker shape;
+  a formal S4 class named `NoDefault` and an identically classed general
+  ParamUty stored value are opaque and retain exact identity.
 - Mutations build and validate replacement capsules and swap `.core`
   atomically. Value assignment plans the complete BASE/COLLECTION/SHADOW
   graph through ultimate BASE targets, deduplicates shared targets with
@@ -673,7 +713,13 @@ operator action.
   and special leaves are opaque and may be S4; its retained Paradox-1 special
   membership is exactly base `identical()` over the admitted leaves, including
   S4, and is the sole narrow native observation of those objects. Neither rule
-  invokes S3/S4 dispatch. Condition structure is never opaque.
+  invokes S3/S4 dispatch. One shared allocation-free semantic-leaf classifier
+  treats genuine formal-S4 class metadata as opaque and therefore never as
+  TuneToken syntax; an S4-marked ordinary object with an inspectable
+  `"TuneToken"` class still claims token syntax and is rejected by exact
+  non-S4 token admission. Assignment, checking, dependency activity, type
+  filtering, fixed designs, and stored/explicit search-space extraction all
+  use this same distinction. Condition structure is never opaque.
 - Every capsule operation has one native semantic implementation. Thin R
   wrappers may capture R language constructs and call documented callbacks,
   but there is no complete R/checkmate/data.table/S3 fallback, no `NULL`
@@ -971,12 +1017,44 @@ operator action.
   together with the allowed class/cache/`repr` attributes without allocating.
   Stored row names must be ordinary canonical integer metadata—empty, compact
   `c(NA, +/-n)`, or exact `1:n`—matching that selected column length. The one
-  authentic Paradox-1/data.table spelling with no `row.names` attribute is
-  accepted only after the selected columns prove that the table is empty. Plain
-  interpreted list columns are copied from the same carrier primitive. Never
-  restore separate R observations of table names, columns, row metadata, and
-  optional attributes; a pending by-reference finalizer must either precede
-  one selected generation or make migration fail closed.
+  authentic Paradox-1/data.table spelling built from a classed list followed by
+  `setkeyv()` has no `row.names` attribute even when populated. It is accepted
+  because absence declares no competing row count: the exact selected columns
+  define it and their materialized lengths must agree. Before the terminal
+  source-shell/attribute receipt, the cold native snapshot independently owns
+  every top-level atomic payload and list-column carrier. Generic tables own
+  non-S4 atomic leaves; an exact dependency/Domain schema instead invokes the
+  existing closed C owners for Conditions, requirements, cargo, levels,
+  special-value carriers, and default/init. Typed leaves are detached,
+  ParamUty leaves retain exact identity, and `NoDefault` remains interpreted
+  schema. The named legacy value store likewise has one native kind-aware
+  snapshot: it owns the carrier and typed leaves but preserves every ParamUty
+  value identity, including atomic/classed values. It retains a private shallow
+  identity receipt for each source list column while the outward carrier holds
+  the owned leaves. After all allocations, every stable top-level or nested
+  ALTREP finishes its final Length observation; one callback-free pass then
+  authenticates exact source-cell identity plus every ordinary payload and
+  complete atomic-leaf metadata generation. A finalizer after the native
+  return therefore cannot splice detached old names or representation metadata
+  with a newly mutated source column or nested atomic leaf. Opaque and S4 list
+  leaves retain their documented identity semantics. R validates only
+  surrounding legacy parameter references, rebuilds the outward/internal table
+  facades, and normalizes callbacks on these private carriers. It must not
+  re-admit or reconstruct the built-in Conditions/requirements already owned by
+  C, or restore a second leaf-copy authority. Never restore separate R
+  observations of table names, columns, row metadata, and optional attributes;
+  a pending by-reference finalizer must precede one selected generation, follow
+  an already-independent result harmlessly, or make migration fail closed.
+  Every selected callback-capable nested ALTREP leaf is rooted directly across
+  its `Length` dispatch. A requirement additionally roots its selected `on` and
+  sibling `cond` fields, plus both detached counterparts, as one row before the
+  first such dispatch: an `on` callback may replace `cond` and collect, but it
+  cannot invalidate the exact Condition still needed by the terminal receipt.
+  The regression proves this with a liveness sentinel reachable only through
+  that detached Condition. A structurally canonical legacy `.values` carrier
+  whose name is empty, missing, or not owned by the selected parameter schema
+  is an invalid-name error before leaf ownership, not a generic malformed-list
+  error. These checks remain confined to cold migration.
 - `$subset(..., keep_trafo = FALSE)` is the public way to derive an
   untransformed search space. The final additive argument defaults to `TRUE`
   for BASE, COLLECTION, and SHADOW. `FALSE` makes the single native subset
@@ -1428,7 +1506,11 @@ operator action.
   optional receipt scan fails closed when `R_HasFancyBindings()` reports a
   locked or active frame, then uses the same stored-cell path; this old-only
   exception avoids either evaluator allocation or invocation of an active
-  binding. The facade rejects `UserDefinedDatabase` environments through the
+  binding. The exact Shadow generation-receipt regression for this branch
+  executes on R 3.6--4.1. R >= 4.2 records one source-derived skip because its
+  public non-evaluating binding-existence operation makes the old evaluator
+  path unreachable; this is a capability boundary, not a behavior waiver.
+  The facade rejects `UserDefinedDatabase` environments through the
   same public inheritance predicate R uses before any binding operation:
   their callback-backed table is unsupported, and old
   `R_HasFancyBindings()` assumes an incompatible ordinary-frame layout.
@@ -1725,9 +1807,13 @@ must never leak into a child.
 Every supported-runtime stage runs its complete main source suite with
 `NOT_CRAN=true`; a `Reason: On CRAN` result is therefore a harness failure, not
 an admitted skip. The runner also removes the characterization-GCT override so
-an inherited developer setting cannot silently shrink that suite. Only the
-source-derived active-binding and list-ALTREP capability skips remain in
-`runtime-matrix-result-skips.tsv`.
+an inherited developer setting cannot silently shrink that suite. Only exact
+source-derived capability skips remain in
+`runtime-matrix-result-skips.tsv`: active-binding inspection on R 3.6,
+list-ALTREP fixtures before R 4.3, and the inverse Shadow receipt boundary.
+That old optional-binding path is exercised on R 3.6--4.1 and its one exact
+regression is skipped on R 4.2--4.5, where the public non-evaluating existence
+query makes that path unreachable.
 
 R 3.6.3 and R 4.0.5 additionally replay the bounded
 `runtime-matrix-old-r-stress.tsv` slice. Its literal test titles are validated
@@ -2070,8 +2156,9 @@ performed independently by each consumer gate. After the candidate and the
 priority-one dependency library have been authenticated, run
 `compat/install-downstream-bridges --candidate-source "$candidate_source"
 --evidence-profile release-refresh-20260720 --paradox-axis paradox2` once. It
-installs the exact reviewed heads, in the fixed order bbotk, mlr3, miesmuschel,
-mlr3pipelines, mlr3fselect, mlr3mbo, celecx, and mlr3fda, into the suffixed
+installs the exact reviewed heads, in the fixed order bbotk, mlr3, mlr3tuning,
+miesmuschel, mlr3pipelines, mlr3fselect, mlr3mbo, celecx, and mlr3fda, into the
+suffixed
 `.local/compat/runs/$PARADOX_CANDIDATE_RUN_ID/library-downstream-bridges-release-refresh-20260720-paradox2`
 and publishes it only after complete verification. The final overlay is
 read-only;
@@ -2266,21 +2353,23 @@ commit in local downstream worktrees, but the user must push branches and open
 or submit PRs manually.
 
 The heads below are the current local PR handoff, including the final
-dormant-value adaptations. The new mlr3tuning and mlr3pipelines branches were
-rebuilt on the exact current upstream target heads so their proposed PRs remain
-small; the earlier tested commits remain preserved by hash. Dual-version
+dormant-value adaptations and current-upstream rebases. bbotk, mlr3tuning,
+mlr3mbo, and mlr3fda were rebuilt on their exact current target heads so the
+proposed PRs remain small; the earlier tested commits remain preserved by
+hash. Dual-version
 validation is complete at the intended development scope: complete suites and
 source checks for miesmuschel, complete suites for mlr3tuning, and focused
 clone/spline contracts for mlr3pipelines. Fresh candidate-owned profile
 authentication and compatibility execution are still required before these
 heads become release evidence. The user must perform every remote publication
-action:
+action; live remote inspection found every retained migration branch absent,
+so each command uses `push --set-upstream`:
 
-- bbotk `codex/public-paramsetcollection-sets` at `29f1806`: public collection
+- bbotk `codex/public-paramsetcollection-sets` at `b992512`: public collection
   state and rooted detached native search-space snapshots remain, with the
   authenticated exact-class additive `Codomain` inspector/rebuilder
   registration without restoring private ParamSet state access;
-- mlr3tuning `codex/paradox2-dormant-values-current` at `15a972a`: removes an
+- mlr3tuning `codex/paradox2-dormant-values-current` at `0ec4f40`: removes an
   accidental test-helper default so strict store-blind checks remain useful,
   and version-gates only the TuneToken-child expectation. Complete suites pass
   on both Paradox majors: 189 tests and 4,764/4,761 expectations, with zero
@@ -2301,21 +2390,30 @@ action:
   namespace rebinding is restricted to the exported generator and eleven
   historical package-owned leanification targets; relocking is registered
   before the first unlock, and this bridge exception is not a public API;
-- mlr3mbo `codex/paradox2-transformless-subset` at `1a1c0ab`: public
-  transformation-free subset construction on Paradox 2 plus release notes;
-- celecx `codex/paradox2-diagnostics` at `6da5102`: only the independent
-  cycle/dependency bridge and compatible mlr3mbo requirement remain;
+- mlr3mbo `codex/paradox2-transformless-subset` at `85dd8a5`: public
+  transformation-free subset construction on Paradox 2 plus current release
+  notes; publish it as at least 1.2.2;
+- celecx `codex/paradox2-diagnostics` at `3a8291a`: only the independent
+  cycle/dependency bridge and the exact `mlr3mbo >= 1.2.1.9000` bridge floor
+  remain;
 - mlr3pipelines `codex/paradox-diagnostic-compat-current` at `13610d3`: on
   current upstream, only the GraphLearner deep-clone ownership fix,
   mutation-isolation regression, and dual-version dormant spline test remain;
   those focused files and the related PICVPlus diagnostic contracts pass on
   both majors;
-- mlr3fda `paradox2-snapshots` at `c1cdad5`: the Paradox-1 snapshot stays
+- mlr3fda `paradox2-snapshots` at `0df56f5`: the Paradox-1 snapshot stays
   byte-identical while the four Paradox-2 headers name the current versioned
   `.__paradox2_ParamSet__values()` gateway; diagnostic bodies are unchanged;
 - mlr3 `codex/paradox2-diagnostics` at `35e30a9` and mlr3fselect
   `codex/paradox2-diagnostics` at `ae8e1d1` are wholly redundant. Close those
   PRs without replacement; there is no cleanup commit to publish.
+
+Merge and release the six CRAN reverse-dependency adaptations—bbotk,
+mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines, and mlr3fda—before Paradox 2,
+so CRAN and ordinary installations select compatible revisions. Release
+mlr3mbo as at least 1.2.2 before publishing the GitHub-only celecx bridge. The
+final exact source-package gate covers all seven retained PR heads; the broad
+repository suite is not a substitute for those package build/check rows.
 
 The historical exact Paradox-2 source-package check was
 `.local/compat/runs/migration-release-final-p2-8797f11-fc92edd-bench-r1/repository-checks-release-refresh-20260720-paradox2`.

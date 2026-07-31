@@ -36,6 +36,16 @@ attribute_hidden SEXP paradox_upgrade_table_list_snapshot(
   SEXP allow_repr
 );
 
+/* Kind-aware ownership boundary for the named Paradox-1 value store.  The
+ * already-owned parameter id/class vectors select typed versus ParamUty leaf
+ * policy; the returned outer carrier and typed leaves are detached while
+ * utility leaves retain exact identity. */
+attribute_hidden SEXP paradox_upgrade_values_snapshot(
+  SEXP source,
+  SEXP ids,
+  SEXP classes
+);
+
 /* Allocation-free terminal receipt for the complete known public binding
  * surface selected by legacy shell transplantation. Each record retains one
  * exact shell/class plus symbol, value, active, lock, and environment-lock

@@ -237,9 +237,10 @@ Collection `$sets` result therefore owns its outer named list while retaining
 the exact child shells. No outward S3 class spelling is interpreted inside a
 general ParamUty value store: a utility payload classed `"NoDefault"` remains
 an opaque exact-identity value, while only the schema default/init position
-interprets the package's marker. This copying is paid only at the public outward
-boundary; native planning and mutation use retained capsule generations
-directly.
+interprets the package's exact ordinary, non-S4 zero-length marker. A formal
+S4 class named `NoDefault` is an opaque leaf even at that schema position.
+This copying is paid only at the public outward boundary; native planning and
+mutation use retained capsule generations directly.
 
 Every supported mutation constructs a replacement capsule and swaps the
 private `.core` binding only after validation. Reads retain the capsule selected
@@ -504,6 +505,16 @@ Its Paradox-1 special membership is preserved as base `identical()` against
 each admitted special leaf, including S4 leaves. That comparison is the sole
 narrow observation of opaque ParamUty specials and invokes no S3/S4 method.
 Its Domain shell and structural metadata remain ordinary non-ALTREP/non-S4.
+Every semantic-leaf site uses the same allocation-free class boundary:
+ordinary class metadata may claim a built-in TuneToken and must then pass the
+exact closed token admission, while genuine formal-S4 class metadata is
+opaque and cannot make that leaf token syntax. Consequently an ordinary object
+with its S4 bit set and an inspectable `"TuneToken"` class remains malformed
+interpreted token structure, but a formal S4 utility/special leaf is stored,
+filtered, compared for identity, and ignored by search-space extraction as an
+opaque non-token. Assignment, dependency activity, fixed designs, value-type
+filters, and explicit or stored search-space extraction may not implement
+different classifiers.
 
 `p_uty(custom_check=)` remains the supported validation escape hatch for opaque
 values. Its callback is part of the ordinary callback contract, not a new
@@ -1291,6 +1302,31 @@ compatibility-first 2.0.0 implementation.
   state, and legacy third-party R6 subclasses not covered by an exact
   registered owner bridge fail with a path-specific diagnostic.
 - The upgrader never executes a legacy operation merely to discover its state.
+- Legacy internal-table migration selects names, exact column identities,
+  class, optional representation, and any row metadata as one coherent source
+  generation. Present row metadata must be ordinary canonical integer
+  metadata matching the selected columns. The authentic Paradox-1
+  classed-list-plus-`setkeyv()` spelling may omit `row.names` even when
+  populated; absence declares no competing count, so equal selected column
+  lengths define it. Before the terminal source receipt, the native snapshot
+  independently owns every top-level atomic payload and ordinary list-column
+  carrier. Generic tables own non-S4 atomic leaves. Exact dependency and Domain
+  schemas use the closed native Condition, requirements, cargo, levels,
+  special-value, and default/init owners: interpreted carriers and typed leaves
+  are detached while ParamUty leaves retain exact identity. The named legacy
+  value store is snapshotted natively under the already-owned parameter-kind
+  vector, so typed leaves detach and every ParamUty value remains the exact
+  object. A private shallow carrier receipts exact source-cell identities while
+  the outward carrier holds the owned leaves. Stable top-level and nested
+  ALTREP values finish their bounded Length
+  observations first; the remaining cell-identity, payload, complete
+  atomic-leaf metadata, and shell/name receipts are allocation-free. Opaque and
+  S4 and ParamUty leaves preserve exact identity. R does not repeat leaf
+  ownership or built-in Condition/requirements admission after this boundary;
+  it only validates surrounding legacy references, builds the required table
+  facades, and normalizes callbacks. A by-reference source mutation
+  therefore either precedes one admitted generation, follows an already
+  independent result, or makes migration fail closed.
 
 During pure and graph preparation, package-interpreted legacy callbacks undergo
 the same source-reference normalization as fresh callbacks. Only exact known
@@ -1599,9 +1635,11 @@ The coordinated downstream transition happens in this order:
    ConfigSpace and bbotk verify retained closed Condition function names and
    built-in shapes; ConfigSpace rejects an unknown condition explicitly rather
    than interpreting it as `CondAnyOf`.
-6. Dual-compatible downstream releases or reviewed candidate branches are
-   available before Paradox 2 is submitted. The Paradox release gate tests
-   those exact bridge revisions, then tests the wider priority-zero/one corpus.
+6. The dual-compatible bbotk, mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines,
+   and mlr3fda revisions are merged and released before Paradox 2 is submitted.
+   The GitHub-only celecx bridge follows the compatible mlr3mbo release. The
+   Paradox release gate tests those exact bridge revisions, then tests the wider
+   priority-zero/one corpus.
 7. Only after the downstream bridges and Paradox 2 are public may downstream
    packages remove their Paradox-1 compatibility branches on their own release
    schedules.

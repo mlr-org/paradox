@@ -1523,7 +1523,7 @@ static void build_realized_axis(grid_axis_t *axis, int resolution,
 
 static SEXP fixed_axis_vector(SEXP value, SEXPTYPE storage_type) {
   int is_tune_token = FALSE;
-  if (!paradox_api_ordinary_class_matches(
+  if (!paradox_api_opaque_leaf_class_matches(
       value,
       "TuneToken",
       &is_tune_token

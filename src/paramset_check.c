@@ -885,13 +885,14 @@ static void validate_node_schema(check_node_t *node,
      * TuneToken metadata remains semantic even when assigned to ParamUty and
      * therefore still has to be ordinary canonical storage. */
     int stored_token = FALSE;
-    if (kind == VALUE_UTY &&
-        !paradox_api_ordinary_class_matches(
+    if (kind == VALUE_UTY) {
+      if (!paradox_api_opaque_leaf_class_matches(
           stored_value,
           "TuneToken",
           &stored_token
         )) {
-      Rf_error("Corrupt ParamSet state: invalid stored parameter value");
+        Rf_error("Corrupt ParamSet state: invalid stored parameter value");
+      }
     }
     if ((kind != VALUE_UTY || stored_token) &&
         !semantic_value_is_ordinary(stored_value)) {
@@ -1110,6 +1111,15 @@ static void initialize_node(SEXP self, SEXP private_environment,
        * before every candidate has passed preflight. */
       core = paradox_shadow_preview_authoritative(self, private_environment);
     }
+    /*
+     * A read-only Shadow preview is a fresh capsule that is deliberately not
+     * installed in the shell.  Root it before the signature-content snapshot
+     * below allocates: retaining only the stored generation in
+     * NODE_ROOT_SELECTED_CORE does not retain this authoritative preview.
+     * Committed refreshes are already reachable through the private binding,
+     * but using the same immediate handoff keeps the two paths uniform.
+     */
+    SET_VECTOR_ELT(node->roots, NODE_ROOT_CORE, core);
     if (!paradox_core_is_canonical(core) ||
         paradox_core_kind(core) != PARADOX_CORE_SHADOW ||
         !paradox_shadow_metadata_is_exact(core)) {
@@ -2799,9 +2809,33 @@ static token_claim_t exact_token_claim(SEXP value,
   return TOKEN_CLAIM_NONE;
 }
 
-static int value_is_tune_token(SEXP value) {
+/* An S4-marked ordinary TuneToken remains malformed interpreted structure,
+ * while a formal S4 value is an opaque semantic leaf. Distinguish those cases
+ * only on the S4 cold path. Ordinary values retain the allocation-free exact
+ * token classifier unchanged. */
+static token_claim_t exact_semantic_leaf_token_claim(
+    SEXP value, token_snapshot_kind_t *kind) {
+  *kind = TOKEN_SNAPSHOT_FULL;
+  /* Preserve the former hot path exactly: the object bit is the complete
+   * negative certificate for ordinary scalar values. Only classed values need
+   * the S4 distinction below. */
+  if (!Rf_isObject(value)) return TOKEN_CLAIM_NONE;
+  if (Rf_isS4(value)) {
+    SEXP classes = R_NilValue;
+    if (!paradox_api_opaque_leaf_class_snapshot(value, &classes)) {
+      return TOKEN_CLAIM_MALFORMED;
+    }
+    if (paradox_api_ordinary_class_contains(classes, "TuneToken")) {
+      return exact_token_claim(value, kind);
+    }
+    return TOKEN_CLAIM_NONE;
+  }
+  return exact_token_claim(value, kind);
+}
+
+static int semantic_leaf_is_tune_token(SEXP value) {
   token_snapshot_kind_t ignored;
-  return exact_token_claim(value, &ignored) != TOKEN_CLAIM_NONE;
+  return exact_semantic_leaf_token_claim(value, &ignored) != TOKEN_CLAIM_NONE;
 }
 
 /* Own the snapshot's shell metadata instead of sharing the caller's vectors.
@@ -3302,7 +3336,7 @@ SEXP paradox_test_tune_token_gc_mutation_snapshot(
 }
 
 static SEXP snapshot_parameter_value(SEXP value) {
-  if (value_is_tune_token(value)) {
+  if (semantic_leaf_is_tune_token(value)) {
     return snapshot_tune_token(value);
   }
   return snapshot_parameter_leaf(value);
@@ -3317,7 +3351,7 @@ static SEXP snapshot_value_for_spec(
    * ordinary atomic object.  TuneTokens remain semantic syntax regardless of
    * the target Domain and therefore retain their one canonical snapshot.
    */
-  if (value_is_tune_token(value)) {
+  if (semantic_leaf_is_tune_token(value)) {
     return snapshot_tune_token(value);
   }
   return spec->kind == VALUE_UTY
@@ -3525,7 +3559,7 @@ static SEXP snapshot_tune_tokens_from_value_carrier_impl(
   );
   for (R_xlen_t index = 0; index < size; ++index) {
     token_snapshot_kind_t kind = TOKEN_SNAPSHOT_FULL;
-    const token_claim_t claim = exact_token_claim(
+    const token_claim_t claim = exact_semantic_leaf_token_claim(
       VECTOR_ELT(stable_values, index),
       &kind
     );
@@ -3561,7 +3595,7 @@ static SEXP snapshot_tune_tokens_from_value_carrier_impl(
    */
   for (R_xlen_t index = 0; index < size; ++index) {
     token_snapshot_kind_t kind = TOKEN_SNAPSHOT_FULL;
-    const token_claim_t claim = exact_token_claim(
+    const token_claim_t claim = exact_semantic_leaf_token_claim(
       VECTOR_ELT(stable_values, index),
       &kind
     );
@@ -4505,7 +4539,7 @@ static SEXP check_dependencies(check_plan_t *plan,
     const R_xlen_t child = plan->dependency_child[dependency];
     const R_xlen_t child_value = point->value_for_param[child];
     if (child_value == R_XLEN_T_MAX ||
-        value_is_tune_token(
+        semantic_leaf_is_tune_token(
           VECTOR_ELT(point->values, child_value)
         )) {
       continue;
@@ -4605,8 +4639,9 @@ static SEXP validate_initialized_point(check_plan_t *plan,
     .retain_reasons = check_dependencies_flag,
     .result = {NULL, NULL}
   };
+  R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t index = 0; index < point->size; ++index) {
-    if (!allow_token && value_is_tune_token(
+    if (!allow_token && semantic_leaf_is_tune_token(
         VECTOR_ELT(point->values, index)
       )) {
       return Rf_mkString("TuneTokens are not allowed to be present.");
@@ -4631,12 +4666,11 @@ static SEXP validate_initialized_point(check_plan_t *plan,
    * second counting/allocation pass. */
   SEXP receipts = R_NilValue;
   int protected_count = 0;
-  R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t index = 0; index < point->size; ++index) {
     paradox_account_work(&work_since_interrupt);
     SEXP value = VECTOR_ELT(point->values, index);
     token_snapshot_kind_t token_kind = TOKEN_SNAPSHOT_FULL;
-    const token_claim_t token_claim = exact_token_claim(
+    const token_claim_t token_claim = exact_semantic_leaf_token_claim(
       value,
       &token_kind
     );
@@ -4703,7 +4737,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
     const value_spec_t *spec = &plan->specs[row];
     SEXP value = VECTOR_ELT(point->values, index);
     SEXP failure = R_NilValue;
-    if (!value_is_tune_token(value)) {
+    if (!semantic_leaf_is_tune_token(value)) {
       SEXP replacement = value;
       failure = validate_ordinary_value(
         spec, value, sanitize, &replacement, &work_since_interrupt

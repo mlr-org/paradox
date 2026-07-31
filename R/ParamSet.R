@@ -1685,7 +1685,7 @@ rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
     # untyped defaults are reported against the wrong parameters.
     cargo = cargo[match(params$id, parameters$id)]
   }
-  is_default = map_lgl(params$default, inherits, "NoDefault")
+  is_default = map_lgl(params$default, is_nodefault)
   is_uty = params$storage_type == "list"
   set(params, i = which(is_uty & !is_default), j = "default",
       value = map(cargo[!is_default & is_uty], function(x) x$repr))

@@ -213,7 +213,7 @@ static int scalar_leaf_is_inspectable(SEXP value, SEXP rhs) {
 
 static int condition_operand_is_tune_token(SEXP value) {
   int token = FALSE;
-  if (!paradox_api_ordinary_class_matches(
+  if (!paradox_api_opaque_leaf_class_matches(
       value,
       "TuneToken",
       &token
@@ -443,6 +443,74 @@ SEXP paradox_builtin_condition_snapshot(SEXP condition,
   Rf_setAttrib(result, R_ClassSymbol, classes);
   UNPROTECT(5);
   return result;
+}
+
+static int condition_snapshot_parts(SEXP condition,
+    paradox_builtin_condition_kind_t *kind, SEXP *rhs) {
+  R_xlen_t work_since_interrupt = 0;
+  return condition_outer_exact(
+    condition,
+    kind,
+    rhs,
+    &work_since_interrupt
+  );
+}
+
+int paradox_builtin_condition_snapshot_lengths_current(
+    SEXP source, SEXP snapshot) {
+  paradox_builtin_condition_kind_t source_kind;
+  paradox_builtin_condition_kind_t snapshot_kind;
+  SEXP source_rhs = R_NilValue;
+  SEXP snapshot_rhs = R_NilValue;
+  if (!condition_snapshot_parts(source, &source_kind, &source_rhs) ||
+      !condition_snapshot_parts(snapshot, &snapshot_kind, &snapshot_rhs) ||
+      source_kind != snapshot_kind || TYPEOF(source_rhs) != TYPEOF(snapshot_rhs) ||
+      Rf_isS4(source_rhs) || Rf_isObject(source_rhs) ||
+      !paradox_api_has_no_attributes(source_rhs) || ALTREP(snapshot_rhs) ||
+      Rf_isS4(snapshot_rhs) || Rf_isObject(snapshot_rhs) ||
+      !paradox_api_has_no_attributes(snapshot_rhs)) {
+    return FALSE;
+  }
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source_rhs);
+  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
+      type != STRSXP) {
+    return FALSE;
+  }
+  if (!ALTREP(source_rhs)) return TRUE;
+  /* Length may dispatch into R.  The callback can rewrite the owning
+   * Condition cell before allocating, so the owner graph alone is not a root
+   * for the exact RHS generation whose method is currently executing. */
+  PROTECT(source_rhs);
+  PROTECT(snapshot_rhs);
+  const int current = XLENGTH(source_rhs) == XLENGTH(snapshot_rhs);
+  UNPROTECT(2);
+  return current;
+}
+
+int paradox_builtin_condition_snapshot_is_current(
+    SEXP source, SEXP snapshot) {
+  paradox_builtin_condition_kind_t source_kind;
+  paradox_builtin_condition_kind_t snapshot_kind;
+  SEXP source_rhs = R_NilValue;
+  SEXP snapshot_rhs = R_NilValue;
+  if (!condition_snapshot_parts(source, &source_kind, &source_rhs) ||
+      !condition_snapshot_parts(snapshot, &snapshot_kind, &snapshot_rhs) ||
+      source_kind != snapshot_kind || TYPEOF(source_rhs) != TYPEOF(snapshot_rhs) ||
+      Rf_isS4(source_rhs) || Rf_isObject(source_rhs) ||
+      !paradox_api_has_no_attributes(source_rhs) || ALTREP(snapshot_rhs) ||
+      Rf_isS4(snapshot_rhs) || Rf_isObject(snapshot_rhs) ||
+      !paradox_api_has_no_attributes(snapshot_rhs)) {
+    return FALSE;
+  }
+  return ALTREP(source_rhs)
+    ? paradox_altrep_builtin_value_leaf_metadata_is_current(
+        source_rhs,
+        snapshot_rhs
+      )
+    : paradox_builtin_value_leaf_receipt_current(
+        source_rhs,
+        snapshot_rhs
+      );
 }
 
 SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {

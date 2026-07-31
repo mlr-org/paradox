@@ -3,6 +3,10 @@
 #include <string.h>
 
 #include "core_state.h"
+#include "builtin_condition.h"
+#include "domain_admission.h"
+#include "paramset_domain_common.h"
+#include "paramset_params_internal.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 #include "shell_auth.h"
@@ -268,15 +272,605 @@ static int exact_upgrade_table_row_names(
 static int exact_upgrade_table_rows(
     const paradox_upgrade_table_attributes_t *attributes,
     R_xlen_t row_count) {
+  if (row_count > INT_MAX) return FALSE;
   if ((attributes->seen & UPGRADE_TABLE_ATTRIBUTE_ROWS) == 0U) {
     /*
-     * Paradox 1/data.table legitimately omitted row.names from some empty
-     * keyed internal tables.  That historical spelling is unambiguous only
-     * after the selected columns have proved that the table has zero rows.
+     * Paradox 1 constructed keyed internal tables as a classed list followed
+     * by data.table::setkeyv().  That spelling legitimately omits row.names
+     * even when the columns are populated.  Absence supplies no competing row
+     * count: the exact selected columns define it, and the R-side migration
+     * validator subsequently requires all native-owned columns to have that
+     * same length.  A present row.names attribute, by contrast, must agree
+     * exactly with the selected first-column length below.
      */
-    return row_count == 0;
+    return TRUE;
   }
   return exact_upgrade_table_row_names(attributes->row_names, row_count);
+}
+
+static int upgrade_table_column_is_supported(SEXP column) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
+  const int atomic = type == LGLSXP || type == INTSXP || type == REALSXP ||
+    type == CPLXSXP || type == STRSXP || type == RAWSXP;
+  return (atomic || (type == VECSXP && !ALTREP(column))) &&
+    !Rf_isS4(column) && !Rf_isObject(column) &&
+    paradox_api_has_no_attributes(column);
+}
+
+static int upgrade_table_leaf_is_owned_atomic(SEXP value) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+  return !Rf_isS4(value) &&
+    (type == LGLSXP || type == INTSXP || type == REALSXP ||
+      type == CPLXSXP || type == STRSXP || type == RAWSXP);
+}
+
+typedef enum {
+  UPGRADE_TABLE_SCHEMA_GENERIC = 0,
+  UPGRADE_TABLE_SCHEMA_DOMAIN,
+  UPGRADE_TABLE_SCHEMA_DEPENDENCIES
+} upgrade_table_schema_t;
+
+typedef enum {
+  UPGRADE_TABLE_LEAF_BUILTIN = 0,
+  UPGRADE_TABLE_LEAF_OPAQUE,
+  UPGRADE_TABLE_LEAF_CONDITION,
+  UPGRADE_TABLE_LEAF_DOMAIN_CARGO,
+  UPGRADE_TABLE_LEAF_DOMAIN_LEVELS,
+  UPGRADE_TABLE_LEAF_DOMAIN_SPECIAL_VALUES,
+  UPGRADE_TABLE_LEAF_DOMAIN_VALUE,
+  UPGRADE_TABLE_LEAF_DOMAIN_REQUIREMENTS
+} upgrade_table_leaf_policy_t;
+
+static int upgrade_table_has_exact_names(SEXP table,
+    const char *const *expected, R_xlen_t count) {
+  SEXP names = paradox_api_raw_attribute(table, R_NamesSymbol);
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+      Rf_isObject(names) || !paradox_api_has_no_attributes(names) ||
+      XLENGTH(table) != count || XLENGTH(names) != count) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP name = STRING_ELT(names, index);
+    if (name == NA_STRING || Rf_getCharCE(name) == CE_BYTES ||
+        strcmp(CHAR(name), expected[index]) != 0) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static upgrade_table_schema_t upgrade_table_schema(SEXP table) {
+  static const char *const dependency_names[] = {"id", "on", "cond"};
+  if (upgrade_table_has_exact_names(
+      table,
+      paradox_domain_column_names,
+      PARADOX_DOMAIN_COLUMN_COUNT
+    ) || upgrade_table_has_exact_names(
+      table,
+      paradox_domain_column_names,
+      PARADOX_DOMAIN_PERMANENT_COLUMNS
+    )) {
+    return UPGRADE_TABLE_SCHEMA_DOMAIN;
+  }
+  if (upgrade_table_has_exact_names(table, dependency_names, 3)) {
+    return UPGRADE_TABLE_SCHEMA_DEPENDENCIES;
+  }
+  return UPGRADE_TABLE_SCHEMA_GENERIC;
+}
+
+static int upgrade_table_domain_class_is_typed(SEXP table,
+    R_xlen_t row) {
+  SEXP classes = VECTOR_ELT(table, PARADOX_DOMAIN_CLS);
+  if (TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes) ||
+      Rf_isObject(classes) || !paradox_api_has_no_attributes(classes) ||
+      row >= XLENGTH(classes)) {
+    Rf_error("legacy Domain class column is malformed");
+  }
+  SEXP cls = STRING_ELT(classes, row);
+  if (cls == NA_STRING || Rf_getCharCE(cls) == CE_BYTES) {
+    Rf_error("legacy Domain class column is malformed");
+  }
+  if (strcmp(CHAR(cls), "ParamUty") == 0) return FALSE;
+  if (strcmp(CHAR(cls), "ParamDbl") == 0 ||
+      strcmp(CHAR(cls), "ParamInt") == 0 ||
+      strcmp(CHAR(cls), "ParamFct") == 0 ||
+      strcmp(CHAR(cls), "ParamLgl") == 0) {
+    return TRUE;
+  }
+  Rf_error("legacy Domain class column is malformed");
+}
+
+static upgrade_table_leaf_policy_t upgrade_table_leaf_policy(
+    upgrade_table_schema_t schema, R_xlen_t column) {
+  if (schema == UPGRADE_TABLE_SCHEMA_DEPENDENCIES && column == 2) {
+    return UPGRADE_TABLE_LEAF_CONDITION;
+  }
+  if (schema != UPGRADE_TABLE_SCHEMA_DOMAIN) {
+    return UPGRADE_TABLE_LEAF_BUILTIN;
+  }
+  switch ((enum paradox_domain_column) column) {
+  case PARADOX_DOMAIN_CARGO:
+    return UPGRADE_TABLE_LEAF_DOMAIN_CARGO;
+  case PARADOX_DOMAIN_LEVELS:
+    return UPGRADE_TABLE_LEAF_DOMAIN_LEVELS;
+  case PARADOX_DOMAIN_SPECIAL_VALS:
+    return UPGRADE_TABLE_LEAF_DOMAIN_SPECIAL_VALUES;
+  case PARADOX_DOMAIN_DEFAULT:
+  case PARADOX_DOMAIN_INIT:
+    return UPGRADE_TABLE_LEAF_DOMAIN_VALUE;
+  case PARADOX_DOMAIN_REQUIREMENTS:
+    return UPGRADE_TABLE_LEAF_DOMAIN_REQUIREMENTS;
+  case PARADOX_DOMAIN_TRAFO:
+    return UPGRADE_TABLE_LEAF_OPAQUE;
+  default:
+    return UPGRADE_TABLE_LEAF_BUILTIN;
+  }
+}
+
+NORET static void upgrade_table_column_error(
+    SEXP table, R_xlen_t index, const char *problem) {
+  SEXP names = paradox_api_raw_attribute(table, R_NamesSymbol);
+  if (TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
+      !Rf_isObject(names) && paradox_api_has_no_attributes(names) &&
+      XLENGTH(names) == XLENGTH(table)) {
+    SEXP name = STRING_ELT(names, index);
+    if (name != NA_STRING && Rf_getCharCE(name) != CE_BYTES) {
+      Rf_error("table column `%s` %s", CHAR(name), problem);
+    }
+  }
+  Rf_error("table column %.0f %s", (double) (index + 1), problem);
+}
+
+static void admit_upgrade_table_column(SEXP table, R_xlen_t index) {
+  SEXP column = VECTOR_ELT(table, index);
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
+  const int atomic = type == LGLSXP || type == INTSXP || type == REALSXP ||
+    type == CPLXSXP || type == STRSXP || type == RAWSXP;
+  if (Rf_isS4(column) || (!atomic && type != VECSXP) ||
+      (type == VECSXP && ALTREP(column))) {
+    upgrade_table_column_error(
+      table,
+      index,
+      "has unsupported structural representation"
+    );
+  }
+  if (Rf_isObject(column) || !paradox_api_has_no_attributes(column)) {
+    upgrade_table_column_error(
+      table,
+      index,
+      "has unsupported attributes"
+    );
+  }
+  if (XLENGTH(column) > INT_MAX) {
+    upgrade_table_column_error(table, index, "is too large");
+  }
+}
+
+/*
+ * The ordinary table snapshot owns its names and column-pointer carrier, but
+ * a data.table by-reference write can still mutate an aliased ordinary column
+ * payload after the native receipt.  Own every top-level column before that
+ * receipt. Atomic ALTREP is materialized by the shared semantic primitive. An
+ * interpreted list column receives both a private identity receipt and a fresh
+ * outward carrier; every non-S4 atomic leaf is independently snapshotted there
+ * too, while genuinely opaque leaves retain identity.
+ */
+static SEXP snapshot_upgrade_table_leaf(SEXP source,
+    upgrade_table_leaf_policy_t policy, int typed,
+    R_xlen_t *work_since_interrupt) {
+  switch (policy) {
+  case UPGRADE_TABLE_LEAF_OPAQUE:
+    return source;
+  case UPGRADE_TABLE_LEAF_CONDITION:
+    return paradox_builtin_condition_snapshot(
+      source,
+      work_since_interrupt
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_CARGO:
+    return paradox_detach_domain_row_field(
+      source,
+      PARADOX_DOMAIN_CARGO,
+      typed,
+      work_since_interrupt
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_LEVELS:
+    return paradox_detach_domain_row_field(
+      source,
+      PARADOX_DOMAIN_LEVELS,
+      typed,
+      work_since_interrupt
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_SPECIAL_VALUES:
+    return paradox_detach_domain_row_field(
+      source,
+      PARADOX_DOMAIN_SPECIAL_VALS,
+      typed,
+      work_since_interrupt
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_VALUE:
+    return paradox_detach_domain_row_field(
+      source,
+      PARADOX_DOMAIN_DEFAULT,
+      typed,
+      work_since_interrupt
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_REQUIREMENTS:
+    return paradox_detach_domain_row_field(
+      source,
+      PARADOX_DOMAIN_REQUIREMENTS,
+      typed,
+      work_since_interrupt
+    );
+  case UPGRADE_TABLE_LEAF_BUILTIN:
+    return paradox_snapshot_builtin_value_leaf(source);
+  default:
+    Rf_error("Internal error: invalid legacy-table leaf policy");
+  }
+}
+
+static SEXP snapshot_upgrade_table_list_column(
+    SEXP source, SEXP list_receipts, R_xlen_t column_index,
+    upgrade_table_schema_t schema, SEXP owned_table) {
+  SEXP captured = PROTECT(paradox_snapshot_semantic_vector(source));
+  SET_VECTOR_ELT(list_receipts, column_index, captured);
+  SEXP owned = PROTECT(paradox_snapshot_semantic_vector(captured));
+  const upgrade_table_leaf_policy_t policy =
+    upgrade_table_leaf_policy(schema, column_index);
+  R_xlen_t work_since_interrupt = 0;
+  for (R_xlen_t index = 0; index < XLENGTH(captured); ++index) {
+    paradox_account_work(&work_since_interrupt);
+    SEXP leaf = VECTOR_ELT(captured, index);
+    const int typed = schema != UPGRADE_TABLE_SCHEMA_DOMAIN ||
+      upgrade_table_domain_class_is_typed(owned_table, index);
+    SEXP leaf_snapshot = PROTECT(snapshot_upgrade_table_leaf(
+      leaf,
+      policy,
+      typed,
+      &work_since_interrupt
+    ));
+    if (leaf_snapshot == R_UnboundValue) {
+      UNPROTECT(3);
+      upgrade_table_column_error(
+        owned_table,
+        column_index,
+        "contains malformed interpreted structure"
+      );
+    }
+    SET_VECTOR_ELT(owned, index, leaf_snapshot);
+    UNPROTECT(1);
+  }
+  UNPROTECT(2);
+  return owned;
+}
+
+static SEXP snapshot_upgrade_table_columns(
+    SEXP selected, SEXP list_receipts) {
+  const R_xlen_t count = XLENGTH(selected);
+  for (R_xlen_t index = 0; index < count; ++index) {
+    admit_upgrade_table_column(selected, index);
+  }
+
+  SEXP owned = PROTECT(paradox_snapshot_semantic_vector(selected));
+  const upgrade_table_schema_t schema = upgrade_table_schema(selected);
+  /* Own every atomic selector first. Domain list-leaf policy is derived from
+   * this private `cls` generation, never by rereading a caller-owned column
+   * after nested allocations have begun. */
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP source_column = VECTOR_ELT(selected, index);
+    if (TYPEOF(source_column) == VECSXP) continue;
+    SEXP column = PROTECT(paradox_snapshot_semantic_vector(source_column));
+    SET_VECTOR_ELT(owned, index, column);
+    UNPROTECT(1);
+  }
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP source_column = VECTOR_ELT(selected, index);
+    if (TYPEOF(source_column) != VECSXP) continue;
+    SEXP column = PROTECT(snapshot_upgrade_table_list_column(
+      source_column,
+      list_receipts,
+      index,
+      schema,
+      owned
+    ));
+    SET_VECTOR_ELT(owned, index, column);
+    UNPROTECT(1);
+  }
+  UNPROTECT(1);
+  return owned;
+}
+
+static int upgrade_table_owned_column_structure_is_current(
+    SEXP source, SEXP owned) {
+  return upgrade_table_column_is_supported(source) &&
+    TYPEOF(source) == TYPEOF(owned) && !ALTREP(owned) &&
+    !Rf_isS4(owned) && !Rf_isObject(owned) &&
+    paradox_api_has_no_attributes(owned);
+}
+
+static int upgrade_table_list_column_shape_is_current(
+    SEXP value, R_xlen_t size) {
+  return TYPEOF(value) == VECSXP && !ALTREP(value) &&
+    !Rf_isS4(value) && !Rf_isObject(value) &&
+    paradox_api_has_no_attributes(value) && XLENGTH(value) == size;
+}
+
+/* Complete every stable nested ALTREP Length callback before any ordinary
+ * payload or metadata receipt. A callback may rewrite a different cell by
+ * reference; the following callback-free phase reauthenticates all of them. */
+static int upgrade_table_builtin_leaf_lengths_are_current(
+    SEXP source, SEXP owned) {
+  if (!upgrade_table_leaf_is_owned_atomic(source)) {
+    return source == owned;
+  }
+  if (!ALTREP(source)) return TRUE;
+  if (TYPEOF(source) != TYPEOF(owned) || ALTREP(owned) ||
+      Rf_isS4(owned)) {
+    return FALSE;
+  }
+  /* Nested special-value carriers can rewrite their own cells from a Length
+   * callback.  The outer shallow receipt then no longer retains this exact
+   * leaf, so root it directly for the whole dispatch. */
+  PROTECT(source);
+  PROTECT(owned);
+  const int current = XLENGTH(source) == XLENGTH(owned);
+  UNPROTECT(2);
+  return current;
+}
+
+static int exact_upgrade_no_default(SEXP value) {
+  static const char *const allowed[] = {"class"};
+  /* Bound the raw selector first; the shared Domain classifier remains the
+   * sole semantic owner of the marker spelling (including formal-S4
+   * exclusion). */
+  if (!paradox_api_has_only_attributes(value, allowed, 1)) {
+    return FALSE;
+  }
+  SEXP classes = paradox_api_raw_attribute(value, R_ClassSymbol);
+  return paradox_domain_exact_no_default_marker(value, classes) == 1;
+}
+
+static int upgrade_table_special_lengths_are_current(
+    SEXP source, SEXP owned, int typed) {
+  if (TYPEOF(source) != VECSXP || TYPEOF(owned) != VECSXP ||
+      ALTREP(source) || ALTREP(owned) || Rf_isS4(source) ||
+      Rf_isS4(owned) || XLENGTH(source) != XLENGTH(owned)) {
+    return FALSE;
+  }
+  if (!typed) return TRUE;
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    if (!upgrade_table_builtin_leaf_lengths_are_current(
+        VECTOR_ELT(source, index),
+        VECTOR_ELT(owned, index)
+      )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int upgrade_table_leaf_lengths_are_current(SEXP source,
+    SEXP owned, upgrade_table_leaf_policy_t policy, int typed) {
+  switch (policy) {
+  case UPGRADE_TABLE_LEAF_OPAQUE:
+    return source == owned;
+  case UPGRADE_TABLE_LEAF_CONDITION:
+    return paradox_builtin_condition_snapshot_lengths_current(
+      source,
+      owned
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_CARGO:
+    return TRUE;
+  case UPGRADE_TABLE_LEAF_DOMAIN_LEVELS:
+    return source == R_NilValue
+      ? owned == R_NilValue
+      : upgrade_table_builtin_leaf_lengths_are_current(source, owned);
+  case UPGRADE_TABLE_LEAF_DOMAIN_SPECIAL_VALUES:
+    return upgrade_table_special_lengths_are_current(
+      source,
+      owned,
+      typed
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_VALUE:
+    if (source != owned && exact_upgrade_no_default(owned)) {
+      return exact_upgrade_no_default(source);
+    }
+    return typed
+      ? upgrade_table_builtin_leaf_lengths_are_current(source, owned)
+      : source == owned;
+  case UPGRADE_TABLE_LEAF_DOMAIN_REQUIREMENTS:
+    return paradox_builtin_requirements_snapshot_lengths_current(
+      source,
+      owned
+    );
+  case UPGRADE_TABLE_LEAF_BUILTIN:
+    return upgrade_table_builtin_leaf_lengths_are_current(source, owned);
+  default:
+    return FALSE;
+  }
+}
+
+static int upgrade_table_list_leaf_lengths_are_current(
+    SEXP source, SEXP captured, SEXP owned,
+    upgrade_table_schema_t schema, R_xlen_t column_index,
+    SEXP owned_table) {
+  const R_xlen_t size = XLENGTH(captured);
+  if (!upgrade_table_list_column_shape_is_current(source, size) ||
+      !upgrade_table_list_column_shape_is_current(captured, size) ||
+      !upgrade_table_list_column_shape_is_current(owned, size)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SEXP source_leaf = VECTOR_ELT(source, index);
+    SEXP captured_leaf = VECTOR_ELT(captured, index);
+    SEXP owned_leaf = VECTOR_ELT(owned, index);
+    if (source_leaf != captured_leaf) return FALSE;
+    const upgrade_table_leaf_policy_t policy =
+      upgrade_table_leaf_policy(schema, column_index);
+    const int typed = schema != UPGRADE_TABLE_SCHEMA_DOMAIN ||
+      upgrade_table_domain_class_is_typed(owned_table, index);
+    if (!upgrade_table_leaf_lengths_are_current(
+        source_leaf,
+        owned_leaf,
+        policy,
+        typed
+      )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int upgrade_table_leaf_is_current(SEXP source, SEXP owned,
+    upgrade_table_leaf_policy_t policy, int typed) {
+  switch (policy) {
+  case UPGRADE_TABLE_LEAF_OPAQUE:
+    return source == owned;
+  case UPGRADE_TABLE_LEAF_CONDITION:
+    return paradox_builtin_condition_snapshot_is_current(source, owned);
+  case UPGRADE_TABLE_LEAF_DOMAIN_CARGO:
+    return paradox_domain_cargo_snapshot_is_current(source, owned);
+  case UPGRADE_TABLE_LEAF_DOMAIN_LEVELS:
+    return source == R_NilValue
+      ? owned == R_NilValue
+      : paradox_builtin_value_leaf_receipt_current(source, owned);
+  case UPGRADE_TABLE_LEAF_DOMAIN_SPECIAL_VALUES:
+    return paradox_domain_special_values_snapshot_is_current(
+      source,
+      owned,
+      typed
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_VALUE:
+    if (source != owned && exact_upgrade_no_default(owned)) {
+      return exact_upgrade_no_default(source);
+    }
+    return typed
+      ? (ALTREP(source)
+        ? paradox_altrep_builtin_value_leaf_metadata_is_current(
+            source,
+            owned
+          )
+        : paradox_builtin_value_leaf_receipt_current(source, owned))
+      : source == owned;
+  case UPGRADE_TABLE_LEAF_DOMAIN_REQUIREMENTS:
+    return paradox_builtin_requirements_snapshot_is_current(source, owned);
+  case UPGRADE_TABLE_LEAF_BUILTIN:
+    if (!upgrade_table_leaf_is_owned_atomic(source)) {
+      return source == owned;
+    }
+    return ALTREP(source)
+      ? paradox_altrep_builtin_value_leaf_metadata_is_current(source, owned)
+      : paradox_builtin_value_leaf_receipt_current(source, owned);
+  default:
+    return FALSE;
+  }
+}
+
+static int upgrade_table_list_leaves_are_current(
+    SEXP source, SEXP captured, SEXP owned,
+    upgrade_table_schema_t schema, R_xlen_t column_index,
+    SEXP owned_table) {
+  const R_xlen_t size = XLENGTH(captured);
+  if (!upgrade_table_list_column_shape_is_current(source, size) ||
+      !upgrade_table_list_column_shape_is_current(captured, size) ||
+      !upgrade_table_list_column_shape_is_current(owned, size)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SEXP source_leaf = VECTOR_ELT(source, index);
+    SEXP captured_leaf = VECTOR_ELT(captured, index);
+    SEXP owned_leaf = VECTOR_ELT(owned, index);
+    if (source_leaf != captured_leaf) return FALSE;
+    const upgrade_table_leaf_policy_t policy =
+      upgrade_table_leaf_policy(schema, column_index);
+    const int typed = schema != UPGRADE_TABLE_SCHEMA_DOMAIN ||
+      upgrade_table_domain_class_is_typed(owned_table, index);
+    if (!upgrade_table_leaf_is_current(
+        source_leaf,
+        owned_leaf,
+        policy,
+        typed
+      )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int upgrade_table_owned_columns_are_current(
+    SEXP selected, SEXP owned, SEXP list_receipts) {
+  if (TYPEOF(selected) != VECSXP || ALTREP(selected) || Rf_isS4(selected) ||
+      TYPEOF(owned) != VECSXP || ALTREP(owned) || Rf_isS4(owned) ||
+      Rf_isObject(owned) || TYPEOF(list_receipts) != VECSXP ||
+      ALTREP(list_receipts) || Rf_isS4(list_receipts) ||
+      Rf_isObject(list_receipts) ||
+      !paradox_api_has_no_attributes(list_receipts) ||
+      XLENGTH(selected) != XLENGTH(owned) ||
+      XLENGTH(selected) != XLENGTH(list_receipts)) {
+    return FALSE;
+  }
+  const R_xlen_t count = XLENGTH(selected);
+  const upgrade_table_schema_t schema = upgrade_table_schema(owned);
+
+  /* Finish every callback-capable stable-ALTREP Length observation first. A
+   * later column's Length method may rewrite an earlier ordinary source
+   * payload by reference, so interleaving these observations with payload
+   * comparisons would not make the latter a terminal receipt. */
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP source_column = VECTOR_ELT(selected, index);
+    SEXP owned_column = VECTOR_ELT(owned, index);
+    SEXP list_receipt = VECTOR_ELT(list_receipts, index);
+    if (!upgrade_table_owned_column_structure_is_current(
+        source_column,
+        owned_column
+      )) {
+      return FALSE;
+    }
+    if (TYPEOF(source_column) == VECSXP) {
+      if (!upgrade_table_list_leaf_lengths_are_current(
+          source_column,
+          list_receipt,
+          owned_column,
+          schema,
+          index,
+          owned
+        )) {
+        return FALSE;
+      }
+    } else if (list_receipt != R_NilValue ||
+        (ALTREP(source_column) &&
+          XLENGTH(source_column) != XLENGTH(owned_column))) {
+      return FALSE;
+    }
+  }
+
+  /* No supported observation below can allocate or invoke R. Re-admit every
+   * shell after the final Length callback, then compare every ordinary
+   * payload before the table attributes and outer identities are selected. */
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP source_column = VECTOR_ELT(selected, index);
+    SEXP owned_column = VECTOR_ELT(owned, index);
+    SEXP list_receipt = VECTOR_ELT(list_receipts, index);
+    if (!upgrade_table_owned_column_structure_is_current(
+        source_column,
+        owned_column
+      ) || (TYPEOF(source_column) == VECSXP
+        ? !upgrade_table_list_leaves_are_current(
+            source_column,
+            list_receipt,
+            owned_column,
+            schema,
+            index,
+            owned
+          )
+        : (!ALTREP(source_column) &&
+            !paradox_ordinary_vector_payload_equal(
+              source_column,
+              owned_column
+            )))) {
+      return FALSE;
+    }
+  }
+  return TRUE;
 }
 
 SEXP paradox_upgrade_table_list_snapshot(SEXP source,
@@ -318,21 +912,37 @@ SEXP paradox_upgrade_table_list_snapshot(SEXP source,
    * in one callback-free pass. It deliberately discards the source class and
    * cache attributes from the returned table shell.
    */
-  SEXP table = PROTECT(paradox_snapshot_semantic_vector(source));
+  SEXP list_receipts = PROTECT(Rf_allocVector(VECSXP, XLENGTH(source)));
+  SEXP selected_table = PROTECT(paradox_snapshot_semantic_vector(source));
+  SEXP table = PROTECT(snapshot_upgrade_table_columns(
+    selected_table,
+    list_receipts
+  ));
+  if (table == R_NilValue) {
+    UNPROTECT(5);
+    return R_NilValue;
+  }
   R_xlen_t row_count = 0;
   if (XLENGTH(table) != 0) {
     SEXP first_column = VECTOR_ELT(table, 0);
-    if (!Rf_isVector(first_column)) {
-      UNPROTECT(3);
-      return R_NilValue;
-    }
     /*
-     * A stable ALTREP column may observe Length here. Attribute capture and
-     * the exact source-shell receipt deliberately follow that observation, so
-     * a supported reentrant change is either the selected later generation or
-     * a terminal mismatch, never old columns paired with unrelated row names.
+     * Every top-level column is ordinary and independently owned now.  Its
+     * length cannot dispatch or expose source state while the terminal table
+     * and attribute receipts select one exact legacy generation below.
      */
     row_count = XLENGTH(first_column);
+  }
+  /* A stable ALTREP source receives its final bounded Length observation
+   * before attribute capture.  A callback may therefore precede the selected
+   * source generation or make the terminal pointer/name receipt fail, but it
+   * cannot run between attribute capture and that receipt. */
+  if (!upgrade_table_owned_columns_are_current(
+      selected_table,
+      table,
+      list_receipts
+    )) {
+    UNPROTECT(5);
+    return R_NilValue;
   }
   R_xlen_t attribute_count = 0;
   if (!paradox_api_map_bounded_stored_attributes(
@@ -342,7 +952,7 @@ SEXP paradox_upgrade_table_list_snapshot(SEXP source,
       &attributes,
       &attribute_count
     ) || !attributes.valid || attribute_count > 7) {
-    UNPROTECT(3);
+    UNPROTECT(5);
     return R_NilValue;
   }
   /*
@@ -351,20 +961,189 @@ SEXP paradox_upgrade_table_list_snapshot(SEXP source,
    * cannot encounter a later cyclic generation.
    */
   SEXP observed_classes = paradox_api_raw_attribute(source, R_ClassSymbol);
-  if (!upgrade_table_snapshot_is_current(source, table) ||
+  if (!upgrade_table_snapshot_is_current(source, selected_table) ||
       !attributes.valid ||
       (attributes.seen & UPGRADE_TABLE_ATTRIBUTE_NAMES) == 0U ||
       (attributes.seen & UPGRADE_TABLE_ATTRIBUTE_CLASS) == 0U ||
       !exact_upgrade_table_rows(&attributes, row_count) ||
       !exact_upgrade_table_classes(observed_classes, expected_classes)) {
-    UNPROTECT(3);
+    UNPROTECT(5);
     return R_NilValue;
   }
 
   SET_VECTOR_ELT(result, 0, table);
   SET_VECTOR_ELT(result, 1, attributes.repr);
-  UNPROTECT(3);
+  UNPROTECT(5);
   return result;
+}
+
+static int exact_upgrade_values_parameter_vectors(
+    SEXP ids, SEXP classes) {
+  if (TYPEOF(ids) != STRSXP || ALTREP(ids) || Rf_isS4(ids) ||
+      Rf_isObject(ids) || !paradox_api_has_no_attributes(ids) ||
+      TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes) ||
+      Rf_isObject(classes) || !paradox_api_has_no_attributes(classes) ||
+      XLENGTH(ids) != XLENGTH(classes)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(ids); ++index) {
+    SEXP id = STRING_ELT(ids, index);
+    SEXP cls = STRING_ELT(classes, index);
+    if (id == NA_STRING || cls == NA_STRING || CHAR(id)[0] == '\0' ||
+        Rf_getCharCE(id) == CE_BYTES || Rf_getCharCE(cls) == CE_BYTES ||
+        (strcmp(CHAR(cls), "ParamDbl") != 0 &&
+          strcmp(CHAR(cls), "ParamInt") != 0 &&
+          strcmp(CHAR(cls), "ParamFct") != 0 &&
+          strcmp(CHAR(cls), "ParamLgl") != 0 &&
+          strcmp(CHAR(cls), "ParamUty") != 0)) {
+      return FALSE;
+    }
+    for (R_xlen_t prior = 0; prior < index; ++prior) {
+      if (paradox_domain_strings_equal(id, STRING_ELT(ids, prior))) {
+        return FALSE;
+      }
+    }
+  }
+  return TRUE;
+}
+
+static int exact_upgrade_values_shell(SEXP value) {
+  static const char *const allowed[] = {"names"};
+  if (TYPEOF(value) != VECSXP || ALTREP(value) || Rf_isS4(value) ||
+      Rf_isObject(value) ||
+      !paradox_api_has_only_attributes(value, allowed, 1)) {
+    return FALSE;
+  }
+  SEXP names = paradox_api_raw_attribute(value, R_NamesSymbol);
+  return names == R_NilValue
+    ? XLENGTH(value) == 0
+    : TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
+      !Rf_isObject(names) && paradox_api_has_no_attributes(names) &&
+      XLENGTH(names) == XLENGTH(value);
+}
+
+static int upgrade_values_outer_is_current(SEXP source, SEXP captured) {
+  if (!exact_upgrade_values_shell(source) ||
+      !exact_upgrade_values_shell(captured) ||
+      XLENGTH(source) != XLENGTH(captured)) {
+    return FALSE;
+  }
+  SEXP source_names = paradox_api_raw_attribute(source, R_NamesSymbol);
+  SEXP captured_names = paradox_api_raw_attribute(captured, R_NamesSymbol);
+  if ((source_names == R_NilValue) != (captured_names == R_NilValue) ||
+      (source_names != R_NilValue &&
+        !paradox_ordinary_vector_payload_equal(
+          source_names,
+          captured_names
+        ))) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    if (VECTOR_ELT(source, index) != VECTOR_ELT(captured, index)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int upgrade_value_owner_is_typed(SEXP id, SEXP ids,
+    SEXP classes, int *typed) {
+  R_xlen_t match = R_XLEN_T_MAX;
+  for (R_xlen_t index = 0; index < XLENGTH(ids); ++index) {
+    if (!paradox_domain_strings_equal(id, STRING_ELT(ids, index))) {
+      continue;
+    }
+    if (match != R_XLEN_T_MAX) return FALSE;
+    match = index;
+  }
+  if (match == R_XLEN_T_MAX) return FALSE;
+  *typed = strcmp(CHAR(STRING_ELT(classes, match)), "ParamUty") != 0;
+  return TRUE;
+}
+
+SEXP paradox_upgrade_values_snapshot(SEXP source,
+    SEXP ids, SEXP classes) {
+  PROTECT(source);
+  PROTECT(ids);
+  PROTECT(classes);
+  if (!exact_upgrade_values_parameter_vectors(ids, classes) ||
+      !exact_upgrade_values_shell(source)) {
+    UNPROTECT(3);
+    return R_NilValue;
+  }
+
+  SEXP captured = PROTECT(paradox_snapshot_semantic_vector(source));
+  SEXP owned = PROTECT(paradox_snapshot_semantic_vector(captured));
+  SEXP typed = PROTECT(Rf_allocVector(LGLSXP, XLENGTH(captured)));
+  if (!upgrade_values_outer_is_current(source, captured)) {
+    UNPROTECT(6);
+    return R_NilValue;
+  }
+  SEXP names = paradox_api_raw_attribute(captured, R_NamesSymbol);
+  R_xlen_t work_since_interrupt = 0;
+  for (R_xlen_t index = 0; index < XLENGTH(captured); ++index) {
+    paradox_account_work(&work_since_interrupt);
+    int typed_leaf = FALSE;
+    if (!upgrade_value_owner_is_typed(
+        STRING_ELT(names, index),
+        ids,
+        classes,
+        &typed_leaf
+      )) {
+      UNPROTECT(6);
+      /* The outer carrier is canonical, but this name cannot select a
+       * parameter kind. Keep that semantic failure distinct from malformed
+       * list structure so the R migration boundary can retain its useful
+       * invalid-parameter-names diagnostic without attempting to own a leaf
+       * under an invented kind. */
+      return Rf_ScalarLogical(FALSE);
+    }
+    LOGICAL(typed)[index] = typed_leaf;
+    SEXP detached = PROTECT(paradox_detach_stored_value_leaf(
+      VECTOR_ELT(captured, index),
+      typed_leaf
+    ));
+    SET_VECTOR_ELT(owned, index, detached);
+    UNPROTECT(1);
+  }
+
+  /* Finish every nested stable-ALTREP Length before the callback-free source
+   * generation and payload receipts. */
+  if (!upgrade_values_outer_is_current(source, captured)) {
+    UNPROTECT(6);
+    return R_NilValue;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(captured); ++index) {
+    if (LOGICAL(typed)[index] &&
+        !upgrade_table_builtin_leaf_lengths_are_current(
+          VECTOR_ELT(captured, index),
+          VECTOR_ELT(owned, index)
+        )) {
+      UNPROTECT(6);
+      return R_NilValue;
+    }
+  }
+  if (!upgrade_values_outer_is_current(source, captured)) {
+    UNPROTECT(6);
+    return R_NilValue;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(captured); ++index) {
+    SEXP source_leaf = VECTOR_ELT(captured, index);
+    SEXP owned_leaf = VECTOR_ELT(owned, index);
+    if (LOGICAL(typed)[index]
+        ? !upgrade_table_leaf_is_current(
+            source_leaf,
+            owned_leaf,
+            UPGRADE_TABLE_LEAF_BUILTIN,
+            TRUE
+          )
+        : source_leaf != owned_leaf) {
+      UNPROTECT(6);
+      return R_NilValue;
+    }
+  }
+  UNPROTECT(6);
+  return owned;
 }
 
 enum {

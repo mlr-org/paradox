@@ -316,6 +316,10 @@ test_that("built-in checks reject structural S4 while retaining opaque leaves", 
   numeric = ps(value = p_dbl(0, 1, special_vals = list(special)))
   expect_identical(numeric$check(list(value = special)), TRUE)
   expect_identical(
+    numeric$check(list(value = special), allow_token = FALSE),
+    TRUE
+  )
+  expect_identical(
     numeric$check(list(value = asS4(0.75))),
     "value: Must be of type 'number', not 'double'"
   )
@@ -323,6 +327,23 @@ test_that("built-in checks reject structural S4 while retaining opaque leaves", 
   opaque = asS4(list(payload = 1L))
   utility = ps(value = p_uty())
   expect_identical(utility$check(list(value = opaque)), TRUE)
+
+  formal_class = "ParadoxAdversarialOpaqueCheck"
+  if (!methods::isClass(formal_class)) {
+    methods::setClass(formal_class, slots = c(payload = "integer"))
+  }
+  formal = methods::new(formal_class, payload = 1L)
+  expect_identical(utility$check(list(value = formal)), TRUE)
+
+  dependent = ps(
+    controller = p_dbl(0, 1, special_vals = list(special)),
+    child = p_int()
+  )
+  dependent$add_dep("child", "controller", CondEqual$new(1))
+  expect_match(
+    dependent$check(list(controller = special, child = 1L)),
+    "requires a plain scalar"
+  )
 
   point = list(value = 0.5)
   expect_identical(

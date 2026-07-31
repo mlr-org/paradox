@@ -154,9 +154,10 @@ if (any(tests$skipped > 1L) ||
   fail("functional-test skip accounting differs")
 }
 optional_skips <- data.frame(
-  file = character(),
-  test = character(),
-  skip_reason = character(),
+  file = "test-ParamSetShadow.R",
+  test = "old-R Shadow generation receipts never enter the evaluator",
+  skip_reason =
+    "Reason: R >= 4.2 has a public non-evaluating binding-existence operation",
   stringsAsFactors = FALSE
 )
 analyzer_required_skips <- data.frame(
@@ -187,30 +188,6 @@ analyzer_required_skips <- data.frame(
   skip_reason = rep("Reason: On CRAN", 10L),
   stringsAsFactors = FALSE
 )
-allowed_skips <- if (selection == "analyzer") {
-  analyzer_required_skips
-} else {
-  optional_skips
-}
-observed_skips <- tests[tests$skipped == 1L,
-  c("file", "test", "skip_reason"), drop = FALSE]
-observed_skip_keys <- do.call(paste, c(observed_skips, sep = "\t"))
-allowed_skip_keys <- do.call(paste, c(allowed_skips, sep = "\t"))
-if (nrow(observed_skips)) {
-  if (anyDuplicated(observed_skip_keys) ||
-      any(!observed_skip_keys %in% allowed_skip_keys)) {
-    fail("functional-test ledger contains an unreviewed skip")
-  }
-}
-if (selection == "analyzer") {
-  required_skip_keys <- do.call(
-    paste, c(analyzer_required_skips, sep = "\t")
-  )
-  if (!all(required_skip_keys %in% observed_skip_keys)) {
-    fail("analyzer ledger did not retain every reviewed NOT_CRAN skip")
-  }
-}
-
 analyzer_files <- c(
   "test-native-adversarial-storage.R",
   "test-native-altrep-lifetimes.R",
@@ -245,6 +222,46 @@ if (selection == "focused") {
       selected_files
     )
   ]
+}
+allowed_skips <- if (selection == "analyzer") {
+  analyzer_required_skips
+} else {
+  optional_skips
+}
+observed_skips <- tests[tests$skipped == 1L,
+  c("file", "test", "skip_reason"), drop = FALSE]
+observed_skip_keys <- do.call(paste, c(observed_skips, sep = "\t"))
+allowed_skip_keys <- do.call(paste, c(allowed_skips, sep = "\t"))
+if (nrow(observed_skips)) {
+  if (anyDuplicated(observed_skip_keys) ||
+      any(!observed_skip_keys %in% allowed_skip_keys)) {
+    fail("functional-test ledger contains an unreviewed skip")
+  }
+}
+if (selection == "analyzer") {
+  required_skip_keys <- do.call(
+    paste, c(analyzer_required_skips, sep = "\t")
+  )
+  if (!all(required_skip_keys %in% observed_skip_keys)) {
+    fail("analyzer ledger did not retain every reviewed NOT_CRAN skip")
+  }
+} else {
+  optional_skip_keys <- do.call(paste, c(optional_skips, sep = "\t"))
+  observed_optional_keys <- intersect(observed_skip_keys, optional_skip_keys)
+  expected_optional_keys <- if (
+      optional_skips$file[[1L]] %in% selected_files &&
+      getRversion() >= "4.2.0"
+    ) {
+    optional_skip_keys
+  } else {
+    character()
+  }
+  if (!identical(
+      sort_bytes(observed_optional_keys),
+      sort_bytes(expected_optional_keys)
+    )) {
+    fail("functional-test runtime capability skip differs")
+  }
 }
 observed_files <- sort_bytes(unique(tests$file))
 if (!identical(observed_files, selected_files)) {

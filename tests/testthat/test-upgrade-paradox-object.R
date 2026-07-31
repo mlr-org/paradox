@@ -1367,7 +1367,7 @@ test_that("legacy interpreted structural lists reject ALTREP inertly", {
 
   expect_error(
     upgrade_paradox_object(legacy),
-    "legacy values must be a plain list",
+    "legacy values must be a canonical named list",
     fixed = TRUE
   )
   expect_identical(observations, 0L)
@@ -1553,7 +1553,10 @@ test_that("legacy extensions, replacements, and malformed state fail closed", {
   )
   expect_error(
     upgrade_paradox_object(unknown_condition),
-    "x\\$private\\$\\.deps\\$cond\\[\\[1\\]\\].*unsupported Condition"
+    paste0(
+      "x\\$private\\$\\.deps.*Unsupported Condition class; ",
+      "supported classes are 'CondEqual' and 'CondAnyOf'"
+    )
   )
 
   observed = 0L
@@ -1593,7 +1596,7 @@ test_that("legacy extensions, replacements, and malformed state fail closed", {
   pairlist_private$.values = pairlist(x = 0.5)
   expect_error(
     upgrade_paradox_object(pairlist_values),
-    "legacy values must be a plain list",
+    "legacy values must be a canonical named list",
     fixed = TRUE
   )
 
@@ -1602,9 +1605,20 @@ test_that("legacy extensions, replacements, and malformed state fail closed", {
   attr(attributed_private$.values, "forged") = TRUE
   expect_error(
     upgrade_paradox_object(attributed_values),
-    "legacy values must be a plain list",
+    "legacy values must be a canonical named list",
     fixed = TRUE
   )
+
+  for (invalid_name in list("unknown", "", NA_character_)) {
+    invalid_values = legacy_base_from_current(ps(x = p_dbl()))
+    invalid_values_private = mlr3misc::get_private(invalid_values)
+    invalid_values_private$.values = setNames(list(0.5), invalid_name)
+    expect_error(
+      upgrade_paradox_object(invalid_values),
+      "legacy values have invalid parameter names",
+      fixed = TRUE
+    )
+  }
 
   attributed_column = legacy_base_from_current(ps(x = p_dbl()))
   attributed_column_private = mlr3misc::get_private(attributed_column)

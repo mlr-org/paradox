@@ -33,6 +33,19 @@ attribute_hidden SEXP paradox_builtin_condition_snapshot(
   R_xlen_t *work_since_interrupt
 );
 
+/* Two-phase terminal receipt for the exact source paired with a canonical
+ * result from `paradox_builtin_condition_snapshot()`.  The first entry owns
+ * the sole admitted stable-ALTREP Length observation; after all such calls
+ * finish, the second entry is allocation- and callback-free. */
+attribute_hidden int paradox_builtin_condition_snapshot_lengths_current(
+  SEXP source,
+  SEXP snapshot
+);
+attribute_hidden int paradox_builtin_condition_snapshot_is_current(
+  SEXP source,
+  SEXP snapshot
+);
+
 /* Scalar admission and element comparison are shared by the ParamSet
  * activity kernel (paramset_activity.c), the quantile/grid planner, and the
  * Design dependency planner. Mixed non-byte string encodings are compared

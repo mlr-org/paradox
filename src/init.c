@@ -167,6 +167,8 @@ static const R_CallMethodDef call_methods[] = {
     (DL_FUNC) &paradox_upgrade_carrier_list_snapshot, 1},
   {"upgrade_table_list_snapshot",
     (DL_FUNC) &paradox_upgrade_table_list_snapshot, 3},
+  {"upgrade_values_snapshot",
+    (DL_FUNC) &paradox_upgrade_values_snapshot, 3},
   {"upgrade_public_binding_receipts",
     (DL_FUNC) &paradox_upgrade_public_binding_receipts, 1},
   {"plain_binding_snapshot", (DL_FUNC) &paradox_plain_binding_snapshot, 2},

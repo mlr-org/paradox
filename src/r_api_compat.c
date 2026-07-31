@@ -428,6 +428,16 @@ int paradox_api_ordinary_class_snapshot(SEXP value, SEXP *classes) {
   return TRUE;
 }
 
+int paradox_api_opaque_leaf_class_snapshot(SEXP value, SEXP *classes) {
+  if (classes == NULL) {
+    Rf_error("Internal error: missing opaque-leaf class snapshot destination");
+  }
+  if (paradox_api_ordinary_class_snapshot(value, classes)) return TRUE;
+  if (!Rf_isS4(value)) return FALSE;
+  *classes = R_NilValue;
+  return TRUE;
+}
+
 int paradox_api_ordinary_class_contains(SEXP classes, const char *label) {
   if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
       Rf_isS4(classes) || label == NULL) {
@@ -442,6 +452,19 @@ int paradox_api_ordinary_class_contains(SEXP classes, const char *label) {
     }
   }
   return FALSE;
+}
+
+int paradox_api_opaque_leaf_class_matches(
+    SEXP value, const char *label, int *matches) {
+  if (label == NULL || matches == NULL) {
+    Rf_error("Internal error: invalid opaque-leaf class-membership request");
+  }
+  *matches = FALSE;
+  if (!Rf_isObject(value)) return TRUE;
+  SEXP classes = R_NilValue;
+  if (!paradox_api_opaque_leaf_class_snapshot(value, &classes)) return FALSE;
+  *matches = paradox_api_ordinary_class_contains(classes, label);
+  return TRUE;
 }
 
 int paradox_api_ordinary_class_matches(

@@ -2,14 +2,13 @@
 
 ## Status
 
-**The focused adversarial source review and bounded unified-capture recovery
-are closed. Focused current-R/R-3.6 tests, strict GNU C99 builds, native probes,
-API audit, and Callgrind attribution are green, but this is development
-evidence over a mutable worktree. The first new immutable candidate remains
-rejected by its targeted direct one-row performance gate. Freeze a replacement
-candidate, pass the corrected source-bound comparison, and then run the fresh
-C17/C23, every-minor runtime, memory, compatibility, and remaining release
-gates below.**
+**The corrected source-bound Domain performance obligation is closed, but the
+most recent immutable candidate is rejected by its diagnostic `release-core`
+run. Source is reopened for the reviewed C23 inventory-format repair, refreshed
+differential ledger, formal-S4 semantic-leaf correction, and coherent legacy
+table snapshot. Freeze a replacement only after those source/test/documentation
+changes converge, then run C17/C23, the complete R 3.6-through-current minor
+matrix, memory, compatibility, and all remaining release gates below.**
 The bounded indexed-root Domain admission compaction is governed by
 [`domain-admission-receipt-compaction-plan.md`](domain-admission-receipt-compaction-plan.md).
 Its implementation and focused correctness proof are complete; the plan's
@@ -17,8 +16,48 @@ first source-bound three-way timing attempt used
 `refs/paradox-release/candidate-20260731T124039Z` at
 `024e28f770f8dd7a8802b70a4a8e866ac2cb344f`. It passed all bulk Domain timing
 and allocation gates but rejected direct one-row ratios of 1.213x and 1.141x
-against `e923c1a`. That ref is diagnostic evidence, not the release candidate;
-the replacement must repeat the corrected comparison.
+against `e923c1a`. That ref is diagnostic evidence, not the release candidate.
+
+Replacement timing candidate
+`refs/paradox-release/candidate-20260731T150816Z`, commit
+`a153faeeed8735c4aeeba512a70fb71b11235469`, tree
+`2fe241b90b0e86381a6f884fd29d3a80baab6b7b`, passed the corrected comparison
+under
+`.local/perf/domain-indexed-root-final-threeway-candidate-a153fae-repaired-r5/results`.
+All eight gates pass. Completion, gate, round, and summary SHA-256 values are
+`379d4c1839c2d05f8c7c8c9d867f492d68355ef3fc22eae46fdf36a389a417d7`,
+`e87450b0ab084a0f43867daeb6aee7473eea888b952af9a306c894fa7f89dce2`,
+`0cfb24b08727eb930ee34f42384242abaece108181e70e66bbc1bddea7c60d8c`,
+and
+`ed1d3d6efc8f311d80e8371e0d055aebcdc87f3f5c19d6d1950ab3386672cd43`.
+This closes the bounded comparison; do not rerun it for unrelated cleanup.
+
+The candidate's `release-candidate-a153fae` coordinator passed five tasks,
+failed three, and dependency-blocked the every-minor runtime task before it
+started. The four harness rows and API-header matrix passed. C23 stopped before
+compilation because the validator expected an obsolete micromamba inventory
+header. Differential completed all 33 cases with zero unexpected differences
+but seven stale candidate hashes. Strict GCC completed the package suite and
+exposed six errors: one stale expected diagnostic, one genuine formal-S4 leaf
+misclassification, and four authentic populated Paradox-1 keyed
+transformation tables whose historical spelling omitted `row.names`. The
+completion, JSON summary, and TSV summary SHA-256 values are respectively
+`83140b9737809c8b8db6457160938bdc5a39b6db4531fef42962508b61e3e165`,
+`e73d372b7533782ba66f922948c7acb4764aa115cafe02c9a64973a531b5269f`,
+and
+`f912757fe598e4e5fa269e6511f93969b20ebf7aee9d22c9fbd3881626755737`.
+The run is diagnostic only, supplies no donor, and accepts no package bytes.
+
+The final mutable-worktree convergence preflight is
+`.local/checks/release-fixes-preflight-20260731-r5`. Both strict GCC and Clang
+GNU C99 installations and all 88 focused source files pass after the
+formal-S4 marker, coherent migration snapshot, nested receipt-lifetime, and
+diagnostic repairs. Its completion and source-manifest SHA-256 values are
+`0f306c6e698e39e2720774ed02fab01171919c6e62a4c0d046fdf6ee4c38ff67`
+and
+`4aa0bb3b7f3d5c57176b6e56145aad9f8d97cf0a866a5ae5f0cbd724a872fdf6`.
+This is development evidence only. The immutable candidate and complete
+release gates below remain mandatory.
 
 Section 11.5 records the implemented recovery and exact focused evidence.  A
 single five-cell metadata capture now feeds generation-local names/column,
@@ -97,7 +136,7 @@ which owns the retained strict GCC/Clang GNU99 and current/R-3.6 package
 installation proof. This is focused development evidence only, not candidate
 acceptance.
 
-The previous candidate is
+An earlier historical candidate is
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
 `b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. It contains the complete
@@ -614,9 +653,10 @@ release-ready and do not transfer an earlier candidate's green gates.
   stages, and focused admission corrections;
 - [ ] freeze one new clean immutable candidate ref and repoint every active
   candidate/compatibility identity to its exact commit and tree;
-- [ ] run the Domain receipt-compaction plan's source-bound three-way timing
-  comparison against that immutable candidate and its two exact historical
-  controls, rejecting mismatched package fingerprints or semantic keys;
+- [x] close the Domain receipt-compaction three-way timing obligation with the
+  corrected eight-gate `a153fae` r5 evidence; its exact package fingerprints
+  and semantic keys passed, and the bounded plan explicitly forbids rerunning
+  this completed slice during final cleanup;
 - [ ] run the complete `release-core` profile for that ref: current R 4.6.1
   full native/package acceptance, both explicit C23 compiler modes, all seven
   supported runtimes—exactly one complete stage for every minor line at R
@@ -746,17 +786,17 @@ release-ready and do not transfer an earlier candidate's green gates.
   miesmuschel adds the exact legacy-Shadow replacement registration, retired
   `params_unid`/`set_id` behavior, and any required owner-local cold gateways;
   both receive focused explicit/first-use migration tests on both Paradox axes;
-- [x] the tested post-migration bridge trees are committed as bbotk `29f1806`
+- [x] the tested post-migration bridge trees are committed as bbotk `b992512`
   and miesmuschel `ecd7c69`; the latter keeps its unavoidable dual-version
   namespace rebinding allowlisted and registers relocking before the first
   historical target is changed, and its dormant-value bridge regression passes
   both Paradox majors;
-- [x] mlr3tuning `15a972a`, mlr3mbo `1a1c0ab`, celecx `6da5102`,
-  mlr3pipelines `13610d3`, and mlr3fda `c1cdad5` are prepared on their
-  recorded branches; tuning and pipelines are based on the current upstream
-  target heads so their dormant-value PR diffs remain small; complete
-  mlr3tuning suites and focused mlr3pipelines contracts pass against both
-  Paradox majors; the mlr3
+- [x] mlr3tuning `0ec4f40`, mlr3mbo `85dd8a5`, celecx `3a8291a`,
+  mlr3pipelines `13610d3`, and mlr3fda `0df56f5` are prepared on their
+  recorded branches; bbotk, tuning, mbo, and fda are rebased on their current
+  target heads, and celecx requires the exact bridge development floor before
+  the intended mlr3mbo >= 1.2.2 release. Complete mlr3tuning suites and focused
+  mlr3pipelines contracts pass against both Paradox majors; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
   closure without replacement;
 - [x] the superseded pre-dormant profile heads were authenticated against their
@@ -764,9 +804,9 @@ release-ready and do not transfer an earlier candidate's green gates.
   corpus and five-package source-check conclusions remain historical evidence
   only;
 - [ ] authenticate the refreshed snapshot/provenance manifests and exact
-  `ecd7c69`/`13610d3` bridge heads in a fresh candidate-owned overlay,
-  authenticate corpus-only mlr3tuning `15a972a` in the repository checkout,
-  then rerun the prepared compatibility DAG;
+  `ecd7c69`/`13610d3` bridge heads in a fresh candidate-owned nine-package
+  overlay, build and check all seven changed PR heads including mlr3tuning
+  `0ec4f40`, then rerun the prepared compatibility DAG;
 - [x] diagnostic-only downstream changes remain pruned and the current
   committed bbotk/miesmuschel owner bridges pass focused tests plus authentic
   default/opt-in migration fixtures against the then-reopened Paradox-2
@@ -778,6 +818,9 @@ release-ready and do not transfer an earlier candidate's green gates.
   passed; those counts are not active-candidate evidence;
 - [ ] user has manually pushed branches and opened the required PRs (agents
   have no remote-write authorization).
+- [ ] bbotk, mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines, and mlr3fda have
+  released their dual-compatible revisions before Paradox 2; the GitHub-only
+  celecx bridge follows mlr3mbo >= 1.2.2.
 
 ### Performance and correctness
 
@@ -1069,14 +1112,29 @@ only and must not be published as replacements.
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
 | miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `ecd7c69e22b5fd73670393155781bdcd638445fd` | Official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, dual-major Rd links, exact replacement registration, retired `params_unid`/`set_id` contract, bounded owner-local cold gateways, and a dual-version dormant raw/filter/reactivation regression. |
-| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | head `29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0` | Public `.sets` migration, detached-snapshot rooting, and exact additive legacy-Codomain inspector/rebuilder registration without private state access. |
-| mlr3tuning | `.local/compat/github-release-refresh-20260720/mlr3tuning` | `codex/paradox2-dormant-values-current` | head `15a972a3582fea955b80bb0200ddab58793451e1` (base `b65a40959fe9f2e806edd6f4697a7061977f1a1a`) | Test-only adaptation preserving strict NoDefault point checks and version-gating the changed TuneToken-child dormant contract. |
-| mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
-| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `6da5102ca948b8182aae13575c48a932812b05c6` | Retain only the independent cycle/dependency adaptation and compatible mlr3mbo bridge requirement. |
+| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | head `b9925122e444015b65c4d548150764300c9c0637` (base `74515a792243a0f62a95f8ba3452be6290278c8c`) | Public `.sets` migration, detached-snapshot rooting, and exact additive legacy-Codomain inspector/rebuilder registration without private state access. |
+| mlr3tuning | `.local/compat/github-release-refresh-20260720/mlr3tuning` | `codex/paradox2-dormant-values-current` | head `0ec4f40033a393d41c7842541c2d5f8173dfb6bd` (base `5ac566dc53480e2fd3fa0497f70f2cb038412863`) | Test-only adaptation preserving strict NoDefault point checks and version-gating the changed TuneToken-child dormant contract. |
+| mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `85dd8a5ada86aacafe93637711e3b1f2e91ba219` (base `4471f6fc4a8aa217fffb6ce5a45d3e525e96dc44`, runtime change `185b2298216eef47b0f976667c4e8949c069dff4`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths, removing the obsolete set_id-era branch, and documenting the current release. |
+| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `3a8291a9e2058323f4af93452141f6f1e46b5295` | Retain only the independent cycle/dependency adaptation and require the exact compatible mlr3mbo development bridge (`>= 1.2.1.9000`) before its intended >= 1.2.2 release. |
 | mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | obsolete head `35e30a9` | Close without replacement; removing its numeric-diagnostic gates leaves an empty effective diff. |
 | mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | obsolete head `ae8e1d1` | Close without replacement; removing its feature-fraction diagnostic gate leaves an empty effective diff. |
 | mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat-current` | head `13610d39e06639ce96f0b76862f76acd794c0dc8` (base `bef040ae5c886bf5b09863b956d341eb3cbd772c`) | Retain only the GraphLearner deep-clone ownership fix, mutation-isolation regression, and dual-version dormant spline contract. |
-| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `c1cdad5a78913c9a47fec1003de8d4309275c80c` (upstream base `5e6204d0d3a3c21325a71eda4402c30b31209eef`; previous bridge head `8f5a3dfa297ad236812cda57fab02de75fec375a`) | Preserve byte-identical Paradox-1 messages; the four Paradox-2 headers now name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
+| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` (upstream base `8960c9292221e7065e5175762e12354c6eb08607`; previous bridge head `c1cdad5a78913c9a47fec1003de8d4309275c80c`) | Preserve byte-identical Paradox-1 messages; the four Paradox-2 headers name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
+
+A final read-only live-head audit does not add another mlr3fselect probe. Its
+current `29fa095` delta changes the sole Paradox-specific branch by deleting
+the obsolete `set_id` test and calling the public `p_dbl()` sugar directly;
+the pinned head already executes that same path on Paradox 2, and public
+`p_dbl()` is covered on both axes. The remaining live-head changes are not
+Paradox-facing and its new test corpus is coupled to mlr3's unrelated
+`pima`-to-`diabetes` task replacement. Updating only mlr3fselect would therefore
+create an invalid mixed snapshot, while updating both repositories would add a
+broad unrelated corpus refresh rather than a cheap compatibility probe.
+The paired mlr3 audit compares pinned `f70c001` with current `7cb6a08`: its two
+commits and 67 changed files are confined to a `TaskClassif` print cache and
+that data-task replacement across code, documentation, snapshots, and tests.
+No Paradox import, ParamSet/value path, or Paradox-facing test changes, so the
+smaller paired support snapshot remains the intentional release subject.
 
 The last pre-dormant Paradox-2 source-package stage built and checked bbotk,
 miesmuschel, mlr3mbo, celecx, and mlr3fda from its then-exact Git archives;
@@ -1397,6 +1455,14 @@ Windows x86-64/macOS ARM64 gates, and user publication of prepared downstream
 branches/PRs, the release tag, and workflow all remain mandatory.
 
 ## Historical rejected or superseded refs
+
+Candidate `refs/paradox-release/candidate-20260731T150816Z` at `a153fae`
+closed its exact bounded Domain comparison but is rejected as a release
+candidate by `release-candidate-a153fae`. Its five passing and three failing
+tasks are recorded in the status section. The run stopped the dependent
+every-minor matrix before execution and produced no reusable native source
+donor; the C23 precompile harness failure and the formal-S4/legacy-table defects
+must be proved anew against a replacement ref.
 
 The compatibility-first candidate at
 `refs/paradox-release/candidate-20260717T083921Z`, commit

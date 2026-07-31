@@ -49,6 +49,66 @@ test_that("typed special values retain ordinary equality but make S4 exact", {
     fixed = TRUE
   )
 
+  formal_class = "ParadoxAdversarialFormalSpecial"
+  if (!methods::isClass(formal_class)) {
+    methods::setClass(formal_class, slots = c(payload = "integer"))
+  }
+  formal_default = methods::new(formal_class, payload = 1L)
+  formal_init = methods::new(formal_class, payload = 2L)
+  formal = p_int(
+    special_vals = list(formal_default, formal_init),
+    default = formal_default,
+    init = formal_init
+  )
+  expect_identical(formal$default[[1L]], formal_default)
+  expect_identical(formal$.init[[1L]], formal_init)
+
+  # The package-owned NoDefault marker is an exact ordinary S3 shape, not an
+  # inheritance spelling. A formal S4 class with the same outward name remains
+  # an opaque semantic leaf through both constructor admission and ParamSet
+  # table detachment.
+  class_where = new.env(parent = emptyenv())
+  methods::setClass(
+    "NoDefault",
+    slots = c(payload = "integer"),
+    where = class_where
+  )
+  on.exit(
+    suppressWarnings(methods::removeClass("NoDefault", where = class_where)),
+    add = TRUE
+  )
+  formal_no_default = methods::new(
+    methods::getClassDef("NoDefault", where = class_where),
+    payload = 3L
+  )
+  formal_no_default_init = methods::new(
+    methods::getClassDef("NoDefault", where = class_where),
+    payload = 4L
+  )
+  named_formal = p_uty(
+    special_vals = list(formal_no_default, formal_no_default_init),
+    default = formal_no_default,
+    init = formal_no_default_init
+  )
+  named_formal_set = ps(value = named_formal)
+  expect_identical(named_formal$default[[1L]], formal_no_default)
+  expect_identical(named_formal$.init[[1L]], formal_no_default_init)
+  expect_identical(
+    named_formal_set$params$default[[1L]],
+    formal_no_default
+  )
+  expect_identical(
+    named_formal_set$params$.init[[1L]],
+    formal_no_default_init
+  )
+  if (requireNamespace("knitr", quietly = TRUE)) {
+    expect_match(
+      rd_info(named_formal_set),
+      "formal_no_default",
+      fixed = TRUE
+    )
+  }
+
   typed_set = ps(value = exact)
   expect_true(typed_set$test(list(value = s4_default)))
   expect_false(typed_set$test(list(value = s4_equal)))
@@ -113,6 +173,16 @@ test_that("ParamUty special matching preserves opaque identity semantics", {
   # structurally equal opaque specials bypass it for default and initial-value
   # checks as well.
   expect_identical(calls, 1L)
+
+  formal_class = "ParadoxAdversarialFormalUtility"
+  if (!methods::isClass(formal_class)) {
+    methods::setClass(formal_class, slots = c(payload = "integer"))
+  }
+  formal_default = methods::new(formal_class, payload = 1L)
+  formal_init = methods::new(formal_class, payload = 2L)
+  formal_utility = p_uty(default = formal_default, init = formal_init)
+  expect_identical(formal_utility$default[[1L]], formal_default)
+  expect_identical(formal_utility$.init[[1L]], formal_init)
 
   calls = 0L
   expect_true(domain_test(utility, list(list_equal)))

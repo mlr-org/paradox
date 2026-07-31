@@ -811,7 +811,7 @@ main <- function() {
     direct_param_set_dependency_table_snapshot = function() {
       condition <- CondAnyOf(1:2)
       input <- data.frame(id = "child", on = "parent",
-        cond = I(list(condition)))
+        cond = I(list(condition)), stringsAsFactors = FALSE)
       result <- .Call(symbol("param_set_dependency_table_snapshot"), input)
       condition$rhs[[1L]] <- 9L
       check(identical(class(result), "data.frame") &&
@@ -882,7 +882,7 @@ main <- function() {
     direct_param_set_set_dependencies = function() {
       set <- ps(parent = p_int(0L, 2L), child = p_lgl())
       input <- data.frame(id = "child", on = "parent",
-        cond = I(list(CondEqual(1L))))
+        cond = I(list(CondEqual(1L))), stringsAsFactors = FALSE)
       result <- .Call(
         symbol("param_set_set_dependencies"), private_of(set), set, input
       )
@@ -1505,6 +1505,99 @@ main <- function() {
         c("data.table", "data.frame"),
         TRUE
       )
+      owned_source <- structure(
+        list(left = 1:2),
+        row.names = c(NA_integer_, -2L),
+        class = c("data.table", "data.frame")
+      )
+      owned_snapshot <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        owned_source,
+        c("data.table", "data.frame"),
+        FALSE
+      )
+      data.table::set(owned_source, i = 1L, j = 1L, value = 99L)
+      nested_old <- new.env(parent = emptyenv())
+      nested_new <- new.env(parent = emptyenv())
+      nested_leaf <- structure(1L, generation = nested_old)
+      nested_source <- structure(
+        list(payload = list(nested_leaf)),
+        row.names = 1L,
+        class = c("data.table", "data.frame")
+      )
+      nested_snapshot <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        nested_source,
+        c("data.table", "data.frame"),
+        FALSE
+      )
+      data.table::setattr(nested_leaf, "generation", nested_new)
+      nested_receipt_state <- new.env(parent = emptyenv())
+      nested_receipt_state$fired <- FALSE
+      nested_receipt_state$old_generation <- new.env(parent = emptyenv())
+      nested_receipt_state$new_generation <- new.env(parent = emptyenv())
+      nested_receipt_state$leaf <- stateful(
+        c(1L, 2L),
+        callback = function() {
+          nested_receipt_state$fired <- TRUE
+          data.table::setattr(
+            nested_receipt_state$leaf,
+            "generation",
+            nested_receipt_state$new_generation
+          )
+        },
+        callback_after = c(NA_integer_, 3L)
+      )
+      data.table::setattr(
+        nested_receipt_state$leaf,
+        "generation",
+        nested_receipt_state$old_generation
+      )
+      nested_receipt_state$table <- structure(
+        list(payload = list(nested_receipt_state$leaf)),
+        row.names = 1L,
+        class = c("data.table", "data.frame")
+      )
+      nested_receipt_result <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        nested_receipt_state$table,
+        c("data.table", "data.frame"),
+        FALSE
+      )
+      receipt_state <- new.env(parent = emptyenv())
+      receipt_state$fired <- FALSE
+      receipt_state$old_repr <- new.env(parent = emptyenv())
+      receipt_state$new_repr <- new.env(parent = emptyenv())
+      receipt_callback <- function() {
+        receipt_state$fired <- TRUE
+        data.table::set(
+          receipt_state$table,
+          i = 1L,
+          j = 1L,
+          value = "new"
+        )
+        data.table::setattr(
+          receipt_state$table,
+          "repr",
+          receipt_state$new_repr
+        )
+      }
+      receipt_ids <- stateful(
+        c(1L, 2L),
+        callback = receipt_callback,
+        callback_after = c(NA_integer_, 2L)
+      )
+      receipt_state$table <- structure(
+        list(tag = c("old", "old"), id = receipt_ids),
+        class = c("data.table", "data.frame"),
+        repr = receipt_state$old_repr
+      )
+      receipt_result <- .Call(
+        symbol("upgrade_table_list_snapshot"),
+        receipt_state$table,
+        c("data.table", "data.frame"),
+        TRUE
+      )
 
       check(
         identical(names(snapshot), c("table", "repr")) &&
@@ -1515,11 +1608,67 @@ main <- function() {
           is.null(wrong_class_result) &&
           is.null(wrong_rows_result) &&
           identical(empty_rows_result$table$left, list()) &&
-          is.null(missing_nonempty_rows_result),
+          identical(
+            missing_nonempty_rows_result$table$left,
+            source$left
+          ) &&
+          identical(missing_nonempty_rows_result$repr, representation) &&
+          identical(owned_snapshot$table$left, 1:2) &&
+          identical(owned_source$left, c(99L, 2L)) &&
+          identical(
+            attr(nested_snapshot$table$payload[[1L]], "generation"),
+            nested_old
+          ) &&
+          identical(attr(nested_source$payload[[1L]], "generation"), nested_new) &&
+          nested_receipt_state$fired &&
+          identical(
+            attr(nested_receipt_state$leaf, "generation"),
+            nested_receipt_state$new_generation
+          ) &&
+          is.null(nested_receipt_result) &&
+          receipt_state$fired &&
+          identical(receipt_state$table$tag, c("new", "old")) &&
+          identical(
+            attr(receipt_state$table, "repr"),
+            receipt_state$new_repr
+          ) &&
+          is.null(receipt_result),
         paste(
           "legacy table snapshot generation, class, rows, repr, or",
           "unsupported attribute admission differs"
         )
+      )
+    },
+    direct_upgrade_values_snapshot = function() {
+      typed_generation <- new.env(parent = emptyenv())
+      changed_generation <- new.env(parent = emptyenv())
+      utility_generation <- new.env(parent = emptyenv())
+      changed_utility_generation <- new.env(parent = emptyenv())
+      typed_value <- structure(1L, generation = typed_generation)
+      utility_value <- structure(2L, generation = utility_generation)
+      source <- list(x = typed_value, u = utility_value)
+      snapshot <- .Call(
+        symbol("upgrade_values_snapshot"),
+        source,
+        c("x", "u"),
+        c("ParamInt", "ParamUty")
+      )
+      data.table::setattr(typed_value, "generation", changed_generation)
+      data.table::setattr(
+        utility_value,
+        "generation",
+        changed_utility_generation
+      )
+      data.table::setattr(source, "names", c("changed", "u"))
+
+      check(
+        identical(names(snapshot), c("x", "u")) &&
+          identical(attr(snapshot$x, "generation"), typed_generation) &&
+          identical(
+            attr(snapshot$u, "generation"),
+            changed_utility_generation
+          ),
+        "kind-aware legacy value-store ownership differs"
       )
     },
     direct_upgrade_public_binding_receipts = function() {

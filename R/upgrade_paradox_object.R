@@ -386,24 +386,13 @@
   })
 }
 
-.upgrade_paradox_materialize_columns = function(columns) {
-  lapply(columns, function(column) {
-    if (is.atomic(column)) {
-      .upgrade_paradox_materialize_atomic(column)
-    } else if (.upgrade_paradox_is_ordinary_list(column)) {
-      .upgrade_paradox_copy_list(column)
-    } else {
-      column
-    }
-  })
-}
-
 .upgrade_paradox_table = function(
     x,
     columns,
     path,
     classes = c("data.table", "data.frame"),
-    extra_attributes = character()) {
+    extra_attributes = character(),
+    .after_snapshot = NULL) {
   allow_repr = identical(extra_attributes, "repr")
   snapshot = tryCatch(
     .Call(
@@ -428,69 +417,19 @@
       paste(columns, collapse = "`, `")
     )
   }
+  if (!is.null(.after_snapshot)) {
+    .after_snapshot()
+  }
   materialized = unname(snapshot$table)
   names(materialized) = columns
-  invalid_list = vapply(
-    materialized,
-    function(column) {
-      is.list(column) && !.upgrade_paradox_is_ordinary_list(column)
-    },
-    logical(1L)
-  )
-  if (any(invalid_list)) {
-    .upgrade_paradox_abort(
-      path,
-      "table column `%s` has unsupported structural representation",
-      columns[which(invalid_list)[[1L]]]
-    )
-  }
-  invalid_list_attributes = vapply(
-    materialized,
-    function(column) {
-      is.list(column) &&
-        !.upgrade_paradox_has_only_attributes(column, "names")
-    },
-    logical(1L)
-  )
-  if (any(invalid_list_attributes)) {
-    .upgrade_paradox_abort(
-      path,
-      "table column `%s` has unsupported attributes",
-      columns[which(invalid_list_attributes)[[1L]]]
-    )
-  }
-  invalid_type = vapply(
-    materialized,
-    function(column) {
-      isS4(column) ||
-        !(is.atomic(column) || .upgrade_paradox_is_ordinary_list(column))
-    },
-    logical(1L)
-  )
-  if (any(invalid_type)) {
-    .upgrade_paradox_abort(
-      path,
-      "table column `%s` has unsupported structural representation",
-      columns[which(invalid_type)[[1L]]]
-    )
-  }
-  attributed = names(materialized)[vapply(
-    materialized,
-    function(column) !is.null(attributes(column)),
-    logical(1L)
-  )]
-  if (length(attributed)) {
-    .upgrade_paradox_abort(
-      path,
-      "table column `%s` has unsupported attributes",
-      attributed[[1L]]
-    )
-  }
-  materialized = .upgrade_paradox_materialize_columns(materialized)
   lengths = lengths(materialized)
   if (length(lengths) && any(lengths != lengths[[1L]])) {
     .upgrade_paradox_abort(path, "table columns have inconsistent lengths")
   }
+  # The native snapshot owns every top-level column, every interpreted list
+  # carrier, and each non-S4 atomic list leaf before its terminal generation
+  # receipt. These ordinary lengths and payloads are therefore already the one
+  # authoritative migration snapshot; R performs no second semantic copy.
   if (allow_repr) {
     attr(materialized, ".paradox_upgrade_repr") = snapshot$repr
   }
@@ -498,11 +437,11 @@
 }
 
 .upgrade_paradox_internal_table = function(columns) {
-  param_set_internal_table(.upgrade_paradox_materialize_columns(columns))
+  param_set_internal_table(columns)
 }
 
 .upgrade_paradox_domain_table = function(columns) {
-  param_set_data_table_facade(.upgrade_paradox_materialize_columns(columns))
+  param_set_data_table_facade(columns)
 }
 
 .upgrade_paradox_condition = function(cond, path, allow_base = FALSE) {
@@ -543,42 +482,6 @@
     "unsupported Condition class `%s`",
     paste(classes, collapse = "/")
   )
-}
-
-.upgrade_paradox_requirements = function(requirements, path) {
-  # A Domain without `depends` stores NULL, which is exactly what the current
-  # constructors produce. Returning an empty list instead denormalized the
-  # column, so an upgraded object was no longer `identical()` to a freshly
-  # constructed one.
-  if (is.null(requirements)) return(NULL)
-  if (!.upgrade_paradox_is_ordinary_list(requirements) ||
-      is.object(requirements) ||
-      !.upgrade_paradox_has_only_attributes(requirements, character())) {
-    .upgrade_paradox_abort(path, "Domain requirements must be a plain list")
-  }
-  lapply(seq_along(requirements), function(index) {
-    requirement = requirements[[index]]
-    requirement_path = sprintf("%s[[%d]]", path, index)
-    if (!.upgrade_paradox_is_ordinary_list(requirement) ||
-        is.object(requirement) ||
-        !.upgrade_paradox_has_only_attributes(requirement, "names") ||
-        !identical(names(requirement), c("on", "cond"))) {
-      .upgrade_paradox_abort(requirement_path, "malformed Domain requirement")
-    }
-    on = .upgrade_paradox_materialize_atomic(.subset2(requirement, "on"))
-    if (
-        !is.character(on) || length(on) != 1L ||
-        !is.null(attributes(on)) || is.na(on)) {
-      .upgrade_paradox_abort(requirement_path, "malformed Domain requirement")
-    }
-    list(
-      on = on,
-      cond = .upgrade_paradox_condition(
-        .subset2(requirement, "cond"),
-        paste0(requirement_path, "$cond")
-      )
-    )
-  })
 }
 
 .upgrade_paradox_validate_domain_columns = function(columns, path) {
@@ -853,13 +756,10 @@
       !.upgrade_paradox_is_ordinary_list(columns$.requirements)) {
     .upgrade_paradox_abort(path, "malformed transient Domain columns")
   }
-  # Single-bracket list assignment, because the canonical value for a Domain
-  # without `depends` is NULL and `[[<- NULL` would delete the cell.
-  columns$.requirements[1L] = list(.upgrade_paradox_requirements(
-    columns$.requirements[[1L]],
-    paste0(path, "$.requirements[[1]]")
-  ))
-  domain_tags = .upgrade_paradox_materialize_atomic(columns$.tags[[1L]])
+  # The native table snapshot has already rebuilt built-in requirements and
+  # their Conditions through the canonical C owner. Keep that exact private
+  # result; a second R constructor pass would be a duplicate semantic engine.
+  domain_tags = columns$.tags[[1L]]
   if (!is.character(domain_tags) || !is.null(attributes(domain_tags)) ||
       anyNA(domain_tags) || anyDuplicated(domain_tags)) {
     .upgrade_paradox_abort(path, "malformed Domain tags")
@@ -1169,36 +1069,50 @@
       anyNA(id) || anyNA(on) || any(id %nin% ids)) {
     .upgrade_paradox_abort(path, "malformed legacy dependency table")
   }
-  cond = lapply(seq_along(cond), function(index) {
-    .upgrade_paradox_condition(
-      cond[[index]],
-      sprintf("%s$cond[[%d]]", path, index)
-    )
-  })
+  # Exact built-in Conditions were already admitted, detached, and rebuilt by
+  # the native table owner. This R layer validates only the surrounding legacy
+  # parameter references and constructs the canonical internal table.
   .upgrade_paradox_internal_table(list(id = id, on = on, cond = cond))
 }
 
-.upgrade_paradox_values = function(values, ids, path) {
-  if (!.upgrade_paradox_is_ordinary_list(values) || is.object(values) ||
-      !.upgrade_paradox_has_only_attributes(values, "names")) {
-    .upgrade_paradox_abort(path, "legacy values must be a plain list")
+.upgrade_paradox_values = function(values, param_columns, path) {
+  snapshot = tryCatch(
+    .Call(
+      C_upgrade_values_snapshot,
+      values,
+      param_columns$id,
+      param_columns$cls
+    ),
+    error = function(error) {
+      .upgrade_paradox_abort(
+        path,
+        "could not snapshot legacy values (%s)",
+        conditionMessage(error)
+      )
+    }
+  )
+  if (identical(snapshot, FALSE)) {
+    .upgrade_paradox_abort(path, "legacy values have invalid parameter names")
   }
-  value_names = .upgrade_paradox_materialize_atomic(names(values))
-  if (is.null(value_names)) value_names = character(length(values))
-  if (length(value_names) != length(values) || anyNA(value_names) ||
+  if (is.null(snapshot)) {
+    .upgrade_paradox_abort(path, "legacy values must be a canonical named list")
+  }
+  ids = param_columns$id
+  value_names = names(snapshot)
+  if (is.null(value_names)) value_names = character(length(snapshot))
+  if (length(value_names) != length(snapshot) || anyNA(value_names) ||
       any(!nzchar(value_names)) || anyDuplicated(value_names) ||
       any(value_names %nin% ids)) {
     .upgrade_paradox_abort(path, "legacy values have invalid parameter names")
   }
-  values = .upgrade_paradox_copy_list(values)
   # Only a zero-length unnamed list reaches this point with `names()` NULL --
   # every longer unnamed list fails the nzchar check above. Paradox 1 stored
   # `named_list()` even when empty, but the current capsule requires the names
   # attribute outright: installed verbatim, an unnamed empty `.values` is
   # admitted at build time and rejected by every later graph validation.
   # Install the validated names unconditionally to keep the copy canonical.
-  names(values) = value_names
-  values[match(ids, value_names, nomatch = 0L)]
+  names(snapshot) = value_names
+  snapshot[match(ids, value_names, nomatch = 0L)]
 }
 
 .upgrade_paradox_base_info = function(x, shell, path, authenticate = TRUE) {
@@ -1229,7 +1143,7 @@
     paste0(path, "$private$.deps")
   )
   values = .upgrade_paradox_values(
-    .upgrade_paradox_binding(private, ".values", path), ids,
+    .upgrade_paradox_binding(private, ".values", path), param_columns,
     paste0(path, "$private$.values")
   )
   extra_trafo = .upgrade_paradox_binding(private, ".extra_trafo", path)

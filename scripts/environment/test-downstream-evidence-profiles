@@ -43,7 +43,7 @@ value() {
    $(value "$profile_output" dependency_checkout_namespace) == github ]] ||
   fail "profile/axis identities do not produce distinct exact suffixes"
 [[ $(value "$profile_output" install_order) == \
-   bbotk,mlr3,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx,mlr3fda ]] ||
+   bbotk,mlr3,mlr3tuning,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx,mlr3fda ]] ||
   fail "refreshed install order is incomplete"
 [[ $(value "$profile_output" snapshot_sha256) == \
    $(sha256sum "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv" | awk '{print $1}') &&
@@ -65,15 +65,15 @@ if (!rejected) stop("candidate substitution was accepted", call. = FALSE)
 RSCRIPT
 
 for binding in \
-    $'bbotk\t29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0' \
-    $'mlr3tuning\t15a972a3582fea955b80bb0200ddab58793451e1' \
+    $'bbotk\tb9925122e444015b65c4d548150764300c9c0637' \
+    $'mlr3tuning\t0ec4f40033a393d41c7842541c2d5f8173dfb6bd' \
     $'mlr3\tf70c001d526213d80059744b81fcbc420bb83017' \
     $'miesmuschel\tecd7c69e22b5fd73670393155781bdcd638445fd' \
     $'mlr3pipelines\t13610d39e06639ce96f0b76862f76acd794c0dc8' \
     $'mlr3fselect\tcd12d7717f31701edc6ebcf7f2cbe1168cae1ecb' \
-    $'mlr3mbo\t1a1c0abe95f59cd314f1fbc19c596cb6ac15f067' \
-    $'celecx\t6da5102ca948b8182aae13575c48a932812b05c6' \
-    $'mlr3fda\tc1cdad5a78913c9a47fec1003de8d4309275c80c'; do
+    $'mlr3mbo\t85dd8a5ada86aacafe93637711e3b1f2e91ba219' \
+    $'celecx\t3a8291a9e2058323f4af93452141f6f1e46b5295' \
+    $'mlr3fda\t0df56f51b5d7fd751e16575fbd897b1c7f449c5e'; do
   repository=${binding%%$'\t'*}
   commit=${binding#*$'\t'}
   [[ $(awk -F '\t' -v repository="$repository" \
@@ -134,6 +134,15 @@ awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $9=$9 ",mlr3fda" } { print }' \
 expect_reject "duplicate install-order head" resolve "$fixture" "$PROFILE" paradox2
 
 cp "$fixture/registry.good" "$fixture/compat/downstream-evidence-profiles.tsv"
+
+dependency_manifest=$fixture/compat/github-repositories.release-refresh-dependencies.tsv
+cp "$dependency_manifest" "$fixture/dependency-manifest.good"
+awk -F '\t' '$1 != "mlr3tuning" { print }' OFS='\t' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "incomplete non-default dependency manifest" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
 cp "$fixture/compat/paradox-evidence-axes.tsv" "$fixture/axes.good"
 awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $5=sprintf("%040d", 0) } { print }' \
   "$fixture/axes.good" >"$fixture/compat/paradox-evidence-axes.tsv"

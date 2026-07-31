@@ -241,11 +241,39 @@ The migration implementation has three layers:
    taking class, optional `repr`, and ordinary canonical integer row metadata.
    Row metadata must be empty, compact `c(NA, +/-n)`, or exact `1:n`, and match
    the selected first column's length. An absent row-name attribute is the one
-   historical exception and is admitted only for a selected zero-row table,
-   matching authentic Paradox-1/data.table fixtures. A pending finalizer performing a
-   by-reference rewrite can therefore make migration reject, or can precede
-   the selected generation, but cannot splice names, columns, and metadata
-   from states which never coexisted.
+   historical exception: Paradox 1's classed-list-plus-`setkeyv()` construction
+   omitted it even for populated keyed tables. Absence declares no independent
+   row count, so the exact selected columns define it and their materialized
+   lengths must agree; present metadata must still match that count exactly.
+   The native snapshot also owns every top-level atomic payload and ordinary
+   list-column carrier before its receipts. Generic tables detach non-S4
+   atomic leaves. Exact canonical dependency and Domain schemas additionally
+   enter their existing closed native owners: Conditions and requirements are
+   rebuilt, interpreted cargo and its recognized nested carriers are detached,
+   and the `special_vals` outer shell is detached while typed leaves are owned
+   and ParamUty leaves retain exact identity. Default and initial values follow
+   that same kind policy, with `NoDefault` remaining interpreted schema. The
+   named legacy value store has a separate native kind-aware snapshot: its
+   carrier and typed leaves are owned, while every ParamUty value—including an
+   atomic or classed value—retains exact identity. A private shallow carrier
+   preserves the exact selected source-cell identities while the outward
+   carrier holds the owned leaves. After all ownership allocations, every
+   stable top-level or interpreted nested ALTREP source
+   finishes its last bounded Length observation; then one callback-free pass
+   re-admits every column and authenticates exact source-cell identity plus
+   every ordinary payload and complete atomic-leaf metadata generation. Only
+   afterward are attributes captured and exact outer names/column identities
+   authenticated as the terminal shell receipt.
+   R consumes these private native results directly: it validates surrounding
+   legacy parameter references, builds the outward/internal table facades, and
+   normalizes callbacks, but does not reconstruct built-in Conditions or
+   requirements through a second semantic engine.
+   A pending finalizer performing a by-reference rewrite can therefore make
+   migration reject, can precede the selected generation, or can follow an
+   already-independent result, but cannot splice names, column or nested-leaf
+   payloads, and metadata from states which never coexisted. Opaque and S4
+   semantic leaf preserves exact identity. R validates the resulting private
+   carriers but does not perform a second leaf copy.
    Read-only Shadow admission builds the authoritative live semantic core
    without installing it, retains the private binding's source core as a
    distinct generation receipt, and derives callback detachment from the same
@@ -364,6 +392,14 @@ ParamUty value/default/init/special leaves are the opaque S4 exception, with
 special membership preserved through base `identical()` and no S3/S4 dispatch.
 A typed-Domain S4 special is a pointer-identity token; typed default/init may
 use it only when it is that exact admitted special leaf.
+One shared leaf-class facade distinguishes an S4-marked ordinary object with
+safely inspectable class metadata from a genuine formal S4 instance whose
+class carrier has formal metadata. The former can still claim `"TuneToken"`
+and is rejected by exact token admission because token structure is never S4;
+the latter remains opaque and cannot be selected as token syntax. Assignment,
+checks, dependency activity, type filtering, fixed designs, and stored or
+explicit search-space extraction all use that same classifier; none dispatches
+or allocates on the ordinary unclassed hot path.
 
 Public accessors build independently owned objects. Accessors historically
 returning a data.table attach the public `c("data.table", "data.frame")` class
@@ -403,8 +439,10 @@ their distinct shallow nested-value contract through a bounded top-level
 tag/value copier; this path never invokes the pairlist duplicator and performs
 no metadata allocation for an attribute-free source.
 The schema default/init position alone interprets the package-owned
-`NoDefault` marker; the same outward class on a general ParamUty stored value
-has no authority and preserves exact opaque identity.
+`NoDefault` marker, and only when its complete shape is the exact ordinary,
+non-S4 zero-length marker. The same outward class on a formal S4 value or a
+general ParamUty stored value has no authority and preserves exact opaque
+identity.
 
 There is one ledgered cold presentation-only data.table identity lookup in
 `R/ParamSet.R`. It resolves the unexported `.reassign_extracted_table` and the

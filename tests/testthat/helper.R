@@ -70,3 +70,10 @@ skip_if_no_active_binding_inspection = function() {
     "R < 4.0 cannot safely inspect active-binding functions"
   )
 }
+
+skip_if_no_old_r_binding_existence_path = function() {
+  testthat::skip_if(
+    getRversion() >= "4.2.0",
+    "R >= 4.2 has a public non-evaluating binding-existence operation"
+  )
+}

@@ -247,7 +247,10 @@ and UBSan as two separate builds. Functional tests are deliberately owned by
 one selected DSO (strict GCC when it is present); the other compiler and
 sanitizer builds dynamically exercise every ordinary registered routine in the
 reviewed coverage manifest and four allocation/callback hazards through
-`run-native-probes.R`. Its grid probe includes a dependent list-valued fixed
+`run-native-probes.R`. This inventory is deliberately a current-R native gate:
+it includes VECSXP ALTREP fixtures unavailable before R 4.3, while the complete
+old-minor behavior suites belong to the separate runtime matrix. Its grid probe
+includes a dependent list-valued fixed
 special value and inactive row, so GCT reaches the conditional missing-sentinel
 protection path as well as ordinary atomic construction. The compile-time
 row-name-rooting fixture belongs only to its dedicated instrumented build. The
@@ -658,9 +661,10 @@ files that stop at their absent-reticulate guard remain staged and are audited
 separately through `environment/runtime-matrix-whole-file-skips.tsv`, including
 the old file's preceding available `callr` guard; they are not silently treated
 as executed result files. Every `skip_on_cran()` block is admitted, so an
-`On CRAN` result is forbidden. The current active-binding and list-ALTREP
-guards instead derive the exact capability rows matched against
-`environment/runtime-matrix-result-skips.tsv` for every runtime. The
+`On CRAN` result is forbidden. The current active-binding, list-ALTREP, and
+inverse old-binding-path Shadow guards instead derive the exact capability
+rows matched against `environment/runtime-matrix-result-skips.tsv` for every
+runtime. The
 suite must be clean and nonempty; file, context, support, and skip counts are
 joined to their retained inventories instead of frozen prose floors. The stage
 retains the exact scope ledger, staged source copies, testthat-reported

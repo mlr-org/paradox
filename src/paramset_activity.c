@@ -32,7 +32,7 @@ static int has_recorded_default(SEXP value) {
 
 static int activity_value_is_tune_token(SEXP value) {
   int token = FALSE;
-  if (!paradox_api_ordinary_class_matches(
+  if (!paradox_api_opaque_leaf_class_matches(
       value,
       "TuneToken",
       &token

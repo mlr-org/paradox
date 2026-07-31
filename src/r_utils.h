@@ -228,6 +228,16 @@ attribute_hidden int paradox_builtin_value_leaf_receipt_current(
   SEXP source,
   SEXP snapshot
 );
+/* Allocation- and callback-free terminal metadata receipt for a stable ALTREP
+ * atomic leaf returned by `paradox_snapshot_builtin_value_leaf()`. The caller
+ * must finish its one admitted Length observation before entering this
+ * receipt; semantic payload stability is the documented ALTREP contract, while
+ * this function proves that the complete bounded attribute generation did not
+ * move around that observation. */
+attribute_hidden int paradox_altrep_builtin_value_leaf_metadata_is_current(
+  SEXP source,
+  SEXP snapshot
+);
 /* Allocation-free exact payload comparison for already ordinary vectors.
  * Attributes are deliberately excluded. */
 attribute_hidden int paradox_ordinary_vector_payload_equal(

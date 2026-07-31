@@ -235,6 +235,18 @@ attribute_hidden SEXP paradox_snapshot_builtin_requirements(
   R_xlen_t *work_since_interrupt
 );
 
+/* Global two-phase receipt companion for a canonical requirements snapshot.
+ * The Length pass must finish for every table cell before any caller invokes
+ * the callback-free semantic receipt. */
+attribute_hidden int paradox_builtin_requirements_snapshot_lengths_current(
+  SEXP source,
+  SEXP snapshot
+);
+attribute_hidden int paradox_builtin_requirements_snapshot_is_current(
+  SEXP source,
+  SEXP snapshot
+);
+
 /* Own one interpreted nested Domain field.  This is the single structural
  * snapshot authority shared by Domain/ParamSet admission and detached public
  * projections.  Only CARGO, LEVELS, SPECIAL_VALS, and REQUIREMENTS are
@@ -243,6 +255,30 @@ attribute_hidden SEXP paradox_snapshot_domain_nested(
   SEXP source,
   enum paradox_domain_column column,
   R_xlen_t *work_since_interrupt
+);
+
+/* Allocation- and callback-free terminal receipts for nested snapshots
+ * returned by `paradox_snapshot_domain_nested()`.  These are shared with the
+ * legacy-table migration boundary so migration cannot grow a second cargo or
+ * special-value ownership policy. */
+attribute_hidden int paradox_domain_cargo_snapshot_is_current(
+  SEXP source,
+  SEXP snapshot
+);
+attribute_hidden int paradox_domain_special_values_snapshot_is_current(
+  SEXP source,
+  SEXP snapshot,
+  int typed
+);
+
+/* Classify the sole package-interpreted NoDefault marker. `classes` is the
+ * already captured class carrier for `value`. Return 1 for the exact ordinary
+ * zero-length marker, 0 when the class is absent, and -1 for an outward
+ * NoDefault spelling with any other shape. Formal S4 objects remain opaque
+ * even when their formal class is named NoDefault. */
+attribute_hidden int paradox_domain_exact_no_default_marker(
+  SEXP value,
+  SEXP classes
 );
 
 /* Admit and own one exact built-in public Domain facade.  Opaque leaf objects

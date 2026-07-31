@@ -373,10 +373,7 @@ test_that("ParamSetShadow composes with collections", {
 })
 
 test_that("old-R Shadow generation receipts never enter the evaluator", {
-  skip_if(
-    getRversion() >= "4.2.0",
-    "R >= 4.2 has a public non-evaluating binding-existence operation"
-  )
+  skip_if_no_old_r_binding_existence_path()
 
   left = ps(ax = p_dbl(tags = "left"))
   right = ps(bx = p_dbl(tags = "right"))

@@ -80,9 +80,57 @@ test_that("S4 values remain opaque through checked and unchecked graph stores", 
   collection = psc(owner = leaf)
   collection$values = list(owner.value = special)
   expect_identical(leaf$values$value, special)
+  expect_identical(
+    collection$get_values(type = "without_token"),
+    list(owner.value = special)
+  )
+  tokens = collection$get_values(type = "only_token")
+  expect_length(tokens, 0L)
+  expect_identical(names(tokens), character())
 
   collection$assert_values = FALSE
   collection$values = list(owner.value = unchecked)
   expect_identical(leaf$values$value, unchecked)
   expect_identical(collection$values$owner.value, unchecked)
+  expect_identical(
+    collection$get_values(type = "without_token")$owner.value,
+    unchecked
+  )
+
+  utility = ps(value = p_uty())
+  utility$values = list(value = special)
+  expect_identical(utility$get_values(type = "without_token")$value, special)
+
+  formal_class = "ParadoxAdversarialFormalStoredValue"
+  if (!methods::isClass(formal_class)) {
+    methods::setClass(formal_class, slots = c(payload = "integer"))
+  }
+  formal = methods::new(formal_class, payload = 1L)
+  utility$values = list(value = formal)
+  expect_identical(utility$search_space()$ids(), character())
+  expect_identical(
+    utility$search_space(list(value = formal))$ids(),
+    character()
+  )
+  expect_error(
+    utility$search_space(list(value = asS4(to_tune()))),
+    "TuneToken"
+  )
+
+  dependent = ps(
+    controller = p_int(special_vals = list(special)),
+    child = p_int()
+  )
+  dependent$add_dep("child", "controller", CondEqual$new(1L))
+  dependent$values = list(controller = special, child = 1L)
+  expect_identical(dependent$get_values(), list(controller = special))
+
+  design = generate_design_grid(
+    dependent,
+    resolution = 2L,
+    upper_limit = 1L
+  )
+  expect_identical(nrow(design$data), 1L)
+  expect_identical(design$transpose(trafo = FALSE)[[1L]]$controller, special)
+  expect_false("child" %in% names(design$transpose(trafo = FALSE)[[1L]]))
 })

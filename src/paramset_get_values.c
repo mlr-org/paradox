@@ -521,7 +521,7 @@ static void apply_type_filter(const get_values_snapshot_t *snapshot,
     SEXP value = VECTOR_ELT(snapshot->values_data.values, index);
     SEXP classes = R_NilValue;
     if (Rf_isObject(value) &&
-        !paradox_api_ordinary_class_snapshot(value, &classes)) {
+        !paradox_api_opaque_leaf_class_snapshot(value, &classes)) {
       Rf_error(
         "Stored value class metadata must be ordinary and bounded"
       );

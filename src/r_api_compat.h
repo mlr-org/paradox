@@ -65,6 +65,21 @@ attribute_hidden int paradox_api_ordinary_class_snapshot(
   SEXP value,
   SEXP *classes
 );
+/* Semantic S4 leaves are opaque, but an S4-marked ordinary object can still
+ * carry one safely inspectable built-in class vector (notably a malformed
+ * S4-marked TuneToken). Preserve that exact vector when it is ordinary. If an
+ * S4 leaf has formal/attributed class metadata, expose no class rather than
+ * rejecting or interpreting it. Malformed class metadata on a non-S4 value
+ * remains an error result. */
+attribute_hidden int paradox_api_opaque_leaf_class_snapshot(
+  SEXP value,
+  SEXP *classes
+);
+attribute_hidden int paradox_api_opaque_leaf_class_matches(
+  SEXP value,
+  const char *label,
+  int *matches
+);
 attribute_hidden int paradox_api_ordinary_class_contains(
   SEXP classes,
   const char *label

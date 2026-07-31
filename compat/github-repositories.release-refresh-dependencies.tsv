@@ -1,6 +1,7 @@
 repository	url	relation	priority	action	notes
 bbotk	https://github.com/mlr-org/bbotk.git	Depends	0	clone	Unchanged support-head dependency closure for the focused release refresh.
 mlr3	https://github.com/mlr-org/mlr3.git	Imports	0	clone	Unchanged support-head dependency closure for the focused release refresh.
+mlr3tuning	https://github.com/mlr-org/mlr3tuning.git	Depends	0	clone	Unchanged pre-refresh head supplies external test dependencies only.
 miesmuschel	https://github.com/mlr-org/miesmuschel.git	Depends	0	clone	Unchanged pre-refresh head supplies external test dependencies only.
 mlr3pipelines	https://github.com/mlr-org/mlr3pipelines.git	Imports	0	clone	Unchanged support-head dependency closure for the focused release refresh.
 mlr3fselect	https://github.com/mlr-org/mlr3fselect.git	Imports	0	clone	Unchanged support-head dependency closure for the focused release refresh.
