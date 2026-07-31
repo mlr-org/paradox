@@ -26,7 +26,10 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
       stop("`levels` must be an atomic vector or list", call. = FALSE)
     }
     if (is.null(names(levels))) {
-      names(levels) = as.character(levels)
+      # `as.character()` may return a deferred-string ALTREP vector. Names are
+      # structural Domain/representation metadata, not a semantic ALTREP
+      # position, so materialize the package-generated carrier once here.
+      names(levels) = c(as.character(levels))
     }
     # A package-owned two-binding closure is enough here. `crate()` compiled a
     # fresh function for every Domain construction, which dominated numeric

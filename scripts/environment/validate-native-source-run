@@ -222,13 +222,14 @@ validate_resource_report() {
       } else {
         exit 1
       }
-      # Containment selects the cooperative memory policy: inside the
-      # authenticated aggregate envelope the launcher already withheld the
-      # host reserve, so light-test uses the measured 1024-MiB weight and a
-      # 4096-MiB intra-envelope floor instead of the conservative direct
-      # values.
+      # Containment selects the cooperative memory policy. A hard worker owns
+      # one exact task cgroup and keeps a 1024-MiB local floor; the aggregate
+      # envelope keeps its 4096-MiB shared floor.
       if (values["containment"] == "aggregate-systemd") {
         reserve_floor = 4096
+        if (expected_profile == "light-test") expected_memory_per_job = 1024
+      } else if (values["containment"] == "worker-hard") {
+        reserve_floor = 1024
         if (expected_profile == "light-test") expected_memory_per_job = 1024
       } else if (values["containment"] == "direct") {
         reserve_floor = 12288

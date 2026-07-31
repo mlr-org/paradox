@@ -291,6 +291,25 @@ static R_xlen_t checked_input_size(R_xlen_t rows, R_xlen_t columns) {
   return rows * columns;
 }
 
+static int matrix_metadata_current(
+    SEXP x, SEXP dimensions, SEXP dimension_names) {
+  int has_class = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      x,
+      R_ClassSymbol,
+      &has_class
+    ) || has_class) {
+    return FALSE;
+  }
+  /*
+   * The complete bounded tag scan is allocation-free and immediately
+   * precedes these two raw selectors, so even a cyclic caller-owned spine
+   * cannot reach an unbounded lookup.
+   */
+  return paradox_stored_attribute(x, R_DimSymbol) == dimensions &&
+    paradox_stored_attribute(x, R_DimNamesSymbol) == dimension_names;
+}
+
 static void snapshot_matrix_input(SEXP x, qunif_input_t *info, SEXP roots,
     R_xlen_t *work_since_interrupt) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(x);
@@ -299,33 +318,44 @@ static void snapshot_matrix_input(SEXP x, qunif_input_t *info, SEXP roots,
     Rf_error("`x` must be a numeric matrix or data.frame");
   }
 
-  SEXP dimensions = PROTECT(ALTREP(x)
-    ? paradox_stored_attribute(x, R_DimSymbol)
-    : Rf_getAttrib(x, R_DimSymbol));
+  int has_class = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      x,
+      R_ClassSymbol,
+      &has_class
+    )) {
+    Rf_error("`x` must have ordinary, acyclic, bounded metadata");
+  }
+  if (has_class) {
+    Rf_error("`x` must be a numeric matrix or data.frame");
+  }
+  SEXP dimensions = PROTECT(paradox_stored_attribute(x, R_DimSymbol));
+  SEXP dimension_names = PROTECT(paradox_stored_attribute(
+    x,
+    R_DimNamesSymbol
+  ));
   if (TYPEOF(dimensions) != INTSXP || ALTREP(dimensions) ||
       Rf_isS4(dimensions) || Rf_isObject(dimensions) ||
       !paradox_api_has_no_attributes(dimensions) ||
       XLENGTH(dimensions) != 2) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     Rf_error("`x` must be a numeric matrix or data.frame");
   }
   const int row_count = INTEGER_ELT(dimensions, 0);
   const int column_count = INTEGER_ELT(dimensions, 1);
   if (row_count < 0 || column_count <= 0) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     Rf_error("`x` must have at least one column");
   }
   info->rows = (R_xlen_t) row_count;
   info->columns = (R_xlen_t) column_count;
   const R_xlen_t size = checked_input_size(info->rows, info->columns);
-  if (XLENGTH(x) != size) {
-    UNPROTECT(1);
+  if (XLENGTH(x) != size ||
+      !matrix_metadata_current(x, dimensions, dimension_names)) {
+    UNPROTECT(2);
     Rf_error("`x` has inconsistent matrix dimensions");
   }
 
-  SEXP dimension_names = PROTECT(ALTREP(x)
-    ? paradox_stored_attribute(x, R_DimNamesSymbol)
-    : Rf_getAttrib(x, R_DimNamesSymbol));
   static const char *const names_only[] = {"names"};
   if (TYPEOF(dimension_names) != VECSXP || ALTREP(dimension_names) ||
       Rf_isS4(dimension_names) || Rf_isObject(dimension_names) ||
@@ -352,14 +382,29 @@ static void snapshot_matrix_input(SEXP x, qunif_input_t *info, SEXP roots,
     roots,
     work_since_interrupt
   );
+  if (!matrix_metadata_current(x, dimensions, dimension_names) ||
+      VECTOR_ELT(dimension_names, 1) != source_names) {
+    UNPROTECT(4);
+    Rf_error("`x` matrix metadata changed while being snapshotted");
+  }
   SET_VECTOR_ELT(roots, QUNIF_INPUT_SOURCE, x);
 
   SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
+  if (!matrix_metadata_current(x, dimensions, dimension_names) ||
+      VECTOR_ELT(dimension_names, 1) != source_names) {
+    UNPROTECT(5);
+    Rf_error("`x` matrix metadata changed while being snapshotted");
+  }
   for (R_xlen_t index = 0; index < size; ++index) {
     paradox_account_work(work_since_interrupt);
     const double unit = paradox_numeric_elt(x, index);
     require_unit_interval(unit);
     SET_REAL_ELT(stable_values, index, unit);
+  }
+  if (!matrix_metadata_current(x, dimensions, dimension_names) ||
+      VECTOR_ELT(dimension_names, 1) != source_names) {
+    UNPROTECT(5);
+    Rf_error("`x` matrix metadata changed while being snapshotted");
   }
   SET_VECTOR_ELT(roots, QUNIF_INPUT_VALUES, stable_values);
   info->column_names = VECTOR_ELT(roots, QUNIF_INPUT_NAMES);
@@ -377,6 +422,58 @@ static int ordinary_frame_shell(SEXP x) {
     UNPROTECT(1);
   }
   return valid;
+}
+
+typedef enum {
+  QUNIF_FRAME_COLUMN_CURRENT = 0,
+  QUNIF_FRAME_COLUMN_WRONG_TYPE,
+  QUNIF_FRAME_COLUMN_WRONG_LENGTH
+} qunif_frame_column_status_t;
+
+/*
+ * A data-frame snapshot owns each exact column identity, but deliberately
+ * does not copy its payload before the bulk REALSXP materialization.  Length
+ * may dispatch for a stable atomic ALTREP and a later column's Elt method may
+ * mutate an earlier column's metadata.  Each admission/receipt pass therefore
+ * observes Length first, then bounds the complete attribute spine and ends
+ * with allocation-free type/class flags.  Ordinary vectors receive one final
+ * callback-free length receipt as well.
+ */
+static qunif_frame_column_status_t frame_numeric_column_status(
+    SEXP source, SEXPTYPE captured_type, R_xlen_t rows) {
+  const int source_altrep = ALTREP(source);
+  if (XLENGTH(source) != rows) {
+    return QUNIF_FRAME_COLUMN_WRONG_LENGTH;
+  }
+  int has_class = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      source,
+      R_ClassSymbol,
+      &has_class
+    ) || has_class ||
+      (SEXPTYPE) TYPEOF(source) != captured_type ||
+      (captured_type != REALSXP && captured_type != INTSXP) ||
+      Rf_isS4(source) || Rf_isObject(source)) {
+    return QUNIF_FRAME_COLUMN_WRONG_TYPE;
+  }
+  if (!source_altrep && XLENGTH(source) != rows) {
+    return QUNIF_FRAME_COLUMN_WRONG_LENGTH;
+  }
+  return QUNIF_FRAME_COLUMN_CURRENT;
+}
+
+static void require_frame_columns_current(
+    SEXP source_columns, const SEXPTYPE *captured_types,
+    R_xlen_t columns, R_xlen_t rows) {
+  for (R_xlen_t column = 0; column < columns; ++column) {
+    if (frame_numeric_column_status(
+        VECTOR_ELT(source_columns, column),
+        captured_types[column],
+        rows
+      ) != QUNIF_FRAME_COLUMN_CURRENT) {
+      Rf_error("Columns of `x` changed while being snapshotted");
+    }
+  }
 }
 
 static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
@@ -398,21 +495,21 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
    * value through the wrong parameter's Domain. */
   SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, info->columns));
   SEXP source_columns = PROTECT(Rf_allocVector(VECSXP, info->columns));
-  SEXP source_names = paradox_api_raw_attribute(x, R_NamesSymbol);
   if (XLENGTH(x) != info->columns ||
-      !ordinary_character_metadata(source_names, FALSE) ||
-      XLENGTH(source_names) != info->columns) {
+      !paradox_capture_list_identities(
+        x,
+        stable_names,
+        source_columns
+      )) {
     UNPROTECT(2);
     Rf_error("`x` must have one column name for every column");
   }
   for (R_xlen_t column = 0; column < info->columns; ++column) {
-    SEXP name = STRING_ELT(source_names, column);
+    SEXP name = STRING_ELT(stable_names, column);
     if (name == NA_STRING) {
       UNPROTECT(2);
       Rf_error("Column names of `x` must not be missing");
     }
-    SET_STRING_ELT(stable_names, column, name);
-    SET_VECTOR_ELT(source_columns, column, VECTOR_ELT(x, column));
   }
 
   /*
@@ -434,17 +531,27 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
     Rf_error("`x` has too many rows for a data.frame result");
   }
 
+  SEXPTYPE *captured_types = paradox_temporary_alloc(
+    info->columns,
+    sizeof(*captured_types)
+  );
+
   /* Validate the owned columns. These reads may dispatch an ALTREP Length,
    * but they observe this operation's own snapshot. */
   for (R_xlen_t column = 0; column < info->columns; ++column) {
     paradox_account_work(work_since_interrupt);
     SEXP source = VECTOR_ELT(source_columns, column);
-    const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
-    if ((type != REALSXP && type != INTSXP) || Rf_isS4(source) ||
-        Rf_isObject(source)) {
+    captured_types[column] = (SEXPTYPE) TYPEOF(source);
+    const qunif_frame_column_status_t status =
+      frame_numeric_column_status(
+        source,
+        captured_types[column],
+        info->rows
+      );
+    if (status == QUNIF_FRAME_COLUMN_WRONG_TYPE) {
       Rf_error("Every column of `x` must be an unclassed numeric vector");
     }
-    if (XLENGTH(source) != info->rows) {
+    if (status == QUNIF_FRAME_COLUMN_WRONG_LENGTH) {
       Rf_error(column == 0
         ? "`x` has invalid data.frame row names"
         : "Columns of `x` must have equal lengths");
@@ -453,6 +560,12 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
   const R_xlen_t size = checked_input_size(info->rows, info->columns);
 
   SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
+  require_frame_columns_current(
+    source_columns,
+    captured_types,
+    info->columns,
+    info->rows
+  );
   for (R_xlen_t column = 0; column < info->columns; ++column) {
     SEXP source = VECTOR_ELT(source_columns, column);
     for (R_xlen_t row = 0; row < info->rows; ++row) {
@@ -466,6 +579,12 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
       );
     }
   }
+  require_frame_columns_current(
+    source_columns,
+    captured_types,
+    info->columns,
+    info->rows
+  );
   SET_VECTOR_ELT(roots, QUNIF_INPUT_VALUES, stable_values);
   info->column_names = VECTOR_ELT(roots, QUNIF_INPUT_NAMES);
   info->values = VECTOR_ELT(roots, QUNIF_INPUT_VALUES);
@@ -1403,7 +1522,17 @@ static void build_realized_axis(grid_axis_t *axis, int resolution,
 }
 
 static SEXP fixed_axis_vector(SEXP value, SEXPTYPE storage_type) {
-  if (Rf_inherits(value, "TuneToken")) {
+  int is_tune_token = FALSE;
+  if (!paradox_api_ordinary_class_matches(
+      value,
+      "TuneToken",
+      &is_tune_token
+    )) {
+    Rf_error(
+      "Grid generation cannot inspect a fixed value with malformed class metadata"
+    );
+  }
+  if (is_tune_token) {
     Rf_error(
       "Grid generation cannot materialize a stored TuneToken value"
     );

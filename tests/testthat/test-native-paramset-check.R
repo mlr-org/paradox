@@ -552,6 +552,83 @@ test_that("opaque ParamUty leaves retain identity and are not inspected", {
   expect_identical(data.table::address(seen), data.table::address(direct))
 })
 
+test_that("typed structural ALTREP list leaves are rejected without observation", {
+  skip_if_no_list_altrep()
+  callbacks = 0L
+  hostile = native_stateful_altrep(
+    list(0.5),
+    list(0.75),
+    callback = function() callbacks <<- callbacks + 1L,
+    callback_after = c(0L, 0L)
+  )
+  checked = ps(value = p_dbl())
+
+  expect_error(
+    checked$check(list(value = hostile)),
+    "Typed parameter list values must use ordinary list storage",
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 0L)
+
+  table = structure(
+    list(value = hostile),
+    names = "value",
+    row.names = .set_row_names(1L),
+    class = "data.frame"
+  )
+  expect_identical(
+    checked$check_dt(table),
+    "Table list-column shells must use ordinary storage"
+  )
+  expect_identical(callbacks, 0L)
+})
+
+test_that("typed ordinary list leaves own their shell and retain opaque cells", {
+  marker = new.env(parent = emptyenv())
+  metadata = new.env(parent = emptyenv())
+  special = structure(
+    list(marker),
+    class = "typed_list_special",
+    metadata = metadata
+  )
+  candidate = structure(
+    list(marker),
+    class = "typed_list_special",
+    metadata = metadata
+  )
+  checked = ps(value = p_dbl(special_vals = list(special)))
+
+  checked$values = list(value = candidate)
+  candidate[[1L]] = new.env(parent = emptyenv())
+  attr(candidate, "later") = TRUE
+  stored = checked$values$value
+
+  expect_false(
+    identical(data.table::address(stored), data.table::address(candidate))
+  )
+  expect_identical(stored[[1L]], marker)
+  expect_identical(attr(stored, "metadata", exact = TRUE), metadata)
+  expect_null(attr(stored, "later", exact = TRUE))
+
+  attribute_names = sprintf("metadata_%03d", seq_len(65L))
+  overlong_special = list(marker)
+  attributes(overlong_special) = stats::setNames(
+    as.list(seq_along(attribute_names)),
+    attribute_names
+  )
+  overlong_candidate = list(marker)
+  attributes(overlong_candidate) = stats::setNames(
+    as.list(seq_along(attribute_names)),
+    attribute_names
+  )
+  overlong = ps(value = p_dbl(special_vals = list(overlong_special)))
+  expect_error(
+    overlong$check(list(value = overlong_candidate)),
+    "Typed parameter list metadata must use a bounded attribute set",
+    fixed = TRUE
+  )
+})
+
 test_that("check_dt uses the scalar row kernel and snapshots its columns", {
   param_set = native_check_space()
   values = data.frame(

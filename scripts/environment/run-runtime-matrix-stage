@@ -119,28 +119,28 @@ audit_symbols() {
     printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
   } > "$log"
   if [[ "$version" == 3.6.3 ]]; then
-    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE R_HasFancyBindings)
-    forbidden=(R_ClosureFormals R_ClosureExpr R_BytecodeExpr
+    forbidden=(R_ClosureFormals R_BytecodeExpr
       R_ClosureEnv R_ParentEnv
       R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
       R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
       R_getAttribCount R_hasAttrib R_mapAttrib Rf_GetOption1
       ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
-  elif [[ "$version" == 4.0.5 ]]; then
-    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
+  elif [[ "$version" == 4.0.5 || "$version" == 4.1.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE R_HasFancyBindings
       R_ActiveBindingFunction)
-    forbidden=(R_ClosureFormals R_ClosureExpr R_BytecodeExpr
+    forbidden=(R_ClosureFormals R_BytecodeExpr
       R_ClosureEnv R_ParentEnv
       R_existsVarInFrame R_NewEnv R_getVar R_getVarEx R_GetBindingType
       R_getRegisteredNamespace R_getAttribCount R_hasAttrib R_mapAttrib
       Rf_GetOption1 ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
-  elif [[ "$version" == 4.3.3 ]]; then
-    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
+  elif [[ "$version" == 4.2.3 || "$version" == 4.3.3 || "$version" == 4.4.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE R_existsVarInFrame
       R_ActiveBindingFunction SET_COMPLEX_ELT SET_RAW_ELT)
-    forbidden=(R_ClosureFormals R_ClosureExpr R_BytecodeExpr
+    forbidden=(R_ClosureFormals R_BytecodeExpr
       R_ClosureEnv R_ParentEnv R_getVar R_getVarEx
       R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
       R_mapAttrib Rf_GetOption1 ANY_ATTRIB R_HasFancyBindings)
@@ -151,7 +151,7 @@ audit_symbols() {
       SET_COMPLEX_ELT SET_RAW_ELT)
     forbidden=(R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
       R_getAttribCount R_hasAttrib R_mapAttrib
-      R_PromiseExpr PRENV PRVALUE FORMALS R_HasFancyBindings)
+      R_PromiseExpr PRENV PRVALUE FORMALS CLOENV R_HasFancyBindings)
   else
     fail "unsupported runtime symbol policy: $version"
   fi
@@ -380,9 +380,10 @@ exec {stage_artifacts_descriptor}<&-
   "$R_INSTALL_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" ]] ||
   fail "stage-aware activation did not retain authenticated R startup inputs"
 
-# The scheduler admits at most four independently isolated R-version stages at
-# once. Do not let a package, BLAS, OpenMP runtime, future/parallel, or a nested
-# build multiply the admitted process and memory budget inside a stage.
+# The outer scheduler may admit every selected minor-version stage at once
+# when the aggregate resource envelope allows it. Do not let a package, BLAS,
+# OpenMP runtime, future/parallel, or a nested build multiply that admitted
+# process and memory budget inside a stage.
 export R_LIBS_USER="$STAGE_LIBRARY"
 export R_LIBS_SITE="$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"
 export LC_ALL=C.UTF-8

@@ -57,6 +57,80 @@ static const char *const result_names[RESULT_COUNT] = {
   "params", "tags", "trafos", "requirements", "init_values"
 };
 
+typedef struct {
+  SEXP selfref_symbol;
+  SEXP repr_symbol;
+  SEXP names;
+  SEXP classes;
+  SEXP row_names;
+  SEXP selfref;
+  SEXP repr;
+  R_xlen_t count;
+  int valid;
+} domain_outer_metadata_t;
+
+static void capture_domain_outer_attribute(
+    SEXP tag, SEXP value, void *data) {
+  domain_outer_metadata_t *metadata = data;
+  if (!metadata->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  SEXP *destination = NULL;
+  if (tag == R_NamesSymbol) {
+    destination = &metadata->names;
+  } else if (tag == R_ClassSymbol) {
+    destination = &metadata->classes;
+  } else if (tag == R_RowNamesSymbol) {
+    destination = &metadata->row_names;
+  } else if (tag == metadata->selfref_symbol) {
+    destination = &metadata->selfref;
+  } else if (tag == metadata->repr_symbol) {
+    destination = &metadata->repr;
+  } else {
+    metadata->valid = FALSE;
+    return;
+  }
+  if (*destination != R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  *destination = value;
+  ++metadata->count;
+}
+
+/*
+ * Capture one complete public Domain metadata generation. Both non-global
+ * symbols are interned before selection; the bounded mapper and every
+ * subsequent field check are allocation-free, so no compact-row-name
+ * expansion or pending finalizer can splice later selectors.
+ */
+static int capture_domain_outer_metadata(
+    SEXP domain, domain_outer_metadata_t *metadata) {
+  SEXP selfref_symbol = Rf_install(".internal.selfref");
+  SEXP repr_symbol = Rf_install("repr");
+  *metadata = (domain_outer_metadata_t) {
+    selfref_symbol,
+    repr_symbol,
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    0,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  return !Rf_isS4(domain) &&
+    paradox_api_map_bounded_stored_attributes(
+      domain,
+      5,
+      capture_domain_outer_attribute,
+      metadata,
+      &count
+    ) && metadata->valid && metadata->count == count;
+}
 
 static int class_is_builtin_domain(SEXP domain, SEXP cls) {
   if (TYPEOF(cls) != STRSXP || ALTREP(cls) || Rf_isS4(cls) ||
@@ -64,11 +138,12 @@ static int class_is_builtin_domain(SEXP domain, SEXP cls) {
     return FALSE;
   }
 
-  SEXP classes = PROTECT(Rf_getAttrib(domain, R_ClassSymbol));
+  domain_outer_metadata_t metadata;
+  if (!capture_domain_outer_metadata(domain, &metadata)) return FALSE;
+  SEXP classes = metadata.classes;
   if (TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes) ||
       Rf_isObject(classes) || !paradox_api_has_no_attributes(classes) ||
       XLENGTH(classes) != 4) {
-    UNPROTECT(1);
     return FALSE;
   }
 
@@ -78,7 +153,6 @@ static int class_is_builtin_domain(SEXP domain, SEXP cls) {
       !paradox_domain_string_is(class_name, "ParamFct") &&
       !paradox_domain_string_is(class_name, "ParamLgl") &&
       !paradox_domain_string_is(class_name, "ParamUty")) {
-    UNPROTECT(1);
     return FALSE;
   }
 
@@ -90,48 +164,47 @@ static int class_is_builtin_domain(SEXP domain, SEXP cls) {
     strcmp(CHAR(first), CHAR(class_name)) == 0 &&
     paradox_domain_string_is(second, "Domain") && paradox_domain_string_is(third, "data.table") &&
     paradox_domain_string_is(fourth, "data.frame");
-  UNPROTECT(1);
   return supported;
 }
 
 static int exact_domain_outer_attributes(SEXP domain) {
-  static const char *const allowed[] = {
-    "names", "class", "row.names", ".internal.selfref", "repr"
-  };
-  if (Rf_isS4(domain) ||
-      !paradox_api_has_only_attributes(domain, allowed, 5)) return FALSE;
-  SEXP row_names = PROTECT(Rf_getAttrib(domain, R_RowNamesSymbol));
-  SEXP selfref = PROTECT(Rf_getAttrib(
-    domain,
-    Rf_install(".internal.selfref")
-  ));
-  SEXP repr = PROTECT(Rf_getAttrib(domain, Rf_install("repr")));
-  const int valid = TYPEOF(row_names) == INTSXP && !ALTREP(row_names) &&
-    !Rf_isS4(row_names) && !Rf_isObject(row_names) &&
-    paradox_api_has_no_attributes(row_names) &&
-    XLENGTH(row_names) == 1 && INTEGER_ELT(row_names, 0) == 1 &&
-    (selfref == R_NilValue ||
-      (TYPEOF(selfref) == EXTPTRSXP && !Rf_isS4(selfref))) &&
-    (repr == R_NilValue || !Rf_isS4(repr));
-  UNPROTECT(3);
-  return valid;
+  domain_outer_metadata_t metadata;
+  if (!capture_domain_outer_metadata(domain, &metadata)) return FALSE;
+  if (TYPEOF(metadata.row_names) != INTSXP ||
+      ALTREP(metadata.row_names) ||
+      Rf_isS4(metadata.row_names) || Rf_isObject(metadata.row_names) ||
+      !paradox_api_has_no_attributes(metadata.row_names)) {
+    return FALSE;
+  }
+  const R_xlen_t row_name_count = XLENGTH(metadata.row_names);
+  const int exact_one_row =
+    (row_name_count == 1 &&
+      INTEGER_ELT(metadata.row_names, 0) == 1) ||
+    (row_name_count == 2 &&
+      INTEGER_ELT(metadata.row_names, 0) == NA_INTEGER &&
+      (INTEGER_ELT(metadata.row_names, 1) == 1 ||
+        INTEGER_ELT(metadata.row_names, 1) == -1));
+  return exact_one_row &&
+    (metadata.selfref == R_NilValue ||
+      (TYPEOF(metadata.selfref) == EXTPTRSXP &&
+        !Rf_isS4(metadata.selfref))) &&
+    (metadata.repr == R_NilValue || !Rf_isS4(metadata.repr));
 }
 
 static int exact_domain_column_names(SEXP domain) {
-  SEXP names = PROTECT(Rf_getAttrib(domain, R_NamesSymbol));
+  domain_outer_metadata_t metadata;
+  if (!capture_domain_outer_metadata(domain, &metadata)) return FALSE;
+  SEXP names = metadata.names;
   if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
       Rf_isObject(names) || !paradox_api_has_no_attributes(names) ||
       XLENGTH(names) != PARADOX_DOMAIN_COLUMN_COUNT) {
-    UNPROTECT(1);
     return FALSE;
   }
   for (R_xlen_t column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     if (!paradox_domain_string_is(STRING_ELT(names, column), paradox_domain_column_names[column])) {
-      UNPROTECT(1);
       return FALSE;
     }
   }
-  UNPROTECT(1);
   return TRUE;
 }
 
@@ -235,7 +308,8 @@ SEXP paradox_snapshot_domain_nested(SEXP source,
       return source;
     }
     const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
-    if ((type != STRSXP && type != LGLSXP) || Rf_isS4(source) ||
+    if ((type != STRSXP && type != LGLSXP) || ALTREP(source) ||
+        Rf_isS4(source) ||
         Rf_isObject(source) ||
         !paradox_api_has_no_attributes(source)) {
       return R_UnboundValue;
@@ -498,10 +572,20 @@ SEXP paradox_snapshot_builtin_domain(SEXP domain,
     UNPROTECT(1);
     return R_NilValue;
   }
-  /* Reuse the admitted outward metadata, but never its self-reference.  The
-   * finalizer owns the result shell and names vector and installs a public
-   * data.table self-reference for that detached shell. */
-  SHALLOW_DUPLICATE_ATTRIB(snapshot, domain);
+  /*
+   * Reuse the admitted outward metadata, but never expose its caller-owned
+   * raw pairlist to R's shallow duplicator. `snapshot` is a fresh
+   * attribute-free shell; the bounded copier retains the exact top-level
+   * metadata identities and rejects a finalizer splice. The finalizer below
+   * then owns the result shell and names vector and installs a public
+   * data.table self-reference for that detached shell.
+   */
+  paradox_copy_bounded_shallow_attributes(
+    snapshot,
+    domain,
+    PARADOX_SHALLOW_ATTRIBUTES_ALL,
+    "Domain metadata changed while being snapshotted"
+  );
   if (Rf_isS4(domain) || !exact_domain_outer_attributes(domain) ||
       !exact_domain_column_names(domain) ||
       !class_is_builtin_domain(domain, cls) ||

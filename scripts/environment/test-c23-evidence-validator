@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Fast behavioral coverage for the C23 evidence validator. No compiler,
+# package installation, container, or network access is used.
+
+umask 077
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+VALIDATOR="$ROOT/scripts/environment/validate-c23-evidence"
+RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/c23-evidence-validator.XXXXXX")
+
+cleanup() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  chmod -R u+w "$TEST_ROOT" 2>/dev/null || true
+  rm -rf -- "$TEST_ROOT"
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+fail() {
+  printf 'test-c23-evidence-validator: %s\n' "$*" >&2
+  exit 1
+}
+
+expect_failure() {
+  local label=$1
+  shift
+  if "$@" > "$TEST_ROOT/unexpected-success.log" 2>&1; then
+    cat "$TEST_ROOT/unexpected-success.log" >&2
+    fail "$label unexpectedly succeeded"
+  fi
+}
+
+[[ -f "$VALIDATOR" && -x "$VALIDATOR" && ! -L "$VALIDATOR" ]] ||
+  fail "validator is absent, non-executable, or symbolic"
+[[ -f "$RSCRIPT" && -x "$RSCRIPT" ]] ||
+  fail "repository-local Rscript is absent"
+
+SOURCE="$TEST_ROOT/source.tar.gz"
+printf '%s\n' canonical > "$SOURCE"
+SOURCE_SHA=$(sha256sum -- "$SOURCE" | cut -d ' ' -f 1)
+"$VALIDATOR" file-sha256 "$SOURCE" "$SOURCE_SHA"
+printf '%s\n' changed > "$SOURCE"
+expect_failure changed-source \
+  "$VALIDATOR" file-sha256 "$SOURCE" "$SOURCE_SHA"
+expect_failure malformed-source-hash \
+  "$VALIDATOR" file-sha256 "$SOURCE" not-a-sha256
+
+DESCRIPTION="$TEST_ROOT/DESCRIPTION"
+cat > "$DESCRIPTION" <<'EOF'
+Package: paradox
+Version: 2.0.0
+SystemRequirements: USE_C17
+EOF
+"$VALIDATOR" description "$RSCRIPT" "$DESCRIPTION" \
+  paradox 2.0.0 USE_C17
+sed 's/USE_C17/USE_C23/' "$DESCRIPTION" > "$TEST_ROOT/DESCRIPTION-wrong"
+expect_failure wrong-system-requirements \
+  "$VALIDATOR" description "$RSCRIPT" "$TEST_ROOT/DESCRIPTION-wrong" \
+  paradox 2.0.0 USE_C17
+
+FAKE_ROOT="$TEST_ROOT/toolchain-fixture"
+FAKE_MICROMAMBA="$FAKE_ROOT/bin/micromamba"
+FAKE_PREFIX="$FAKE_ROOT/prefix"
+FAKE_HOME="$FAKE_ROOT/home"
+FAKE_MAMBA_ROOT="$FAKE_ROOT/mamba-root"
+FAKE_INVENTORY="$FAKE_ROOT/inventory"
+FAKE_LOCK="$FAKE_ROOT/toolchain.lock"
+mkdir -p "$FAKE_ROOT/bin" "$FAKE_PREFIX" "$FAKE_HOME" "$FAKE_MAMBA_ROOT"
+cat > "$FAKE_MICROMAMBA" <<'EOF'
+#!/bin/sh
+set -eu
+script_directory=${0%/*}
+cat "$script_directory/../inventory"
+EOF
+chmod 0755 "$FAKE_MICROMAMBA"
+cat > "$FAKE_INVENTORY" <<'EOF'
+# platform: linux-64
+@EXPLICIT
+https://example.invalid/linux-64/compiler-1.0-0.conda#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+EOF
+cp -- "$FAKE_INVENTORY" "$FAKE_LOCK"
+"$VALIDATOR" toolchain-inventory \
+  "$FAKE_MICROMAMBA" "$FAKE_PREFIX" "$FAKE_LOCK" "$FAKE_HOME" \
+  "/usr/bin:/bin" "$FAKE_MAMBA_ROOT" \
+  "$TEST_ROOT/toolchain-raw.log" "$TEST_ROOT/toolchain-observed.lock"
+cmp -s -- "$FAKE_LOCK" "$TEST_ROOT/toolchain-observed.lock" ||
+  fail "valid live toolchain inventory was not retained exactly"
+sed 's/compiler-1[.]0/compiler-2.0/' "$FAKE_LOCK" \
+  > "$TEST_ROOT/toolchain-wrong.lock"
+expect_failure wrong-toolchain-inventory \
+  "$VALIDATOR" toolchain-inventory \
+  "$FAKE_MICROMAMBA" "$FAKE_PREFIX" "$TEST_ROOT/toolchain-wrong.lock" \
+  "$FAKE_HOME" "/usr/bin:/bin" "$FAKE_MAMBA_ROOT" \
+  "$TEST_ROOT/toolchain-wrong-raw.log" \
+  "$TEST_ROOT/toolchain-wrong-observed.lock"
+
+COMPILER="$TEST_ROOT/compiler"
+: > "$COMPILER"
+chmod 0755 "$COMPILER"
+EXPECTED_SOURCES="$TEST_ROOT/expected-sources"
+printf '%s\n' alpha.c omega.c > "$EXPECTED_SOURCES"
+GOOD_LOG="$TEST_ROOT/install-good.log"
+cat > "$GOOD_LOG" <<EOF
+$COMPILER -std=gnu23 -O2 -c alpha.c -o alpha.o
+$COMPILER -std=gnu23 -O2 -c omega.c -o omega.o
+$COMPILER -std=gnu23 -shared alpha.o omega.o -o paradox.so
+EOF
+"$VALIDATOR" install-log "$GOOD_LOG" "$COMPILER" \
+  "$EXPECTED_SOURCES" paradox.so
+
+sed '1s/-O2/-std=gnu2x -O2/' "$GOOD_LOG" \
+  > "$TEST_ROOT/install-overridden.log"
+expect_failure overridden-standard \
+  "$VALIDATOR" install-log "$TEST_ROOT/install-overridden.log" "$COMPILER" \
+  "$EXPECTED_SOURCES" paradox.so
+sed '1s/-O2/-std=gnu23 -O2/' "$GOOD_LOG" \
+  > "$TEST_ROOT/install-duplicate-standard.log"
+expect_failure duplicate-standard \
+  "$VALIDATOR" install-log "$TEST_ROOT/install-duplicate-standard.log" \
+  "$COMPILER" "$EXPECTED_SOURCES" paradox.so
+sed '$s/-shared/-std=gnu2x -shared/' "$GOOD_LOG" \
+  > "$TEST_ROOT/install-link-overridden.log"
+expect_failure overridden-link-standard \
+  "$VALIDATOR" install-log "$TEST_ROOT/install-link-overridden.log" \
+  "$COMPILER" "$EXPECTED_SOURCES" paradox.so
+sed '/omega[.]c/d' "$GOOD_LOG" > "$TEST_ROOT/install-missing-source.log"
+expect_failure missing-source \
+  "$VALIDATOR" install-log "$TEST_ROOT/install-missing-source.log" \
+  "$COMPILER" "$EXPECTED_SOURCES" paradox.so
+sed 's/-o paradox[.]so/-o substitute.so/' "$GOOD_LOG" \
+  > "$TEST_ROOT/install-wrong-dso.log"
+expect_failure wrong-dso \
+  "$VALIDATOR" install-log "$TEST_ROOT/install-wrong-dso.log" "$COMPILER" \
+  "$EXPECTED_SOURCES" paradox.so
+cp -- "$GOOD_LOG" "$TEST_ROOT/install-warning.log"
+printf '%s\n' 'source.c:1: warning: synthetic diagnostic' \
+  >> "$TEST_ROOT/install-warning.log"
+expect_failure compiler-warning \
+  "$VALIDATOR" install-log "$TEST_ROOT/install-warning.log" "$COMPILER" \
+  "$EXPECTED_SOURCES" paradox.so
+
+printf '%s\n' 'c23 evidence validator fixtures: PASS'

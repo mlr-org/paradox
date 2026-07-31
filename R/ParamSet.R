@@ -44,7 +44,14 @@ param_set_data_table_facade = function(x) {
   table = structure(
     unname(as.list(x)),
     names = names(x),
-    row.names = if (nrow(x)) seq_len(nrow(x)) else integer(),
+    # Package-created facade metadata is canonical ordinary structure. Use
+    # base's compact spelling directly instead of generating an O(n)
+    # `seq_len()` ALTREP only to materialize it before native finalization.
+    row.names = if (nrow(x)) {
+      c(NA_integer_, -as.integer(nrow(x)))
+    } else {
+      integer()
+    },
     class = c("data.table", "data.frame")
   )
   finalize_domain_data_table(table)

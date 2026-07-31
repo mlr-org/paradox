@@ -54,7 +54,9 @@
       "scripts/activate",
       "scripts/environment/**",
       "scripts/bootstrap-configspace",
+      "scripts/bootstrap-c23-gcc",
       "scripts/native-check",
+      "scripts/check-c23-compatibility",
       "scripts/check-r-api-compatibility",
       "scripts/test-runtime-matrix",
       "scripts/memory-check",
@@ -192,11 +194,12 @@
       "require_hard_isolation": true
     },
     "release-core": {
-      "description": "Fresh source-bound native, API, runtime, and differential release foundation; memory evidence remains a separate direct gate.",
+      "description": "Fresh source-bound native, C23, API, runtime, and differential release foundation; memory evidence remains a separate direct gate.",
       "tasks": [
         "harness-controller",
         "harness-validation",
         "native-release",
+        "c23-compatibility",
         "api-headers",
         "runtime-supported",
         "differential"
@@ -205,6 +208,7 @@
         "harness-controller",
         "harness-validation",
         "native-release",
+        "c23-compatibility",
         "api-headers",
         "runtime-supported",
         "differential"
@@ -833,6 +837,64 @@
       "image": null
     },
     {
+      "id": "c23-compatibility",
+      "description": "Explicit GCC 15.2 and Clang 22 C23 builds plus complete registered native probes.",
+      "command": [
+        "scripts/check-c23-compatibility",
+        "--source-ref",
+        "{source_ref}",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-native"
+      ],
+      "phase": 20,
+      "priority": 675,
+      "information": 9,
+      "estimated_seconds": 900,
+      "cpu": 4,
+      "cpu_min": 2,
+      "memory_mib": 4096,
+      "memory_mib_min": 4096,
+      "pids": 512,
+      "scratch_mib": 3072,
+      "timeout_seconds": 3600,
+      "failure_class": "blocker",
+      "cache": "none",
+      "input_groups": [
+        "package",
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "DESCRIPTION",
+        "NAMESPACE",
+        "environment/c23-gcc-linux-64.lock",
+        "scripts/bootstrap-c23-gcc",
+        "scripts/check-c23-compatibility",
+        "scripts/environment/run-native-probes.R",
+        "scripts/environment/verify-native-probes.R"
+      ],
+      "environment": {},
+      "required_parameters": [
+        "source_ref"
+      ],
+      "writable_paths": [
+        ".local/checks"
+      ],
+      "readonly_paths": [
+        ".local/c23-gcc",
+        ".local/receipts/c23-gcc"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
       "id": "api-headers",
       "description": "Strict compilation against every pinned supported R public-header tree.",
       "command": [
@@ -880,7 +942,7 @@
     },
     {
       "id": "runtime-supported",
-      "description": "Complete supported corpus under actual local R 3.6.3, 4.0.5, 4.3.3, and 4.5.2 runtimes.",
+      "description": "Complete supported corpus under actual local R 3.6.3 and every R 4 minor from 4.0.5 through 4.5.2; current R 4.6.1 is owned by native-release.",
       "command": [
         "scripts/test-runtime-matrix",
         "--runtime",
@@ -892,6 +954,7 @@
       ],
       "dependencies": [
         "native-release",
+        "c23-compatibility",
         "api-headers",
         "harness-runtime"
       ],

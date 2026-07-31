@@ -62,6 +62,26 @@ attribute_hidden int paradox_prepare_builtin_special_values(
   R_xlen_t *work_since_interrupt
 );
 
+/* The single closed class/storage resolver used by constructors and public
+ * Domain-operation admission. Inputs are exact rooted CHARSXPs; malformed or
+ * unsupported spellings return UNKNOWN. The class-only form authenticates
+ * the outer Domain dispatch class, whose storage column may be empty. */
+attribute_hidden paradox_builtin_domain_kind_t
+paradox_resolve_builtin_domain_class_char(SEXP cls);
+attribute_hidden paradox_builtin_domain_kind_t
+paradox_resolve_builtin_domain_kind_chars(SEXP cls, SEXP storage);
+
+/* Kind-resolved companion to special-value preparation. The public Domain
+ * adapter has already frozen and resolved its representative class/storage
+ * before nested ownership; constructor callers retain the SEXP wrapper
+ * above. Both entries share one implementation. */
+attribute_hidden int paradox_prepare_builtin_special_values_kind(
+  paradox_builtin_domain_kind_t kind,
+  SEXP special_values,
+  paradox_special_values_receipt_t *receipt,
+  R_xlen_t *work_since_interrupt
+);
+
 /*
  * What a Domain operation declares it interprets. The identity spine -- `id`,
  * `cls`, `grouping`, `storage_type`, and the closed kind they derive -- is
@@ -123,6 +143,40 @@ attribute_hidden int paradox_admit_builtin_domain_schema_row(
    * scalars after the hash tables above could have run a finalizer. Only
    * published when bounds are inside the closure. */
   double *admitted_bounds,
+  paradox_domain_field_t *failure,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Frozen scalar record supplied by the public Domain-operation adapter.
+ * Every CHARSXP is rooted in the adapter's indexed protection block or
+ * admitted-row carrier for the entire call; the record is not itself a GC
+ * root. `kind` is the exact result of the canonical class/storage resolver for
+ * `cls` and `storage`. */
+typedef struct {
+  SEXP id;
+  SEXP cls;
+  SEXP grouping;
+  SEXP storage;
+  paradox_builtin_domain_kind_t kind;
+  double lower;
+  double upper;
+  double tolerance;
+} paradox_captured_domain_schema_t;
+
+/* Structural captured-scalar entry to the same private semantic owner as
+ * `paradox_admit_builtin_domain_schema_row()`. It adds no rule or trusted
+ * caller path: the ordinary public adapter still terminally authenticates
+ * every captured scalar against the live Domain generation. */
+attribute_hidden int paradox_admit_builtin_domain_schema_captured(
+  const paradox_captured_domain_schema_t *schema,
+  SEXP cargo,
+  SEXP levels,
+  SEXP special_values,
+  SEXP tags,
+  SEXP trafo,
+  const paradox_special_values_receipt_t *special_receipt,
+  unsigned int interpreted,
+  paradox_builtin_domain_kind_t *kind,
   paradox_domain_field_t *failure,
   R_xlen_t *work_since_interrupt
 );
@@ -191,7 +245,8 @@ attribute_hidden SEXP paradox_snapshot_builtin_domain(
 /* Interpreted per-row fields retained by the public Domain-operation adapter
  * below, in the order the owner receives them. */
 enum paradox_admitted_domain_row_field {
-  PARADOX_ADMITTED_LEVELS = 0,
+  PARADOX_ADMITTED_ID = 0,
+  PARADOX_ADMITTED_LEVELS,
   PARADOX_ADMITTED_SPECIAL_VALS,
   PARADOX_ADMITTED_CARGO,
   PARADOX_ADMITTED_TAGS,
@@ -200,11 +255,8 @@ enum paradox_admitted_domain_row_field {
 };
 
 typedef struct {
-  /* Single rooted carrier for everything below; the caller protects it. */
-  SEXP bundle;
-  /* The exact selected columns, indexed by `enum paradox_domain_column`. */
-  SEXP columns;
-  /* `PARADOX_ADMITTED_ROW_STRIDE` interpreted fields per admitted row. */
+  /* Sole returned carrier; the direct C caller protects it. It contains every
+   * source-then-owned admitted field used after adapter return. */
   SEXP rows;
   /* Admitted numeric schema, already widened and validated by the owner. */
   const double *lower;
@@ -223,18 +275,20 @@ static inline SEXP paradox_admitted_domain_field(
 }
 
 /* Route one public built-in Domain table through the canonical row owner.
- * The adapter validates the complete outward column container -- presence,
- * uniqueness, and shape of every interpreted-capable column stay structural
- * duties of the boundary -- and then admits every row's declared fields
+ * The adapter validates the exact complete sixteen-column outward container
+ * -- count, presence, uniqueness, type, and shape stay structural duties of
+ * the boundary -- and then admits every row's declared fields
  * through the owner at the closure of `interpreted`; it restates no semantic
  * rule. `domain_check` passes `PARADOX_DOMAIN_INTERPRET_ALL`; the other
  * kernels declare what they read, so a corrupt field outside an operation's
  * closure is diagnosed by the first operation that interprets it (`check`
- * always does) rather than by every operation. The returned bundle must be
- * protected by the caller, which then reads the admitted columns, rows, and
- * numeric schema instead of reselecting them from the live table; row fields
- * and numeric pointers outside the closure are absent (`R_NilValue`/NULL)
- * and must not be read. */
+ * always does) rather than by every operation. The returned admitted-row
+ * carrier must be protected by the caller. Selected columns and outer
+ * metadata are indexed protection-stack roots used only by the adapter's
+ * terminal proof; after return the caller reads the admitted rows and numeric
+ * schema instead of reselecting them from the live table. Row fields and
+ * numeric pointers outside the closure are absent (`R_NilValue`/NULL) and
+ * must not be read. */
 attribute_hidden SEXP paradox_admit_public_domain_table(
   SEXP domain,
   paradox_builtin_domain_kind_t kind,
@@ -242,6 +296,17 @@ attribute_hidden SEXP paradox_admit_public_domain_table(
   unsigned int interpreted,
   paradox_admitted_domain_table_t *table,
   R_xlen_t *work_since_interrupt
+);
+
+/* Test-only exact seam around the production adapter. A function runs after
+ * complete source capture; alternatively a plain two-element list supplies
+ * `{after_capture, after_ownership}` functions or NULL. Production supplies
+ * no hooks and enters the identical implementation. */
+attribute_hidden SEXP paradox_test_domain_admission_reentry(
+  SEXP domain,
+  SEXP kind,
+  SEXP interpreted,
+  SEXP capture_hook
 );
 
 #endif

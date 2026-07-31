@@ -345,6 +345,36 @@ test_that("direct native qunif errors on malformed input without mutation", {
       info = deparse(case[[1L]])
     )
   }
+
+  overlong_matrix = valid
+  matrix_attributes = attributes(overlong_matrix)
+  extra_names = sprintf("metadata_%03d", seq_len(65L))
+  attributes(overlong_matrix) = c(
+    matrix_attributes,
+    stats::setNames(as.list(seq_along(extra_names)), extra_names)
+  )
+  expect_error(
+    .Call(symbol, private, param_set, overlong_matrix),
+    "ordinary, acyclic, bounded metadata",
+    fixed = TRUE
+  )
+
+  overlong_column = c(0.25, 0.75)
+  attributes(overlong_column) = stats::setNames(
+    as.list(seq_along(extra_names)),
+    extra_names
+  )
+  overlong_frame = structure(
+    list(double = overlong_column),
+    class = "data.frame",
+    row.names = .set_row_names(2L)
+  )
+  expect_error(
+    .Call(symbol, private, param_set, overlong_frame),
+    "unclassed numeric vector",
+    fixed = TRUE
+  )
+
   expect_identical(
     .Call(symbol, private, param_set, as.data.frame(valid)),
     param_set$qunif(as.data.frame(valid))
@@ -542,4 +572,42 @@ test_that("frame input names and columns come from one generation", {
   expect_identical(observed$b, expected$b)
   expect_identical(observed$a, c(0, 5))
   expect_identical(observed$b, c(1, 1))
+})
+
+test_that("frame column metadata remains unclassed through materialization", {
+  skip_if_not(
+    exists(
+      "C_test_stateful_altrep",
+      asNamespace("paradox"),
+      inherits = FALSE
+    ),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+
+  state = new.env(parent = emptyenv())
+  state$first = c(0.25, 0.75)
+  second = native_stateful_altrep(
+    c(0.25, 0.75),
+    c(0.25, 0.75),
+    callback = function() {
+      data.table::setattr(state$first, "class", "hostile_numeric")
+    },
+    callback_after = c(0L, NA_integer_)
+  )
+  frame = structure(
+    list(first = state$first, second = second),
+    class = "data.frame",
+    row.names = .set_row_names(2L)
+  )
+  native_stateful_altrep_rearm(second, c(0L, NA_integer_))
+
+  param_set = ps(
+    first = p_dbl(0, 1),
+    second = p_dbl(0, 1)
+  )
+  expect_error(
+    param_set$qunif(frame),
+    "Columns of `x` changed while being snapshotted",
+    fixed = TRUE
+  )
 })

@@ -25,8 +25,7 @@ typedef enum {
 typedef struct {
   domain_kind_t kind;
   R_xlen_t size;
-  int grouped;
-} domain_info_t;
+} domain_shape_t;
 
 static int zero_length_vector(SEXP value) {
   switch ((SEXPTYPE) TYPEOF(value)) {
@@ -57,22 +56,20 @@ static domain_kind_t class_kind(SEXP param) {
   if (TYPEOF(param) != VECSXP || ALTREP(param) || Rf_isS4(param)) {
     return DOMAIN_KIND_UNKNOWN;
   }
-  SEXP classes = PROTECT(Rf_getAttrib(param, R_ClassSymbol));
-  if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(param, &classes) ||
+      TYPEOF(classes) != STRSXP || ALTREP(classes) ||
       Rf_isS4(classes) || Rf_isObject(classes) ||
       !paradox_api_has_no_attributes(classes)) {
-    UNPROTECT(1);
     return DOMAIN_KIND_UNKNOWN;
   }
 
   if (XLENGTH(classes) == 2 &&
       paradox_domain_string_is(STRING_ELT(classes, 0), "data.table") &&
       paradox_domain_string_is(STRING_ELT(classes, 1), "data.frame")) {
-    UNPROTECT(1);
     return DOMAIN_KIND_EMPTY;
   }
   if (XLENGTH(classes) != 4) {
-    UNPROTECT(1);
     return DOMAIN_KIND_UNKNOWN;
   }
 
@@ -82,59 +79,31 @@ static domain_kind_t class_kind(SEXP param) {
   for (R_xlen_t index = 0; index < 3; ++index) {
     SEXP value = STRING_ELT(classes, index + 1);
     if (value == NA_STRING || strcmp(CHAR(value), tail[index]) != 0) {
-      UNPROTECT(1);
       return DOMAIN_KIND_UNKNOWN;
     }
   }
 
   SEXP first = STRING_ELT(classes, 0);
   if (first == NA_STRING) {
-    UNPROTECT(1);
     return DOMAIN_KIND_UNKNOWN;
   }
   const char *name = CHAR(first);
   if (strcmp(name, "ParamDbl") == 0) {
-    UNPROTECT(1);
     return DOMAIN_KIND_DBL;
   }
   if (strcmp(name, "ParamInt") == 0) {
-    UNPROTECT(1);
     return DOMAIN_KIND_INT;
   }
   if (strcmp(name, "ParamFct") == 0) {
-    UNPROTECT(1);
     return DOMAIN_KIND_FCT;
   }
   if (strcmp(name, "ParamLgl") == 0) {
-    UNPROTECT(1);
     return DOMAIN_KIND_LGL;
   }
   if (strcmp(name, "ParamUty") == 0) {
-    UNPROTECT(1);
     return DOMAIN_KIND_UTY;
   }
-  UNPROTECT(1);
   return DOMAIN_KIND_UNKNOWN;
-}
-
-static const char *kind_name(domain_kind_t kind) {
-  switch (kind) {
-  case DOMAIN_KIND_EMPTY:
-    return "";
-  case DOMAIN_KIND_DBL:
-    return "ParamDbl";
-  case DOMAIN_KIND_INT:
-    return "ParamInt";
-  case DOMAIN_KIND_FCT:
-    return "ParamFct";
-  case DOMAIN_KIND_LGL:
-    return "ParamLgl";
-  case DOMAIN_KIND_UTY:
-    return "ParamUty";
-  case DOMAIN_KIND_UNKNOWN:
-    return "";
-  }
-  return "";
 }
 
 static paradox_builtin_domain_kind_t builtin_domain_kind(domain_kind_t kind) {
@@ -152,38 +121,105 @@ static paradox_builtin_domain_kind_t builtin_domain_kind(domain_kind_t kind) {
   return PARADOX_BUILTIN_DOMAIN_UNKNOWN;
 }
 
+typedef struct {
+  SEXP names;
+  SEXP classes;
+  SEXP row_names;
+  SEXP selfref;
+  SEXP selfref_symbol;
+  int valid;
+} empty_domain_metadata_t;
+
+static void capture_empty_domain_attribute(
+    SEXP tag, SEXP value, void *data) {
+  empty_domain_metadata_t *metadata = data;
+  if (!metadata->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  SEXP *destination = NULL;
+  if (tag == R_NamesSymbol) {
+    destination = &metadata->names;
+  } else if (tag == R_ClassSymbol) {
+    destination = &metadata->classes;
+  } else if (tag == R_RowNamesSymbol) {
+    destination = &metadata->row_names;
+  } else if (tag == metadata->selfref_symbol) {
+    destination = &metadata->selfref;
+  } else {
+    metadata->valid = FALSE;
+    return;
+  }
+  if (*destination != R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  *destination = value;
+}
+
 static void validate_empty_domain(SEXP param) {
   static const int column_types[] = {
     STRSXP, STRSXP, STRSXP, VECSXP, REALSXP, REALSXP, REALSXP, VECSXP,
     VECSXP, VECSXP, STRSXP, STRSXP, VECSXP, VECSXP, LGLSXP, VECSXP
   };
-  static const char *const allowed_attributes[] = {
-    "names", "class", "row.names", ".internal.selfref"
-  };
   const R_xlen_t column_count = (R_xlen_t) (
     PARADOX_DOMAIN_COLUMN_COUNT
   );
+  /*
+   * Intern the sole non-global tag before selecting caller-owned state.  One
+   * bounded mapper then proves and captures the complete four-cell metadata
+   * generation; in particular, neither special row-name lookup nor a later
+   * raw selector can allocate and let an old-R finalizer splice generations.
+   */
+  SEXP selfref_symbol = Rf_install(".internal.selfref");
   if (TYPEOF(param) != VECSXP || ALTREP(param) || Rf_isS4(param) ||
-      XLENGTH(param) != column_count ||
-      !paradox_api_has_only_attributes(param, allowed_attributes, 4)) {
+      XLENGTH(param) != column_count) {
     Rf_error("Corrupt empty Domain storage");
   }
-  SEXP names = PROTECT(Rf_getAttrib(param, R_NamesSymbol));
-  SEXP row_names = PROTECT(Rf_getAttrib(param, R_RowNamesSymbol));
-  SEXP selfref = PROTECT(Rf_getAttrib(
+  empty_domain_metadata_t metadata = {
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    selfref_symbol,
+    TRUE
+  };
+  R_xlen_t attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
     param,
-    Rf_install(".internal.selfref")
-  ));
+    4,
+    capture_empty_domain_attribute,
+    &metadata,
+    &attribute_count
+  ) || !metadata.valid || attribute_count != 4 ||
+      metadata.names == R_NilValue ||
+      metadata.classes == R_NilValue ||
+      metadata.row_names == R_NilValue ||
+      metadata.selfref == R_NilValue) {
+    Rf_error("Corrupt empty Domain storage");
+  }
+  SEXP names = PROTECT(metadata.names);
+  SEXP classes = PROTECT(metadata.classes);
+  SEXP row_names = PROTECT(metadata.row_names);
+  SEXP selfref = PROTECT(metadata.selfref);
   if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
       Rf_isObject(names) ||
       !paradox_api_has_no_attributes(names) ||
-      XLENGTH(names) != column_count || TYPEOF(row_names) != INTSXP ||
+      XLENGTH(names) != column_count ||
+      TYPEOF(classes) != STRSXP || ALTREP(classes) ||
+      Rf_isS4(classes) || Rf_isObject(classes) ||
+      !paradox_api_has_no_attributes(classes) ||
+      XLENGTH(classes) != 2 ||
+      !paradox_domain_string_is(STRING_ELT(classes, 0), "data.table") ||
+      !paradox_domain_string_is(STRING_ELT(classes, 1), "data.frame") ||
+      TYPEOF(row_names) != INTSXP ||
       ALTREP(row_names) || Rf_isS4(row_names) ||
       Rf_isObject(row_names) ||
       !paradox_api_has_no_attributes(row_names) ||
       XLENGTH(row_names) != 0 || TYPEOF(selfref) != EXTPTRSXP ||
       Rf_isS4(selfref)) {
-    UNPROTECT(3);
+    UNPROTECT(4);
     Rf_error("Corrupt empty Domain storage");
   }
   for (R_xlen_t column = 0; column < column_count; ++column) {
@@ -195,14 +231,21 @@ static void validate_empty_domain(SEXP param) {
         Rf_isS4(value) || Rf_isObject(value) ||
         !paradox_api_has_no_attributes(value) ||
         XLENGTH(value) != 0) {
-      UNPROTECT(3);
+      UNPROTECT(4);
       Rf_error("Corrupt empty Domain storage");
     }
   }
-  UNPROTECT(3);
+  UNPROTECT(4);
 }
 
-static domain_info_t domain_info(SEXP param) {
+/*
+ * Pre-callback shape probe.  The canonical row adapter below is the sole full
+ * Domain admission owner; kernels need only the closed outer kind and the
+ * ordinary ID carrier's length before they can size value-side work.  Passing
+ * both values into that adapter makes a callback-induced shape replacement
+ * fail there without repeating class/storage/grouping and per-row scans here.
+ */
+static domain_shape_t domain_shape(SEXP param) {
   const domain_kind_t kind = class_kind(param);
   if (kind == DOMAIN_KIND_UNKNOWN) {
     Rf_error(
@@ -212,20 +255,19 @@ static domain_info_t domain_info(SEXP param) {
   }
   if (kind == DOMAIN_KIND_EMPTY) {
     validate_empty_domain(param);
-    const domain_info_t empty = {DOMAIN_KIND_EMPTY, 0, TRUE};
+    const domain_shape_t empty = {DOMAIN_KIND_EMPTY, 0};
     return empty;
   }
 
-  SEXP schema_columns[PARADOX_DOMAIN_COLUMN_COUNT];
+  SEXP columns[PARADOX_DOMAIN_COLUMN_COUNT];
   paradox_domain_select_columns(
     param,
     "Domain storage",
     "Domain",
-    (1U << PARADOX_DOMAIN_ID) | (1U << PARADOX_DOMAIN_CLS) |
-      (1U << PARADOX_DOMAIN_GROUPING) | (1U << PARADOX_DOMAIN_STORAGE_TYPE),
-    schema_columns
+    1U << PARADOX_DOMAIN_ID,
+    columns
   );
-  SEXP ids = PROTECT(schema_columns[PARADOX_DOMAIN_ID]);
+  SEXP ids = PROTECT(columns[PARADOX_DOMAIN_ID]);
   if (TYPEOF(ids) != STRSXP) {
     Rf_error("Corrupt Domain storage: `id` must have type `character`");
   }
@@ -235,9 +277,6 @@ static domain_info_t domain_info(SEXP param) {
     );
   }
   const R_xlen_t size = XLENGTH(ids);
-  SEXP classes = PROTECT(schema_columns[PARADOX_DOMAIN_CLS]);
-  SEXP grouping = PROTECT(schema_columns[PARADOX_DOMAIN_GROUPING]);
-  SEXP storage = PROTECT(schema_columns[PARADOX_DOMAIN_STORAGE_TYPE]);
   paradox_require_column_checked(
     ids,
     STRSXP,
@@ -245,84 +284,51 @@ static domain_info_t domain_info(SEXP param) {
     "Domain storage",
     "id"
   );
-  paradox_require_column_checked(
-    classes,
-    STRSXP,
-    size,
-    "Domain storage",
-    "cls"
-  );
-  paradox_require_column_checked(
-    grouping,
-    STRSXP,
-    size,
-    "Domain storage",
-    "grouping"
-  );
-  paradox_require_column_checked(
-    storage,
-    STRSXP,
-    size,
-    "Domain storage",
-    "storage_type"
-  );
-  /* Package-owned Domain facades carry ordinary, unclassed schema columns.
-   * Dispatch-sensitive metadata is corrupt state, not a request to restart in
-   * a second semantic engine. */
-  if (!paradox_api_has_no_attributes(ids) ||
-      !paradox_api_has_no_attributes(classes) ||
-      !paradox_api_has_no_attributes(grouping) ||
-      !paradox_api_has_no_attributes(storage)) {
-    Rf_error("Corrupt Domain storage: schema columns must be ordinary vectors");
-  }
-
-  int grouped = TRUE;
-  const char *expected_class = kind_name(kind);
-  const char *expected_storage = kind == DOMAIN_KIND_DBL ? "numeric" :
-    (kind == DOMAIN_KIND_INT ? "integer" :
-    (kind == DOMAIN_KIND_FCT ? "character" :
-    (kind == DOMAIN_KIND_LGL ? "logical" : "list")));
-  SEXP first_group = size == 0 ? R_NilValue : STRING_ELT(grouping, 0);
-  /* Every row of a canonical table stores the same interned class and storage
-   * strings, so after one byte comparison the accepted CHARSXP answers all
-   * later rows by identity. */
-  SEXP accepted_cls = NA_STRING;
-  SEXP accepted_storage = NA_STRING;
-  for (R_xlen_t row = 0; row < size; ++row) {
-    periodic_interrupt(row);
-    SEXP id = STRING_ELT(ids, row);
-    SEXP cls = STRING_ELT(classes, row);
-    SEXP group = STRING_ELT(grouping, row);
-    SEXP storage_value = STRING_ELT(storage, row);
-    if (id == NA_STRING) {
-      Rf_error("Corrupt Domain storage: `id` contains a missing value");
-    }
-    if (cls != accepted_cls) {
-      if (cls == NA_STRING || strcmp(CHAR(cls), expected_class) != 0) {
-        Rf_error(
-          "Corrupt Domain storage: `cls` is inconsistent with its class"
-        );
-      }
-      accepted_cls = cls;
-    }
-    if (storage_value != accepted_storage) {
-      if (storage_value == NA_STRING ||
-          strcmp(CHAR(storage_value), expected_storage) != 0) {
-        Rf_error(
-          "Corrupt Domain storage: `storage_type` is inconsistent with its "
-          "class"
-        );
-      }
-      accepted_storage = storage_value;
-    }
-    if (group == NA_STRING || !paradox_domain_strings_equal(group, first_group)) {
-      grouped = FALSE;
-    }
-  }
-
-  const domain_info_t result = {kind, size, grouped};
-  UNPROTECT(4);
+  const domain_shape_t result = {kind, size};
+  UNPROTECT(1);
   return result;
+}
+
+/*
+ * Typed zero-row Domains and operations with an empty value input have no row
+ * loop in which to perform canonical admission. They must still cross the
+ * public-table boundary: the complete sixteen-column outward schema is
+ * structural even when there is no semantic row to interpret. This helper is
+ * confined to those cold exits; ordinary nonempty kernels retain their
+ * existing single admission and hot path.
+ */
+static void admit_domain_before_empty_exit(SEXP param,
+    const domain_shape_t *info, unsigned int interpreted) {
+  if (info->kind == DOMAIN_KIND_EMPTY) {
+    /* `domain_shape()` already ran the dedicated exact empty-Domain validator. */
+    return;
+  }
+  R_xlen_t work_since_interrupt = 0;
+  paradox_admitted_domain_table_t table;
+  PROTECT(paradox_admit_public_domain_table(
+    param,
+    builtin_domain_kind(info->kind),
+    info->size,
+    interpreted,
+    &table,
+    &work_since_interrupt
+  ));
+  UNPROTECT(1);
+}
+
+static int bounded_metadata_is_unclassed(SEXP value) {
+  int has_class = FALSE;
+  return paradox_bounded_metadata_has_tag(
+      value,
+      R_ClassSymbol,
+      &has_class
+    ) && !has_class;
+}
+
+static int numeric_scalar_altrep_current(SEXP value, SEXPTYPE type) {
+  return (SEXPTYPE) TYPEOF(value) == type &&
+    !Rf_isS4(value) && !Rf_isObject(value) &&
+    bounded_metadata_is_unclassed(value);
 }
 
 static int numeric_scalar(SEXP value, double *result, int allow_logical) {
@@ -335,26 +341,42 @@ static int numeric_scalar(SEXP value, double *result, int allow_logical) {
     return FALSE;
   }
 
-  switch ((SEXPTYPE) TYPEOF(value)) {
-  case REALSXP:
-    if (XLENGTH(value) != 1) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+  const int altrep = ALTREP(value);
+  switch (type) {
+  case REALSXP: {
+    if (XLENGTH(value) != 1 ||
+        (altrep && !numeric_scalar_altrep_current(value, type))) {
       return FALSE;
     }
-    *result = REAL_ELT(value, 0);
+    const double element = REAL_ELT(value, 0);
+    if (altrep && !numeric_scalar_altrep_current(value, type)) {
+      return FALSE;
+    }
+    *result = element;
     return TRUE;
+  }
   case INTSXP: {
-    if (XLENGTH(value) != 1) {
+    if (XLENGTH(value) != 1 ||
+        (altrep && !numeric_scalar_altrep_current(value, type))) {
       return FALSE;
     }
     const int element = INTEGER_ELT(value, 0);
+    if (altrep && !numeric_scalar_altrep_current(value, type)) {
+      return FALSE;
+    }
     *result = element == NA_INTEGER ? NA_REAL : (double) element;
     return TRUE;
   }
   case LGLSXP: {
-    if (!allow_logical || XLENGTH(value) != 1) {
+    if (!allow_logical || XLENGTH(value) != 1 ||
+        (altrep && !numeric_scalar_altrep_current(value, type))) {
       return FALSE;
     }
     const int element = LOGICAL_ELT(value, 0);
+    if (altrep && !numeric_scalar_altrep_current(value, type)) {
+      return FALSE;
+    }
     *result = element == NA_LOGICAL ? NA_REAL : (double) element;
     return TRUE;
   }
@@ -390,78 +412,102 @@ static int vector_numeric_at(SEXP values, R_xlen_t index, double *result) {
   }
 }
 
-static SEXP materialize_domain_value(SEXP value) {
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
-  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
-      type != CPLXSXP && type != STRSXP && type != RAWSXP &&
-      type != VECSXP) {
-    Rf_error("Unsupported ALTREP Domain value type");
+static int ordinary_list_argument_shell(SEXP values) {
+  return TYPEOF(values) == VECSXP && !ALTREP(values) &&
+    !Rf_isS4(values) &&
+    !Rf_isObject(values) &&
+    bounded_metadata_is_unclassed(values);
+}
+
+static void require_ordinary_list_argument_shell(SEXP values,
+    R_xlen_t expected_size) {
+  if (!ordinary_list_argument_shell(values) ||
+      XLENGTH(values) != expected_size) {
+    Rf_error("`values` must be an ordinary list with one element per Domain row");
   }
-  const R_xlen_t size = XLENGTH(value);
-  SEXP result = PROTECT(Rf_allocVector(type, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
-    periodic_interrupt(index);
-    switch (type) {
-    case LGLSXP:
-      SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
-      break;
-    case INTSXP:
-      SET_INTEGER_ELT(result, index, INTEGER_ELT(value, index));
-      break;
-    case REALSXP:
-      SET_REAL_ELT(result, index, REAL_ELT(value, index));
-      break;
-    case CPLXSXP:
-      paradox_api_set_complex_elt(
-        result,
-        index,
-        COMPLEX_ELT(value, index)
-      );
-      break;
-    case STRSXP:
-      SET_STRING_ELT(result, index, STRING_ELT(value, index));
-      break;
-    case RAWSXP:
-      paradox_api_set_raw_elt(result, index, RAW_ELT(value, index));
-      break;
-    case VECSXP:
-      SET_VECTOR_ELT(result, index, VECTOR_ELT(value, index));
-      break;
-    default:
-      UNPROTECT(1);
-      Rf_error("Unsupported ALTREP Domain value type");
+}
+
+static SEXP stable_list_source_receipt(SEXP stable,
+    R_xlen_t expected_size) {
+  SEXP receipt = VECTOR_ELT(stable, expected_size);
+  return receipt == R_NilValue ? stable : receipt;
+}
+
+static void require_stable_list_source(SEXP values, SEXP stable,
+    R_xlen_t expected_size) {
+  require_ordinary_list_argument_shell(values, expected_size);
+  SEXP receipt = stable_list_source_receipt(stable, expected_size);
+  for (R_xlen_t row = 0; row < expected_size; ++row) {
+    if (VECTOR_ELT(values, row) != VECTOR_ELT(receipt, row)) {
+      Rf_error("`values` changed during Domain value admission");
     }
   }
-  SHALLOW_DUPLICATE_ATTRIB(result, value);
-  UNPROTECT(1);
-  return result;
 }
 
 static SEXP stable_list_argument(SEXP values, R_xlen_t expected_size,
-    domain_kind_t kind, int *callback_capable_admission) {
-  *callback_capable_admission = FALSE;
-  if (TYPEOF(values) != VECSXP) {
-    Rf_error("`values` must be an ordinary list with one element per Domain row");
-  }
-  *callback_capable_admission = ALTREP(values);
-  if (Rf_isObject(values) || XLENGTH(values) != expected_size) {
-    Rf_error("`values` must be an ordinary list with one element per Domain row");
-  }
+    domain_kind_t kind) {
+  require_ordinary_list_argument_shell(values, expected_size);
 
-  SEXP stable = PROTECT(Rf_allocVector(VECSXP, expected_size));
+  if (expected_size == R_XLEN_T_MAX) {
+    Rf_error("`values` has an unsupported length");
+  }
+  /*
+   * The final slot owns a rare-path source receipt when a typed ALTREP leaf
+   * must be materialized. Ordinary and ParamUty paths retain their captured
+   * source pointers directly in the first `expected_size` slots, so they keep
+   * one allocation and pay only one additional pointer of storage.
+   */
+  SEXP stable = PROTECT(Rf_allocVector(VECSXP, expected_size + 1));
+  /* Allocation may run a pending finalizer. Select the complete valid source
+   * generation only after the destination that will own it exists. */
+  require_ordinary_list_argument_shell(values, expected_size);
+  int materialize_any = FALSE;
   for (R_xlen_t row = 0; row < expected_size; ++row) {
     periodic_interrupt(row);
-    SEXP value = PROTECT(VECTOR_ELT(values, row));
-    /* ParamUty values are deliberately opaque and identity-bearing. Built-in
-     * scalar kinds instead own one ordinary snapshot before special-value and
-     * type/bounds passes can observe the value independently. */
-    const int materialize = kind != DOMAIN_KIND_UTY && ALTREP(value);
-    if (materialize) *callback_capable_admission = TRUE;
-    SEXP snapshot = PROTECT(
-      materialize ? materialize_domain_value(value) : value
-    );
-    SET_VECTOR_ELT(stable, row, snapshot);
-    UNPROTECT(2);
+    SEXP value = VECTOR_ELT(values, row);
+    SET_VECTOR_ELT(stable, row, value);
+    if (kind != DOMAIN_KIND_UTY && ALTREP(value)) {
+      if (TYPEOF(value) == VECSXP) {
+        UNPROTECT(1);
+        Rf_error(
+          "Typed Domain values may use ALTREP only for atomic vectors"
+        );
+      }
+      materialize_any = TRUE;
+    }
+  }
+
+  if (materialize_any) {
+    SEXP receipt = PROTECT(Rf_allocVector(VECSXP, expected_size));
+    SET_VECTOR_ELT(stable, expected_size, receipt);
+    for (R_xlen_t row = 0; row < expected_size; ++row) {
+      SET_VECTOR_ELT(receipt, row, VECTOR_ELT(stable, row));
+    }
+    /*
+     * The receipt allocation itself may have run a finalizer. Refuse that
+     * splice before invoking any ALTREP Elt method from the older captured
+     * generation.
+     */
+    require_stable_list_source(values, stable, expected_size);
+    for (R_xlen_t row = 0; row < expected_size; ++row) {
+      periodic_interrupt(row);
+      SEXP source = VECTOR_ELT(receipt, row);
+      if (ALTREP(source)) {
+        SEXP snapshot = PROTECT(
+          paradox_snapshot_builtin_value_leaf(source)
+        );
+        SET_VECTOR_ELT(stable, row, snapshot);
+        UNPROTECT(1);
+      }
+    }
+    /*
+     * An ALTREP value may reenter R and mutate the caller-owned ordinary
+     * outer shell. Reject that splice immediately. Ordinary/ParamUty paths
+     * have no callback window here and defer their one necessary receipt to
+     * the post-Domain-admission check in the caller.
+     */
+    require_stable_list_source(values, stable, expected_size);
+    UNPROTECT(1);
   }
   UNPROTECT(1);
   return stable;
@@ -510,7 +556,7 @@ static SEXP check_failure_literal(SEXP id, const char *reason) {
 
 static int *snapshot_special_hits(
     const paradox_admitted_domain_table_t *table, SEXP values,
-    const domain_info_t *info, int internal) {
+    const domain_shape_t *info, int internal) {
   int *hits = paradox_temporary_alloc(
     info->size == 0 ? 1 : info->size,
     sizeof(*hits)
@@ -542,8 +588,7 @@ static int *snapshot_special_hits(
 
 static SEXP check_numeric_domain(
     const paradox_admitted_domain_table_t *table, SEXP values,
-    const domain_info_t *info, const int *skip) {
-  SEXP ids = VECTOR_ELT(table->columns, PARADOX_DOMAIN_ID);
+    const domain_shape_t *info, const int *skip) {
   for (R_xlen_t row = 0; row < info->size; ++row) {
     periodic_interrupt(row);
     if (skip[row]) {
@@ -568,7 +613,7 @@ static SEXP check_numeric_domain(
       );
     if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
       SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
-        STRING_ELT(ids, row),
+        paradox_admitted_domain_field(table, row, PARADOX_ADMITTED_ID),
         &spec,
         element,
         &checked
@@ -583,8 +628,7 @@ static SEXP check_numeric_domain(
 
 static SEXP check_factor_domain(
     const paradox_admitted_domain_table_t *table, SEXP values,
-    const domain_info_t *info, const int *skip) {
-  SEXP ids = VECTOR_ELT(table->columns, PARADOX_DOMAIN_ID);
+    const domain_shape_t *info, const int *skip) {
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t row = 0; row < info->size; ++row) {
     paradox_account_work(&work_since_interrupt);
@@ -614,7 +658,7 @@ static SEXP check_factor_domain(
       );
     if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
       SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
-        STRING_ELT(ids, row),
+        paradox_admitted_domain_field(table, row, PARADOX_ADMITTED_ID),
         &spec,
         value,
         &checked
@@ -629,8 +673,7 @@ static SEXP check_factor_domain(
 
 static SEXP check_logical_domain(
     const paradox_admitted_domain_table_t *table, SEXP values,
-    const domain_info_t *info, const int *skip) {
-  SEXP ids = VECTOR_ELT(table->columns, PARADOX_DOMAIN_ID);
+    const domain_shape_t *info, const int *skip) {
   for (R_xlen_t row = 0; row < info->size; ++row) {
     periodic_interrupt(row);
     if (skip[row]) {
@@ -655,7 +698,7 @@ static SEXP check_logical_domain(
       );
     if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
       SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
-        STRING_ELT(ids, row),
+        paradox_admitted_domain_field(table, row, PARADOX_ADMITTED_ID),
         &spec,
         value,
         &checked
@@ -697,7 +740,7 @@ static SEXP named_list_element(SEXP values, const char *target) {
  * row owner's rule and has already been decided; this only extracts. */
 static SEXP snapshot_utility_callbacks(
     const paradox_admitted_domain_table_t *table,
-    const domain_info_t *info) {
+    const domain_shape_t *info) {
   SEXP callbacks = PROTECT(Rf_allocVector(VECSXP, info->size));
   for (R_xlen_t row = 0; row < info->size; ++row) {
     periodic_interrupt(row);
@@ -722,9 +765,8 @@ static SEXP snapshot_utility_callbacks(
 
 static SEXP check_utility_domain(
     const paradox_admitted_domain_table_t *table, SEXP values,
-    const domain_info_t *info, const int *skip) {
+    const domain_shape_t *info, const int *skip) {
   SEXP callbacks = PROTECT(snapshot_utility_callbacks(table, info));
-  SEXP ids = VECTOR_ELT(table->columns, PARADOX_DOMAIN_ID);
   for (R_xlen_t row = 0; row < info->size; ++row) {
     periodic_interrupt(row);
     if (skip[row]) {
@@ -744,7 +786,11 @@ static SEXP check_utility_domain(
       UNPROTECT(2);
       continue;
     }
-    SEXP id = STRING_ELT(ids, row);
+    SEXP id = paradox_admitted_domain_field(
+      table,
+      row,
+      PARADOX_ADMITTED_ID
+    );
     SEXP result;
     SEXP reason = TYPEOF(answer) == STRSXP && XLENGTH(answer) == 1
       ? STRING_ELT(answer, 0)
@@ -777,41 +823,43 @@ SEXP paradox_domain_check_builtin(SEXP param, SEXP values, SEXP internal) {
     Rf_error("`internal` must be TRUE or FALSE");
   }
 
-  const domain_info_t admission_info = domain_info(param);
-  if (!admission_info.grouped) {
-    Rf_error("Corrupt Domain storage: rows must share one grouping");
+  /*
+   * A list is a structural value carrier at this boundary. Reject dispatch-
+   * bearing shells before the empty-value probe can invoke an ALTREP Length
+   * method; non-list zero-length vectors retain their established empty-input
+   * compatibility below.
+   */
+  if (TYPEOF(values) == VECSXP &&
+      !ordinary_list_argument_shell(values)) {
+    Rf_error("`values` must be an ordinary list with one element per Domain row");
   }
-  if (zero_length_vector(values)) {
+
+  const domain_shape_t info = domain_shape(param);
+  /*
+   * Length is an observable ALTREP method. The adapter below receives the
+   * already observed kind and size: a callback may replace same-shaped
+   * semantics, which become the admitted generation, but cannot splice in a
+   * different shape.
+   */
+  const int empty_values = zero_length_vector(values);
+  if (info.size == 0 || empty_values) {
+    admit_domain_before_empty_exit(
+      param,
+      &info,
+      PARADOX_DOMAIN_INTERPRET_ALL
+    );
+  }
+  if (empty_values) {
     return Rf_ScalarLogical(TRUE);
   }
-  if (admission_info.size == 0) {
+  if (info.size == 0) {
     Rf_error("Cannot check nonempty values against an empty Domain");
   }
-  int callback_capable_admission = FALSE;
   SEXP stable_values = PROTECT(stable_list_argument(
     values,
-    admission_info.size,
-    admission_info.kind,
-    &callback_capable_admission
+    info.size,
+    info.kind
   ));
-  /* Materializing a semantic ALTREP value may reenter R and mutate this
-   * outward Domain table.  The contract deliberately makes that mutation part
-   * of the operation snapshot, so re-admit the complete current shape before
-   * reading special values, callbacks, levels, or bounds.  A changed kind or
-   * row count cannot reinterpret the already materialized value list safely;
-   * reject it instead of combining fields from two Domain generations. */
-  domain_info_t info = admission_info;
-  if (callback_capable_admission) {
-    info = domain_info(param);
-    if (info.kind != admission_info.kind || info.size != admission_info.size) {
-      UNPROTECT(1);
-      Rf_error("Domain shape changed during value admission");
-    }
-    if (!info.grouped) {
-      UNPROTECT(1);
-      Rf_error("Corrupt Domain storage: rows must share one grouping");
-    }
-  }
   /*
    * Route the complete outward Domain through the canonical row owner before
    * any operation-specific work. `check` is the one operation that certifies
@@ -828,6 +876,14 @@ SEXP paradox_domain_check_builtin(SEXP param, SEXP values, SEXP internal) {
     &table,
     &work_since_interrupt
   ));
+  /*
+   * Domain ownership can allocate after the value snapshot. A pending
+   * finalizer may therefore mutate the caller-owned outer shell even though
+   * no value callback ran. Retained per-row selections remain authoritative,
+   * but their structural source must still be the admitted ordinary list
+   * shell immediately before they are consumed.
+   */
+  require_stable_list_source(values, stable_values, info.size);
   const int *skip = snapshot_special_hits(
     &table,
     stable_values,
@@ -891,29 +947,253 @@ static SEXP numeric_vector_as_list(SEXP values) {
   return Rf_coerceVector(values, VECSXP);
 }
 
-static SEXP sanitize_double(const paradox_admitted_domain_table_t *table,
-    SEXP values, const domain_info_t *info) {
-  const R_xlen_t value_size = XLENGTH(values);
-  if (value_size == 0) {
-    return values;
+static int sanitize_noop_list_shell(SEXP values) {
+  return TYPEOF(values) == VECSXP && !ALTREP(values) &&
+    !Rf_isS4(values);
+}
+
+static int sanitize_numeric_values_shell(SEXP values) {
+  if (Rf_isS4(values) || Rf_isObject(values) ||
+      !bounded_metadata_is_unclassed(values)) {
+    return FALSE;
   }
-  if (info->size == 0) {
-    Rf_error("Cannot sanitize values against an empty Domain");
+  switch ((SEXPTYPE) TYPEOF(values)) {
+  case VECSXP:
+    return !ALTREP(values);
+  case REALSXP:
+  case INTSXP:
+  case LGLSXP:
+    return TRUE;
+  default:
+    return FALSE;
+  }
+}
+
+static void require_sanitize_numeric_values_shell(SEXP values) {
+  if (!sanitize_numeric_values_shell(values)) {
+    Rf_error("`values` must be an unclassed numeric vector or list");
+  }
+}
+
+static void require_sanitize_numeric_values_current(SEXP values,
+    R_xlen_t size) {
+  require_sanitize_numeric_values_shell(values);
+  /* Stable semantic atomic ALTREP gets exactly the already selected Length.
+   * Every other accepted carrier is ordinary, so this repeat is
+   * allocation-free and cannot dispatch. */
+  if (!ALTREP(values) && XLENGTH(values) != size) {
+    Rf_error("`values` changed during Domain sanitization");
+  }
+}
+
+typedef struct {
+  SEXPTYPE type;
+  double real_value;
+  int integer_value;
+} sanitize_scalar_receipt_t;
+
+static int capture_ordinary_sanitize_scalar(
+    SEXP value, sanitize_scalar_receipt_t *receipt, double *converted) {
+  if (ALTREP(value) || Rf_isS4(value) || Rf_isObject(value) ||
+      !bounded_metadata_is_unclassed(value) ||
+      XLENGTH(value) != 1) {
+    return FALSE;
+  }
+  receipt->type = (SEXPTYPE) TYPEOF(value);
+  switch (receipt->type) {
+  case REALSXP:
+    receipt->real_value = REAL_ELT(value, 0);
+    *converted = receipt->real_value;
+    return TRUE;
+  case INTSXP:
+    receipt->integer_value = INTEGER_ELT(value, 0);
+    *converted = receipt->integer_value == NA_INTEGER
+      ? NA_REAL
+      : (double) receipt->integer_value;
+    return TRUE;
+  case LGLSXP:
+    receipt->integer_value = LOGICAL_ELT(value, 0);
+    *converted = receipt->integer_value == NA_LOGICAL
+      ? NA_REAL
+      : (double) receipt->integer_value;
+    return TRUE;
+  default:
+    return FALSE;
+  }
+}
+
+static int ordinary_sanitize_scalar_receipt_current(
+    SEXP value, const sanitize_scalar_receipt_t *receipt) {
+  if (ALTREP(value) || (SEXPTYPE) TYPEOF(value) != receipt->type ||
+      Rf_isS4(value) || Rf_isObject(value) ||
+      !bounded_metadata_is_unclassed(value) ||
+      XLENGTH(value) != 1) {
+    return FALSE;
+  }
+  switch (receipt->type) {
+  case REALSXP: {
+    const double current = REAL_ELT(value, 0);
+    return memcmp(
+      &current,
+      &receipt->real_value,
+      sizeof(current)
+    ) == 0;
+  }
+  case INTSXP:
+    return INTEGER_ELT(value, 0) == receipt->integer_value;
+  case LGLSXP:
+    return LOGICAL_ELT(value, 0) == receipt->integer_value;
+  default:
+    return FALSE;
+  }
+}
+
+static void require_sanitize_list_source(SEXP values, SEXP receipt,
+    const sanitize_scalar_receipt_t *scalar_receipts, R_xlen_t size) {
+  require_sanitize_numeric_values_current(values, size);
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SEXP source = VECTOR_ELT(receipt, index);
+    if (VECTOR_ELT(values, index) != source) {
+      Rf_error("`values` changed during Domain sanitization");
+    }
+    const SEXPTYPE type = scalar_receipts[index].type;
+    const int current = ALTREP(source)
+      ? (SEXPTYPE) TYPEOF(source) == type &&
+        (type == REALSXP || type == INTSXP || type == LGLSXP) &&
+        numeric_scalar_altrep_current(source, type)
+      : ordinary_sanitize_scalar_receipt_current(
+          source,
+          &scalar_receipts[index]
+        );
+    if (!current) {
+      Rf_error("`values` changed during Domain sanitization");
+    }
+  }
+}
+
+static SEXP snapshot_sanitize_numeric_values(SEXP values,
+    R_xlen_t value_size) {
+  /*
+   * Allocate the semantic destination before selecting any caller-owned
+   * element. A pending finalizer therefore either contributes to the
+   * generation selected below or is rejected by its terminal receipt.
+   */
+  SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, value_size));
+  require_sanitize_numeric_values_current(values, value_size);
+
+  if (TYPEOF(values) != VECSXP) {
+    for (R_xlen_t index = 0; index < value_size; ++index) {
+      periodic_interrupt(index);
+      double value;
+      if (!vector_numeric_at(values, index, &value)) {
+        UNPROTECT(1);
+        Rf_error("`values` must contain only numeric scalar values");
+      }
+      SET_REAL_ELT(stable_values, index, value);
+    }
+    UNPROTECT(1);
+    return stable_values;
   }
 
-  /* Establish support before emitting recycling warnings. Materialize each
-   * observation at the same time: callback-capable ALTREP vectors and list
-   * elements must not be reread after output allocation. */
-  SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, value_size));
+  int has_altrep = FALSE;
   for (R_xlen_t index = 0; index < value_size; ++index) {
     periodic_interrupt(index);
+    SEXP source = VECTOR_ELT(values, index);
+    if (ALTREP(source)) {
+      if (TYPEOF(source) == VECSXP) {
+        UNPROTECT(1);
+        Rf_error(
+          "Numeric Domain values may use ALTREP only for atomic vectors"
+        );
+      }
+      has_altrep = TRUE;
+    }
+  }
+
+  if (!has_altrep) {
+    /* No observation in this loop can call back or allocate, so the ordinary
+     * path needs no source carrier beyond the caller-owned list itself. */
+    for (R_xlen_t index = 0; index < value_size; ++index) {
+      periodic_interrupt(index);
+      double value;
+      if (!numeric_scalar(VECTOR_ELT(values, index), &value, TRUE)) {
+        UNPROTECT(1);
+        Rf_error("`values` must contain only numeric scalar values");
+      }
+      SET_REAL_ELT(stable_values, index, value);
+    }
+    UNPROTECT(1);
+    return stable_values;
+  }
+
+  /*
+   * Only the callback-capable path allocates a source receipt. Select its
+   * complete generation after that allocation, root every row before
+   * observing one ALTREP leaf, and then require all outer pointers to remain
+   * that generation.
+   */
+  SEXP receipt = PROTECT(Rf_allocVector(VECSXP, value_size));
+  sanitize_scalar_receipt_t *scalar_receipts = paradox_temporary_alloc(
+    value_size == 0 ? 1 : value_size,
+    sizeof(*scalar_receipts)
+  );
+  require_sanitize_numeric_values_current(values, value_size);
+  for (R_xlen_t index = 0; index < value_size; ++index) {
+    SET_VECTOR_ELT(receipt, index, VECTOR_ELT(values, index));
+  }
+  /*
+   * Own the exact type/length/value bits of every ordinary scalar before the
+   * first ALTREP callback. Pointer identity alone cannot detect an in-place
+   * data.table-style write to an earlier scalar leaf.
+   */
+  for (R_xlen_t index = 0; index < value_size; ++index) {
+    SEXP source = VECTOR_ELT(receipt, index);
+    scalar_receipts[index].type = (SEXPTYPE) TYPEOF(source);
+    if (!ALTREP(source)) {
+      double value;
+      if (!capture_ordinary_sanitize_scalar(
+          source,
+          &scalar_receipts[index],
+          &value
+        )) {
+        UNPROTECT(2);
+        Rf_error("`values` must contain only numeric scalar values");
+      }
+      SET_REAL_ELT(stable_values, index, value);
+    } else if ((scalar_receipts[index].type != REALSXP &&
+        scalar_receipts[index].type != INTSXP &&
+        scalar_receipts[index].type != LGLSXP) ||
+        !numeric_scalar_altrep_current(
+          source,
+          scalar_receipts[index].type
+        )) {
+      UNPROTECT(2);
+      Rf_error("`values` must contain only numeric scalar values");
+    }
+  }
+  for (R_xlen_t index = 0; index < value_size; ++index) {
+    periodic_interrupt(index);
+    SEXP source = VECTOR_ELT(receipt, index);
+    if (!ALTREP(source)) continue;
     double value;
-    if (!vector_numeric_at(values, index, &value)) {
+    if (!numeric_scalar(source, &value, TRUE)) {
+      UNPROTECT(2);
       Rf_error("`values` must contain only numeric scalar values");
     }
     SET_REAL_ELT(stable_values, index, value);
   }
+  require_sanitize_list_source(
+    values,
+    receipt,
+    scalar_receipts,
+    value_size
+  );
+  UNPROTECT(2);
+  return stable_values;
+}
 
+static SEXP sanitize_double(const paradox_admitted_domain_table_t *table,
+    SEXP stable_values, R_xlen_t value_size, const domain_shape_t *info) {
   const R_xlen_t result_size = value_size > info->size
     ? value_size
     : info->size;
@@ -938,7 +1218,7 @@ static SEXP sanitize_double(const paradox_admitted_domain_table_t *table,
   }
 
   SEXP result = PROTECT(numeric_vector_as_list(numeric));
-  UNPROTECT(3);
+  UNPROTECT(2);
   return result;
 }
 
@@ -956,29 +1236,16 @@ static int integer_from_double(double value, int *out) {
   return FALSE;
 }
 
-static SEXP sanitize_integer(SEXP values) {
-  const R_xlen_t size = XLENGTH(values);
-  SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
-  int warn_range = FALSE;
-  for (R_xlen_t index = 0; index < size; ++index) {
-    periodic_interrupt(index);
-    double value;
-    int ignored;
-    if (!vector_numeric_at(values, index, &value)) {
-      Rf_error("`values` must contain only numeric scalar values");
-    }
-    if (integer_from_double(nearbyint(value), &ignored)) {
-      warn_range = TRUE;
-    }
-    SET_REAL_ELT(stable_values, index, value);
-  }
-
+static SEXP sanitize_integer(SEXP stable_values, R_xlen_t size) {
   SEXP integer = PROTECT(Rf_allocVector(INTSXP, size));
+  int warn_range = FALSE;
   for (R_xlen_t index = 0; index < size; ++index) {
     periodic_interrupt(index);
     const double value = REAL_ELT(stable_values, index);
     int mapped;
-    (void) integer_from_double(nearbyint(value), &mapped);
+    if (integer_from_double(nearbyint(value), &mapped)) {
+      warn_range = TRUE;
+    }
     SET_INTEGER_ELT(integer, index, mapped);
   }
 
@@ -986,24 +1253,88 @@ static SEXP sanitize_integer(SEXP values) {
   if (warn_range) {
     Rf_warning("NAs introduced by coercion to integer range");
   }
-  UNPROTECT(3);
+  UNPROTECT(2);
   return result;
 }
 
 SEXP paradox_domain_sanitize_builtin(SEXP param, SEXP values) {
-  const domain_info_t info = domain_info(param);
-  if (!info.grouped) {
-    Rf_error("Corrupt Domain storage: rows must share one grouping");
+  /* A list is structural even for empty and categorical no-op paths. Reject
+   * ALTREP/S4 shells before any Length/Elt observation. Classed ordinary
+   * lists remain opaque identity-bearing values on ParamUty and the other
+   * categorical no-op paths. */
+  if (TYPEOF(values) == VECSXP &&
+      !sanitize_noop_list_shell(values)) {
+    Rf_error("`values` must be an unclassed numeric vector or list");
   }
+
+  const domain_shape_t info = domain_shape(param);
   if (info.size == 0) {
-    if (!zero_length_vector(values)) {
+    /*
+     * Select the complete Domain generation before observing a value-side
+     * ALTREP Length. A typed zero-row Domain has an ordinary admitted bundle;
+     * keep it rooted through the return. The canonical empty Domain has no
+     * rows to detach, so its dedicated exact validator is the admission
+     * boundary.
+     */
+    int protect_count = 0;
+    if (info.kind == DOMAIN_KIND_EMPTY) {
+      validate_empty_domain(param);
+    } else {
+      R_xlen_t work_since_interrupt = 0;
+      paradox_admitted_domain_table_t table;
+      PROTECT(paradox_admit_public_domain_table(
+        param,
+        builtin_domain_kind(info.kind),
+        info.size,
+        PARADOX_DOMAIN_INTERPRET_BOUNDS,
+        &table,
+        &work_since_interrupt
+      ));
+      ++protect_count;
+    }
+    const int empty_values = zero_length_vector(values);
+    if (TYPEOF(values) == VECSXP &&
+        !sanitize_noop_list_shell(values)) {
+      UNPROTECT(protect_count);
+      Rf_error("`values` must be an unclassed numeric vector or list");
+    }
+    if (!empty_values) {
+      UNPROTECT(protect_count);
       Rf_error("Cannot sanitize nonempty values against an empty Domain");
     }
+    UNPROTECT(protect_count);
     return values;
   }
+
+  if (info.kind == DOMAIN_KIND_FCT || info.kind == DOMAIN_KIND_LGL ||
+      info.kind == DOMAIN_KIND_UTY) {
+    R_xlen_t work_since_interrupt = 0;
+    paradox_admitted_domain_table_t table;
+    PROTECT(paradox_admit_public_domain_table(
+      param,
+      builtin_domain_kind(info.kind),
+      info.size,
+      PARADOX_DOMAIN_INTERPRET_BOUNDS,
+      &table,
+      &work_since_interrupt
+    ));
+    if (TYPEOF(values) == VECSXP &&
+        !sanitize_noop_list_shell(values)) {
+      Rf_error("`values` must be an unclassed numeric vector or list");
+    }
+    UNPROTECT(1);
+    return values;
+  }
+
+  /*
+   * Unlike check/qunif, sanitization can select its complete Domain before
+   * any value-side Length or Elt method. Keep that exact admitted bundle
+   * rooted throughout value materialization and output construction: a
+   * callback may mutate the live table, but cannot replace the enclosing
+   * operation's already selected bounds.
+   */
   R_xlen_t work_since_interrupt = 0;
   paradox_admitted_domain_table_t table;
-  /* Sanitizing interprets only the numeric schema. */
   PROTECT(paradox_admit_public_domain_table(
     param,
     builtin_domain_kind(info.kind),
@@ -1012,27 +1343,32 @@ SEXP paradox_domain_sanitize_builtin(SEXP param, SEXP values) {
     &table,
     &work_since_interrupt
   ));
-  if (info.kind == DOMAIN_KIND_FCT || info.kind == DOMAIN_KIND_LGL ||
-      info.kind == DOMAIN_KIND_UTY) {
-    UNPROTECT(1);
+
+  require_sanitize_numeric_values_shell(values);
+  const R_xlen_t value_size = XLENGTH(values);
+  require_sanitize_numeric_values_current(values, value_size);
+  SEXP stable_values = PROTECT(snapshot_sanitize_numeric_values(
+    values,
+    value_size
+  ));
+
+  require_sanitize_numeric_values_current(values, value_size);
+  if (value_size == 0) {
+    UNPROTECT(2);
     return values;
-  }
-  if (zero_length_vector(values)) {
-    UNPROTECT(1);
-    return values;
-  }
-  if (Rf_isObject(values) ||
-      (TYPEOF(values) != VECSXP && TYPEOF(values) != REALSXP &&
-       TYPEOF(values) != INTSXP && TYPEOF(values) != LGLSXP)) {
-    Rf_error("`values` must be an unclassed numeric vector or list");
   }
   if (info.kind == DOMAIN_KIND_DBL) {
-    SEXP result = PROTECT(sanitize_double(&table, values, &info));
-    UNPROTECT(2);
+    SEXP result = PROTECT(sanitize_double(
+      &table,
+      stable_values,
+      value_size,
+      &info
+    ));
+    UNPROTECT(3);
     return result;
   }
-  SEXP result = PROTECT(sanitize_integer(values));
-  UNPROTECT(2);
+  SEXP result = PROTECT(sanitize_integer(stable_values, value_size));
+  UNPROTECT(3);
   return result;
 }
 
@@ -1047,18 +1383,9 @@ SEXP paradox_domain_property_builtin(SEXP param, SEXP property) {
     Rf_error("Internal error: unknown Domain property");
   }
   const paradox_property_t requested = (paradox_property_t) selector;
-  const domain_info_t info = domain_info(param);
+  const domain_shape_t info = domain_shape(param);
   /* Keep dispatch independent of the helper calls that receive `&info`. */
   const domain_kind_t kind = info.kind;
-  if (!info.grouped) {
-    Rf_error("Corrupt Domain storage: rows must share one grouping");
-  }
-  if (info.size == 0) {
-    return Rf_allocVector(
-      requested == PARADOX_PROPERTY_NLEVELS ? INTSXP : LGLSXP,
-      0
-    );
-  }
 
   /* Each property declares what it reads: the kind alone for the class
    * predicates, the numeric schema for boundedness, and for level counts the
@@ -1069,6 +1396,13 @@ SEXP paradox_domain_property_builtin(SEXP param, SEXP property) {
   } else if (requested == PARADOX_PROPERTY_NLEVELS) {
     interpreted =
       PARADOX_DOMAIN_INTERPRET_BOUNDS | PARADOX_DOMAIN_INTERPRET_LEVELS;
+  }
+  if (info.size == 0) {
+    admit_domain_before_empty_exit(param, &info, interpreted);
+    return Rf_allocVector(
+      requested == PARADOX_PROPERTY_NLEVELS ? INTSXP : LGLSXP,
+      0
+    );
   }
   R_xlen_t work_since_interrupt = 0;
   paradox_admitted_domain_table_t table;
@@ -1235,39 +1569,65 @@ R_xlen_t paradox_qunif_level_index(double unit, R_xlen_t level_count) {
   return index < level_count ? index : R_XLEN_T_MAX;
 }
 
-static void copy_logical_structure(SEXP result, SEXP attribute_carrier) {
-  SEXP names = PROTECT(Rf_getAttrib(attribute_carrier, R_NamesSymbol));
-  SEXP dimensions = PROTECT(Rf_getAttrib(attribute_carrier, R_DimSymbol));
-  SEXP dimension_names = PROTECT(Rf_getAttrib(
-    attribute_carrier,
-    R_DimNamesSymbol
-  ));
-  if (names != R_NilValue && dimensions == R_NilValue) {
-    Rf_setAttrib(result, R_NamesSymbol, names);
+static void require_unclassed_qunif_source_shell(SEXP x) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(x);
+  if ((type != REALSXP && type != INTSXP) ||
+      Rf_isS4(x) || Rf_isObject(x)) {
+    Rf_error("`x` must be an unclassed numeric vector");
   }
-  if (dimensions != R_NilValue) {
-    Rf_setAttrib(result, R_DimSymbol, dimensions);
+  int has_class = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      x,
+      R_ClassSymbol,
+      &has_class
+    )) {
+    Rf_error(
+      "`x` must have ordinary, acyclic, bounded metadata"
+    );
   }
-  if (dimension_names != R_NilValue) {
-    Rf_setAttrib(result, R_DimNamesSymbol, dimension_names);
+  if (has_class) {
+    Rf_error("`x` must be an unclassed numeric vector");
   }
-  UNPROTECT(3);
+}
+
+static void require_unclassed_qunif_selected_shell(SEXP selected) {
+  /*
+   * The fresh result owns the bounded, shallowly selected attribute
+   * generation. Checking its flags and raw class attribute is allocation-free
+   * and cannot dispatch. A finalizer may have changed `x` during result or
+   * metadata-carrier allocation; this selected result generation, rather than
+   * an earlier live-source observation, is the generation the caller sees.
+   */
+  if (Rf_isS4(selected) || Rf_isObject(selected) ||
+      paradox_stored_attribute(selected, R_ClassSymbol) != R_NilValue) {
+    Rf_error("`x` must be an unclassed numeric vector");
+  }
 }
 
 static SEXP qunif_numeric(const paradox_admitted_domain_table_t *table,
-    SEXP x, const domain_info_t *info) {
-  const R_xlen_t size = XLENGTH(x);
+    SEXP x, R_xlen_t size, const domain_shape_t *info) {
   if (info->kind == DOMAIN_KIND_DBL) {
-    const int x_is_altrep = ALTREP(x);
-    SEXP attribute_carrier = PROTECT(R_MakeExternalPtr(
-      NULL,
-      R_NilValue,
-      R_NilValue
-    ));
-    SHALLOW_DUPLICATE_ATTRIB(attribute_carrier, x);
-    SEXP dimensions = PROTECT(Rf_getAttrib(attribute_carrier, R_DimSymbol));
-    SEXP names = PROTECT(Rf_getAttrib(attribute_carrier, R_NamesSymbol));
     SEXP result = PROTECT(Rf_allocVector(REALSXP, size));
+    /*
+     * Result allocation precedes attribute selection. If it runs a finalizer
+     * which classes `x`, the post-allocation shell check rejects it. The
+     * bounded copier then freezes one exact shallow metadata generation
+     * directly on the fresh result; its canonical attr-free path allocates
+     * nothing. After this point the direct Elt loop allocates nothing.
+     */
+    require_unclassed_qunif_source_shell(x);
+    paradox_copy_bounded_shallow_attributes(
+      result,
+      x,
+      PARADOX_SHALLOW_ATTRIBUTES_ALL,
+      "`x` must be an unclassed numeric vector with ordinary, acyclic, "
+        "bounded metadata"
+    );
+    require_unclassed_qunif_selected_shell(result);
+    require_unclassed_qunif_source_shell(x);
+    const int drops_names =
+      paradox_stored_attribute(result, R_DimSymbol) != R_NilValue &&
+      paradox_stored_attribute(result, R_NamesSymbol) != R_NilValue;
     for (R_xlen_t index = 0; index < size; ++index) {
       periodic_interrupt(index);
       const R_xlen_t row = index % info->size;
@@ -1282,19 +1642,18 @@ static SEXP qunif_numeric(const paradox_admitted_domain_table_t *table,
       );
       SET_REAL_ELT(result, index, mapped);
     }
-    if (x_is_altrep) {
-      SHALLOW_DUPLICATE_ATTRIB(result, attribute_carrier);
-    } else {
-      DUPLICATE_ATTRIB(result, attribute_carrier);
-    }
-    if (dimensions != R_NilValue && names != R_NilValue) {
+    /* Presentation metadata is shallowly selected, not recursively owned.
+     * Exact nested values retain R's ordinary copy-on-write aliasing without
+     * exposing an adversarial top-level pairlist to R's duplicator. */
+    if (drops_names) {
       Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
     }
-    UNPROTECT(4);
+    UNPROTECT(1);
     return result;
   }
 
   SEXP result = PROTECT(Rf_allocVector(INTSXP, size));
+  require_unclassed_qunif_source_shell(x);
   int warn_range = FALSE;
   for (R_xlen_t index = 0; index < size; ++index) {
     periodic_interrupt(index);
@@ -1323,10 +1682,10 @@ static SEXP qunif_numeric(const paradox_admitted_domain_table_t *table,
 }
 
 static SEXP qunif_factor(const paradox_admitted_domain_table_t *table,
-    SEXP x, const domain_info_t *info) {
+    SEXP x, R_xlen_t size, const domain_shape_t *info) {
   R_xlen_t work_since_interrupt = 0;
-  const R_xlen_t size = XLENGTH(x);
   SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
+  require_unclassed_qunif_source_shell(x);
   for (R_xlen_t index = 0; index < size; ++index) {
     paradox_account_work(&work_since_interrupt);
     const R_xlen_t row = index % info->size;
@@ -1359,15 +1718,18 @@ static SEXP qunif_factor(const paradox_admitted_domain_table_t *table,
   return result;
 }
 
-static SEXP qunif_logical(SEXP x) {
-  const R_xlen_t size = XLENGTH(x);
-  SEXP attribute_carrier = PROTECT(R_MakeExternalPtr(
-    NULL,
-    R_NilValue,
-    R_NilValue
-  ));
-  SHALLOW_DUPLICATE_ATTRIB(attribute_carrier, x);
+static SEXP qunif_logical(SEXP x, R_xlen_t size) {
   SEXP result = PROTECT(Rf_allocVector(LGLSXP, size));
+  require_unclassed_qunif_source_shell(x);
+  paradox_copy_bounded_shallow_attributes(
+    result,
+    x,
+    PARADOX_SHALLOW_ATTRIBUTES_LOGICAL_STRUCTURE,
+    "`x` must be an unclassed numeric vector with ordinary, acyclic, "
+      "bounded metadata"
+  );
+  require_unclassed_qunif_selected_shell(result);
+  require_unclassed_qunif_source_shell(x);
   for (R_xlen_t index = 0; index < size; ++index) {
     periodic_interrupt(index);
     const double value = paradox_numeric_elt(x, index);
@@ -1376,24 +1738,30 @@ static SEXP qunif_logical(SEXP x) {
     }
     SET_LOGICAL_ELT(result, index, value < 0.5);
   }
-  copy_logical_structure(result, attribute_carrier);
-  UNPROTECT(2);
+  UNPROTECT(1);
   return result;
 }
 
 SEXP paradox_domain_qunif_builtin(SEXP param, SEXP x) {
-  const domain_info_t info = domain_info(param);
-  if (!info.grouped) {
-    Rf_error("Corrupt Domain storage: rows must share one grouping");
-  }
+  const domain_shape_t info = domain_shape(param);
   if (info.size == 0) {
+    admit_domain_before_empty_exit(
+      param,
+      &info,
+      PARADOX_DOMAIN_INTERPRET_BOUNDS | PARADOX_DOMAIN_INTERPRET_LEVELS
+    );
     return Rf_allocVector(LGLSXP, 0);
   }
-  if (Rf_isObject(x) ||
-      (TYPEOF(x) != REALSXP && TYPEOF(x) != INTSXP)) {
-    Rf_error("`x` must be an unclassed numeric vector");
-  }
-  if (XLENGTH(x) % info.size != 0) {
+  require_unclassed_qunif_source_shell(x);
+  /*
+   * Length is the only semantic observation before complete Domain
+   * admission. The adapter receives the already observed kind and size, so a
+   * stateful ALTREP may replace same-shaped semantics but cannot splice in a
+   * different shape.
+   */
+  const R_xlen_t size = XLENGTH(x);
+  require_unclassed_qunif_source_shell(x);
+  if (size % info.size != 0) {
     Rf_error("Length of `x` must be a multiple of the number of Domain rows");
   }
 
@@ -1409,21 +1777,22 @@ SEXP paradox_domain_qunif_builtin(SEXP param, SEXP x) {
     &table,
     &work_since_interrupt
   ));
+  require_unclassed_qunif_source_shell(x);
   SEXP result;
   switch (info.kind) {
   case DOMAIN_KIND_EMPTY:
     break;
   case DOMAIN_KIND_DBL:
   case DOMAIN_KIND_INT:
-    result = PROTECT(qunif_numeric(&table, x, &info));
+    result = PROTECT(qunif_numeric(&table, x, size, &info));
     UNPROTECT(2);
     return result;
   case DOMAIN_KIND_FCT:
-    result = PROTECT(qunif_factor(&table, x, &info));
+    result = PROTECT(qunif_factor(&table, x, size, &info));
     UNPROTECT(2);
     return result;
   case DOMAIN_KIND_LGL:
-    result = PROTECT(qunif_logical(x));
+    result = PROTECT(qunif_logical(x, size));
     UNPROTECT(2);
     return result;
   case DOMAIN_KIND_UTY:

@@ -457,12 +457,17 @@ grep -Fq 'RESERVE_MIB=$EFFECTIVE_MINIMUM_RESERVE_MIB' "$RESOURCE_JOBS" ||
 for contract in \
     'CONTAINMENT=direct' \
     '"${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1' \
+    '"${PARADOX_VERIFY_HARD_WORKER:-}" == 1' \
     'CONTAINMENT=aggregate-systemd' \
+    'CONTAINMENT=worker-hard' \
+    'WORKER_MINIMUM_RESERVE_MIB=1024' \
     'EFFECTIVE_MEMORY_MIB_PER_JOB=$AGGREGATE_MEMORY_MIB_PER_JOB' \
     'EFFECTIVE_MINIMUM_RESERVE_MIB=$AGGREGATE_MINIMUM_RESERVE_MIB' \
     'EFFECTIVE_PROFILE_MAX_JOBS=$AGGREGATE_PROFILE_MAX_JOBS' \
     'ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / EFFECTIVE_MEMORY_MIB_PER_JOB))' \
     'fail "aggregate containment marker without the aggregate service cgroup"' \
+    'fail "hard-worker marker without a finite cgroup memory limit inside the assigned envelope"' \
+    'fail "hard-worker marker without a finite cgroup CPU quota inside the assigned envelope"' \
     'printf '"'"'containment\t%s\n'"'"' "$CONTAINMENT"'; do
   grep -Fq "$contract" "$RESOURCE_JOBS" ||
     fail "resource scheduler lost containment-policy contract: $contract"
@@ -878,6 +883,8 @@ for runner in "$COMPILER_BATCH_RUNNER" "$COMPILER_WAVE_RUNNER"; do
     fail "compiler runner does not recompute the direct reserve floor: $runner"
   grep -Fq 'aggregate-systemd) reserve_floor=4096 ;;' "$runner" ||
     fail "compiler runner does not recompute the aggregate reserve floor: $runner"
+  grep -Fq 'worker-hard) reserve_floor=1024 ;;' "$runner" ||
+    fail "compiler runner does not recompute the hard-worker reserve floor: $runner"
   grep -Fq '((expected_memory_reserve >= reserve_floor)) ||' "$runner" ||
     fail "compiler runner does not recompute the containment reserve floor: $runner"
   grep -Fq 'fail "admission report arithmetic is internally inconsistent"' \

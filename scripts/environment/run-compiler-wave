@@ -112,6 +112,7 @@ validate_admission_report() {
   # withholds the host reserve, so only a small intra-envelope floor remains.
   case "$(report_value containment)" in
     direct) reserve_floor=12288 ;;
+    worker-hard) reserve_floor=1024 ;;
     aggregate-systemd) reserve_floor=4096 ;;
     *) fail "admission report has an unknown containment mode" ;;
   esac

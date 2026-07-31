@@ -10,6 +10,7 @@
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "paramset_params_internal.h"
+#include "r_api_compat.h"
 #include "r_utils.h"
 
 typedef enum {
@@ -518,13 +519,24 @@ static void apply_type_filter(const get_values_snapshot_t *snapshot,
       continue;
     }
     SEXP value = VECTOR_ELT(snapshot->values_data.values, index);
-    const int token = Rf_inherits(value, "TuneToken") != FALSE;
+    SEXP classes = R_NilValue;
+    if (Rf_isObject(value) &&
+        !paradox_api_ordinary_class_snapshot(value, &classes)) {
+      Rf_error(
+        "Stored value class metadata must be ordinary and bounded"
+      );
+    }
+    const int token =
+      paradox_api_ordinary_class_contains(classes, "TuneToken");
     if (type == GET_VALUES_WITHOUT_TOKEN) {
       kept[index] = !token;
     } else if (type == GET_VALUES_ONLY_TOKEN) {
       kept[index] = token;
     } else {
-      kept[index] = Rf_inherits(value, "InternalTuneToken") != FALSE;
+      kept[index] = paradox_api_ordinary_class_contains(
+        classes,
+        "InternalTuneToken"
+      );
     }
   }
 }

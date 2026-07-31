@@ -32,10 +32,11 @@ paradox_core_kind_t paradox_param_set_class_kind_raw(
   if (classes_result != NULL) *classes_result = R_NilValue;
   if (TYPEOF(self) != ENVSXP || Rf_isS4(self)) return 0;
 
-  SEXP classes = Rf_getAttrib(self, R_ClassSymbol);
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(self, &classes)) return 0;
   if (classes_result != NULL) *classes_result = classes;
   if (TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes) ||
-      !paradox_api_has_no_attributes(classes)) {
+      Rf_isObject(classes) || !paradox_api_has_no_attributes(classes)) {
     return 0;
   }
   const R_xlen_t size = XLENGTH(classes);
@@ -405,8 +406,11 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
         paradox_api_plain_binding_scan,
         paradox_api_frame_has_binding_scan
       );
-  if (Rf_getAttrib(self, R_ClassSymbol) != classes ||
-      paradox_param_set_class_kind_raw(self, NULL) != class_kind ||
+  SEXP scanned_classes = R_NilValue;
+  const paradox_core_kind_t scanned_class_kind =
+    paradox_param_set_class_kind_raw(self, &scanned_classes);
+  if (scanned_classes != classes ||
+      scanned_class_kind != class_kind ||
       paradox_api_plain_binding_scan(self, enclosure_symbol) != top_enclosure ||
       scanned_enclosure != enclosure ||
       scanned_super != super ||

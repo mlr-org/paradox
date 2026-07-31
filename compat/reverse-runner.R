@@ -382,12 +382,13 @@ rr_reverse_check_environment <- function(environment, package) {
 }
 
 # The consumer policy is containment-dependent: conservative direct weights
-# protect an uncontained host, while the authenticated aggregate systemd
-# envelope admits measured cooperative rows because the root-owned launcher
-# already withheld the host reserve when sizing the hard ceiling.
+# protect an uncontained host. Hard workers and the aggregate systemd envelope
+# admit measured cooperative rows inside their respective hard ceilings.
 rr_consumer_policy <- function(containment) {
   if (identical(containment, "aggregate-systemd")) {
     list(memory_per_job = 2048L, reserve_floor = 4096L, profile_max = 8L)
+  } else if (identical(containment, "worker-hard")) {
+    list(memory_per_job = 2048L, reserve_floor = 1024L, profile_max = 8L)
   } else if (identical(containment, "direct")) {
     list(memory_per_job = 8192L, reserve_floor = 16384L, profile_max = 4L)
   } else {

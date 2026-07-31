@@ -508,6 +508,32 @@ test_that("Design column metadata is admitted after ALTREP observation", {
     fixed = TRUE
   )
 
+  factor_callbacks = 0L
+  factor_column = NULL
+  factor_column = native_stateful_altrep(
+    structure(c(1L, 2L), class = "factor", levels = c("a", "b")),
+    structure(c(1L, 2L), class = "factor", levels = c("a", "b")),
+    callback = function() {
+      factor_callbacks <<- factor_callbacks + 1L
+      data.table::setattr(
+        attr(factor_column, "levels", exact = TRUE),
+        "adversarial",
+        TRUE
+      )
+    },
+    callback_after = 0L
+  )
+  expect_error(
+    .Call(
+      altrep2_symbol("design_transpose"),
+      list(x = factor_column),
+      FALSE
+    ),
+    "ordinary structural attributes",
+    fixed = TRUE
+  )
+  expect_identical(factor_callbacks, 1L)
+
   dependent = ps(parent = p_lgl(), child = p_int())
   dependent$add_dep("child", "parent", CondEqual(TRUE))
   parent_column = NULL

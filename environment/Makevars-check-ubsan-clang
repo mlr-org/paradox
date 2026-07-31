@@ -2,7 +2,7 @@
 # recommendation for Clang 17 and newer.  It is never combined with ASan.
 
 CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu99 -fsanitize=undefined -fno-sanitize=float-divide-by-zero -fno-sanitize-recover=undefined -fno-omit-frame-pointer
-CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17 -fsanitize=undefined -fno-sanitize=float-divide-by-zero -fno-sanitize-recover=undefined -fno-omit-frame-pointer
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu99 -fsanitize=undefined -fno-sanitize=float-divide-by-zero -fno-sanitize-recover=undefined -fno-omit-frame-pointer
 SHLIB_LD = $(CC)
 CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include
 

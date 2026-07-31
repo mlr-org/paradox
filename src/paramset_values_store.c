@@ -64,36 +64,106 @@ static void shadow_parameter_unavailable(SEXP id, SEXP candidate_ids) {
   paradox_error_from_scalar_string(message);
 }
 
+typedef struct {
+  SEXP names;
+  SEXP classes;
+  R_xlen_t count;
+  int object;
+  int valid;
+} plain_list_metadata_t;
+
+static void capture_plain_list_attribute(SEXP tag, SEXP value, void *data) {
+  plain_list_metadata_t *metadata = data;
+  if (!metadata->valid || value == R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  SEXP *destination = NULL;
+  if (tag == R_NamesSymbol) {
+    destination = &metadata->names;
+  } else if (tag == R_ClassSymbol) {
+    destination = &metadata->classes;
+  } else {
+    metadata->valid = FALSE;
+    return;
+  }
+  if (*destination != R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  *destination = value;
+  ++metadata->count;
+}
+
+/*
+ * Select the complete supported list-shell metadata in one hard-bounded,
+ * allocation-free pass.  This is both the admission snapshot and the terminal
+ * receipt used around destination allocation / ALTREP element observation.
+ */
+static int capture_plain_list_metadata(SEXP value, R_xlen_t size,
+    plain_list_metadata_t *metadata) {
+  *metadata = (plain_list_metadata_t) {
+    R_NilValue,
+    R_NilValue,
+    0,
+    Rf_isObject(value) != FALSE,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  if (!paradox_api_has_no_attributes(value) &&
+      !paradox_api_map_bounded_stored_attributes(
+        value,
+        2,
+        capture_plain_list_attribute,
+        metadata,
+        &count
+      )) {
+    return FALSE;
+  }
+  if (!metadata->valid || metadata->count != count) return FALSE;
+  if (metadata->classes != R_NilValue &&
+      (TYPEOF(metadata->classes) != STRSXP ||
+        ALTREP(metadata->classes) || Rf_isS4(metadata->classes) ||
+        Rf_isObject(metadata->classes) ||
+        !paradox_api_has_no_attributes(metadata->classes))) {
+    return FALSE;
+  }
+  if (metadata->names == R_NilValue) {
+    return size == 0;
+  }
+  return TYPEOF(metadata->names) == STRSXP &&
+    !ALTREP(metadata->names) && !Rf_isS4(metadata->names) &&
+    !Rf_isObject(metadata->names) &&
+    paradox_api_has_no_attributes(metadata->names) &&
+    XLENGTH(metadata->names) == size;
+}
+
+static int plain_list_metadata_is_current(SEXP value, R_xlen_t size,
+    const plain_list_metadata_t *selected, SEXP stable_names) {
+  plain_list_metadata_t current;
+  if (TYPEOF(value) != VECSXP || Rf_isS4(value) ||
+      !capture_plain_list_metadata(value, size, &current) ||
+      current.names != selected->names ||
+      current.classes != selected->classes ||
+      current.count != selected->count ||
+      current.object != selected->object) {
+    return FALSE;
+  }
+  return current.names == R_NilValue ||
+    paradox_ordinary_vector_payload_equal(current.names, stable_names);
+}
+
 static int plain_list(SEXP value, SEXP *names, R_xlen_t *size) {
   if (TYPEOF(value) != VECSXP || Rf_isS4(value)) {
     return FALSE;
   }
   *size = XLENGTH(value);
-  SEXP observed_names = PROTECT(ALTREP(value)
-    ? paradox_stored_attribute(value, R_NamesSymbol)
-    : Rf_getAttrib(value, R_NamesSymbol));
-  SEXP observed_class = PROTECT(ALTREP(value)
-    ? paradox_stored_attribute(value, R_ClassSymbol)
-    : Rf_getAttrib(value, R_ClassSymbol));
-  *names = observed_names;
-  int plain = observed_class == R_NilValue ||
-    (TYPEOF(observed_class) == STRSXP && !ALTREP(observed_class) &&
-      !Rf_isS4(observed_class) && !Rf_isObject(observed_class) &&
-      paradox_api_has_no_attributes(observed_class));
-  if (plain && observed_names == R_NilValue) {
-    static const char *const allowed[] = {"class"};
-    plain = *size == 0 &&
-      paradox_api_has_only_attributes(value, allowed, 1);
-  } else if (plain) {
-    static const char *const allowed[] = {"names", "class"};
-    plain = TYPEOF(observed_names) == STRSXP && !ALTREP(observed_names) &&
-      !Rf_isS4(observed_names) && !Rf_isObject(observed_names) &&
-      paradox_api_has_no_attributes(observed_names) &&
-      XLENGTH(observed_names) == *size &&
-      paradox_api_has_only_attributes(value, allowed, 2);
+  plain_list_metadata_t metadata;
+  if (!capture_plain_list_metadata(value, *size, &metadata)) {
+    return FALSE;
   }
-  UNPROTECT(2);
-  return plain;
+  *names = metadata.names;
+  return TRUE;
 }
 
 static int ordinary_plain_list(SEXP value, SEXP *names, R_xlen_t *size) {
@@ -122,10 +192,19 @@ static SEXP snapshot_plain_list(SEXP value, SEXP names, R_xlen_t size,
   if (names != R_NilValue) {
     stable_names = PROTECT(Rf_allocVector(STRSXP, size));
     ++protected_count;
+    /*
+     * Install the fresh destination's names before selecting the source
+     * generation. Rf_setAttrib() may allocate; after this point the ordinary
+     * list path is one allocation-free copy pass.
+     */
+    Rf_setAttrib(result, R_NamesSymbol, stable_names);
   }
-  SEXP current_names = ALTREP(value)
-    ? paradox_stored_attribute(value, R_NamesSymbol)
-    : Rf_getAttrib(value, R_NamesSymbol);
+  plain_list_metadata_t selected;
+  if (!capture_plain_list_metadata(value, size, &selected)) {
+    UNPROTECT(protected_count);
+    return R_NilValue;
+  }
+  SEXP current_names = selected.names;
   if ((names == R_NilValue) != (current_names == R_NilValue) ||
       (current_names != R_NilValue &&
         (TYPEOF(current_names) != STRSXP ||
@@ -146,8 +225,20 @@ static SEXP snapshot_plain_list(SEXP value, SEXP names, R_xlen_t size,
       SET_STRING_ELT(stable_names, index, STRING_ELT(names, index));
     }
   }
-  if (stable_names != R_NilValue) {
-    Rf_setAttrib(result, R_NamesSymbol, stable_names);
+  /*
+   * Ordinary VECSXP/STRSXP element reads above cannot allocate or invoke user
+   * code, so the generation selected after the last allocation is coherent
+   * by construction. Structural ALTREP may invoke Elt methods and therefore
+   * retains the explicit terminal metadata receipt.
+   */
+  if (ALTREP(value) && !plain_list_metadata_is_current(
+      value,
+      size,
+      &selected,
+      stable_names
+    )) {
+    UNPROTECT(protected_count);
+    return R_NilValue;
   }
   UNPROTECT(protected_count);
   return result;
@@ -969,8 +1060,13 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
   for (R_xlen_t child = 0; child < child_count; ++child) {
     paradox_account_work(&work_since_interrupt);
     SEXP child_set = VECTOR_ELT(sets, child);
+    int param_set = FALSE;
     if (TYPEOF(child_set) != ENVSXP ||
-        !Rf_inherits(child_set, "ParamSet")) {
+        !paradox_api_ordinary_class_matches(
+          child_set,
+          "ParamSet",
+          &param_set
+        ) || !param_set) {
       UNPROTECT(protected_count);
       Rf_error("Corrupt ParamSetCollection child reference");
     }

@@ -1289,6 +1289,16 @@ aggregate_resource_report$value <- c(
   "7680", "2048", "11", "8", "none", "8"
 )
 invisible(rr_validate_resource_report(aggregate_resource_report, "consumer"))
+# A hard per-worker container uses the same measured row weight and cap, but
+# keeps only its one-GiB local floor (the live one-quarter reserve is larger in
+# this fixture).
+worker_resource_report <- resource_report_fixture
+worker_resource_report$value <- c(
+  "2", "consumer", "worker-hard", "Linux", "4", "4", "4", "4", "1",
+  "2", "1", "proc_memavailable+cgroup", "8192", "8192", "2048",
+  "2048", "3", "8", "none", "1"
+)
+invisible(rr_validate_resource_report(worker_resource_report, "consumer"))
 mixed_policy_resource_report <- aggregate_resource_report
 mixed_policy_resource_report$value[
   mixed_policy_resource_report$field == "memory_mib_per_job"

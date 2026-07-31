@@ -280,16 +280,19 @@ paradox_builtin_value_result_t paradox_builtin_value_check(
 
 static SEXP observed_type(SEXP value, int factor_style) {
   if (Rf_isObject(value) || Rf_isS4(value)) {
-    SEXP classes = PROTECT(Rf_getAttrib(value, R_ClassSymbol));
-    if (TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
-        XLENGTH(classes) != 0) {
-      SEXP first = STRING_ELT(classes, 0);
-      if (first != NA_STRING) {
-        UNPROTECT(1);
-        return first;
+    SEXP classes = R_NilValue;
+    if (paradox_api_ordinary_class_snapshot(value, &classes)) {
+      PROTECT(classes);
+      if (TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
+          XLENGTH(classes) != 0) {
+        SEXP first = STRING_ELT(classes, 0);
+        if (first != NA_STRING) {
+          UNPROTECT(1);
+          return first;
+        }
       }
+      UNPROTECT(1);
     }
-    UNPROTECT(1);
   }
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
   return Rf_mkChar(

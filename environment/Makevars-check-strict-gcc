@@ -3,7 +3,9 @@
 # construct that requires them; this profile intentionally has none.
 
 CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
-CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+# DESCRIPTION requests USE_C17 for ordinary installs.  This strict lane
+# intentionally feeds GNU C99 through the selected no-later-than-C17 slot.
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
 SHLIB_LD = $(CC)
 
 # R's conda Makeconf puts a linker-only option in CPPFLAGS.  Supplying the

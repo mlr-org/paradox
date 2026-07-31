@@ -46,13 +46,15 @@ static int exact_shadow_constraint_plan(SEXP plan) {
   static const char *const field_names[SHADOW_CONSTRAINT_PLAN_FIELD_COUNT] = {
     "callback", "hidden_values"
   };
+  if (TYPEOF(plan) != VECSXP || ALTREP(plan) || Rf_isS4(plan) ||
+      Rf_isObject(plan) ||
+      XLENGTH(plan) != SHADOW_CONSTRAINT_PLAN_FIELD_COUNT ||
+      !paradox_api_has_single_attribute(plan, "names")) {
+    return FALSE;
+  }
   R_xlen_t work_since_interrupt = 0;
-  SEXP names = Rf_getAttrib(plan, R_NamesSymbol);
-  return TYPEOF(plan) == VECSXP && !ALTREP(plan) && !Rf_isS4(plan) &&
-    !Rf_isObject(plan) &&
-    XLENGTH(plan) == SHADOW_CONSTRAINT_PLAN_FIELD_COUNT &&
-    paradox_api_has_single_attribute(plan, "names") &&
-    TYPEOF(names) == STRSXP && !ALTREP(names) &&
+  SEXP names = paradox_api_raw_attribute(plan, R_NamesSymbol);
+  return TYPEOF(names) == STRSXP && !ALTREP(names) &&
     !Rf_isS4(names) && !Rf_isObject(names) &&
     paradox_api_has_no_attributes(names) &&
     paradox_domain_exact_string_vector(
@@ -64,11 +66,10 @@ static int exact_shadow_constraint_plan(SEXP plan) {
 }
 
 static int exact_optional_s3_class(SEXP value) {
-  SEXP classes = Rf_getAttrib(value, R_ClassSymbol);
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(value, &classes)) return FALSE;
   if (classes == R_NilValue) return TRUE;
-  if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
-      Rf_isS4(classes) || Rf_isObject(classes) ||
-      !paradox_api_has_no_attributes(classes) || XLENGTH(classes) == 0) {
+  if (XLENGTH(classes) == 0) {
     return FALSE;
   }
   for (R_xlen_t index = 0; index < XLENGTH(classes); ++index) {
@@ -93,7 +94,10 @@ static int shadow_constraint_values_shape(SEXP values, int allow_s3,
       ) || (allow_s3 && !exact_optional_s3_class(values))) {
     return FALSE;
   }
-  SEXP observed_names = Rf_getAttrib(values, R_NamesSymbol);
+  SEXP observed_names = paradox_api_raw_attribute(
+    values,
+    R_NamesSymbol
+  );
   if (observed_names == R_NilValue && XLENGTH(values) == 0) {
     if (!allow_s3) return FALSE;
     *names = observed_names;

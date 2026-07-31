@@ -921,7 +921,7 @@ test_that("Domain constructors remain rooted during GC and callback reentry", {
 })
 
 
-test_that("a snapshotted value leaf keeps its own materialized names", {
+test_that("typed value metadata rejects structural ALTREP names unobserved", {
   skip_on_cran()
   namespace = asNamespace("paradox")
   skip_if_not(
@@ -929,17 +929,38 @@ test_that("a snapshotted value leaf keeps its own materialized names", {
     "the internal stateful ALTREP test class is unavailable"
   )
 
-  growing = native_stateful_altrep(
-    "a", c("a", "b"),
-    length_switch_after = 7L
+  state = new.env(parent = emptyenv())
+  state$callbacks = 0L
+  deferred = native_stateful_altrep(
+    "a",
+    "changed",
+    callback = function() {
+      state$callbacks = state$callbacks + 1L
+    }
   )
   value = 1
-  names(value) = growing
+  names(value) = deferred
+  native_stateful_altrep_rearm(
+    attr(value, "names", exact = TRUE),
+    c(0L, 0L)
+  )
 
-  set = ps(a = p_dbl(0, 2, default = value), b = p_dbl(0, 1))
-  stored = set$params$default[[1L]]
-  expect_identical(length(stored), 1L)
-  expect_identical(length(attr(stored, "names", exact = TRUE)), 1L)
+  expect_error(
+    .Call(
+      get(
+        "C_test_builtin_metadata_copy_reentry",
+        envir = asNamespace("paradox")
+      ),
+      value,
+      NULL
+    ),
+    "Built-in value metadata must be ordinary, acyclic, and bounded"
+  )
+  expect_identical(state$callbacks, 0L)
+  expect_error(
+    p_dbl(0, 2, default = value),
+    "Built-in value metadata must be ordinary, acyclic, and bounded"
+  )
 })
 
 test_that("built-in value snapshots own payload and arbitrary attributes", {

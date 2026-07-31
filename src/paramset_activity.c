@@ -4,6 +4,7 @@
 
 #include "builtin_condition.h"
 #include "paramset_domain_common.h"
+#include "r_api_compat.h"
 #include "r_utils.h"
 
 int paradox_activity_reason_is_satisfied(
@@ -21,7 +22,26 @@ static int has_recorded_default(SEXP value) {
    * marker from an opaque semantic default; it must not inspect the latter
    * unless the built-in Condition comparator admits it.
    */
-  return !Rf_inherits(value, "NoDefault");
+  int marker = FALSE;
+  return !paradox_api_ordinary_class_matches(
+      value,
+      "NoDefault",
+      &marker
+    ) || !marker;
+}
+
+static int activity_value_is_tune_token(SEXP value) {
+  int token = FALSE;
+  if (!paradox_api_ordinary_class_matches(
+      value,
+      "TuneToken",
+      &token
+    )) {
+    Rf_error(
+      "Dependency value class metadata must be ordinary and bounded"
+    );
+  }
+  return token;
 }
 
 static paradox_activity_reason_t compare_operand(
@@ -169,9 +189,8 @@ void paradox_activity_evaluate(const paradox_activity_plan_t *plan,
        */
       const R_xlen_t child_value = plan->value_by_parameter[child];
       if (child_value != R_XLEN_T_MAX &&
-          Rf_inherits(
-            VECTOR_ELT(plan->values, child_value),
-            "TuneToken"
+          activity_value_is_tune_token(
+            VECTOR_ELT(plan->values, child_value)
           )) {
         if (result->reasons != NULL) {
           result->reasons[dependency] =
@@ -202,7 +221,7 @@ void paradox_activity_evaluate(const paradox_activity_plan_t *plan,
       paradox_activity_reason_t reason;
       if (parent_value != R_XLEN_T_MAX) {
         SEXP value = VECTOR_ELT(plan->values, parent_value);
-        reason = Rf_inherits(value, "TuneToken")
+        reason = activity_value_is_tune_token(value)
           ? PARADOX_ACTIVITY_SATISFIED_PARENT_TOKEN
           : compare_operand(
               value,

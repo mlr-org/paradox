@@ -1253,12 +1253,12 @@ main <- function() {
         NULL,
         c(NA_integer_, NA_integer_, 1L)
       )[[1L]]
-      altrep_diagnostics <- capture.output(
-        altrep_result <- .Call(
+      altrep_error <- tryCatch(
+        .Call(
           symbol("upgrade_graph_discover"),
           self_duplicate
         ),
-        type = "message"
+        error = conditionMessage
       )
       check(
         identical(names(result), c("objects", "paths")) &&
@@ -1266,18 +1266,82 @@ main <- function() {
           identical(result$objects[[1L]], candidate) &&
           length(result$paths) == 1L &&
           is.character(result$paths) &&
-          identical(altrep_result$objects, list(candidate)) &&
-          identical(altrep_result$paths, "x[[1]]") &&
-          !any(grepl(
-            "stack imbalance",
-            altrep_diagnostics,
+          is.character(altrep_error) &&
+          length(altrep_error) == 1L &&
+          grepl(
+            "structural list/expression vectors must not use ALTREP",
+            altrep_error,
             fixed = TRUE
-          )) &&
+          ) &&
           identical(boundary, list(objects = list(), paths = character())),
         paste(
-          "identity-aware graph discovery, self-returning ALTREP duplicate,",
+          "identity-aware graph discovery, structural ALTREP rejection,",
           "or global boundary differs"
         )
+      )
+    },
+    direct_test_upgrade_graph_boundary_lifetime = function() {
+      search_prefix <- "paradox_boundary_lifetime_native_probe"
+      search_names <- paste0(search_prefix, "_", seq_len(40L))
+      check(
+        !any(search_names %in% search()),
+        "boundary lifetime probe search names are already attached"
+      )
+      attached <- character()
+      on.exit({
+        for (search_name in rev(attached)) {
+          if (search_name %in% search()) {
+            detach(search_name, character.only = TRUE)
+          }
+        }
+      }, add = TRUE)
+      for (index in seq_along(search_names)) {
+        search_name <- search_names[[index]]
+        attach(
+          setNames(
+            list(TRUE),
+            paste0(search_prefix, "_binding_", index)
+          ),
+          name = search_name
+        )
+        attached <- c(attached, search_name)
+      }
+      boundary <- as.environment(search_names[[1L]])
+      state <- new.env(parent = emptyenv())
+      state$finalized <- FALSE
+      state$finalized_during_call <- NA
+      state$detached <- FALSE
+      reg.finalizer(boundary, function(unused) {
+        state$finalized <- TRUE
+      })
+      rm(boundary)
+      hook <- function() {
+        for (search_name in search_names) {
+          detach(search_name, character.only = TRUE)
+        }
+        attached <<- character()
+        state$detached <- TRUE
+        gc(full = TRUE)
+        state$finalized_during_call <- state$finalized
+      }
+      result <- .Call(
+        symbol("test_upgrade_graph_boundary_lifetime"),
+        list(),
+        hook
+      )
+      check(
+        state$detached &&
+          identical(state$finalized_during_call, FALSE) &&
+          identical(result, list(objects = list(), paths = character())),
+        "detached search boundary was not rooted through graph discovery"
+      )
+      for (iteration in 1:4) {
+        if (state$finalized) break
+        gc(full = TRUE)
+      }
+      check(
+        state$finalized,
+        "detached search boundary did not finalize after discovery"
       )
     },
     direct_upgrade_class_snapshot = function() {
@@ -1917,6 +1981,115 @@ main <- function() {
       check(identical(class(target), "later"),
         "GC attribute mutator did not rewrite the live attribute")
     },
+    direct_test_builtin_metadata_copy_reentry = function() {
+      metadata <- list(NULL)
+      value <- structure(3L, metadata = metadata)
+      mutator <- .Call(
+        symbol("test_gc_column_mutator"),
+        metadata,
+        0L,
+        metadata
+      )
+      hook_calls <- 0L
+      hook <- function() {
+        hook_calls <<- hook_calls + 1L
+        pointer <- mutator
+        mutator <<- NULL
+        rm(pointer)
+        for (attempt in seq_len(3L)) {
+          invisible(gc(full = TRUE))
+        }
+      }
+      error <- tryCatch(
+        .Call(
+          symbol("test_builtin_metadata_copy_reentry"),
+          value,
+          hook
+        ),
+        error = conditionMessage
+      )
+      check(
+        is.character(error) &&
+          length(error) == 1L &&
+          grepl(
+            "metadata must be ordinary, acyclic, and bounded",
+            error,
+            fixed = TRUE
+          ) &&
+          identical(hook_calls, 1L) &&
+          identical(metadata[[1L]], metadata),
+        "post-preflight metadata mutation did not reject at the bounded copier"
+      )
+
+      root_metadata <- list(NULL)
+      root_value <- structure(4L, metadata = root_metadata)
+      root_mutator <- .Call(
+        symbol("test_gc_column_mutator"),
+        root_metadata,
+        0L,
+        root_value
+      )
+      rm(root_mutator)
+      for (attempt in seq_len(3L)) {
+        invisible(gc(full = TRUE))
+      }
+      root_error <- tryCatch(
+        .Call(
+          symbol("test_builtin_metadata_copy_reentry"),
+          root_value,
+          NULL
+        ),
+        error = conditionMessage
+      )
+      check(
+        identical(attr(root_metadata[[1L]], "metadata"), root_metadata) &&
+          is.character(root_error) &&
+          grepl(
+            "metadata must be ordinary, acyclic, and bounded",
+            root_error,
+            fixed = TRUE
+        ),
+        "metadata root back-edge was not rejected at the bounded root"
+      )
+
+      expanded_value <- structure(5L, metadata = "selected")
+      expanded_labels <- sprintf("late_attribute_%03d", seq_len(65L))
+      invisible(lapply(expanded_labels, as.name))
+      expanded_mutators <- lapply(seq_along(expanded_labels), function(index) {
+        .Call(
+          symbol("test_gc_attribute_mutator"),
+          expanded_value,
+          expanded_labels[[index]],
+          index
+        )
+      })
+      expanded_hook <- function() {
+        pointers <- expanded_mutators
+        expanded_mutators <<- NULL
+        rm(pointers)
+        for (attempt in seq_len(3L)) {
+          invisible(gc(full = TRUE))
+        }
+      }
+      expanded_error <- tryCatch(
+        .Call(
+          symbol("test_builtin_metadata_copy_reentry"),
+          expanded_value,
+          expanded_hook
+        ),
+        error = conditionMessage
+      )
+      check(
+        is.character(expanded_error) &&
+          grepl(
+            "metadata must be ordinary, acyclic, and bounded",
+            expanded_error,
+            fixed = TRUE
+          ) &&
+          all(expanded_labels %in% names(attributes(expanded_value))),
+        "finalizer-expanded metadata spine did not reject at the hard bound"
+      )
+    },
     direct_test_param_set_collection_add_reentry = function() {
       collection <- ParamSetCollection$new(list(existing = ps(x = p_int())))
       result <- .Call(
@@ -1960,6 +2133,44 @@ main <- function() {
         identical(closure(3L), 3L) &&
         identical(closure(63L), 63L),
         "Domain interpretation closure differs")
+    },
+    direct_test_domain_admission_reentry = function() {
+      recover_domain <- get("recover_domain", envir = namespace)
+      domain <- recover_domain(data.table::rbindlist(
+        list(p_fct(c("a", "b")), p_fct(c("a", "b"))),
+        use.names = TRUE,
+        fill = TRUE
+      ))
+      levels_index <- match("levels", names(domain))
+      replacement <- list(c("c", "d"), c("u", "v"))
+      observed <- tryCatch(
+        {
+          .Call(
+            symbol("test_domain_admission_reentry"),
+            domain,
+            3L,
+            63L,
+            function() {
+              pointer <- .Call(
+                symbol("test_gc_column_mutator"),
+                domain,
+                as.integer(levels_index - 1L),
+                replacement
+              )
+              rm(pointer)
+              for (index in 1:3) invisible(gc(full = TRUE))
+              invisible(NULL)
+            }
+          )
+          NULL
+        },
+        error = conditionMessage
+      )
+      check(
+        identical(observed, "Domain changed during admission") &&
+          identical(domain$levels, replacement),
+        "Domain admission reentry fixture failed to reject a changed generation"
+      )
     }
   )
 

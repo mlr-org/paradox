@@ -4,7 +4,7 @@
 # that R's incoming checks classify as nonportable package compilation flags.
 
 CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
-CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
 SHLIB_LD = $(CC)
 
 CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include

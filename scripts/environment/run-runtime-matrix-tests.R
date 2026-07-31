@@ -337,28 +337,15 @@ cat("result_skip_manifest=", result_skip_relative, "\n", sep = "")
 cat("expected_result_test_block_skip_count=", nrow(expected_result_skips),
   "\n", sep = "")
 
-# Parallel testthat is a per-stage capability, not a default: it needs a
-# testthat whose TESTTHAT_PARALLEL environment override exists (3.2+) and
-# callr in this stage's sealed library, so the old runtimes keep the exact
-# serial path automatically.  The worker count is pinned through
-# options(Ncpus) as well as the environment because the staged Rprofile's
-# Ncpus default would otherwise widen the pool to eight and multiply the
-# four concurrent stages far beyond the admitted envelope.  Parallel workers
-# resolve the loaded package namespace themselves, so load_package stays
-# "none" in both modes.
-testthat_parallel <- getRversion() >= "4.1.0" &&
-  tryCatch(
-    utils::packageVersion("testthat") >= "3.2.0",
-    error = function(...) FALSE
-  ) &&
-  requireNamespace("callr", quietly = TRUE)
-testthat_workers <- if (testthat_parallel) 2L else 1L
-if (testthat_parallel) {
-  Sys.setenv(TESTTHAT_PARALLEL = "TRUE", TESTTHAT_CPUS = "2")
-  options(Ncpus = testthat_workers)
-} else {
-  Sys.setenv(TESTTHAT_PARALLEL = "FALSE", TESTTHAT_CPUS = "1")
-}
+# The outer runtime wave owns parallelism. A complete seven-minor run may
+# admit all stages at once, so a second testthat pool here would spend up to
+# twelve CPU processes against seven one-CPU stage admissions. Keep the exact
+# per-stage suite serial and let freed outer slots refill. The full native
+# gate separately retains its explicitly accounted parallel-testthat proof.
+testthat_parallel <- FALSE
+testthat_workers <- 1L
+Sys.setenv(TESTTHAT_PARALLEL = "FALSE", TESTTHAT_CPUS = "1")
+options(Ncpus = testthat_workers)
 cat("testthat_parallel=", if (testthat_parallel) "true" else "false",
   "\n", sep = "")
 cat("testthat_workers=", testthat_workers, "\n", sep = "")

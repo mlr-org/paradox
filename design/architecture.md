@@ -209,7 +209,18 @@ The migration implementation has three layers:
    direct parent; a user environment with only the display prefix remains an
    ordinary graph node. Generic external-pointer and weak-reference
    internals are opaque; an authenticated Paradox core contributes its
-   protected payload.
+   protected payload. Each scheduled node is represented by one rooted,
+   coherent edge snapshot: allocation-free direct paths, including the exact
+   old-R closure facade, allocate all carriers before capturing attributes and
+   primary edges together; the allocating old-R bytecode bridge and all
+   environment paths require two independently rooted, exactly equal complete
+   snapshots or fail closed.
+   Environment receipts cover exact attributes, parent, binding inventory,
+   kinds/edges/locks, and environment lock/object/S4 state without invoking an
+   active binding or forcing a promise. Package/import/user-database boundary
+   policy is then derived again from the selected receipt. Structural
+   list/expression ALTREP rejects before either attributes or its provider can
+   be observed.
 2. `R/upgrade_paradox_object.R` authenticates discovered ParamSet-family
    candidates, memoizes one offside current replacement per legacy identity,
    resolves collection/Shadow/registered-owner dependencies in post-order, and
@@ -366,8 +377,13 @@ internal state.
 
 The same rule applies to nested public projections. `$params`, `$domains`,
 `$data`, property vectors, raw `$values`, and `$get_values()` detach their list
-carriers and built-in typed atomic leaves, including complete nested attribute
-metadata. Condition shells/RHS vectors,
+carriers and built-in typed atomic leaves, including complete supported
+ordinary, acyclic, bounded nested attribute metadata. A closure recursively
+embedded as presentation metadata rejects cleanly because the R-3.6-compatible
+terminal receipt cannot authenticate the fresh closure shell made by R's deep
+duplicator without allocating. A function that is itself a semantic leaf or
+callback remains opaque and retains its documented identity behavior.
+Condition shells/RHS vectors,
 levels, defaults, initialization values, special-value lists, and interpreted
 cargo therefore cannot be used as a by-reference route back into capsule
 state. Opaque ParamUty leaves, callbacks, environments, external pointers,
@@ -375,6 +391,17 @@ typed S4 identity tokens, and Collection child shells retain exact identity;
 the operation owns only the carrier around them. Detachment occurs only while
 constructing an outward result. Internal value planning and mutation keep
 using the exact retained capsule/graph snapshot and pay no public-copy cost.
+The outward copier is package-owned and bounded: at most 64 attributes per
+carrier, 64 recursive frames, and 65,536 selected nodes. Every recursive child
+is first retained in scanned R storage, payloads are copied without duplicating
+the caller's attribute pairlist, attributes are installed only with public
+setters in a fixed dependency-safe order, and an allocation-free terminal
+receipt closes the graph generation. Setter-normalized raw attributes,
+closures or `DOTSXP` used as presentation metadata, cycles, and overbound
+graphs reject. Direct quantile metadata and typed list-leaf snapshots preserve
+their distinct shallow nested-value contract through a bounded top-level
+tag/value copier; this path never invokes the pairlist duplicator and performs
+no metadata allocation for an attribute-free source.
 The schema default/init position alone interprets the package-owned
 `NoDefault` marker; the same outward class on a general ParamUty stored value
 has no authority and preserves exact opaque identity.
@@ -606,6 +633,19 @@ kind/storage, grouping, bounds/tolerance, levels, special values, default, tags,
 transformation, requirements, and initialization are not restated there. The
 owner returns the admitted kind/field view used by operation-specific target
 compatibility or construction.
+
+Public Domain operations retain that single rule owner but do not all
+interpret every semantic field. Every nonempty or typed-zero operation first
+admits the complete exact sixteen-column structure; the canonical zero-column
+empty Domain uses its dedicated exact validator. The identity spine is always
+interpreted. Each operation supplies a mask over bounds, levels, special
+values, cargo, tags, and transformation, and only
+`paradox_domain_interpretation_closure()` expands the dependencies among those
+rules. `domain_check()` supplies the complete mask. An irrelevant rule is
+skipped whole, never reimplemented by the caller, so malformed semantic state
+outside one mask is rejected by the first operation that interprets it. The
+compact indexed-root receipt retains the exact selected fields and proves one
+coherent terminal Domain generation without a parallel row validator.
 
 The shared owner rejects ALTREP or S4 structural Domain objects/metadata. For
 Dbl, Int, Fct, Lgl, and Uty the outer special-values list, names, and metadata
@@ -1015,11 +1055,14 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
 
 - `src/core_state.[ch]`: capsule creation, validation, field replacement,
   ownership, SHADOW refresh, and graph-path safety;
-- `src/domain_construct.c`, `src/domain_admission.h`, `src/domain_kernels.c`,
+- `src/domain_construct.c`, `src/domain_admission.h`,
+  `src/domain_row_admission.c`, `src/domain_kernels.c`, and
   `src/paramset_domain_common.[ch]`: closed Domain construction, the sole shared
-  built-in row-admission owner, canonical capsule table/kind validation, and
-  the exact dependency validator that can expose admitted RHS pointers to its
-  rooted caller. `paramset_domain_common` also owns the cross-unit helper
+  built-in row-rule owner, the exact public sixteen-column structural adapter,
+  operation-mask/closure handoff, compact indexed-root terminal-generation
+  receipt, canonical capsule table/kind validation, and the exact dependency
+  validator that can expose admitted RHS pointers to its rooted caller.
+  `paramset_domain_common` also owns the cross-unit helper
   vocabulary — the canonical 16-column schema enum and name table, encoding-
   aware string equality and linear identifier search, plain-table construction
   and metadata stamping — so per-file copies of these facts do not drift;
@@ -1048,7 +1091,10 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   collection reads do not allocate a temporary environment or repeat the
   private-to-core lookup;
 - `src/upgrade_graph.[ch]`: non-forcing, pointer-memoized iterative discovery
-  for the recursive legacy migration boundary;
+  for the recursive legacy migration boundary. Its precomputed search/built-in
+  boundary identities live in one indexed ordinary `VECSXP` for the complete
+  allocating walk; the parallel `R_alloc()` array is lookup scratch and can
+  never be their sole owner after a finalizer detaches an environment;
 - `src/binding_snapshot.c`: the registered cold R-facing projection of the
   centralized non-forcing ordinary-frame binding classifier. It distinguishes
   realized values—including language objects and symbols—from absent,
@@ -1062,10 +1108,11 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   facade completion for genuinely fresh package-owned tables from the
   defensive caller-owned finalizer. Raw stored-attribute selection uses
   `R_mapAttrib()` on R >= 4.6 and one centralized, ledgered `ATTRIB` traversal
-  on R 3.6--4.5. Before R 4.5, one ledgered `FORMALS` accessor preserves
-  allocation-free transformation callback admission, while cold `body()` and
-  `environment()` calls replace native accessors that were not yet API. A
-  directly reached bytecode object takes the cold public
+  on R 3.6--4.5. Before R 4.5, exact ledgered `FORMALS`,
+  `R_ClosureExpr`, and `CLOENV` accessors capture one allocation-free closure
+  generation for transformation callback admission and recursive migration;
+  the historical function-like macros are invoked with expansion suppressed.
+  A directly reached bytecode object alone takes the cold public
   `as.function.default()`/`body()` bridge without executing it. Attribute and
   hot binding adapters never evaluate `attributes()` or another
   R/data.table helper. R 3.6--4.1 use
@@ -1079,8 +1126,9 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   an incompatible layout.
   A terminal optional receipt scan must not allocate, so it uses old-only
   `R_HasFancyBindings()` to reject a fancy frame before the stored-cell scan.
-  The exact non-public compatibility entries are centralized here. The single
-  old attribute and hot-formals selectors are described above. R < 4.6
+  The exact non-public compatibility entries are centralized here. The
+  old-runtime raw-attribute iterator and coherent three-accessor closure
+  snapshot are described above. R < 4.6
   uses one declared/exported `Rf_findVarInFrame` call to obtain the stored
   binding cell. Only R < 4.5 uses the header-declared/exported
   `R_PromiseExpr`, `PRENV`, and `PRVALUE` when that cell is a `PROMSXP`.
@@ -1312,7 +1360,10 @@ Every allocating or callback-capable boundary has explicit protection. Long
 loops poll interrupts without holding unrooted objects or raw pointers. Output
 sizes, byte counts, recursion replacements, row/column products, and C casts
 are checked before allocation or indexing. Portable scalar C99 is the baseline;
-architecture-specific code is not required for performance.
+`SystemRequirements: USE_C17` caps the dialect selected for ordinary current-R
+installation, while a separate current-R GCC >= 15 / Clang `--use-C23` gate
+proves forward compatibility without replacing any strict GNU C99 lane.
+Architecture-specific code is not required for performance.
 
 ## Forbidden architecture regressions
 
@@ -1331,7 +1382,8 @@ Do not add any of the following:
 - generated-surface creator-provenance authentication for an exact BASE
   ObjectTuneToken shell; safe genuine-private/core aliases must remain harmless
   because no alias method is invoked;
-- any internal R API beyond the exact raw-attribute, hot closure-formals, and
+- any internal R API beyond the exact raw-attribute, coherent old-R
+  closure-snapshot, and
   non-forcing stored-binding/promise compatibility entries ledgered by symbol, version,
   count, and source in
   `environment/r-api-exceptions.tsv`;

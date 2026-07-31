@@ -1030,12 +1030,18 @@ test_that("TuneToken and search metadata use the closed ordinary shape", {
 })
 
 test_that("TuneToken snapshots revalidate after allocation finalizers", {
+  token_snapshot = get(
+    "C_test_tune_token_gc_mutation_snapshot",
+    envir = asNamespace("paradox")
+  )
+  attribute_mutator = get(
+    "C_test_gc_attribute_mutator",
+    envir = asNamespace("paradox")
+  )
+
   token = to_tune(0, 1)
   snapshot = .Call(
-    get(
-      "C_test_tune_token_gc_mutation_snapshot",
-      envir = asNamespace("paradox")
-    ),
+    token_snapshot,
     token,
     0L,
     asS4(0),
@@ -1046,10 +1052,7 @@ test_that("TuneToken snapshots revalidate after allocation finalizers", {
 
   values = list(value = to_tune(0, 1))
   snapshot = .Call(
-    get(
-      "C_test_tune_token_gc_mutation_snapshot",
-      envir = asNamespace("paradox")
-    ),
+    token_snapshot,
     values,
     0L,
     0,
@@ -1059,6 +1062,59 @@ test_that("TuneToken snapshots revalidate after allocation finalizers", {
   expect_s3_class(snapshot$value, "RangeTuneToken")
   expect_identical(snapshot$value$content$lower, 0)
   expect_identical(values$value, 0)
+
+  # The outward names belong to the value carrier selected before token
+  # snapshotting, even if the caller rewrites the source list's names at the
+  # allocation barrier.
+  values = list(original = to_tune(0, 1))
+  original_names = names(values)
+  replacement_names = "renamed"
+  attribute_name = "names"
+  mutation_column = NULL
+  mutation_replacement = NULL
+  mutation_phase = "content"
+  gc()
+  pending = .Call(
+    attribute_mutator,
+    values,
+    attribute_name,
+    replacement_names
+  )
+  rm(pending)
+  snapshot = .Call(
+    token_snapshot,
+    values,
+    mutation_column,
+    mutation_replacement,
+    mutation_phase
+  )
+  expect_identical(names(snapshot), original_names)
+  expect_identical(names(values), replacement_names)
+
+  # Likewise, the content names are captured beside their matching cells.
+  # Reordering only the live names after that capture must not relabel the
+  # detached snapshot.
+  token = to_tune(0, 1)
+  content = token$content
+  original_names = names(content)
+  replacement_names = c("upper", "lower", "logscale")
+  gc()
+  pending = .Call(
+    attribute_mutator,
+    content,
+    attribute_name,
+    replacement_names
+  )
+  rm(pending)
+  snapshot = .Call(
+    token_snapshot,
+    token,
+    mutation_column,
+    mutation_replacement,
+    mutation_phase
+  )
+  expect_identical(names(snapshot$content), original_names)
+  expect_identical(names(token$content), replacement_names)
 })
 
 test_that("Domain TuneTokens fail closed on forged candidate storage", {
@@ -1521,23 +1577,34 @@ test_that("TuneToken content fields come from one generation", {
   # payload.
   source = data.table::data.table(lo = 0.2, hi = 0.9)
   token = to_tune(source$lo, source$hi)
+  token_snapshot = get(
+    "C_test_tune_token_gc_mutation_snapshot",
+    envir = asNamespace("paradox")
+  )
+  snapshot_column = NULL
+  snapshot_replacement = NULL
+  snapshot_phase = "content"
+  finalizer_state = new.env(parent = emptyenv())
+  finalizer_state$fired = FALSE
   expect_identical(
     data.table::address(token$content$lower),
     data.table::address(source$lo)
   )
   trigger = new.env(parent = emptyenv())
   reg.finalizer(trigger, function(e) {
+    finalizer_state$fired = TRUE
     data.table::set(source, 1L, "lo", 0.4)
     data.table::set(source, 1L, "hi", 0.5)
   })
   rm(trigger)
   snapshot = .Call(
-    get("C_test_tune_token_gc_mutation_snapshot", envir = asNamespace("paradox")),
+    token_snapshot,
     token,
-    NULL,
-    NULL,
-    "content"
+    snapshot_column,
+    snapshot_replacement,
+    snapshot_phase
   )
+  expect_true(finalizer_state$fired)
   # The payload copy is one allocation-free pass, so the two bounds are always
   # taken from the same generation. A per-leaf copy could pair the pre-mutation
   # lower bound with the post-mutation upper bound.
@@ -1553,7 +1620,7 @@ test_that("TuneToken content fields come from one generation", {
   # without mutating the caller's leaves.
   named = to_tune(c(low = 0.1), c(high = 0.9))
   owned = .Call(
-    get("C_test_tune_token_gc_mutation_snapshot", envir = asNamespace("paradox")),
+    token_snapshot,
     named,
     NULL,
     NULL,

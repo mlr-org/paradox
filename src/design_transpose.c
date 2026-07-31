@@ -56,31 +56,142 @@ static int supported_column_type(SEXPTYPE type) {
 static SEXP design_tzone_symbol = NULL;
 static SEXP design_units_symbol = NULL;
 
+enum design_attribute {
+  DESIGN_ATTRIBUTE_NAMES = 0,
+  DESIGN_ATTRIBUTE_CLASS,
+  DESIGN_ATTRIBUTE_LEVELS,
+  DESIGN_ATTRIBUTE_TZONE,
+  DESIGN_ATTRIBUTE_UNITS,
+  DESIGN_ATTRIBUTE_COUNT
+};
+
 static void initialize_design_attribute_symbols(void) {
   if (design_tzone_symbol != NULL) return;
   design_tzone_symbol = Rf_install("tzone");
   design_units_symbol = Rf_install("units");
 }
 
-static void validate_attributes(SEXP source) {
-  static const char *const allowed[] = {
-    "names", "class", "levels", "tzone", "units"
-  };
-  if (!paradox_api_has_only_attributes(source, allowed, 5)) {
+static SEXP design_attribute_symbol(enum design_attribute attribute) {
+  switch (attribute) {
+  case DESIGN_ATTRIBUTE_NAMES:
+    return R_NamesSymbol;
+  case DESIGN_ATTRIBUTE_CLASS:
+    return R_ClassSymbol;
+  case DESIGN_ATTRIBUTE_LEVELS:
+    return R_LevelsSymbol;
+  case DESIGN_ATTRIBUTE_TZONE:
+    return design_tzone_symbol;
+  case DESIGN_ATTRIBUTE_UNITS:
+    return design_units_symbol;
+  default:
+    Rf_error("Internal error: invalid Design attribute");
+  }
+  return R_NilValue;
+}
+
+static int ordinary_design_attribute(SEXP value) {
+  return value == R_NilValue ||
+    (TYPEOF(value) == STRSXP && !ALTREP(value) && !Rf_isS4(value) &&
+      !Rf_isObject(value) && paradox_api_has_no_attributes(value));
+}
+
+static int bounded_design_attribute_count(
+    SEXP source, R_xlen_t *count) {
+  if (paradox_api_has_no_attributes(source)) {
+    *count = 0;
+    return TRUE;
+  }
+  return paradox_api_map_bounded_stored_attributes(
+    source,
+    DESIGN_ATTRIBUTE_COUNT,
+    NULL,
+    NULL,
+    count
+  );
+}
+
+static R_xlen_t capture_design_attributes(SEXP source, SEXP snapshot,
+    R_xlen_t column_size) {
+  R_xlen_t stored_count = 0;
+  if (!bounded_design_attribute_count(source, &stored_count)) {
     Rf_error("Design columns have unsupported structural attributes");
   }
-  const SEXP attributes[] = {
-    paradox_api_raw_attribute(source, R_NamesSymbol),
-    paradox_api_raw_attribute(source, R_ClassSymbol),
-    paradox_api_raw_attribute(source, R_LevelsSymbol),
-    paradox_api_raw_attribute(source, design_tzone_symbol),
-    paradox_api_raw_attribute(source, design_units_symbol)
-  };
-  for (size_t index = 0; index < 5; ++index) {
-    if (attributes[index] != R_NilValue &&
-        (ALTREP(attributes[index]) || Rf_isS4(attributes[index]) ||
-          Rf_isObject(attributes[index]))) {
+  R_xlen_t present_count = 0;
+  for (enum design_attribute attribute = DESIGN_ATTRIBUTE_NAMES;
+      attribute < DESIGN_ATTRIBUTE_COUNT;
+      attribute = (enum design_attribute) (attribute + 1)) {
+    SEXP value = paradox_api_raw_attribute(
+      source,
+      design_attribute_symbol(attribute)
+    );
+    if (!ordinary_design_attribute(value) ||
+        (attribute == DESIGN_ATTRIBUTE_NAMES &&
+          value != R_NilValue && XLENGTH(value) != column_size)) {
       Rf_error("Design columns must have ordinary structural attributes");
+    }
+    if (value != R_NilValue) ++present_count;
+    SET_VECTOR_ELT(snapshot, attribute, value);
+  }
+  if (stored_count != present_count) {
+    Rf_error("Design columns have unsupported structural attributes");
+  }
+  return stored_count;
+}
+
+static int design_attributes_current(SEXP source, SEXP snapshot,
+    R_xlen_t column_size, R_xlen_t stored_count) {
+  R_xlen_t observed_count = 0;
+  if (stored_count > DESIGN_ATTRIBUTE_COUNT ||
+      !bounded_design_attribute_count(source, &observed_count) ||
+      observed_count != stored_count) {
+    return FALSE;
+  }
+  R_xlen_t present_count = 0;
+  for (enum design_attribute attribute = DESIGN_ATTRIBUTE_NAMES;
+      attribute < DESIGN_ATTRIBUTE_COUNT;
+      attribute = (enum design_attribute) (attribute + 1)) {
+    SEXP value = paradox_api_raw_attribute(
+      source,
+      design_attribute_symbol(attribute)
+    );
+    if (value != VECTOR_ELT(snapshot, attribute) ||
+        !ordinary_design_attribute(value) ||
+        (attribute == DESIGN_ATTRIBUTE_NAMES &&
+          value != R_NilValue && XLENGTH(value) != column_size)) {
+      return FALSE;
+    }
+    if (value != R_NilValue) ++present_count;
+  }
+  return present_count == stored_count;
+}
+
+static int design_attribute_copies_current(SEXP source, SEXP owned) {
+  for (enum design_attribute attribute = DESIGN_ATTRIBUTE_NAMES;
+      attribute < DESIGN_ATTRIBUTE_COUNT;
+      attribute = (enum design_attribute) (attribute + 1)) {
+    SEXP original = VECTOR_ELT(source, attribute);
+    SEXP snapshot = VECTOR_ELT(owned, attribute);
+    if (original == R_NilValue) {
+      if (snapshot != R_NilValue) return FALSE;
+    } else if (!ordinary_design_attribute(original) ||
+        !ordinary_design_attribute(snapshot) ||
+        original == snapshot ||
+        !paradox_ordinary_vector_payload_equal(original, snapshot)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static void install_design_attributes(SEXP target, SEXP attributes,
+    int include_names) {
+  for (enum design_attribute attribute = DESIGN_ATTRIBUTE_NAMES;
+      attribute < DESIGN_ATTRIBUTE_COUNT;
+      attribute = (enum design_attribute) (attribute + 1)) {
+    if (!include_names && attribute == DESIGN_ATTRIBUTE_NAMES) continue;
+    SEXP value = VECTOR_ELT(attributes, attribute);
+    if (value != R_NilValue) {
+      Rf_setAttrib(target, design_attribute_symbol(attribute), value);
     }
   }
 }
@@ -145,14 +256,83 @@ static SEXP snapshot_column(SEXP source,
       Rf_error("Internal error: unsupported Design column type");
     }
   }
-  DUPLICATE_ATTRIB(result, source);
-  if ((SEXPTYPE) TYPEOF(result) != type || Rf_isS4(result) ||
-      XLENGTH(result) != count) {
+  R_xlen_t observed_attribute_count = 0;
+  if (!bounded_design_attribute_count(
+      source,
+      &observed_attribute_count
+    )) {
     UNPROTECT(1);
+    Rf_error("Design columns have unsupported structural attributes");
+  }
+  if (observed_attribute_count == 0) {
+    /*
+     * This is the canonical hot path. No allocation or callback follows the
+     * payload pass, so the already selected ordinary result can return
+     * directly without an attribute carrier or terminal replay.
+     */
+    if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
+        XLENGTH(source) != count) {
+      UNPROTECT(1);
+      Rf_error("Design column changed while being snapshotted");
+    }
+    UNPROTECT(1);
+    return result;
+  }
+
+  /*
+   * Design interprets exactly five flat character metadata fields. Allocate
+   * both root carriers before selecting their generation, own every present
+   * value independently, and install only those known fields. This avoids R's
+   * recursive attribute duplicator entirely.
+   */
+  SEXP selected_attributes = PROTECT(Rf_allocVector(
+    VECSXP,
+    DESIGN_ATTRIBUTE_COUNT
+  ));
+  SEXP owned_attributes = PROTECT(Rf_allocVector(
+    VECSXP,
+    DESIGN_ATTRIBUTE_COUNT
+  ));
+  const R_xlen_t selected_attribute_count = capture_design_attributes(
+    source,
+    selected_attributes,
+    count
+  );
+  for (enum design_attribute attribute = DESIGN_ATTRIBUTE_NAMES;
+      attribute < DESIGN_ATTRIBUTE_COUNT;
+      attribute = (enum design_attribute) (attribute + 1)) {
+    SEXP selected = VECTOR_ELT(selected_attributes, attribute);
+    if (selected != R_NilValue) {
+      SEXP owned = PROTECT(Rf_duplicate(selected));
+      SET_VECTOR_ELT(owned_attributes, attribute, owned);
+      UNPROTECT(1);
+    }
+  }
+  install_design_attributes(result, owned_attributes, TRUE);
+
+  if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
+      XLENGTH(source) != count ||
+      !design_attributes_current(
+        source,
+        selected_attributes,
+        count,
+        selected_attribute_count
+      ) ||
+      !design_attribute_copies_current(
+        selected_attributes,
+        owned_attributes
+      ) ||
+      (!ALTREP(source) &&
+        !paradox_ordinary_vector_payload_equal(source, result))) {
+    UNPROTECT(3);
     Rf_error("Design column changed while being snapshotted");
   }
-  validate_attributes(result);
-  UNPROTECT(1);
+  if ((SEXPTYPE) TYPEOF(result) != type || Rf_isS4(result) ||
+      XLENGTH(result) != count) {
+    UNPROTECT(3);
+    Rf_error("Design column changed while being snapshotted");
+  }
+  UNPROTECT(3);
   return result;
 }
 
@@ -180,6 +360,27 @@ static int scalar_is_na(SEXP value) {
     return STRING_ELT(value, 0) == NA_STRING;
   default:
     return FALSE;
+  }
+}
+
+static void install_design_scalar_attributes(SEXP target, SEXP column) {
+  for (enum design_attribute attribute = DESIGN_ATTRIBUTE_CLASS;
+      attribute < DESIGN_ATTRIBUTE_COUNT;
+      attribute = (enum design_attribute) (attribute + 1)) {
+    SEXP value = paradox_api_raw_attribute(
+      column,
+      design_attribute_symbol(attribute)
+    );
+    if (value != R_NilValue) {
+      /*
+       * The frozen column owns one flat, attribute-free character value.
+       * Duplicate that value for every public scalar so rows cannot share a
+       * mutable levels/class/tzone/units carrier.
+       */
+      SEXP owned = PROTECT(Rf_duplicate(value));
+      Rf_setAttrib(target, design_attribute_symbol(attribute), owned);
+      UNPROTECT(1);
+    }
   }
 }
 
@@ -221,10 +422,7 @@ static SEXP atomic_scalar(SEXP column, R_xlen_t row) {
     return R_NilValue;
   }
   if (attributed) {
-    DUPLICATE_ATTRIB(result, column);
-    Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
-    Rf_setAttrib(result, R_DimSymbol, R_NilValue);
-    Rf_setAttrib(result, R_DimNamesSymbol, R_NilValue);
+    install_design_scalar_attributes(result, column);
   }
   UNPROTECT(1);
   return result;

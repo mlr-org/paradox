@@ -19,7 +19,7 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The active frozen package-facing candidate is
+The previous frozen package-facing candidate was
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
 `b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. It includes the managed
@@ -27,10 +27,11 @@ active-path carrier and its ordinary and deterministic instrumented
 regressions. The exact `release-candidate-dbbdcc1` `release-core` run completed
 all eight tasks, including strict native/sanitizer/package checks and the R
 3.6.3, 4.0.5, 4.3.3, and 4.5.2 supported-runtime matrix. Those successful
-package executions remain informative candidate evidence, but the retained
+package executions remain informative historical evidence, but the retained
 native child run cannot seed the memory gate: its source manifest records the
 original worktree modes while the copied source tree reflects the worker
-umask.
+umask. Package-facing source has since reopened; no result for this ref accepts
+the current source or substitutes for a fresh immutable candidate.
 
 The first combined-memory attempt,
 `release-candidate-dbbdcc1-memory`, stopped in source-proof preflight before
@@ -54,18 +55,18 @@ completion, JSON summary, and TSV summary SHA-256 values are respectively
 `9a279062fa8f2d99ff97561b6530dd3944614d04fc133e953b772aee64f5cb80`,
 and
 `92eb669197c8cd82a43f2424143efe7f3967213a3a1da2006bcdc691ce519bd2`.
-That child is the immutable donor for the isolated rchk policy discovery. Once
-the source-bound policy changes, the final combined-memory run requires a new
-static/focused native donor from the converged policy/harness commit; it does
+That child was the immutable donor for the isolated rchk policy discovery. Once
+the source-bound policy changed, the final combined-memory run used a new
+static/focused native donor from the converged policy/harness commit; it did
 not require another full package acceptance run.
 
 The first isolated bounded-rchk discovery attempt from the new donor,
 `release-candidate-dbbdcc1-rchk-discovery-r1`, failed closed in resource
 preflight before starting the analyzer: 36,328 MiB was available against the
 reviewed 20-GiB analyzer allowance plus 16-GiB protected host reserve
-(36,864 MiB total). It is capacity evidence only and must not be reused. Keep
-both limits; wait for or manually free at least about 1 GiB of nonessential
-memory, then use a fresh discovery run ID.
+(36,864 MiB total). It is capacity evidence only and was not reused. Both
+limits were retained; after sufficient nonessential memory was freed, the
+replacement used a fresh discovery run ID.
 
 The admitted replacement discovery,
 `release-candidate-dbbdcc1-rchk-discovery-r2`, ran all three analyzers
@@ -75,7 +76,7 @@ diagnostics. Raw bcheck and ordering-insensitive semantic SHA-256 values are
 `ddbad6140d74e96422bc4f77942f9303af9e51706005f9f95d36b3d677b011d8`
 and
 `9135cbe02ddbd69019d7901d09bd5a7286fd24b74260e1864be0c92aeceef1d9`.
-Maacheck is byte-empty; fficheck reports the exact current 82 functions and one
+Maacheck is byte-empty; fficheck reports that source's exact 82 functions and one
 registration call, SHA-256
 `448c7d8dae05fab9b43570ed169a4472de8ca6ca40836061642c4203c3391882`.
 The independently generated and validated policy, block table, and unchanged
@@ -172,13 +173,14 @@ The direct-child portability companion is
 `e1fe00ddad08af89566e3df12460bc47d3e98292`. It changes only
 `.github/workflows/r-cmd-check.yml` (SHA-256
 `14c4c8d1cc8d8e07aea1829d1203f6217464ae9c6b94efc1050bf192638196e3`)
-and is package-facing-source identical to the candidate. The only remaining
+and is package-facing-source identical to that candidate. The only remaining
 release gates for that historical candidate were retained hosted Windows
 x86-64/macOS ARM64 results and the user-performed downstream branch/PR
-publication handoff. The active replacement candidate has now passed
-`release-core` and has a fresh replayable memory-source proof, but still
-requires the combined-memory result and remaining applicable local/hosted
-gates. Agents must not perform either remote write.
+publication handoff. That historical replacement candidate later passed
+`release-core`, a fresh replayable memory-source proof, and its combined-memory
+gate. Package-facing source has since reopened, so those conclusions are
+historical and every applicable source-bound gate requires a new candidate.
+Agents must not perform any remote write.
 
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
@@ -215,21 +217,76 @@ exactly the condition under which revalidation can only repeat its previous
 answer. It never records that a caller may be trusted, and it never survives
 a change it did not observe.
 
+The later Domain admission carrier compaction is a distinct bounded follow-up
+governed by
+[`design/domain-admission-receipt-compaction-plan.md`](design/domain-admission-receipt-compaction-plan.md).
+It does not reopen the P1--P5 slice experiments above. Its indexed-root and
+focused correctness work is complete, but its own source-bound three-way
+comparison remains mandatory once one immutable candidate exists.
+
+The exact focused adversarial review closure is retained at
+`.local/checks/integrated-selectors-r9-20260731T122010Z`; its source-manifest
+SHA-256 is
+`0a000dfb692332aed5eacd80119b9ae3fdf037e21a31fa7bf1cf60956584db0a`.
+The final review closed the Condition post-`Length` bounded re-admission,
+initialized every interpreted Domain row's empty-special names-presence byte,
+and rejected a provisional broad exception for structural ALTREP names in
+favor of materializing only names produced by Paradox itself. The five
+directly relevant package-source SHA-256 values are
+`f9b81c1d3aca0f99bae5bfc3625ba252eb513eb177c2e1b6dbf8d760110104fb`
+(`src/r_utils.c`),
+`68233a976348f6b09ff42f5157fc780a3451fb52c797a91c85cbf82cc71e38c5`
+(`src/domain_row_admission.c`),
+`621ce8498691a7ff60ba39e8cff617024664738c505a295cfa310cfd854aceff`
+(`src/builtin_condition.c`),
+`4ee3b9179ff78880969acedcaafefb2f0eb8356c87d8a35b3d5ee590e16a3d53`
+(`R/ParamFct.R`), and
+`e676006d826fc97089d56ff5852fa369b79de4f9250b44cb7bfba7b3a66d940d`
+(`R/ParamSet.R`). The current-R `Condition`, `native-design-transpose`,
+`native-domain-construction`, and `native-public-accessor-ownership` logs and
+the actual-R-3.6.3 accessor-ownership log all ended `DONE` with exit zero;
+their SHA-256 values are, in order,
+`7e494791778fad9946d60883cf0d514b403dfd11b312c80af2bd3c550fd2a27d`,
+`eb1940f1604ef0174515ed11db7ad6584f7b78ecb1c3e2389178da29221e91e0`,
+`033caeaef2f31c11d05f2bcaefb584d47edc60bcfe3cf2737d61a9a980d24df3`,
+`9c97379a6cb472533ee656ceb683e83f850c7c15f9ced6e507bb38f086e4d3d6`,
+and
+`c95f6a004903c3bd1d4d0bdc70847254fcd2a8410438632ee770c5feec791b2f`.
+The r9 C/R implementation is byte-identical to r8 manifest
+`6ed37e6c07ca17d8f487a949cfc2e4cf510eaded448e89fc1b11c7750a114634`,
+which owns the strict GCC/Clang GNU99 and current/R-3.6 package-install proof.
+All of this is focused development evidence only. There is no current frozen
+candidate; the Domain three-way timing and every complete release gate remain
+pending.
+
 The final compatibility batch is governed by
 [`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).
-Paradox 2 supports R >= 3.6 and uses portable C99. Old-runtime adaptation stays
+Paradox 2 supports R >= 3.6 and uses portable C99. Normal current-R source
+installations select a dialect no later than C17 through
+`SystemRequirements: USE_C17`; this is an installation ceiling, not permission
+to weaken the strict GNU C99 lanes or use C11/C17-only source. The separate
+bounded forward-compatibility gate installs the exact package archive with
+explicit `--use-C23` under repository-local GCC >= 15 and recent Clang, loads
+both DSOs, and runs the native probe inventory. It is not crossed with old R or
+the downstream matrix. The detailed boundary is
+[`design/c17-c23-release-plan.md`](design/c17-c23-release-plan.md).
+Old-runtime adaptation stays
 inside the small R API facade, except for the graph crawler's narrow
 capability gates where an old runtime cannot expose an edge at all; it is never
-a second semantic engine. The real supported-runtime matrix includes R 3.6.3,
-and the header matrix includes the 3.6.0 minimum plus the 4.0.0 and 4.2.0 API
-transition releases before the existing later axes. Historical candidate evidence that
-started at R 4.3 remains historical and cannot prove this reopened source.
+a second semantic engine. The real supported-runtime matrix executes the
+complete package suite on every minor line from R 3.6 through R 4.5:
+3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2. The independent full
+native lane owns the current R 4.6.1 execution, so no second 4.6 runtime row
+duplicates that expensive suite. The header matrix includes the 3.6.0 minimum
+plus the 4.0.0 and 4.2.0 API transition releases before the existing later
+axes. Historical candidate evidence that started at R 4.3 remains historical
+and cannot prove this reopened source.
 The R 3.6 stage has two separate dependency proofs: its complete-test closure
 and a cached, sealed six-package closure at the exact five direct
 `DESCRIPTION` floors plus `digest` 0.6.39. The latter installs the same
 candidate tarball into a fresh one-package library and runs only a bounded
 dependency-origin/import smoke; it is not a duplicate test suite. A complete
-four-runtime run also serializes a representative current-v2 nested graph on
+seven-runtime run also serializes a representative current-v2 nested graph on
 R 4.0.5 and loads, exercises, mutates, and reserializes those exact bytes on
 R 3.6.3. Every selected R 3.6 stage owns the floor proof; only a complete
 runtime selection may claim the cross-version handoff.
@@ -384,12 +441,28 @@ operator action.
   `row.names`/`class`/`names` construction order on every supported runtime.
   Ownership extends through public `$params`, `$domains`, `$data`, static
   properties, raw `$values`, and `$get_values()`: mutable list carriers and
-  built-in typed atomic leaves, including complete nested attribute metadata,
-  are detached. ParamUty leaves, callbacks, environments, external pointers,
-  typed S4 identity tokens, and ParamSet
+  built-in typed atomic leaves, including their complete supported ordinary,
+  acyclic, bounded nested attribute metadata, are detached. A closure
+  recursively embedded as presentation metadata is unsupported and rejects
+  cleanly; semantic function-valued leaves and callbacks are not metadata and
+  retain their separately documented identity behavior. ParamUty leaves,
+  callbacks, environments, external pointers, typed S4 identity tokens, and ParamSet
   children remain exact opaque identities. `$sets` therefore owns its named
   outer carrier but not its child shells. This cost belongs only to outward
   construction; internal planning and mutation use retained capsules directly.
+  No caller-owned attribute spine in these ownership paths is passed to R's
+  shallow or recursive duplicator. The package-owned copier hard-bounds each
+  attribute spine and recursive path at 64 edges/frames and the complete graph
+  at 65,536 nodes, selects children into scanned R carriers before allocating,
+  and installs attributes with public setters in the fixed
+  `dim`/middle/`dimnames`/`class` order. A setter-normalized raw spelling,
+  post-selection mutation, cycle, overbound graph, closure, or `DOTSXP`
+  presentation node rejects at the terminal receipt. Qunif metadata and typed
+  list-leaf compatibility deliberately retain shallow nested metadata identity,
+  but use the same bounded top-level tag/value selection and public setters;
+  their ordinary attr-free path allocates no metadata carrier. On R >= 4.6 the
+  bounded facade stops `R_mapAttrib()` with a guaranteed non-NULL global
+  symbol; older R uses the one reviewed `ATTRIB` loop with the same edge bound.
   Interpret `"NoDefault"` as the package marker only at a schema default/init
   position; an identically classed general ParamUty stored value is opaque and
   retains exact identity.
@@ -468,8 +541,11 @@ operator action.
   It accepts `NULL` or a plain logical, integer, double, or character vector
   with at most names, materializes a stable ALTREP operand once, and rejects
   classed or otherwise attributed vectors rather than invoking `Ops`/`%in%`
-  dispatch. `condition_as_string()` is cold presentation glue, not a second
-  evaluator. `p_uty(custom_check=)` remains the general callback escape hatch.
+  dispatch. A callback-capable ALTREP `Length` is followed by one terminal
+  hard-bounded re-admission of type, ALTREP/object/S4 state, and the complete
+  allowed attribute spine before raw names selection. `condition_as_string()`
+  is cold presentation glue, not a second evaluator. `p_uty(custom_check=)`
+  remains the general callback escape hatch.
   A built-in Condition RHS is likewise an attribute-free logical, integer,
   double, or character vector without missing values: `CondEqual` has one
   element and `CondAnyOf` is non-empty and unique. Native dependency or direct
@@ -490,6 +566,26 @@ operator action.
   tags, requirements, initialization, or special-value/transformation rules.
   After admission it receives the closed kind and validated fields and handles
   only its operation-specific work.
+  Every public operation on a typed built-in Domain structurally admits the
+  exact complete sixteen-column outward shell for the generation it selects,
+  including typed zero-row and empty-value exits. The canonical zero-column
+  empty Domain instead passes its dedicated exact empty-Domain validator. The
+  identity spine is always semantically admitted. Each operation declares
+  which of bounds, levels, special values, cargo, tags, and transformation it
+  interprets; `paradox_domain_interpretation_closure()` is the sole owner of
+  rule dependencies, and `domain_check()` declares the complete mask. A rule
+  outside the closed mask is skipped whole rather than reimplemented, so
+  malformed semantic state outside one operation's mask is diagnosed by the
+  first operation that interprets it. The four constructor-owned columns whose
+  contents are irrelevant to public kernels remain semantically opaque, but
+  their canonical presence, uniqueness, storage type, and row count are still
+  mandatory. An operation with a callback-capable ALTREP `Length`, including
+  `domain_check()` and `domain_qunif()`, performs a bounded shape probe first
+  and one complete masked admission afterward; Length is observed exactly
+  once. An operation such as `domain_sanitize()` that completes and roots
+  admission before later value-side callbacks deliberately retains that
+  coherent selected snapshot; callbacks do not replace already captured table
+  fields.
   A canonical `ParamFct` may have zero levels. Quantile/grid/uniform-sampling
   operations preserve its typed `character(0)` result when zero rows are
   requested; any positive-row quantile or sampling request errors before RNG
@@ -510,6 +606,10 @@ operator action.
   ALTREP and are materialized once.
   In particular, the outer `special_vals` list, its names, and list metadata
   are structural for every Domain kind and must be ordinary non-ALTREP/non-S4.
+  Do not add a general exception for deferred-string or other ALTREP names:
+  package-generated categorical names are materialized once at construction,
+  and package-generated data-frame facades emit compact ordinary row metadata
+  directly.
   `ParamDbl`, `ParamInt`, `ParamFct`, and `ParamLgl` reject an ALTREP
   `special_vals` leaf before observing it. An S4 special leaf for those kinds
   is an opaque identity token: it matches only the pointer-identical object,
@@ -1056,9 +1156,33 @@ operator action.
   from an R expression: a realized language object or symbol remains a realized
   value, while a delayed promise with the same apparent expression is identified
   as a promise and never evaluated.
+  Discovery must schedule only rooted edges from one coherent observable node
+  generation. Structural list/expression ALTREP is rejected before attributes
+  or an ALTREP provider are observed. For ordinary vectors, pairlists, and
+  closures with direct field access through the reviewed version facade, every
+  destination carrier is allocated before the allocation-free
+  attribute/primary-edge capture. Old-R bytecode alone retains an allocating
+  public bridge and therefore requires two independently rooted complete
+  observations to be exactly equal. Every environment on every runtime
+  likewise requires two equal full snapshots: exact stored
+  attributes, parent, sorted binding-name inventory, binding kind and selected
+  promise/value/function edges, per-binding lock bits, and environment
+  lock/object/S4 state. A mismatch fails closed; neither observation invokes
+  an active binding or forces a promise. Package/import/user-database boundary
+  policy is reapplied from that selected snapshot, so an old non-boundary
+  decision never authorizes traversing a new boundary generation. Do not
+  restore separate attribute and primary-edge passes, retry-until-equal loops,
+  or unrooted native edge arrays.
   `.GlobalEnv`, namespaces, package/import environments, attached search-path
   infrastructure, Autoloads, base, and the empty environment are hard
-  boundaries. An `imports:` display name alone is not authentication: a
+  boundaries. Discovery records those process-local identities before the
+  allocating walk and owns every one in an indexed ordinary `VECSXP` carrier
+  until the operation returns; its parallel native array is lookup scratch
+  only. This remains necessary if a finalizer detaches a search-path
+  environment during discovery: `R_alloc()` storage is not scanned and must
+  never be the only owner of a boundary identity. Grow and root the carrier
+  before publishing a new raw-array entry. An `imports:` display name alone is
+  not authentication: a
   genuine imports boundary must have an ordinary scalar raw `name` attribute
   with that prefix and the exact base namespace as its direct parent. A user
   environment with a spoofed prefix remains traversable. Generic
@@ -1202,7 +1326,12 @@ operator action.
   the exact current Paradox namespace. `isNamespace()` plus
   `environmentName()` is descriptive metadata and is not authentication: an
   ordinary environment can spoof both.
-- Shipped C is portable C99 and supports R >= 3.6. API spelling selection is
+- Shipped C is portable C99 and supports R >= 3.6. `USE_C17` keeps ordinary
+  current-R installation at C17 or earlier, while the explicit GCC >= 15 and
+  recent-Clang `--use-C23` slice proves forward compatibility. The strict,
+  analyzer, sanitizer, old-runtime, and pinned-header lanes remain GNU C99;
+  C23 compatibility is additive evidence, never a replacement source
+  contract. API spelling selection is
   centralized in `src/r_api_compat.c`; the graph walker has only the narrow
   capability gates required to select which inert edges a runtime can expose,
   never a duplicated old-R engine. Current runtimes retain their public,
@@ -1218,10 +1347,15 @@ operator action.
   remain errors throughout Paradox source.
   R 3.6--4.5 use one exact, ledgered `ATTRIB` occurrence for raw attribute
   iteration that cannot be expressed through the earlier API without
-  expanding compact `row.names`. R 3.6--4.4 retain one ledgered `FORMALS`
-  occurrence because transformation callback admission is a semantic hot path;
-  cold closure-body/environment traversal instead uses public base calls and
-  must not compile `R_ClosureExpr` or `R_BytecodeExpr` before they become API.
+  expanding compact `row.names`. R 3.6--4.4 retain exactly three ledgered,
+  header-declared/exported closure accessors: `FORMALS`, `R_ClosureExpr`, and
+  `CLOENV`. Together they capture one allocation-free closure generation for
+  transformation admission and recursive migration; `FORMALS` and `CLOENV`
+  are called with their historical macro expansion suppressed. All three
+  exceptions compile out at R 4.5, where the public closure accessors replace
+  them. Directly reached bytecode alone uses the cold, non-executing public
+  `as.function.default()`/`body()` bridge on old R; `R_BytecodeExpr` must not
+  compile before it becomes API.
   R 3.6--4.1 use a cold
   `base::exists(..., inherits = FALSE)` query only where absence is an accepted
   result. Candidate-shell and fresh-destination classifiers use that optional
@@ -1370,11 +1504,16 @@ Core authenticated inputs include:
   0.5.0 full-test axes;
 - `environment/runtime-r-3.6.3-linux-64.lock`,
   `environment/runtime-r-4.0.5-linux-64.lock`,
-  `environment/runtime-r-4.3.3-linux-64.lock`, and
+  `environment/runtime-r-4.1.3-linux-64.lock`,
+  `environment/runtime-r-4.2.3-linux-64.lock`,
+  `environment/runtime-r-4.3.3-linux-64.lock`,
+  `environment/runtime-r-4.4.3-linux-64.lock`, and
   `environment/runtime-r-4.5.2-linux-64.lock`: supported-runtime prefixes;
 - `environment/runtime-r-3.6.3-packages.lock` and
-  `environment/runtime-r-4.0.5-packages.lock`: exact source-package closures
-  for the two older runtime axes;
+  `environment/runtime-r-4.0.5-packages.lock`,
+  `environment/runtime-r-4.1.3-packages.lock`, and
+  `environment/runtime-r-4.2.3-packages.lock`: exact source-package closures
+  for the four pre-R-4.3 runtime axes;
 - `environment/runtime-r-3.6.3-declared-floor-packages.lock`: the separate
   exact declared-floor source closure;
 - `environment/runtime-r-3.6.3-prefix-repair.lock`: the authenticated repair
@@ -1440,16 +1579,16 @@ The R 4.3.3 conda prefix contains data.table 1.17.8 because no matching
 conda-forge R-4.3 build of 1.18.4 exists. `scripts/test-runtime-matrix` copies
 the SHA-256-pinned cached source
 `.cache/downloads/r-packages/data.table_1.18.4.tar.gz` into the isolated R-4.3
-stage and installs it before Paradox. R 4.5.2 and the primary library already
-contain 1.18.4. Never weaken `DESCRIPTION` or restore the capacity bridge for
-this test-infrastructure detail.
+stage and installs it before Paradox. R 4.4.3, R 4.5.2, and the primary
+library already contain 1.18.4. Never weaken `DESCRIPTION` or restore the
+capacity bridge for this test-infrastructure detail.
 
 Provision and inspect real older runtimes with:
 
 ```sh
 scripts/bootstrap-runtime-matrix
 scripts/bootstrap-runtime-matrix --verify
-. scripts/activate-runtime-matrix 3.6.3   # or 4.0.5 / 4.3.3 / 4.5.2
+. scripts/activate-runtime-matrix 3.6.3   # or any registered 4.0.5--4.5.2 axis
 . scripts/activate                        # return to R 4.6.1
 ```
 
@@ -1467,8 +1606,9 @@ hard-linking bootstrap must be deliberately moved aside or otherwise
 reprovisioned from the exact lock; do not weaken or refresh its receipt to
 admit shared inodes, and do not auto-delete it.
 
-R 3.6.3 and R 4.0.5 install their exact complete-test source locks once into sealed,
-content- and identity-receipted libraries. Interactive activation fully
+R 3.6.3, R 4.0.5, R 4.1.3, and R 4.2.3 install their exact complete-test
+source locks once into sealed, content- and identity-receipted libraries.
+Interactive activation fully
 verifies the selected library; a retained runtime worker instead consumes the
 coordinator's exact authenticated receipt handoff and does not repeat the full
 tree check. A source-library build key is scoped to the selected runtime's
@@ -1791,15 +1931,16 @@ enough RAM that the controlling Codex process cannot be OOM-killed.
 `PARADOX_API_JOBS` and `PARADOX_BRIDGE_COMPILE_JOBS` are lowering-only release
 knobs for the R-API matrix and downstream bridge compilation respectively; the
 resource scheduler remains the upper bound. Admission is containment-aware
-(schema-2 reports record the mode): inside the installed aggregate systemd
-envelope the scheduler uses measured cooperative weights — 2-GiB consumer
-rows capped at eight, 1-GiB light-test jobs, and a 4-GiB intra-envelope
-reserve floor — because the root-owned launcher already withheld the host
-reserve when sizing the hard ceiling, and the envelope with its fatal event
-counters remains the hard boundary. Direct, uncontained work keeps the
-conservative policy: on this 32-CPU, no-swap host follow the reported direct
-ceilings (at most 4 consumer rows, 16-GiB reserve) unless a fresh resource
-report requires less. Prefer running broad parallel work through
+(schema-2 reports record the mode). A proved hard per-worker container uses
+measured cooperative weights — 2-GiB consumer rows capped at eight and 1-GiB
+light-test jobs — with a 1-GiB intra-worker reserve floor inside its exact
+CPU/RAM cgroup. The aggregate systemd envelope uses those weights with a
+4-GiB shared reserve floor and fatal event counters. Direct, uncontained work
+keeps the conservative policy: on this 32-CPU, no-swap host follow the
+reported direct ceilings (at most 4 consumer rows, 16-GiB reserve) unless a
+fresh resource report requires less. The controller-only hard-worker marker
+requires exact assigned envelopes and authenticated raw v1/v2 limits; never
+admit it from task configuration. Prefer running broad parallel work through
 `scripts/verify` so it is contained; `verification/README.md` documents how
 to loosen one allotment in a targeted way after a limit event.
 `scripts/memory-check` performs this admission itself for its serial heavy
@@ -2369,9 +2510,9 @@ concurrent, freed slots start the next row) and order their queues
 heaviest-first from the measured `4c4cb53` durations embedded as scheduling
 hints; the documentation gate stays deliberately serial because its retained
 labels embed execution order and it is hidden behind the corpus/reverse
-branches. Supported runtime-matrix stages run the suite with a
-capability-probed two-worker parallel testthat recorded in the stage log;
-old runtimes keep the exact serial path. An aggregate memory/PID event
+branches. Supported runtime-matrix stages parallelize across minor versions
+and retain exact serial testthat execution inside every stage, so the one-CPU
+stage admissions remain truthful. An aggregate memory/PID event
 or
 protected-disk pressure invalidates only the verification unit and calls for a
 replacement run with the offending reservation raised;
@@ -2406,10 +2547,14 @@ for test discovery.
 Run release gates against one clean immutable full ref, broadly in this order:
 
 1. strict GCC/Clang C99, registered-routine/probe audit, ASan/UBSan, complete
-   package suite, and clean `R CMD check --as-cran`;
-2. actual R 3.6.3, 4.0.5, 4.3.3, 4.5.2, and development R plus compilation
+   package suite, and clean `R CMD check --as-cran`, plus the separate explicit
+   `--use-C23` installation and complete native-probe gate under
+   repository-local GCC >= 15 and recent Clang;
+2. actual R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, with
+   current R 4.6.1 complete execution owned by the full native lane, plus
+   compilation
    against all seven pinned R 3.6.0--4.6.1 header axes; the exact
-   raw-attribute/hot-closure-formals/stored-binding/promise exception ledger,
+   raw-attribute/old-R-closure-snapshot/stored-binding/promise exception ledger,
    raw-token/version-gated DSO audit, and option-access symbol policy; the
    authenticated R 3.6 complete-test closure and separate exact declared-floor
    smoke with `R_DEFAULT_PACKAGES` isolated; and the full-only sealed
@@ -2476,9 +2621,9 @@ evidence and explicit design review. Treat non-pass integrity rows as required
 raw-distribution review, and normally retire these contract-reset tiers once
 Paradox 2 is the authenticated baseline.
 
-## Active candidate and current gate status
+## Historical `dbbdcc1` candidate and gate status
 
-The active frozen candidate is
+The previous frozen candidate was
 `refs/paradox-release/candidate-20260727T152133Z` at
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
 `b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. Its
@@ -2513,24 +2658,26 @@ and result SHA-256 values are respectively
 and
 `d89ff720ea1cda8be1f82538a1e92a245dd901fd7e31990ed2a37e97c62130b0`.
 That child supplied the successful rchk discovery. The regenerated policy and
-strengthened GCT probe now require one fresh static/focused native donor before
-the combined-memory gate; rerunning full native/package acceptance would add no
-information because package-facing source remains `dbbdcc1`.
+strengthened GCT probe then required one fresh static/focused native donor; the
+subsequent combined-memory run recorded below completed that step. For that
+historical source, repeating full native/package acceptance would have added no
+information.
 
-The repair changes only `scripts/memory-check` and five
-`scripts/environment/` harness files. Before transferring any package-facing
-conclusion, prove the repair commit package-facing-source identical to the
-candidate. That path-level proof is complete for `50a8593`; generated package
+The repair changed only `scripts/memory-check` and five
+`scripts/environment/` harness files. Its historical transfer required proof
+that the repair commit was package-facing-source identical to the candidate.
+That path-level proof is complete for `50a8593`; generated package
 archives are not claimed byte-identical because R injects nondeterministic
-metadata and vignette output. The release remains pending after the memory run
-and the remaining applicable downstream, documentation, benchmark, and hosted
-portability gates.
+metadata and vignette output. At that point the remaining applicable
+downstream, documentation, benchmark, and hosted portability gates kept the
+release pending.
 
-The active `paradox2` row in `compat/paradox-evidence-axes.tsv` now names this
-same `dbbdcc1` ref/commit/tree. Its focused structural profile fixture passes.
-All retained overlays and consumer results owned by earlier Paradox-2
-candidates remain historical; construct one new candidate-run-owned
-`release-refresh-20260720` overlay before the prepared compatibility gates.
+The checked-in active `paradox2` row in `compat/paradox-evidence-axes.tsv`
+still names this historical `dbbdcc1` ref/commit/tree. Its historical focused
+structural profile fixture passed, but the row must be repointed to the new
+immutable candidate before constructing a new candidate-run-owned
+`release-refresh-20260720` overlay. All retained overlays and consumer results
+owned by earlier Paradox-2 candidates remain historical.
 Post-freeze tooling admission explicitly includes the package-excluded
 `verification/` root so that reviewed coordinator scheduling changes can drive
 that overlay; package-facing paths remain forbidden, and the tooling checkout

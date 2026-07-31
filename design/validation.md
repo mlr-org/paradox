@@ -7,27 +7,36 @@ file/count matrix.
 
 ## Current validation status
 
-Package-facing feature work has converged at the frozen ref
+Package-facing source is reopened for the final C17/C23, complete
+minor-version runtime, and focused admission changes. There is no current
+frozen candidate. Freeze one new clean ref only after source, tests,
+documentation, downstream bridges, and harness inputs converge; every
+applicable source-bound acceptance gate then runs against that ref.
+
+### Historical `dbbdcc1` evidence
+
+Package-facing feature work previously converged at the frozen ref
 `refs/paradox-release/candidate-20260727T152133Z`, commit `dbbdcc1`. Its
 `release-candidate-dbbdcc1` run passed all eight `release-core` tasks, including
 the complete native lane and supported-runtime matrix. The package executions
-remain informative, but the native child run is not replayable: its manifest
-records original worktree modes while its copied source-tree receipt records
+remain informative historical evidence, but the native child run is not
+replayable: its manifest records original worktree modes while its copied
+source-tree receipt records
 umask-filtered modes. It therefore cannot supply the source proof for the
-combined memory gate.
+reopened source's combined memory gate.
 
 The first memory attempt failed closed in preflight before package load because
 the relocated source-run validator did not receive its trusted offline-
-repository helper. The six-file harness repair now retains and authenticates
-that helper and preserves exact modes across both snapshot copies. This is a
-validation-provenance repair, not a package failure or a reason to rerun the
-already green API/runtime branches. The required replacement native run is now
-complete: `release-candidate-dbbdcc1-native-replay-r2` passed all four selected
-rows, its full native child passed, and direct independent source validation
-accepted the exact copied bytes and modes. Use child
-`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` for isolated
-rchk policy discovery. Do not mutate, reseal, or use
-`release-candidate-dbbdcc1-native-release-a001` as a donor.
+repository helper. The six-file harness repair retained and authenticated that
+helper and preserved exact modes across both snapshot copies. For that payload,
+this was a validation-provenance repair, not a package failure or a reason to
+rerun the already green API/runtime branches. The required replacement native
+run completed: `release-candidate-dbbdcc1-native-replay-r2` passed all four
+selected rows, its full native child passed, and direct independent source
+validation accepted the exact copied bytes and modes. The retained child
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` supplied the
+isolated rchk policy discovery; the superseded
+`release-candidate-dbbdcc1-native-release-a001` was never used as a donor.
 
 The final harness repair itself passed shell syntax checks for the four changed
 shell drivers/tests, R parsing for both snapshot helpers, and the complete
@@ -38,15 +47,16 @@ replay copies preserving exact `0664`/`0775` modes, relocated-helper
 removal/substitution rejection, and equality of the 21-row copied, hashed, and
 independently validated harness inventories. Focused probes also confirmed
 `Sys.chmod(..., use_umask = FALSE)` restores exact `0664` under both actual R
-3.6.3 and the local current R. These are exact repair tests; the fresh native
-execution is complete, but the combined-memory execution remains pending.
+3.6.3 and the local current R. These are exact repair tests. At that point the
+combined-memory execution remained pending; it subsequently passed as recorded
+in the historical release ledger.
 
 The first isolated rchk discovery from the new donor,
 `release-candidate-dbbdcc1-rchk-discovery-r1`, stopped before analyzer start
 because live admission found 36,328 MiB against the reviewed 36,864-MiB
-analyzer-plus-host-reserve requirement. Preserve the 20-GiB analyzer allowance
-and 16-GiB host reserve; wait for or manually free about 1 GiB, then use a new
-run ID. This is neither an analyzer nor package failure.
+analyzer-plus-host-reserve requirement. The replacement retained the 20-GiB
+analyzer allowance and 16-GiB host reserve. This was neither an analyzer nor
+package failure.
 
 Discovery `release-candidate-dbbdcc1-rchk-discovery-r2` subsequently admitted
 40,004 MiB and completed bcheck, maacheck, and fficheck with zero tool failures.
@@ -61,10 +71,10 @@ file.
 No C defect was found in the source review. Four new PB diagnostics are
 bcheck's loss of the conditional list-column protection depth in
 `build_dependent_grid()`; every normal and error branch balances exactly. A
-small harness-only native probe now exercises that dependent list-valued
-inactive-row branch under the final GCT run. After committing the policy and
-probe, create one fresh `--mode static --tests focused` native donor and run
-combined memory from it. Do not repeat full package, API, or runtime gates.
+small harness-only native probe exercised that dependent list-valued
+inactive-row branch under the final GCT run. The historical combined-memory
+stage then used one fresh `--mode static --tests focused` native donor without
+repeating full package, API, or runtime gates.
 
 ## Unattended orchestration
 
@@ -278,17 +288,22 @@ measurements for the old 26--51-GiB weights, so those values are not
 evidence-based safety limits. Fail-closed aggregate OOM/PID events, protected
 disk-pressure checks, immutable failed attempts, and a raised reservation on a
 replacement run are the deliberate feedback mechanism. This does not relax the
-conservative direct/non-aggregate `resource-jobs` policy.
+conservative uncontained-direct `resource-jobs` policy.
 
 Nested drivers must treat `PARADOX_VERIFY_ASSIGNED_CPUS` and
 `PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` as upper bounds on their worker counts.
-Those values are already inside the outer safe budget. Under authenticated
-aggregate systemd containment, a consumer uses a measured 4-GiB cooperative
-row weight when translating the assigned memory envelope; direct and
-individually contained admission retain the conservative 8-GiB consumer
-estimate. The retained inner live-resource check may still lower either
-result. A finite `operator_max_jobs` is valid evidence only when it lowers the
-independently recomputed CPU/memory/profile ceiling.
+Those values are already inside the outer safe budget. An authenticated hard
+worker uses measured cooperative weights inside its exact task cgroup and a
+1-GiB intra-worker reserve floor; the aggregate service uses the same weights
+with a 4-GiB shared floor. A worker marker is accepted only when the assigned
+envelope and raw v1/v2 CPU quota/period and memory limit prove that exact
+boundary. Uncontained direct work retains the conservative host policy. The
+retained inner live-resource check may still lower any result. A finite
+`operator_max_jobs` is valid evidence only when it lowers the independently
+recomputed CPU/memory/profile ceiling. The schema-2 report retains and replays
+that arithmetic decision; it is not a standalone cgroup attestation.
+Generation-time limit authentication and the source-bound controller/worker
+receipts own the containment conclusion.
 
 Without either proof, normal runs fail closed. `--best-effort` is an explicit
 serial development fallback using `RLIMIT_AS`, an RSS watchdog, and the host
@@ -453,18 +468,26 @@ families.
 
 ### Closed semantics
 
-- all five Domain kinds and every operation on each supported kind; constructor,
-  ParamSet, and ObjectTuneToken tests demonstrate that the sole canonical
-  built-in Domain-row owner admits kind/storage, cargo, grouping, bounds,
-  levels, defaults, tags, requirements, initialization, and
-  special-value/transformation combinations. Object-token Domain coverage
-  admits only bounded value-producing built-in Domains, rejects unbounded
-  `ParamUty` and zero-level `ParamFct` tuning ranges, and tests
-  opaque-leaf identity through a bounded typed Domain. Structural ALTREP/S4
-  rejects include every outer `special_vals` list; typed special leaves reject
-  ALTREP, typed S4 special/default/init
-  matching is pointer-only, and ParamUty opaque S4 leaves retain identity with
-  base-`identical()` special membership as the sole no-dispatch observation;
+- all five Domain kinds and every operation on each supported kind. Every
+  nonempty and typed-zero public operation proves the exact complete
+  sixteen-column structure; the canonical zero-column empty Domain proves its
+  dedicated exact structure. The registered interpretation-closure fixture
+  covers all 64 masks and idempotence, `domain_check()` requests the complete
+  mask, and per-operation tests show that a whole irrelevant rule is skipped
+  until the first operation that interprets it. Terminal-generation,
+  callback/reentry, outer-metadata mutation, typed-zero, and empty-Domain
+  regressions cover the compact indexed-root receipt. Constructor, ParamSet,
+  and ObjectTuneToken tests demonstrate that the sole canonical built-in
+  Domain-row owner admits kind/storage, cargo, grouping, bounds, levels,
+  defaults, tags, requirements, initialization, and special-value/
+  transformation combinations. Object-token Domain coverage admits only
+  bounded value-producing built-in Domains, rejects unbounded `ParamUty` and
+  zero-level `ParamFct` tuning ranges, and tests opaque-leaf identity through a
+  bounded typed Domain. Structural ALTREP/S4 rejects include every outer
+  `special_vals` list; typed special leaves reject ALTREP, typed S4
+  special/default/init matching is pointer-only, and ParamUty opaque S4 leaves
+  retain identity with base-`identical()` special membership as the sole
+  no-dispatch observation;
 - CondEqual/CondAnyOf admission, mutation/detachment, evaluation, formatting,
   and unknown-kind rejection; standalone evaluation covers `NULL`, all four
   supported atomic families, names, stable ALTREP operands, separate operand
@@ -644,6 +667,9 @@ The frozen candidate must pass:
 
 - strict GCC and Clang C99 builds with the repository's highest warning set and
   warnings as errors;
+- a bounded current-R forward-compatibility slice which installs one exact
+  archive with explicit `--use-C23` under repository-local GCC >= 15 and recent
+  Clang, then loads each DSO and runs the registered-native probe inventory;
 - fixed-arity registered-routine inventory, dynamic lookup disabled, direct
   probe for every entry, and no unregistered native symbol use;
 - ASan and UBSan direct hazard/probe coverage;
@@ -658,11 +684,13 @@ The frozen candidate must pass:
   supported API branch;
 - no forbidden private data.table API or unledgered/unsupported R API symbol;
 - exact authentication of `environment/r-api-exceptions.tsv`: every
-  raw-attribute, hot closure-formals, non-forcing stored-binding, and promise symbol has its
+  raw-attribute, coherent old-R closure-snapshot, non-forcing stored-binding,
+  and promise symbol has its
   precise source, count, version range, and rationale. R 3.6--4.5 must contain
   the one centralized `ATTRIB` occurrence; R 3.6--4.4 must additionally ledger
-  one `FORMALS` occurrence while excluding `R_ClosureExpr` and
-  `R_BytecodeExpr` in favor of their cold public bridges. R 4.5 must instead
+  exactly one occurrence each of `FORMALS`, `R_ClosureExpr`, and `CLOENV`,
+  while excluding `R_BytecodeExpr` in favor of its cold public bridge. R 4.5
+  must instead
   require the five public closure/bytecode/environment accessors
   `R_ClosureFormals`, `R_ClosureExpr`, `R_BytecodeExpr`, `R_ClosureEnv`, and
   `R_ParentEnv`.
@@ -708,8 +736,9 @@ counts.
 ## Real R runtime matrix
 
 `scripts/test-runtime-matrix` runs the exact candidate on repository-local R
-3.6.3, R 4.0.5, R 4.3.3, and R 4.5.2; development validation also uses local
-R 4.6.1.
+3.6.3, R 4.0.5, R 4.1.3, R 4.2.3, R 4.3.3, R 4.4.3, and R 4.5.2;
+current R 4.6.1 complete test execution is owned by the local full native lane
+rather than duplicated here.
 Each stage
 has a fresh candidate library, builds/installs Paradox once, runs the complete
 supported test inventory, audits DSO symbols, records package/compiler/session
@@ -730,15 +759,15 @@ The retained bundle is outside all mutable
 stage trees, is read-only, and is joined to top-level and per-stage evidence by
 commit, tree, receipt, provenance, and file digests.
 
-R 3.6.3 and R 4.0.5 build their exact SHA-256-authenticated dependency and test
-closures into repository-local source libraries described by their
-`environment/runtime-r-*-packages.lock` files; neither mutates its runtime
-prefix, host R, HOME, or a user library. R 4.3.3 receives only the
+R 3.6.3 through R 4.2.3 build their exact SHA-256-authenticated dependency and
+test closures into repository-local source libraries described by their
+`environment/runtime-r-*-packages.lock` files; none of those stages mutates its
+runtime prefix, host R, HOME, or a user library. R 4.3.3 receives only the
 SHA-256-authenticated cached data.table 1.18.4 source
 overlay before Paradox is built. This is not a reason to skip tests or accept
-1.17 behavior. R 4.5.2 and development R resolve 1.18.4 directly. Runtime
-stages may run concurrently when the resource report admits their outer
-workers; nested work stays at one.
+1.17 behavior. R 4.4.3, R 4.5.2, and current R 4.6.1 resolve 1.18.4 directly.
+All selected stages may run concurrently when the aggregate-contained resource
+report admits their outer workers; nested work stays at one.
 
 Every selected R 3.6.3 stage also installs the same built candidate archive
 against the sealed `declared-floor` library profile: the exact five direct
@@ -751,7 +780,7 @@ package closure is cached by exact inputs. Ambient `R_DEFAULT_PACKAGES` is
 removed before admission so machine startup configuration cannot preload a
 floor dependency.
 
-Only the complete four-runtime selection may claim the post-stage
+Only the complete seven-runtime selection may claim the post-stage
 cross-serialization result. It must produce the current-v2 fixture under the
 exact R 4.0.5 stage package, load/exercise/mutate/reserialize it under the exact
 R 3.6.3 stage package, and seal both package/DLL origins, stage receipts,
@@ -891,9 +920,9 @@ an argument, the suffixed bridge library and evidence path.
 
 Ordinarily one final validation-tooling commit is frozen before constructing a
 fresh named overlay, and documentation, full checks, and the benchmark reuse it
-read-only. The active `paradox2` axis pins the frozen `dbbdcc1` candidate; its
-new overlay and prepared gates remain to be constructed under the converged
-post-freeze tooling commit. Tooling
+read-only. The checked-in `paradox2` axis still pins the historical `dbbdcc1`
+candidate and must be repointed to the new immutable candidate before its fresh
+overlay and prepared gates are constructed. Tooling
 `fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
 `05cc4e5213c5ee73d0bc764c3d102c15e4c57141`, belongs to the historical
 `8797f11` documentation, broad-corpus, source-check, and benchmark stages. The
@@ -1044,15 +1073,14 @@ after proving their heads and production bytes unchanged. This narrow identity
 rule avoids expensive zero-information rebuilds without accepting behavioral
 similarity as release evidence.
 
-The active accepted run IDs and candidate hashes belong in
+The accepted run IDs and candidate hashes belong in
 [`release-2.0.0.md`](release-2.0.0.md). Until that ledger says `accepted`, no
-collection of partial green diagnostics is a release authorization. There is
-now a frozen candidate at `dbbdcc1`; the original `release-core` native child
-has a non-replayable source snapshot, but the repaired harness has produced and
-independently validated the replacement
-`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` source proof.
-That proof supplied the reviewed rchk discovery; the policy update requires a
-new static/focused donor before the combined-memory result. The remaining
-applicable local and hosted matrix then completes against the
-package-facing-source-identical candidate, followed by user-performed remote
-publication.
+collection of partial green diagnostics is a release authorization. The
+historical `dbbdcc1` candidate's original `release-core` native child had a
+non-replayable source snapshot; the repaired harness subsequently produced and
+independently validated
+`release-candidate-dbbdcc1-native-replay-r2-native-release-a001`, which supplied
+the reviewed rchk discovery and historical combined-memory conclusion. None of
+those results accepts reopened package-facing source. After a new candidate is
+frozen, complete every applicable local and hosted gate against that exact ref,
+followed by user-performed remote publication.

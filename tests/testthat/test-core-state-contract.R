@@ -341,6 +341,29 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
   state$.params$special_vals[[1L]] = special_values
   install_base_state(state)
 
+  # Exact capsule tables and nested special-value metadata are admitted
+  # through hard-bounded attribute scans. Overlong caller-owned spines must
+  # reject deterministically before an old-R raw selector can walk them.
+  state = fresh_base_state()
+  for (index in seq_len(65L)) {
+    attr(
+      state$.params,
+      sprintf("paradox.table.attribute.%03d", index)
+    ) = index
+  }
+  install_base_state(state)
+
+  state = fresh_base_state()
+  special_values = state$.params$special_vals[[1L]]
+  for (index in seq_len(65L)) {
+    attr(
+      special_values,
+      sprintf("paradox.special.attribute.%03d", index)
+    ) = index
+  }
+  state$.params$special_vals[[1L]] = special_values
+  install_base_state(state)
+
   for (mutate in list(
       function(state) {
         state$.values = asS4(state$.values)
@@ -404,15 +427,24 @@ test_that("$params rejects noncanonical stored row-name carriers unobserved", {
   private = core_private(set)
   state = unserialize(serialize(core_state(set), NULL))
   callbacks = 0L
-  wrong_length = native_stateful_altrep(
-    c(1L, 2L),
-    c(1L, 2L),
-    callback = function() {
-      callbacks <<- callbacks + 1L
-      stop("row-name ALTREP was observed", call. = FALSE)
-    },
-    callback_after = 0L
-  )
+  if (getRversion() < "4.0.0") {
+    # R 3.6's public row.names<- path requires DATAPTR from its value, so it
+    # cannot install our deliberately no-DATAPTR stateful ALTREP fixture.
+    # Its compact integer sequence is still an exact structural ALTREP
+    # regression; newer runtimes additionally prove non-observation with the
+    # callback-capable fixture below.
+    wrong_length = seq_len(2L)
+  } else {
+    wrong_length = native_stateful_altrep(
+      c(1L, 2L),
+      c(1L, 2L),
+      callback = function() {
+        callbacks <<- callbacks + 1L
+        stop("row-name ALTREP was observed", call. = FALSE)
+      },
+      callback_after = 0L
+    )
+  }
   # Base attr<- installs the fixture without touching its data pointer;
   # data.table::setattr() materializes a referenced value and would replace
   # the fixture with an ordinary copy before the capsule ever sees it.
@@ -476,13 +508,21 @@ test_that("strict capsule tables reject first-column ALTREP without observation"
   set = ps(x = p_int(), y = p_int())
   state = unserialize(serialize(core_state(set), NULL))
   row_names = c(1L, 2L)
-  hostile = native_stateful_altrep(
-    row_names,
-    rev(row_names),
-    callback = function() calls <<- calls + 1L
-  )
+  hostile = if (getRversion() < "4.0.0") {
+    # See the R 3.6 representability boundary in the sibling row-name test.
+    # The compact sequence retains structural ALTREP coverage on that runtime.
+    seq_len(length(row_names))
+  } else {
+    native_stateful_altrep(
+      row_names,
+      rev(row_names),
+      callback = function() calls <<- calls + 1L
+    )
+  }
   attr(state$.params, "row.names") = hostile
-  native_stateful_altrep_rearm(hostile, c(NA_integer_, 0L))
+  if (getRversion() >= "4.0.0") {
+    native_stateful_altrep_rearm(hostile, c(NA_integer_, 0L))
+  }
   calls = 0L
   assign(
     ".core",

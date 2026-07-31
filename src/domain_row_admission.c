@@ -11,51 +11,111 @@
  * Public Domain operations are the fourth consumer of the canonical
  * Domain-row admission owner, beside constructor final-state validation,
  * ParamSet construction, and ObjectTuneToken Domain admission. This adapter
- * owns only the outward table/column container -- the boundary work the
- * contract explicitly assigns to an operation -- and hands every semantic rule
- * to `paradox_admit_builtin_domain_row()`. It deliberately does not build the
- * detached single-row snapshot that ObjectTuneToken admission builds: these
- * kernels also serve multi-row tables, zero-row tables, `ParamUty`, and
- * unbounded numeric Domains, none of which that snapshot accepts, and a
- * read-only operation must not change the identity of what it validates.
+ * owns only the operation-local outward table/row snapshot -- the boundary
+ * work the contract explicitly assigns to an operation -- and hands every
+ * semantic rule to `paradox_admit_builtin_domain_row()`. It does not use the
+ * bounded single-row ObjectTuneToken snapshot: these kernels also serve
+ * multi-row tables, zero-row tables, `ParamUty`, and unbounded numeric
+ * Domains. Instead it detaches exactly the mutable interpreted fields named
+ * by the operation and terminally reauthenticates their common source
+ * generation.
  */
 
-enum admitted_bundle_slot {
-  ADMITTED_BUNDLE_COLUMNS = 0,
-  ADMITTED_BUNDLE_ROWS,
-  ADMITTED_BUNDLE_SCALARS,
-  ADMITTED_BUNDLE_SLOT_COUNT
+enum domain_admission_root {
+  DOMAIN_ADMISSION_ROOT_CLASS = PARADOX_DOMAIN_COLUMN_COUNT,
+  DOMAIN_ADMISSION_ROOT_ROW_NAMES,
+  DOMAIN_ADMISSION_ROOT_SELFREF,
+  DOMAIN_ADMISSION_ROOT_REPR,
+  DOMAIN_ADMISSION_ROOT_RARE_GROUPING,
+  DOMAIN_ADMISSION_ROOT_ACCEPTED_CLASS,
+  DOMAIN_ADMISSION_ROOT_ACCEPTED_GROUPING,
+  DOMAIN_ADMISSION_ROOT_ACCEPTED_STORAGE,
+  DOMAIN_ADMISSION_ROOT_ROWS,
+  DOMAIN_ADMISSION_ROOT_COUNT
 };
 
-enum admitted_scalar_slot {
-  ADMITTED_SCALAR_LOWER = 0,
-  ADMITTED_SCALAR_UPPER,
-  ADMITTED_SCALAR_TOLERANCE,
-  ADMITTED_SCALAR_ID,
-  ADMITTED_SCALAR_CLS,
-  ADMITTED_SCALAR_GROUPING,
-  ADMITTED_SCALAR_STORAGE,
-  ADMITTED_SCALAR_SLOT_COUNT
-};
+typedef struct {
+  SEXP names;
+  SEXP classes;
+  SEXP row_names;
+  SEXP selfref;
+  SEXP repr;
+  SEXP selfref_symbol;
+  SEXP repr_symbol;
+  R_xlen_t count;
+  int valid;
+} domain_outer_metadata_t;
 
-static const SEXPTYPE domain_column_types[PARADOX_DOMAIN_COLUMN_COUNT] = {
-  STRSXP,  /* id */
-  STRSXP,  /* cls */
-  STRSXP,  /* grouping */
-  VECSXP,  /* cargo */
-  REALSXP, /* lower -- numeric column, INTSXP also admitted */
-  REALSXP, /* upper */
-  REALSXP, /* tolerance */
-  VECSXP,  /* levels */
-  VECSXP,  /* special_vals */
-  VECSXP,  /* default */
-  STRSXP,  /* storage_type */
-  VECSXP,  /* .tags */
-  VECSXP,  /* .trafo */
-  VECSXP,  /* .requirements */
-  LGLSXP,  /* .init_given */
-  VECSXP   /* .init */
-};
+static void capture_domain_outer_attribute(
+    SEXP tag, SEXP value, void *data) {
+  domain_outer_metadata_t *metadata = data;
+  if (!metadata->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  SEXP *destination = NULL;
+  if (tag == R_NamesSymbol) {
+    destination = &metadata->names;
+  } else if (tag == R_ClassSymbol) {
+    destination = &metadata->classes;
+  } else if (tag == R_RowNamesSymbol) {
+    destination = &metadata->row_names;
+  } else if (tag == metadata->selfref_symbol) {
+    destination = &metadata->selfref;
+  } else if (tag == metadata->repr_symbol) {
+    destination = &metadata->repr;
+  } else {
+    metadata->valid = FALSE;
+    return;
+  }
+  if (*destination != R_NilValue) {
+    metadata->valid = FALSE;
+    return;
+  }
+  *destination = value;
+  ++metadata->count;
+}
+
+/*
+ * Capture the complete supported caller-owned outer Domain metadata
+ * generation in one allocation-free, hard-bounded pass. The exact five-name
+ * allow-list makes every later raw selector safe for this generation and
+ * rejects a rogue, duplicate, cyclic, or overlong pairlist before it can
+ * reach R's unbounded compatibility accessor on an old runtime.
+ */
+static int capture_domain_outer_metadata(
+    SEXP domain, SEXP selfref_symbol, SEXP repr_symbol,
+    domain_outer_metadata_t *metadata) {
+  *metadata = (domain_outer_metadata_t) {
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    selfref_symbol,
+    repr_symbol,
+    0,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      domain,
+      5,
+      capture_domain_outer_attribute,
+      metadata,
+      &count
+    ) || !metadata->valid || metadata->count != count ||
+      metadata->names == R_NilValue ||
+      metadata->classes == R_NilValue ||
+      metadata->row_names == R_NilValue) {
+    return FALSE;
+  }
+  const R_xlen_t expected = 3 +
+    (metadata->selfref != R_NilValue) +
+    (metadata->repr != R_NilValue);
+  return count == expected;
+}
 
 static int ordinary_string_vector(SEXP value) {
   return TYPEOF(value) == STRSXP && !ALTREP(value) && !Rf_isS4(value) &&
@@ -131,11 +191,261 @@ static void report_row_failure(paradox_builtin_domain_kind_t kind,
   }
 }
 
-SEXP paradox_admit_public_domain_table(SEXP domain,
+typedef struct {
+  SEXP names;
+  int valid;
+} exact_optional_names_capture_t;
+
+static void capture_exact_optional_names(SEXP tag, SEXP value, void *data) {
+  exact_optional_names_capture_t *capture = data;
+  if (!capture->valid || tag != R_NamesSymbol ||
+      value == R_NilValue || capture->names != R_NilValue) {
+    capture->valid = FALSE;
+    return;
+  }
+  capture->names = value;
+}
+
+static SEXP exact_optional_names(SEXP value) {
+  /* The overwhelmingly common attr-free carrier remains one constant-time
+   * predicate. Otherwise capture the sole names cell through the hard-bounded
+   * raw mapper; no untrusted pairlist reaches an unbounded count or selector,
+   * including from the allocation-free terminal receipt. */
+  if (paradox_api_has_no_attributes(value)) return R_NilValue;
+  exact_optional_names_capture_t capture = {R_NilValue, TRUE};
+  R_xlen_t attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      value,
+      1,
+      capture_exact_optional_names,
+      &capture,
+      &attribute_count
+    ) || !capture.valid || attribute_count != 1 ||
+      capture.names == R_NilValue) {
+    return R_UnboundValue;
+  }
+  SEXP names = capture.names;
+  return TYPEOF(names) == STRSXP && !ALTREP(names) &&
+    !Rf_isS4(names) && !Rf_isObject(names) &&
+    paradox_api_has_no_attributes(names) &&
+    XLENGTH(names) == XLENGTH(value)
+      ? names
+      : R_UnboundValue;
+}
+
+static int exact_names_equal(SEXP source, SEXP snapshot) {
+  SEXP source_names = exact_optional_names(source);
+  SEXP snapshot_names = exact_optional_names(snapshot);
+  if (source_names == R_UnboundValue ||
+      snapshot_names == R_UnboundValue ||
+      (source_names == R_NilValue) != (snapshot_names == R_NilValue)) {
+    return FALSE;
+  }
+  return source_names == R_NilValue ||
+    paradox_ordinary_vector_payload_equal(source_names, snapshot_names);
+}
+
+static int plain_vector_receipt_current(SEXP source, SEXP snapshot,
+    SEXPTYPE type, int names_allowed) {
+  if ((SEXPTYPE) TYPEOF(source) != type ||
+      (SEXPTYPE) TYPEOF(snapshot) != type ||
+      ALTREP(source) || ALTREP(snapshot) ||
+      Rf_isS4(source) || Rf_isS4(snapshot) ||
+      Rf_isObject(source) || Rf_isObject(snapshot)) {
+    return FALSE;
+  }
+  if (names_allowed) {
+    if (!exact_names_equal(source, snapshot)) return FALSE;
+  } else if (!paradox_api_has_no_attributes(source) ||
+      !paradox_api_has_no_attributes(snapshot)) {
+    return FALSE;
+  }
+  return paradox_ordinary_vector_payload_equal(source, snapshot);
+}
+
+static int cargo_nested_name(SEXP name) {
+  return name != NA_STRING &&
+    (paradox_domain_string_is(name, "disable_in_tune") ||
+      paradox_domain_string_is(name, "logscale") ||
+      paradox_domain_string_is(name, "repr"));
+}
+
+static int cargo_receipt_current(SEXP source, SEXP snapshot) {
+  if (source == R_NilValue || snapshot == R_NilValue) {
+    return source == snapshot;
+  }
+  if (TYPEOF(source) != VECSXP || TYPEOF(snapshot) != VECSXP ||
+      ALTREP(source) || ALTREP(snapshot) ||
+      Rf_isS4(source) || Rf_isS4(snapshot) ||
+      Rf_isObject(source) || Rf_isObject(snapshot) ||
+      XLENGTH(source) != XLENGTH(snapshot) ||
+      !exact_names_equal(source, snapshot)) {
+    return FALSE;
+  }
+  SEXP names = exact_optional_names(source);
+  if (names == R_UnboundValue ||
+      (XLENGTH(source) != 0 && names == R_NilValue)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    SEXP left = VECTOR_ELT(source, index);
+    SEXP right = VECTOR_ELT(snapshot, index);
+    SEXP name = STRING_ELT(names, index);
+    if (!cargo_nested_name(name)) {
+      if (left != right) return FALSE;
+    } else if (left == R_NilValue || right == R_NilValue) {
+      if (left != right) return FALSE;
+    } else if (paradox_domain_string_is(name, "disable_in_tune")) {
+      if (!plain_vector_receipt_current(left, right, VECSXP, TRUE)) {
+        return FALSE;
+      }
+    } else if (paradox_domain_string_is(name, "logscale")) {
+      if (!plain_vector_receipt_current(left, right, LGLSXP, FALSE)) {
+        return FALSE;
+      }
+    } else if (!plain_vector_receipt_current(
+        left,
+        right,
+        STRSXP,
+        FALSE
+      )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int special_values_receipt_current(SEXP source, SEXP snapshot,
+    int typed, unsigned char empty_names_present) {
+  if (TYPEOF(source) != VECSXP || TYPEOF(snapshot) != VECSXP ||
+      ALTREP(source) || ALTREP(snapshot) ||
+      Rf_isS4(source) || Rf_isS4(snapshot) ||
+      Rf_isObject(source) || Rf_isObject(snapshot) ||
+      XLENGTH(source) != XLENGTH(snapshot) ||
+      !exact_names_equal(source, snapshot)) {
+    return FALSE;
+  }
+  /*
+   * Empty ordinary special-value shells are deliberately not copied. Their
+   * optional names attribute is nevertheless generation state: source and
+   * snapshot alias, so comparing the two live views cannot prove whether
+   * names were added or removed after admission. The byte receipt was
+   * captured immediately after the canonical special-value owner admitted
+   * this exact shell.
+   */
+  if (XLENGTH(source) == 0) {
+    SEXP names = exact_optional_names(source);
+    if (names == R_UnboundValue ||
+        (unsigned char) (names != R_NilValue) != empty_names_present) {
+      return FALSE;
+    }
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    SEXP left = VECTOR_ELT(source, index);
+    SEXP right = VECTOR_ELT(snapshot, index);
+    if (typed
+        ? !paradox_builtin_value_leaf_receipt_current(left, right)
+        : left != right) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int same_double_bits(double left, double right) {
+  return memcmp(&left, &right, sizeof(left)) == 0;
+}
+
+/*
+ * Terminal-only read of an already structurally authenticated ordinary
+ * numeric column. No allocation, interrupt poll, or callback follows pointer
+ * selection until the complete comparison has finished.
+ */
+static int numeric_column_receipt_current(SEXP source,
+    const double *snapshot, R_xlen_t size) {
+  if (size == 0) return TRUE;
+  if (TYPEOF(source) == REALSXP) {
+    return memcmp(
+      REAL_RO(source),
+      snapshot,
+      (size_t) size * sizeof(double)
+    ) == 0;
+  }
+  const int *values = INTEGER_RO(source);
+  for (R_xlen_t row = 0; row < size; ++row) {
+    const double value =
+      values[row] == NA_INTEGER ? NA_REAL : (double) values[row];
+    if (!same_double_bits(value, snapshot[row])) return FALSE;
+  }
+  return TRUE;
+}
+
+static int exact_domain_class(SEXP classes,
+    paradox_builtin_domain_kind_t kind) {
+  static const char *const tail[] = {
+    "Domain", "data.table", "data.frame"
+  };
+  if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
+      Rf_isS4(classes) || Rf_isObject(classes) ||
+      !paradox_api_has_no_attributes(classes) ||
+      XLENGTH(classes) != 4 ||
+      paradox_resolve_builtin_domain_class_char(
+        STRING_ELT(classes, 0)
+      ) != kind) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < 3; ++index) {
+    if (!paradox_domain_string_is(STRING_ELT(classes, index + 1), tail[index])) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+enum domain_admission_test_phase {
+  DOMAIN_ADMISSION_AFTER_CAPTURE = 0,
+  DOMAIN_ADMISSION_AFTER_OWNERSHIP = 1
+};
+
+static int valid_domain_admission_test_hooks(SEXP hooks) {
+  if (Rf_isFunction(hooks)) return TRUE;
+  if (TYPEOF(hooks) != VECSXP || ALTREP(hooks) || Rf_isS4(hooks) ||
+      Rf_isObject(hooks) || !paradox_api_has_no_attributes(hooks) ||
+      XLENGTH(hooks) != 2) {
+    return FALSE;
+  }
+  for (R_xlen_t phase = 0; phase < 2; ++phase) {
+    SEXP hook = VECTOR_ELT(hooks, phase);
+    if (hook != R_NilValue && !Rf_isFunction(hook)) return FALSE;
+  }
+  return TRUE;
+}
+
+static void run_domain_admission_test_hook(SEXP hooks,
+    enum domain_admission_test_phase phase) {
+  SEXP hook = R_NilValue;
+  if (Rf_isFunction(hooks)) {
+    if (phase == DOMAIN_ADMISSION_AFTER_CAPTURE) hook = hooks;
+  } else {
+    hook = VECTOR_ELT(hooks, (R_xlen_t) phase);
+  }
+  if (hook == R_NilValue) return;
+  SEXP call = PROTECT(Rf_lang1(hook));
+  SEXP hook_result = PROTECT(Rf_eval(call, R_BaseEnv));
+  (void) hook_result;
+  UNPROTECT(2);
+}
+
+static SEXP admit_public_domain_table_impl(SEXP domain,
     paradox_builtin_domain_kind_t kind, R_xlen_t row_count,
     unsigned int interpreted,
     paradox_admitted_domain_table_t *table,
-    R_xlen_t *work_since_interrupt) {
+    R_xlen_t *work_since_interrupt,
+    SEXP capture_hook) {
+  /* Intern every optional attribute selector before allocating any receipt
+   * destination. Later capture and terminal comparison are allocation-free. */
+  SEXP selfref_symbol = Rf_install(".internal.selfref");
+  SEXP repr_symbol = Rf_install("repr");
   if (row_count < 0 ||
       row_count > R_XLEN_T_MAX / PARADOX_ADMITTED_ROW_STRIDE) {
     Rf_error("Corrupt Domain storage: unsupported Domain row count");
@@ -144,84 +454,104 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
    * here as well lets the capture below skip fields no rule will read. */
   interpreted = paradox_domain_interpretation_closure(interpreted);
   /*
-   * Allocate every destination first. The capture pass below then pairs each
-   * canonical column name with the exact column it selected without another
-   * allocation, so a pending finalizer cannot leave the admitted table
-   * describing one generation while the operation reads another.
+   * Reserve the complete permanent protection block before selecting a
+   * Domain value. The indexed slots are the scanned roots behind the native
+   * column arrays and scalar representatives below; every temporary
+   * protection is balanced above this block.
    */
-  SEXP bundle = PROTECT(Rf_allocVector(VECSXP, ADMITTED_BUNDLE_SLOT_COUNT));
-  SEXP columns = PROTECT(Rf_allocVector(
-    VECSXP,
-    PARADOX_DOMAIN_COLUMN_COUNT
-  ));
-  SET_VECTOR_ELT(bundle, ADMITTED_BUNDLE_COLUMNS, columns);
-  UNPROTECT(1);
+  PROTECT_INDEX root_indices[DOMAIN_ADMISSION_ROOT_COUNT];
+  for (int root = 0; root < DOMAIN_ADMISSION_ROOT_COUNT; ++root) {
+    PROTECT_WITH_INDEX(R_NilValue, &root_indices[root]);
+  }
   SEXP rows = PROTECT(Rf_allocVector(
     VECSXP,
     row_count * PARADOX_ADMITTED_ROW_STRIDE
   ));
-  SET_VECTOR_ELT(bundle, ADMITTED_BUNDLE_ROWS, rows);
+  REPROTECT(rows, root_indices[DOMAIN_ADMISSION_ROOT_ROWS]);
   UNPROTECT(1);
-  SEXP scalars = PROTECT(Rf_allocVector(VECSXP, ADMITTED_SCALAR_SLOT_COUNT));
-  SET_VECTOR_ELT(bundle, ADMITTED_BUNDLE_SCALARS, scalars);
-  UNPROTECT(1);
-  for (int slot = ADMITTED_SCALAR_LOWER;
-      slot <= ADMITTED_SCALAR_TOLERANCE;
-      ++slot) {
-    SEXP carrier = PROTECT(Rf_allocVector(REALSXP, 1));
-    SET_VECTOR_ELT(scalars, slot, carrier);
-    UNPROTECT(1);
-  }
-  for (int slot = ADMITTED_SCALAR_ID;
-      slot <= ADMITTED_SCALAR_STORAGE;
-      ++slot) {
-    SEXP carrier = PROTECT(Rf_allocVector(STRSXP, 1));
-    SET_VECTOR_ELT(scalars, slot, carrier);
-    UNPROTECT(1);
-  }
 
   const R_xlen_t buffer_size = row_count == 0 ? 1 : row_count;
+  const int captures_bounds =
+    (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) != 0;
+  const int captures_special_values =
+    (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) != 0;
+  const size_t workspace_element_size =
+    (captures_bounds ? 3U * sizeof(double) : 0U) +
+    (captures_special_values ? sizeof(unsigned char) : 0U);
   double *numeric_storage = NULL;
-  if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
-    numeric_storage = paradox_temporary_alloc(
+  unsigned char *empty_special_names_present = NULL;
+  if (workspace_element_size != 0U) {
+    void *workspace = paradox_temporary_alloc(
       buffer_size,
-      3U * sizeof(*numeric_storage)
+      workspace_element_size
     );
+    if (captures_bounds) {
+      numeric_storage = (double *) workspace;
+    }
+    if (captures_special_values) {
+      empty_special_names_present = (unsigned char *) workspace +
+        (captures_bounds
+          ? (size_t) buffer_size * 3U * sizeof(double)
+          : 0U);
+    }
   }
 
   /*
-   * The interpreted column selection is one allocation-free pass. Column shape
-   * diagnostics stay here because the outward table container is the
-   * operation's own boundary; every semantic rule below belongs to the owner.
-   * The four columns only a constructor interprets -- `default`,
-   * `.requirements`, `.init_given`, and `.init` -- are deliberately not
-   * selected: a public projection legitimately carries a stored TuneToken in
-   * `.init`, and no Domain operation reads any of them.
+   * Select the complete canonical outward schema in one allocation-free pass.
+   * Presence, uniqueness, storage type, and rectangularity are structural
+   * properties of the public Domain table even when this operation does not
+   * interpret a column's contents. In particular, `default`,
+   * `.requirements`, `.init_given`, and `.init` remain opaque here, but their
+   * columns may not be absent, duplicated, or malformed.
    */
   unsigned int selected_mask = 0U;
   for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
-    if (column == PARADOX_DOMAIN_DEFAULT ||
-        column == PARADOX_DOMAIN_REQUIREMENTS ||
-        column == PARADOX_DOMAIN_INIT_GIVEN ||
-        column == PARADOX_DOMAIN_INIT) {
-      continue;
-    }
     selected_mask |= 1U << column;
   }
   SEXP selected_columns[PARADOX_DOMAIN_COLUMN_COUNT];
-  paradox_domain_select_columns(
+  R_xlen_t selected_positions[PARADOX_DOMAIN_COLUMN_COUNT];
+  domain_outer_metadata_t outward_metadata;
+  if (!capture_domain_outer_metadata(
+      domain,
+      selfref_symbol,
+      repr_symbol,
+      &outward_metadata
+    )) {
+    Rf_error(
+      "Corrupt Domain storage: outer metadata must be ordinary and bounded"
+    );
+  }
+  paradox_domain_select_columns_with_positions(
     domain,
     "Domain storage",
     "Domain",
     selected_mask,
-    selected_columns
+    selected_columns,
+    selected_positions
   );
+  if (XLENGTH(domain) != PARADOX_DOMAIN_COLUMN_COUNT) {
+    Rf_error(
+      "Corrupt Domain storage: `Domain` must have exactly %d columns",
+      PARADOX_DOMAIN_COLUMN_COUNT
+    );
+  }
   for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
-    if (!((selected_mask >> column) & 1U)) {
-      continue;
-    }
+    REPROTECT(selected_columns[column], root_indices[column]);
+  }
+  for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     SEXP value = selected_columns[column];
-    if (domain_column_types[column] == REALSXP) {
+    if (column == PARADOX_DOMAIN_ID) {
+      /* The entry probe already authenticated this exact shell and length.
+       * Any difference after receipt allocation is a shape replacement, not
+       * an independently malformed generation selected by this operation. */
+      if (!paradox_domain_column_shell_is_exact(
+          value,
+          PARADOX_DOMAIN_ID,
+          row_count
+        )) {
+        Rf_error("Domain shape changed during admission");
+      }
+    } else if (paradox_domain_column_types[column] == REALSXP) {
       paradox_require_numeric_column(
         value,
         row_count,
@@ -231,15 +561,34 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
     } else {
       paradox_require_column_checked(
         value,
-        domain_column_types[column],
+        paradox_domain_column_types[column],
         row_count,
         "Domain storage",
         paradox_domain_column_names[column]
       );
     }
-    SET_VECTOR_ELT(columns, column, value);
   }
-
+  /*
+   * Capture and validate the complete supported outer metadata generation.
+   * Row labels are deliberately count-only; selfref and repr are opaque
+   * representation carriers whose exact identities are retained.
+   */
+  SEXP outward_row_names = outward_metadata.row_names;
+  const int callback_capable_row_names = ALTREP(outward_row_names);
+  /*
+   * Length may dispatch. Root the exact selected carrier before that sole
+   * observation, then require that it is still the table's carrier
+   * afterwards. A callback may not replace A with an unobserved B and smuggle
+   * B's different row count into the admitted generation.
+   */
+  REPROTECT(
+    outward_row_names,
+    root_indices[DOMAIN_ADMISSION_ROOT_ROW_NAMES]
+  );
+  R_xlen_t outward_row_count = 0;
+  if (!paradox_public_table_row_count(domain, &outward_row_count)) {
+    Rf_error("Domain changed during admission");
+  }
   double *lower_values = NULL;
   double *upper_values = NULL;
   double *tolerance_values = NULL;
@@ -247,105 +596,464 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
     lower_values = numeric_storage;
     upper_values = numeric_storage + buffer_size;
     tolerance_values = numeric_storage + 2 * buffer_size;
-    SEXP lower_column = VECTOR_ELT(columns, PARADOX_DOMAIN_LOWER);
-    SEXP upper_column = VECTOR_ELT(columns, PARADOX_DOMAIN_UPPER);
-    SEXP tolerance_column = VECTOR_ELT(columns, PARADOX_DOMAIN_TOLERANCE);
-    for (R_xlen_t row = 0; row < row_count; ++row) {
-      paradox_account_work(work_since_interrupt);
-      lower_values[row] = paradox_numeric_elt(lower_column, row);
-      upper_values[row] = paradox_numeric_elt(upper_column, row);
-      tolerance_values[row] = paradox_numeric_elt(tolerance_column, row);
-    }
   }
 
-  SEXP lower_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_LOWER);
-  SEXP upper_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_UPPER);
-  SEXP tolerance_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_TOLERANCE);
-  SEXP id_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_ID);
-  SEXP cls_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_CLS);
-  SEXP grouping_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_GROUPING);
-  SEXP storage_carrier = VECTOR_ELT(scalars, ADMITTED_SCALAR_STORAGE);
+  /*
+   * A stable row-name ALTREP may have dispatched its one allowed Length above.
+   * Select and own the complete post-callback generation. Canonical Domains
+   * share one grouping pointer; a foreign but semantically grouped table may
+   * need one rare exact per-row receipt. Allocating that receipt can run a
+   * finalizer, so the loop restarts and overwrites every prior capture.
+  */
+  R_xlen_t expected_attribute_count = 0;
+  SEXP outward_class = R_NilValue;
+  SEXP outward_selfref = R_NilValue;
+  SEXP outward_repr = R_NilValue;
+  SEXP rare_grouping = R_NilValue;
+  SEXP accepted_class = R_NilValue;
+  SEXP accepted_grouping = R_NilValue;
+  SEXP accepted_storage = R_NilValue;
+  paradox_builtin_domain_kind_t resolved_kind = kind;
+  int selection_is_current = !callback_capable_row_names;
+  for (;;) {
+    if (!selection_is_current) {
+      if (!capture_domain_outer_metadata(
+          domain,
+          selfref_symbol,
+          repr_symbol,
+          &outward_metadata
+        ) || outward_metadata.row_names != outward_row_names) {
+        Rf_error("Domain changed during admission");
+      }
+      paradox_domain_select_columns_with_positions(
+        domain,
+        "Domain storage",
+        "Domain",
+        selected_mask,
+        selected_columns,
+        selected_positions
+      );
+    }
+    if (XLENGTH(domain) != PARADOX_DOMAIN_COLUMN_COUNT ||
+        outward_metadata.row_names != outward_row_names) {
+      Rf_error("Domain changed during admission");
+    }
+    if (!selection_is_current) {
+      for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
+        REPROTECT(selected_columns[column], root_indices[column]);
+      }
+      for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
+        SEXP value = selected_columns[column];
+        if (column == PARADOX_DOMAIN_ID) {
+          if (!paradox_domain_column_shell_is_exact(
+              value,
+              PARADOX_DOMAIN_ID,
+              row_count
+            )) {
+            Rf_error("Domain shape changed during admission");
+          }
+        } else if (paradox_domain_column_types[column] == REALSXP) {
+          paradox_require_numeric_column(
+            value,
+            row_count,
+            "Domain storage",
+            paradox_domain_column_names[column]
+          );
+        } else {
+          paradox_require_column_checked(
+            value,
+            paradox_domain_column_types[column],
+            row_count,
+            "Domain storage",
+            paradox_domain_column_names[column]
+          );
+        }
+      }
+    }
+    /* Any allocation followed by `continue` must select a fresh generation. */
+    selection_is_current = FALSE;
 
-  SEXP ids = VECTOR_ELT(columns, PARADOX_DOMAIN_ID);
-  SEXP classes = VECTOR_ELT(columns, PARADOX_DOMAIN_CLS);
-  SEXP groupings = VECTOR_ELT(columns, PARADOX_DOMAIN_GROUPING);
-  SEXP storages = VECTOR_ELT(columns, PARADOX_DOMAIN_STORAGE_TYPE);
-  if (!ordinary_string_vector(ids) || !ordinary_string_vector(classes) ||
-      !ordinary_string_vector(groupings) ||
-      !ordinary_string_vector(storages)) {
-    UNPROTECT(1);
-    Rf_error("Corrupt Domain storage: schema columns must be ordinary vectors");
-  }
-
-  SEXP levels_column = VECTOR_ELT(columns, PARADOX_DOMAIN_LEVELS);
-  SEXP special_column = VECTOR_ELT(columns, PARADOX_DOMAIN_SPECIAL_VALS);
-  SEXP cargo_column = VECTOR_ELT(columns, PARADOX_DOMAIN_CARGO);
-  SEXP tags_column = VECTOR_ELT(columns, PARADOX_DOMAIN_TAGS);
-  SEXP trafo_column = VECTOR_ELT(columns, PARADOX_DOMAIN_TRAFO);
-  for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_account_work(work_since_interrupt);
-    /*
-     * Capture the interpreted row before the owner's own admission can
-     * allocate, and keep using exactly those objects afterwards. The kernels
-     * read the same captured row, so a value they operate on is always one the
-     * owner admitted.
-     */
-    const R_xlen_t offset = row * PARADOX_ADMITTED_ROW_STRIDE;
-    /* Fields outside the closure stay `R_NilValue` in the captured row: no
-     * rule will read them, and the declaring kernel must not either. */
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_LEVELS) {
-      SET_VECTOR_ELT(
-        rows,
-        offset + PARADOX_ADMITTED_LEVELS,
-        VECTOR_ELT(levels_column, row)
-      );
+    outward_class = outward_metadata.classes;
+    outward_selfref = outward_metadata.selfref;
+    outward_repr = outward_metadata.repr;
+    const R_xlen_t outward_attribute_count = outward_metadata.count;
+    expected_attribute_count = 3 +
+      (outward_selfref != R_NilValue) + (outward_repr != R_NilValue);
+    if (!exact_domain_class(outward_class, kind)) {
+      Rf_error("Domain shape changed during admission");
     }
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
-      SET_VECTOR_ELT(
-        rows,
-        offset + PARADOX_ADMITTED_SPECIAL_VALS,
-        VECTOR_ELT(special_column, row)
-      );
+    if (outward_attribute_count != expected_attribute_count ||
+        outward_row_count != row_count ||
+        (outward_selfref != R_NilValue &&
+          (TYPEOF(outward_selfref) != EXTPTRSXP ||
+            Rf_isS4(outward_selfref))) ||
+        (outward_repr != R_NilValue && Rf_isS4(outward_repr))) {
+      Rf_error("Domain changed during admission");
     }
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO) {
-      SET_VECTOR_ELT(
-        rows,
-        offset + PARADOX_ADMITTED_CARGO,
-        VECTOR_ELT(cargo_column, row)
-      );
-    }
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_TAGS) {
-      SET_VECTOR_ELT(
-        rows,
-        offset + PARADOX_ADMITTED_TAGS,
-        VECTOR_ELT(tags_column, row)
-      );
-    }
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_TRAFO) {
-      SET_VECTOR_ELT(
-        rows,
-        offset + PARADOX_ADMITTED_TRAFO,
-        VECTOR_ELT(trafo_column, row)
-      );
-    }
+    REPROTECT(
+      outward_class,
+      root_indices[DOMAIN_ADMISSION_ROOT_CLASS]
+    );
+    REPROTECT(
+      outward_selfref,
+      root_indices[DOMAIN_ADMISSION_ROOT_SELFREF]
+    );
+    REPROTECT(outward_repr, root_indices[DOMAIN_ADMISSION_ROOT_REPR]);
 
     if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
-      SET_REAL_ELT(lower_carrier, 0, lower_values[row]);
-      SET_REAL_ELT(upper_carrier, 0, upper_values[row]);
-      SET_REAL_ELT(tolerance_carrier, 0, tolerance_values[row]);
+      SEXP lower_column = selected_columns[PARADOX_DOMAIN_LOWER];
+      SEXP upper_column = selected_columns[PARADOX_DOMAIN_UPPER];
+      SEXP tolerance_column = selected_columns[PARADOX_DOMAIN_TOLERANCE];
+      for (R_xlen_t row = 0; row < row_count; ++row) {
+        paradox_account_work(work_since_interrupt);
+        lower_values[row] = paradox_numeric_elt(lower_column, row);
+        upper_values[row] = paradox_numeric_elt(upper_column, row);
+        tolerance_values[row] = paradox_numeric_elt(tolerance_column, row);
+      }
     }
-    SET_STRING_ELT(id_carrier, 0, STRING_ELT(ids, row));
-    /* The three uniform schema strings repeat the same interned CHARSXP on
-     * every row of a canonical table; rewriting an unchanged element would
-     * only pay the write barrier again. */
-    if (STRING_ELT(cls_carrier, 0) != STRING_ELT(classes, row)) {
-      SET_STRING_ELT(cls_carrier, 0, STRING_ELT(classes, row));
+
+    SEXP ids = selected_columns[PARADOX_DOMAIN_ID];
+    SEXP classes = selected_columns[PARADOX_DOMAIN_CLS];
+    SEXP groupings = selected_columns[PARADOX_DOMAIN_GROUPING];
+    SEXP storages = selected_columns[PARADOX_DOMAIN_STORAGE_TYPE];
+    if (!ordinary_string_vector(ids) || !ordinary_string_vector(classes) ||
+        !ordinary_string_vector(groupings) ||
+        !ordinary_string_vector(storages)) {
+      Rf_error(
+        "Corrupt Domain storage: schema columns must be ordinary vectors"
+      );
     }
-    if (STRING_ELT(grouping_carrier, 0) != STRING_ELT(groupings, row)) {
-      SET_STRING_ELT(grouping_carrier, 0, STRING_ELT(groupings, row));
+    SEXP levels_column = selected_columns[PARADOX_DOMAIN_LEVELS];
+    SEXP special_column = selected_columns[PARADOX_DOMAIN_SPECIAL_VALS];
+    SEXP cargo_column = selected_columns[PARADOX_DOMAIN_CARGO];
+    SEXP tags_column = selected_columns[PARADOX_DOMAIN_TAGS];
+    SEXP trafo_column = selected_columns[PARADOX_DOMAIN_TRAFO];
+
+    if (rare_grouping == R_NilValue && row_count > 1) {
+      SEXP first_grouping = STRING_ELT(groupings, 0);
+      int different_pointer = FALSE;
+      for (R_xlen_t row = 1; row < row_count; ++row) {
+        if (STRING_ELT(groupings, row) != first_grouping) {
+          different_pointer = TRUE;
+          break;
+        }
+      }
+      if (different_pointer) {
+        SEXP receipt = PROTECT(Rf_allocVector(STRSXP, row_count));
+        rare_grouping = receipt;
+        REPROTECT(
+          rare_grouping,
+          root_indices[DOMAIN_ADMISSION_ROOT_RARE_GROUPING]
+        );
+        UNPROTECT(1);
+        continue;
+      }
     }
-    if (STRING_ELT(storage_carrier, 0) != STRING_ELT(storages, row)) {
-      SET_STRING_ELT(storage_carrier, 0, STRING_ELT(storages, row));
+
+    /*
+     * One allocation-free pointer capture of every interpreted row precedes
+     * every nested snapshot and duplicate check. A selected source slot is
+     * overwritten by its owned copy later; the terminal barrier compares the
+     * complete live generation to that copy. Unselected slots remain NULL.
+     */
+    if (row_count != 0) {
+      accepted_class = STRING_ELT(classes, 0);
+      accepted_grouping = STRING_ELT(groupings, 0);
+      accepted_storage = STRING_ELT(storages, 0);
+      /*
+       * Install each exact representative in its scanned indexed root before
+       * the sole canonical resolver sees it. No nested snapshot has started.
+       */
+      REPROTECT(
+        accepted_class,
+        root_indices[DOMAIN_ADMISSION_ROOT_ACCEPTED_CLASS]
+      );
+      REPROTECT(
+        accepted_grouping,
+        root_indices[DOMAIN_ADMISSION_ROOT_ACCEPTED_GROUPING]
+      );
+      REPROTECT(
+        accepted_storage,
+        root_indices[DOMAIN_ADMISSION_ROOT_ACCEPTED_STORAGE]
+      );
+      if (paradox_resolve_builtin_domain_class_char(
+          accepted_class
+        ) != kind) {
+        Rf_error(
+          "Corrupt Domain storage: `cls` is inconsistent with its class"
+        );
+      }
+      resolved_kind = paradox_resolve_builtin_domain_kind_chars(
+        accepted_class,
+        accepted_storage
+      );
+      if (resolved_kind != kind) {
+        Rf_error(
+          "Corrupt Domain storage: `storage_type` is inconsistent with its "
+          "class"
+        );
+      }
+    }
+    for (R_xlen_t row = 0; row < row_count; ++row) {
+      const R_xlen_t offset = row * PARADOX_ADMITTED_ROW_STRIDE;
+      SET_VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_ID,
+        STRING_ELT(ids, row)
+      );
+      if (rare_grouping != R_NilValue) {
+        SET_STRING_ELT(
+          rare_grouping,
+          row,
+          STRING_ELT(groupings, row)
+        );
+      }
+      if (interpreted & PARADOX_DOMAIN_INTERPRET_LEVELS) {
+        SET_VECTOR_ELT(
+          rows,
+          offset + PARADOX_ADMITTED_LEVELS,
+          VECTOR_ELT(levels_column, row)
+        );
+      }
+      if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+        SET_VECTOR_ELT(
+          rows,
+          offset + PARADOX_ADMITTED_SPECIAL_VALS,
+          VECTOR_ELT(special_column, row)
+        );
+      }
+      if (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO) {
+        SET_VECTOR_ELT(
+          rows,
+          offset + PARADOX_ADMITTED_CARGO,
+          VECTOR_ELT(cargo_column, row)
+        );
+      }
+      if (interpreted & PARADOX_DOMAIN_INTERPRET_TAGS) {
+        SET_VECTOR_ELT(
+          rows,
+          offset + PARADOX_ADMITTED_TAGS,
+          VECTOR_ELT(tags_column, row)
+        );
+      }
+      if (interpreted & PARADOX_DOMAIN_INTERPRET_TRAFO) {
+        SET_VECTOR_ELT(
+          rows,
+          offset + PARADOX_ADMITTED_TRAFO,
+          VECTOR_ELT(trafo_column, row)
+        );
+      }
+      SEXP row_class = STRING_ELT(classes, row);
+      SEXP row_storage = STRING_ELT(storages, row);
+      if (row_class != accepted_class &&
+          !paradox_domain_string_is(row_class, CHAR(accepted_class))) {
+        Rf_error(
+          "Corrupt Domain storage: `cls` is inconsistent with its class"
+        );
+      }
+      if (row_storage != accepted_storage &&
+          !paradox_domain_string_is(
+            row_storage,
+            CHAR(accepted_storage)
+          )) {
+        Rf_error(
+          "Corrupt Domain storage: `storage_type` is inconsistent with its "
+          "class"
+        );
+      }
+    }
+    if (rare_grouping != R_NilValue && row_count > 1) {
+      SEXP first_grouping = STRING_ELT(rare_grouping, 0);
+      for (R_xlen_t row = 1; row < row_count; ++row) {
+        if (!paradox_domain_strings_equal(
+            STRING_ELT(rare_grouping, row),
+            first_grouping
+          )) {
+          Rf_error(
+            "Corrupt Domain storage: rows must share one grouping"
+          );
+        }
+      }
+    }
+    break;
+  }
+
+  if (capture_hook != R_NilValue) {
+    run_domain_admission_test_hook(
+      capture_hook,
+      DOMAIN_ADMISSION_AFTER_CAPTURE
+    );
+  }
+
+  /*
+   * Reuse is carried forward as a Boolean proven while both adjacent source
+   * slots are still rooted in `rows`. Never retain a source SEXP only in C
+   * across the snapshot/owner allocations: a finalizer may replace the live
+   * outward column after the current source slot is overwritten. The previous
+   * owned value is safe to retain because the preceding row slot roots it.
+   */
+  SEXP previous_levels_owned = R_UnboundValue;
+  SEXP previous_special_values_owned = R_UnboundValue;
+  SEXP previous_cargo_owned = R_UnboundValue;
+  SEXP previous_tags_owned = R_UnboundValue;
+  int levels_reuses_previous = FALSE;
+  int special_values_reuses_previous = FALSE;
+  int cargo_reuses_previous = FALSE;
+  int tags_reuses_previous = FALSE;
+  for (R_xlen_t row = 0; row < row_count; ++row) {
+    paradox_account_work(work_since_interrupt);
+    const R_xlen_t offset = row * PARADOX_ADMITTED_ROW_STRIDE;
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_LEVELS) {
+      SEXP source = PROTECT(VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_LEVELS
+      ));
+      if (source != R_NilValue &&
+          (ALTREP(source) || XLENGTH(source) != 0)) {
+        const int next_reuses = row + 1 < row_count &&
+          VECTOR_ELT(
+            rows,
+            (row + 1) * PARADOX_ADMITTED_ROW_STRIDE +
+              PARADOX_ADMITTED_LEVELS
+          ) == source;
+        SEXP owned;
+        if (levels_reuses_previous) {
+          owned = previous_levels_owned;
+        } else {
+          owned = PROTECT(paradox_snapshot_domain_nested(
+            source,
+            PARADOX_DOMAIN_LEVELS,
+            work_since_interrupt
+          ));
+          if (owned == R_UnboundValue) {
+            report_row_failure(
+              kind,
+              PARADOX_DOMAIN_FIELD_LEVELS,
+              source,
+              R_NilValue
+            );
+          }
+          UNPROTECT(1);
+        }
+        SET_VECTOR_ELT(rows, offset + PARADOX_ADMITTED_LEVELS, owned);
+        previous_levels_owned = owned;
+        levels_reuses_previous = next_reuses;
+      } else {
+        levels_reuses_previous = FALSE;
+      }
+      UNPROTECT(1);
+    }
+    int special_values_reused = FALSE;
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+      SEXP source = PROTECT(VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_SPECIAL_VALS
+      ));
+      if (TYPEOF(source) == VECSXP &&
+          (ALTREP(source) || XLENGTH(source) != 0)) {
+        const int next_reuses = row + 1 < row_count &&
+          VECTOR_ELT(
+            rows,
+            (row + 1) * PARADOX_ADMITTED_ROW_STRIDE +
+              PARADOX_ADMITTED_SPECIAL_VALS
+          ) == source;
+        SEXP owned;
+        if (special_values_reuses_previous) {
+          owned = previous_special_values_owned;
+          special_values_reused = TRUE;
+        } else {
+          owned = PROTECT(paradox_snapshot_domain_nested(
+            source,
+            PARADOX_DOMAIN_SPECIAL_VALS,
+            work_since_interrupt
+          ));
+          if (owned == R_UnboundValue) {
+            report_row_failure(
+              kind,
+              PARADOX_DOMAIN_FIELD_SPECIAL_VALUES,
+              R_NilValue,
+              source
+            );
+          }
+          UNPROTECT(1);
+        }
+        SET_VECTOR_ELT(rows, offset + PARADOX_ADMITTED_SPECIAL_VALS, owned);
+        previous_special_values_owned = owned;
+        special_values_reuses_previous = next_reuses;
+      } else {
+        special_values_reuses_previous = FALSE;
+      }
+      UNPROTECT(1);
+    }
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO) {
+      SEXP source = PROTECT(VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_CARGO
+      ));
+      if (TYPEOF(source) == VECSXP &&
+          (ALTREP(source) || XLENGTH(source) != 0)) {
+        const int next_reuses = row + 1 < row_count &&
+          VECTOR_ELT(
+            rows,
+            (row + 1) * PARADOX_ADMITTED_ROW_STRIDE +
+              PARADOX_ADMITTED_CARGO
+          ) == source;
+        SEXP owned;
+        if (cargo_reuses_previous) {
+          owned = previous_cargo_owned;
+        } else {
+          owned = PROTECT(paradox_snapshot_domain_nested(
+            source,
+            PARADOX_DOMAIN_CARGO,
+            work_since_interrupt
+          ));
+          if (owned == R_UnboundValue) {
+            report_row_failure(
+              kind,
+              PARADOX_DOMAIN_FIELD_CARGO,
+              R_NilValue,
+              R_NilValue
+            );
+          }
+          UNPROTECT(1);
+        }
+        SET_VECTOR_ELT(rows, offset + PARADOX_ADMITTED_CARGO, owned);
+        previous_cargo_owned = owned;
+        cargo_reuses_previous = next_reuses;
+      } else {
+        cargo_reuses_previous = FALSE;
+      }
+      UNPROTECT(1);
+    }
+    if (interpreted & PARADOX_DOMAIN_INTERPRET_TAGS) {
+      SEXP source = PROTECT(VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_TAGS
+      ));
+      if (TYPEOF(source) == STRSXP && !ALTREP(source) &&
+          !Rf_isS4(source) && !Rf_isObject(source) &&
+          paradox_api_has_no_attributes(source) &&
+          XLENGTH(source) != 0) {
+        const int next_reuses = row + 1 < row_count &&
+          VECTOR_ELT(
+            rows,
+            (row + 1) * PARADOX_ADMITTED_ROW_STRIDE +
+              PARADOX_ADMITTED_TAGS
+          ) == source;
+        SEXP owned;
+        if (tags_reuses_previous) {
+          owned = previous_tags_owned;
+        } else {
+          owned = PROTECT(paradox_snapshot_semantic_vector(source));
+          UNPROTECT(1);
+        }
+        SET_VECTOR_ELT(rows, offset + PARADOX_ADMITTED_TAGS, owned);
+        previous_tags_owned = owned;
+        tags_reuses_previous = next_reuses;
+      } else {
+        tags_reuses_previous = FALSE;
+      }
+      UNPROTECT(1);
     }
 
     SEXP levels = VECTOR_ELT(rows, offset + PARADOX_ADMITTED_LEVELS);
@@ -356,14 +1064,13 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
     paradox_special_values_receipt_t receipt;
     paradox_special_values_receipt_t *selected_receipt = NULL;
     if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
-      if (!paradox_prepare_builtin_special_values(
-          cls_carrier,
-          storage_carrier,
+      empty_special_names_present[row] = 0U;
+      if (!paradox_prepare_builtin_special_values_kind(
+          resolved_kind,
           special_values,
           &receipt,
           work_since_interrupt
         )) {
-        UNPROTECT(1);
         report_row_failure(
           kind,
           PARADOX_DOMAIN_FIELD_SPECIAL_VALUES,
@@ -371,11 +1078,43 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
           special_values
         );
       }
+      if (XLENGTH(special_values) == 0) {
+        SEXP special_names = exact_optional_names(special_values);
+        if (special_names == R_UnboundValue) {
+          report_row_failure(
+            kind,
+            PARADOX_DOMAIN_FIELD_SPECIAL_VALUES,
+            levels,
+            special_values
+          );
+        }
+        empty_special_names_present[row] =
+          (unsigned char) (special_names != R_NilValue);
+      }
+      if (receipt.typed && XLENGTH(special_values) != 0 &&
+          !special_values_reused) {
+        paradox_own_builtin_special_value_leaves(
+          special_values,
+          TRUE
+        );
+      }
       selected_receipt = &receipt;
     }
     paradox_builtin_domain_kind_t admitted_kind =
       PARADOX_BUILTIN_DOMAIN_UNKNOWN;
     paradox_domain_field_t failure = PARADOX_DOMAIN_FIELD_NONE;
+    const int admits_bounds =
+      (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) != 0;
+    const paradox_captured_domain_schema_t schema = {
+      VECTOR_ELT(rows, offset + PARADOX_ADMITTED_ID),
+      accepted_class,
+      accepted_grouping,
+      accepted_storage,
+      resolved_kind,
+      admits_bounds ? lower_values[row] : NA_REAL,
+      admits_bounds ? upper_values[row] : NA_REAL,
+      admits_bounds ? tolerance_values[row] : NA_REAL
+    };
     /*
      * The schema half is exactly the rule set these operations interpret.
      * Default, requirement, and initialization admission belongs to the
@@ -383,38 +1122,311 @@ SEXP paradox_admit_public_domain_table(SEXP domain,
      * stored TuneToken in `.init`, and that is detached by the cold
      * search-space converter rather than by a Domain operation.
      */
-    if (!paradox_admit_builtin_domain_schema_row(
-        id_carrier,
-        cls_carrier,
-        grouping_carrier,
+    if (!paradox_admit_builtin_domain_schema_captured(
+        &schema,
         VECTOR_ELT(rows, offset + PARADOX_ADMITTED_CARGO),
-        lower_carrier,
-        upper_carrier,
-        tolerance_carrier,
         levels,
         special_values,
-        storage_carrier,
         VECTOR_ELT(rows, offset + PARADOX_ADMITTED_TAGS),
         VECTOR_ELT(rows, offset + PARADOX_ADMITTED_TRAFO),
         selected_receipt,
         interpreted,
         &admitted_kind,
-        NULL,
         &failure,
         work_since_interrupt
       )) {
-      UNPROTECT(1);
       report_row_failure(kind, failure, levels, special_values);
+    }
+    if (admitted_kind != resolved_kind) {
+      Rf_error("Domain changed during admission");
     }
   }
 
-  table->bundle = bundle;
-  table->columns = columns;
+  if (capture_hook != R_NilValue) {
+    run_domain_admission_test_hook(
+      capture_hook,
+      DOMAIN_ADMISSION_AFTER_OWNERSHIP
+    );
+  }
+
+  /*
+   * Terminal, callback-free simultaneous-generation receipt. The selector-
+   * owned indexed companion proves the complete canonical pairing directly;
+   * the row receipts below catch in-place mutation of a retained column or
+   * nested field.
+   */
+  domain_outer_metadata_t current_metadata;
+  int current = capture_domain_outer_metadata(
+    domain,
+    selfref_symbol,
+    repr_symbol,
+    &current_metadata
+  );
+  SEXP current_class = current_metadata.classes;
+  SEXP current_row_names = current_metadata.row_names;
+  SEXP current_selfref = current_metadata.selfref;
+  SEXP current_repr = current_metadata.repr;
+  const R_xlen_t current_attribute_count = current_metadata.count;
+  R_xlen_t current_row_count = row_count;
+  current = current && paradox_domain_selected_columns_current(
+      domain,
+      selected_columns,
+      selected_positions,
+      row_count
+    ) &&
+    current_attribute_count == expected_attribute_count &&
+    current_class == outward_class &&
+    exact_domain_class(current_class, kind) &&
+    current_row_names == outward_row_names &&
+    current_selfref == outward_selfref &&
+    current_repr == outward_repr &&
+    (current_selfref == R_NilValue ||
+      (TYPEOF(current_selfref) == EXTPTRSXP &&
+        !Rf_isS4(current_selfref))) &&
+    (current_repr == R_NilValue || !Rf_isS4(current_repr)) &&
+    (TYPEOF(current_row_names) == INTSXP ||
+      TYPEOF(current_row_names) == STRSXP) &&
+    !Rf_isS4(current_row_names) && !Rf_isObject(current_row_names) &&
+    paradox_api_has_no_attributes(current_row_names);
+  if (current && !ALTREP(current_row_names)) {
+    current = paradox_public_table_row_count(domain, &current_row_count) &&
+      current_row_count == row_count;
+  }
+  if (current && (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS)) {
+    current = numeric_column_receipt_current(
+        selected_columns[PARADOX_DOMAIN_LOWER],
+        lower_values,
+        row_count
+      ) &&
+      numeric_column_receipt_current(
+        selected_columns[PARADOX_DOMAIN_UPPER],
+        upper_values,
+        row_count
+      ) &&
+      numeric_column_receipt_current(
+        selected_columns[PARADOX_DOMAIN_TOLERANCE],
+        tolerance_values,
+        row_count
+      );
+  }
+  const int typed_special = kind != PARADOX_BUILTIN_DOMAIN_UTY;
+  const SEXP *live_ids = NULL;
+  const SEXP *live_classes = NULL;
+  const SEXP *live_groupings = NULL;
+  const SEXP *live_storages = NULL;
+  const SEXP *rare_groupings = NULL;
+  if (current && row_count != 0) {
+    /*
+     * Every selected string column and the optional rare receipt is ordinary
+     * and rooted above. The remaining terminal scan has no allocation,
+     * interrupt poll, or callback, so these read-only pointers cannot be
+     * invalidated before its final decision.
+     */
+    live_ids = STRING_PTR_RO(selected_columns[PARADOX_DOMAIN_ID]);
+    live_classes = STRING_PTR_RO(selected_columns[PARADOX_DOMAIN_CLS]);
+    live_groupings = STRING_PTR_RO(
+      selected_columns[PARADOX_DOMAIN_GROUPING]
+    );
+    live_storages = STRING_PTR_RO(
+      selected_columns[PARADOX_DOMAIN_STORAGE_TYPE]
+    );
+    if (rare_grouping != R_NilValue) {
+      rare_groupings = STRING_PTR_RO(rare_grouping);
+    }
+  }
+  int grouping_current = TRUE;
+  SEXP prior_live_levels = R_UnboundValue;
+  SEXP prior_owned_levels = R_UnboundValue;
+  SEXP prior_live_special_values = R_UnboundValue;
+  SEXP prior_owned_special_values = R_UnboundValue;
+  unsigned char prior_empty_special_names_present = 0U;
+  SEXP prior_live_cargo = R_UnboundValue;
+  SEXP prior_owned_cargo = R_UnboundValue;
+  SEXP prior_live_tags = R_UnboundValue;
+  SEXP prior_owned_tags = R_UnboundValue;
+  int have_prior_levels = FALSE;
+  int have_prior_special_values = FALSE;
+  int have_prior_cargo = FALSE;
+  int have_prior_tags = FALSE;
+  for (R_xlen_t row = 0; current && row < row_count; ++row) {
+    const R_xlen_t offset = row * PARADOX_ADMITTED_ROW_STRIDE;
+    SEXP expected_grouping = rare_grouping == R_NilValue
+      ? accepted_grouping
+      : rare_groupings[row];
+    SEXP live_grouping = live_groupings[row];
+    SEXP live_class = live_classes[row];
+    SEXP live_storage = live_storages[row];
+    current =
+      live_ids[row] ==
+        VECTOR_ELT(rows, offset + PARADOX_ADMITTED_ID) &&
+      (live_class == accepted_class ||
+        paradox_domain_string_is(live_class, CHAR(accepted_class))) &&
+      (live_storage == accepted_storage ||
+        paradox_domain_string_is(
+          live_storage,
+          CHAR(accepted_storage)
+        ));
+    if (current && live_grouping != expected_grouping) {
+      current = FALSE;
+      grouping_current = FALSE;
+    }
+    if (current && (interpreted & PARADOX_DOMAIN_INTERPRET_LEVELS)) {
+      SEXP source = VECTOR_ELT(
+        selected_columns[PARADOX_DOMAIN_LEVELS],
+        row
+      );
+      SEXP snapshot = VECTOR_ELT(rows, offset + PARADOX_ADMITTED_LEVELS);
+      if (!(have_prior_levels && source == prior_live_levels &&
+          snapshot == prior_owned_levels)) {
+        const SEXPTYPE type = (SEXPTYPE) TYPEOF(snapshot);
+        current = (snapshot == R_NilValue && source == R_NilValue) ||
+          ((type == STRSXP || type == LGLSXP) &&
+            plain_vector_receipt_current(source, snapshot, type, FALSE));
+      }
+      prior_live_levels = source;
+      prior_owned_levels = snapshot;
+      have_prior_levels = TRUE;
+    }
+    if (current &&
+        (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES)) {
+      SEXP source = VECTOR_ELT(
+        selected_columns[PARADOX_DOMAIN_SPECIAL_VALS],
+        row
+      );
+      SEXP snapshot = VECTOR_ELT(
+        rows,
+        offset + PARADOX_ADMITTED_SPECIAL_VALS
+      );
+      /*
+       * The optional-names receipt of an undetached empty shell is per row.
+       * An identical live/admitted pair can reuse the preceding comparison
+       * only when both rows also captured the same names-presence byte.
+       */
+      if (!(have_prior_special_values &&
+          source == prior_live_special_values &&
+          snapshot == prior_owned_special_values &&
+          (XLENGTH(source) != 0 ||
+            empty_special_names_present[row] ==
+              prior_empty_special_names_present))) {
+        current = special_values_receipt_current(
+          source,
+          snapshot,
+          typed_special,
+          empty_special_names_present[row]
+        );
+      }
+      prior_live_special_values = source;
+      prior_owned_special_values = snapshot;
+      prior_empty_special_names_present =
+        empty_special_names_present[row];
+      have_prior_special_values = TRUE;
+    }
+    if (current && (interpreted & PARADOX_DOMAIN_INTERPRET_CARGO)) {
+      SEXP source = VECTOR_ELT(
+        selected_columns[PARADOX_DOMAIN_CARGO],
+        row
+      );
+      SEXP snapshot = VECTOR_ELT(rows, offset + PARADOX_ADMITTED_CARGO);
+      if (!(have_prior_cargo && source == prior_live_cargo &&
+          snapshot == prior_owned_cargo)) {
+        current = cargo_receipt_current(source, snapshot);
+      }
+      prior_live_cargo = source;
+      prior_owned_cargo = snapshot;
+      have_prior_cargo = TRUE;
+    }
+    if (current && (interpreted & PARADOX_DOMAIN_INTERPRET_TAGS)) {
+      SEXP source = VECTOR_ELT(
+        selected_columns[PARADOX_DOMAIN_TAGS],
+        row
+      );
+      SEXP snapshot = VECTOR_ELT(rows, offset + PARADOX_ADMITTED_TAGS);
+      if (!(have_prior_tags && source == prior_live_tags &&
+          snapshot == prior_owned_tags)) {
+        current = plain_vector_receipt_current(
+          source,
+          snapshot,
+          STRSXP,
+          FALSE
+        );
+      }
+      prior_live_tags = source;
+      prior_owned_tags = snapshot;
+      have_prior_tags = TRUE;
+    }
+    if (current && (interpreted & PARADOX_DOMAIN_INTERPRET_TRAFO)) {
+      current = VECTOR_ELT(
+        selected_columns[PARADOX_DOMAIN_TRAFO],
+        row
+      ) == VECTOR_ELT(rows, offset + PARADOX_ADMITTED_TRAFO);
+    }
+  }
+  if (!current) {
+    if (!grouping_current) {
+      Rf_error("Corrupt Domain storage: rows must share one grouping");
+    }
+    Rf_error("Domain changed during admission");
+  }
+
   table->rows = rows;
   table->lower = lower_values;
   table->upper = upper_values;
   table->tolerance = tolerance_values;
   table->row_count = row_count;
+  UNPROTECT(DOMAIN_ADMISSION_ROOT_COUNT);
+  return rows;
+}
+
+SEXP paradox_admit_public_domain_table(SEXP domain,
+    paradox_builtin_domain_kind_t kind, R_xlen_t row_count,
+    unsigned int interpreted,
+    paradox_admitted_domain_table_t *table,
+    R_xlen_t *work_since_interrupt) {
+  return admit_public_domain_table_impl(
+    domain,
+    kind,
+    row_count,
+    interpreted,
+    table,
+    work_since_interrupt,
+    R_NilValue
+  );
+}
+
+SEXP paradox_test_domain_admission_reentry(SEXP domain, SEXP kind,
+    SEXP interpreted, SEXP capture_hook) {
+  int kind_value = TYPEOF(kind) == INTSXP && !ALTREP(kind) &&
+    XLENGTH(kind) == 1
+      ? INTEGER_ELT(kind, 0)
+      : 0;
+  int interpreted_value = TYPEOF(interpreted) == INTSXP &&
+    !ALTREP(interpreted) && XLENGTH(interpreted) == 1
+      ? INTEGER_ELT(interpreted, 0)
+      : -1;
+  if (TYPEOF(kind) != INTSXP || ALTREP(kind) || XLENGTH(kind) != 1 ||
+      kind_value < (int) PARADOX_BUILTIN_DOMAIN_DBL ||
+      kind_value > (int) PARADOX_BUILTIN_DOMAIN_UTY ||
+      TYPEOF(interpreted) != INTSXP || ALTREP(interpreted) ||
+      XLENGTH(interpreted) != 1 || interpreted_value < 0 ||
+      interpreted_value > (int) PARADOX_DOMAIN_INTERPRET_ALL ||
+      !valid_domain_admission_test_hooks(capture_hook)) {
+    Rf_error("Invalid test Domain-admission arguments");
+  }
+  R_xlen_t row_count;
+  if (!paradox_public_table_row_count(domain, &row_count)) {
+    Rf_error("Invalid test Domain row names");
+  }
+  R_xlen_t work_since_interrupt = 0;
+  paradox_admitted_domain_table_t table;
+  PROTECT(admit_public_domain_table_impl(
+    domain,
+    (paradox_builtin_domain_kind_t) kind_value,
+    row_count,
+    (unsigned int) interpreted_value,
+    &table,
+    &work_since_interrupt,
+    capture_hook
+  ));
   UNPROTECT(1);
-  return bundle;
+  return R_NilValue;
 }

@@ -229,6 +229,27 @@ class ManifestTests(unittest.TestCase):
             with self.assertRaisesRegex(harness.HarnessError, "duplicate JSON key"):
                 harness.load_manifest(root, path)
 
+    def test_task_cannot_forge_containment_markers(self) -> None:
+        for name in sorted(harness.RESERVED_TASK_ENVIRONMENT):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                root = pathlib.Path(temporary)
+                tasks = [
+                    {
+                        "id": "forged",
+                        "description": "forged",
+                        "command": ["true"],
+                        "dependencies": [],
+                        "phase": 0,
+                        "input_groups": ["base"],
+                        "impacts": [],
+                        "environment": {name: "1"},
+                    }
+                ]
+                with self.assertRaisesRegex(
+                    harness.HarnessError, "controller-reserved environment"
+                ):
+                    harness.load_manifest(root, write_manifest(root, tasks=tasks))
+
     def test_cycle_unknown_field_and_unsafe_input_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
@@ -350,7 +371,73 @@ class ManifestTests(unittest.TestCase):
             "scripts/bootstrap-configspace", manifest.input_groups["harness"]
         )
         self.assertIn(
+            "scripts/bootstrap-c23-gcc", manifest.input_groups["harness"]
+        )
+        self.assertIn(
+            "scripts/check-c23-compatibility", manifest.input_groups["harness"]
+        )
+        self.assertIn(
+            "c23-compatibility", manifest.profiles["release-core"].tasks
+        )
+        self.assertIn(
+            "c23-compatibility", manifest.profiles["release-core"].always
+        )
+        c23 = manifest.tasks["c23-compatibility"]
+        self.assertEqual(
+            c23.command,
+            (
+                "scripts/check-c23-compatibility",
+                "--source-ref",
+                "{source_ref}",
+                "--run-id",
+                "{attempt_id}",
+            ),
+        )
+        self.assertEqual(
+            c23.readonly_paths,
+            (".local/c23-gcc", ".local/receipts/c23-gcc"),
+        )
+        self.assertEqual(c23.required_parameters, ("source_ref",))
+        self.assertIn("harness-native", c23.dependencies)
+        self.assertEqual(c23.failure_class, "blocker")
+        self.assertEqual(c23.isolation, "worker")
+        self.assertEqual(c23.resources.minimum_cpu, 2)
+        self.assertEqual(c23.resources.minimum_memory_mib, 4096)
+        self.assertFalse(c23.network)
+        c23_source = (
+            root / "scripts" / "check-c23-compatibility"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            '"$RESOURCE_JOBS" compile --max-jobs 4 --report',
+            c23_source,
+        )
+        self.assertIn(
+            '"$RESOURCE_JOBS" compile --verify-report "$report"',
+            c23_source,
+        )
+        self.assertIn(
+            "scripts/environment/resource-jobs",
+            c23_source,
+        )
+        c23_validator = (
+            root / "scripts" / "environment" / "validate-c23-evidence"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            'identical(unname(value[1L, "SystemRequirements"]), args[[4L]])',
+            c23_validator,
+        )
+        self.assertIn(
+            'paradox 2.0.0 USE_C17',
+            c23_source,
+        )
+        self.assertGreaterEqual(c23_source.count("verify_source_package"), 5)
+        self.assertIn("authenticate_main_toolchain", c23_source)
+        self.assertIn(
             "harness-runtime", manifest.tasks["runtime-supported"].dependencies
+        )
+        self.assertIn(
+            "c23-compatibility",
+            manifest.tasks["runtime-supported"].dependencies,
         )
         self.assertIn("reverse-dependencies", manifest.profiles["prepared-reverse"].tasks)
         self.assertIn(
@@ -470,6 +557,51 @@ class ManifestTests(unittest.TestCase):
             False,
         )
         self.assertIn("harness-runtime", selected)
+
+    def test_c17_ceiling_preserves_strict_gnu99_contract(self) -> None:
+        root = pathlib.Path(__file__).resolve().parents[1]
+        description = (root / "DESCRIPTION").read_text(encoding="utf-8")
+        self.assertEqual(
+            [
+                line
+                for line in description.splitlines()
+                if line.startswith("SystemRequirements:")
+            ],
+            ["SystemRequirements: USE_C17"],
+        )
+
+        r_utils = (root / "src" / "r_utils.h").read_text(encoding="utf-8")
+        self.assertIn(
+            "NORET attribute_hidden void paradox_error_from_scalar_string",
+            r_utils,
+        )
+        self.assertIn(
+            "NORET attribute_hidden void paradox_assertion_error",
+            r_utils,
+        )
+        self.assertNotIn("attribute_hidden NORET void", r_utils)
+
+        configurations = (
+            "Makevars-check-analyzer-gcc",
+            "Makevars-check-asan-clang",
+            "Makevars-check-cran",
+            "Makevars-check-strict-clang",
+            "Makevars-check-strict-gcc",
+            "Makevars-check-ubsan-clang",
+        )
+        for name in configurations:
+            source = (root / "environment" / name).read_text(encoding="utf-8")
+            selected = [
+                line
+                for line in source.splitlines()
+                if line.startswith(("CC = ", "CC17 = "))
+            ]
+            self.assertEqual(len(selected), 2, name)
+            self.assertTrue(
+                all(line.count("-std=gnu99") == 1 for line in selected),
+                name,
+            )
+            self.assertNotIn("-std=gnu17", source, name)
 
     def test_resource_ranges_are_validated(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -830,6 +962,8 @@ class EngineTests(unittest.TestCase):
             self.assertIn("/state/r-one-a002/", retry_joined)
             self.assertIn("PARADOX_VERIFY_TASK_ATTEMPT=1", command)
             self.assertIn("PARADOX_VERIFY_TASK_ATTEMPT=2", retry_command)
+            self.assertIn("PARADOX_VERIFY_HARD_WORKER=1", command)
+            self.assertNotIn("PARADOX_VERIFY_AGGREGATE_SYSTEMD=1", command)
             self.assertNotIn(
                 f"type=bind,src={root / '.local'},dst={root / '.local'},rw",
                 command,
@@ -933,11 +1067,23 @@ class EngineTests(unittest.TestCase):
             self.assertIn("--cgroupns=host", command)
             self.assertIn("--oom-score-adj=1000", command)
             self.assertIn("PARADOX_VERIFY_AGGREGATE_SYSTEMD=1", command)
+            self.assertNotIn("PARADOX_VERIFY_HARD_WORKER=1", command)
             self.assertIn("--read-only", command)
             self.assertIn("--security-opt=no-new-privileges", joined)
             self.assertEqual(
                 harness.hard_backend_name(probe), "podman-aggregate-hard"
             )
+
+    def test_host_and_best_effort_environment_cannot_leak_containment(self) -> None:
+        environment = {
+            "PARADOX_VERIFY_AGGREGATE_SYSTEMD": "1",
+            "PARADOX_VERIFY_HARD_WORKER": "1",
+            "PARADOX_VERIFY_ASSIGNED_MEMORY_MIB": "512",
+        }
+        harness.clean_parallel_environment(environment, 2)
+        self.assertNotIn("PARADOX_VERIFY_AGGREGATE_SYSTEMD", environment)
+        self.assertNotIn("PARADOX_VERIFY_HARD_WORKER", environment)
+        self.assertEqual(environment["PARADOX_VERIFY_ASSIGNED_CPUS"], "2")
 
     def test_probe_cleanup_failure_is_not_hidden_by_probe_timeout(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

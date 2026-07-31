@@ -8,6 +8,8 @@
 #include "shell_auth.h"
 #include "upgrade_graph.h"
 
+#define PARADOX_UPGRADE_MAX_ATTRIBUTES ((R_xlen_t) 65536)
+
 typedef struct paradox_upgrade_path {
   const struct paradox_upgrade_path *parent;
   const char *segment;
@@ -53,12 +55,9 @@ typedef struct {
   SEXP *items;
   size_t size;
   size_t capacity;
+  SEXP roots;
+  PROTECT_INDEX roots_index;
 } paradox_upgrade_boundaries_t;
-
-typedef struct {
-  SEXP tag;
-  SEXP value;
-} paradox_upgrade_attribute_t;
 
 typedef struct {
   paradox_upgrade_seen_t seen;
@@ -100,11 +99,14 @@ SEXP paradox_upgrade_carrier_list_snapshot(SEXP source) {
    * one allocation-free pass.  The former names-then-elements sequence could
    * create a legacy callback carrier generation that never existed.
    */
-  SEXP source_names = paradox_api_raw_attribute(source, R_NamesSymbol);
   if (TYPEOF(source) != VECSXP || ALTREP(source) || Rf_isS4(source) ||
       Rf_isObject(source) || XLENGTH(source) != size ||
-      (source_names != R_NilValue) != has_names ||
-      !paradox_api_has_only_attributes(source, allowed_attributes, 1) ||
+      !paradox_api_has_only_attributes(source, allowed_attributes, 1)) {
+    UNPROTECT(protect_count);
+    return R_NilValue;
+  }
+  SEXP source_names = paradox_api_raw_attribute(source, R_NamesSymbol);
+  if ((source_names != R_NilValue) != has_names ||
       !paradox_capture_list_identities(
         source,
         stable_names,
@@ -332,12 +334,23 @@ SEXP paradox_upgrade_table_list_snapshot(SEXP source,
      */
     row_count = XLENGTH(first_column);
   }
+  R_xlen_t attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      source,
+      7,
+      capture_upgrade_table_attribute,
+      &attributes,
+      &attribute_count
+    ) || !attributes.valid || attribute_count > 7) {
+    UNPROTECT(3);
+    return R_NilValue;
+  }
+  /*
+   * The bounded pass proved the raw spine finite and callbacks cannot run
+   * before the terminal checks, so the direct class/name selectors below
+   * cannot encounter a later cyclic generation.
+   */
   SEXP observed_classes = paradox_api_raw_attribute(source, R_ClassSymbol);
-  paradox_api_map_stored_attributes(
-    source,
-    capture_upgrade_table_attribute,
-    &attributes
-  );
   if (!upgrade_table_snapshot_is_current(source, table) ||
       !attributes.valid ||
       (attributes.seen & UPGRADE_TABLE_ATTRIBUTE_NAMES) == 0U ||
@@ -428,7 +441,9 @@ void paradox_validate_upgrade_public_binding_receipts(SEXP receipts) {
         !exact_upgrade_receipt_flags(environment_locked, 1)) {
       Rf_error("Invalid Paradox migration binding receipt owner");
     }
-    if (paradox_api_raw_attribute(owner, R_ClassSymbol) != expected_class ||
+    SEXP observed_class = R_NilValue;
+    if (!paradox_api_ordinary_class_snapshot(owner, &observed_class) ||
+        observed_class != expected_class ||
         (R_EnvironmentIsLocked(owner) != FALSE) !=
           (LOGICAL_ELT(environment_locked, 0) != FALSE)) {
       Rf_error("Paradox migration public shell changed during commit");
@@ -800,12 +815,26 @@ static int scalar_string_equal(SEXP string, const char *expected) {
   return string != NA_STRING && strcmp(CHAR(string), expected) == 0;
 }
 
-static int is_candidate_shell(SEXP environment) {
-  SEXP classes;
-  if (!paradox_api_ordinary_class_snapshot(environment, &classes) ||
-      classes == R_NilValue) {
+static int ordinary_class_value(SEXP classes) {
+  if (classes == R_NilValue) return TRUE;
+  if (TYPEOF(classes) != STRSXP ||
+      ALTREP(classes) || Rf_isS4(classes) ||
+      !paradox_api_has_no_attributes(classes)) {
     return FALSE;
   }
+  const R_xlen_t count = XLENGTH(classes);
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP label = STRING_ELT(classes, index);
+    if (label == NA_STRING || Rf_getCharCE(label) == CE_BYTES ||
+        CHAR(label)[0] == '\0') {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int candidate_classes(SEXP classes) {
+  if (classes == R_NilValue || !ordinary_class_value(classes)) return FALSE;
   const R_xlen_t count = XLENGTH(classes);
   int has_param_set = FALSE;
   int has_r6 = FALSE;
@@ -816,6 +845,14 @@ static int is_candidate_shell(SEXP environment) {
   }
   return has_param_set && has_r6;
 }
+
+#if R_VERSION < R_Version(4, 0, 0)
+static int is_candidate_shell(SEXP environment) {
+  SEXP classes;
+  return paradox_api_ordinary_class_snapshot(environment, &classes) &&
+    candidate_classes(classes);
+}
+#endif
 
 SEXP paradox_upgrade_class_snapshot(SEXP value) {
   PROTECT(value);
@@ -841,8 +878,22 @@ SEXP paradox_upgrade_class_snapshot(SEXP value) {
 
 static void grow_boundaries(paradox_upgrade_boundaries_t *boundaries) {
   const size_t capacity = checked_double_capacity(boundaries->capacity);
+  if (capacity > (size_t) R_XLEN_T_MAX) {
+    Rf_error("Object graph boundary set is too large");
+  }
   SEXP *items = temporary_size_alloc(capacity, sizeof(*items));
   memcpy(items, boundaries->items, boundaries->size * sizeof(*items));
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, (R_xlen_t) capacity));
+  for (size_t index = 0; index < boundaries->size; ++index) {
+    SET_VECTOR_ELT(
+      roots,
+      (R_xlen_t) index,
+      VECTOR_ELT(boundaries->roots, (R_xlen_t) index)
+    );
+  }
+  boundaries->roots = roots;
+  REPROTECT(boundaries->roots, boundaries->roots_index);
+  UNPROTECT(1);
   boundaries->items = items;
   boundaries->capacity = capacity;
 }
@@ -858,10 +909,18 @@ static int boundary_contains(
 static void append_boundary(
     paradox_upgrade_boundaries_t *boundaries, SEXP environment) {
   if (boundary_contains(boundaries, environment)) return;
+  PROTECT(environment);
   if (boundaries->size == boundaries->capacity) {
     grow_boundaries(boundaries);
   }
-  boundaries->items[boundaries->size++] = environment;
+  boundaries->items[boundaries->size] = environment;
+  SET_VECTOR_ELT(
+    boundaries->roots,
+    (R_xlen_t) boundaries->size,
+    environment
+  );
+  ++boundaries->size;
+  UNPROTECT(1);
 }
 
 static void initialize_search_boundaries(
@@ -888,20 +947,41 @@ static int imports_environment(SEXP environment) {
    * metadata also keeps a hostile ALTREP/classed name from becoming a
    * traversal boundary merely by exposing the prefix.
    */
-  SEXP name = paradox_api_raw_attribute(environment, R_NameSymbol);
+  int has_name = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      environment,
+      R_NameSymbol,
+      &has_name
+    ) || !has_name) {
+    return FALSE;
+  }
+  SEXP name = PROTECT(paradox_api_raw_attribute(
+    environment,
+    R_NameSymbol
+  ));
   if (TYPEOF(name) != STRSXP || ALTREP(name) || Rf_isS4(name) ||
       Rf_isObject(name) || !paradox_api_has_no_attributes(name) ||
       XLENGTH(name) != 1) {
+    UNPROTECT(1);
     return FALSE;
   }
   SEXP label = STRING_ELT(name, 0);
   if (label == NA_STRING || Rf_getCharCE(label) == CE_BYTES ||
       strncmp(CHAR(label), "imports:", 8) != 0) {
+    UNPROTECT(1);
     return FALSE;
   }
   SEXP parent = PROTECT(paradox_api_parent_environment(environment));
-  const int imports = parent == R_BaseNamespace;
-  UNPROTECT(1);
+  int current_has_name = FALSE;
+  const int imports = parent == R_BaseNamespace &&
+    paradox_bounded_metadata_has_tag(
+      environment,
+      R_NameSymbol,
+      &current_has_name
+    ) &&
+    current_has_name &&
+    paradox_api_raw_attribute(environment, R_NameSymbol) == name;
+  UNPROTECT(2);
   return imports;
 }
 
@@ -920,6 +1000,14 @@ static int user_database_environment(SEXP environment) {
 }
 
 static int package_environment(SEXP environment) {
+  int has_name = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      environment,
+      R_NameSymbol,
+      &has_name
+    ) || !has_name) {
+    return FALSE;
+  }
   SEXP name = paradox_api_raw_attribute(environment, R_NameSymbol);
   if (TYPEOF(name) != STRSXP || ALTREP(name) || Rf_isS4(name) ||
       Rf_isObject(name) || !paradox_api_has_no_attributes(name) ||
@@ -1002,37 +1090,8 @@ static SEXP environment_names(SEXP environment) {
   return result;
 }
 
-#if R_VERSION < R_Version(4, 5, 0)
-static void schedule_promise_edges(
-    paradox_upgrade_walker_t *walker,
-    SEXP promise,
-    const paradox_upgrade_path_t *path) {
-  paradox_api_promise_snapshot_t snapshot;
-  paradox_api_promise_snapshot(promise, &snapshot);
-  PROTECT(snapshot.expression);
-  PROTECT(snapshot.environment);
-  PROTECT(snapshot.value);
-  if (snapshot.forced) {
-    schedule_node(
-      walker,
-      snapshot.value,
-      literal_path(path, ".promise.value")
-    );
-  } else {
-    schedule_node(
-      walker,
-      snapshot.environment,
-      literal_path(path, ".promise.environment")
-    );
-  }
-  schedule_node(
-    walker,
-    snapshot.expression,
-    literal_path(path, ".promise.expression")
-  );
-  UNPROTECT(3);
-}
-#elif R_VERSION < R_Version(4, 6, 0)
+#if R_VERSION >= R_Version(4, 5, 0) && \
+    R_VERSION < R_Version(4, 6, 0)
 static void fail_opaque_promise(const paradox_upgrade_path_t *path) {
   SEXP location = PROTECT(render_path(path));
   Rf_error(
@@ -1043,380 +1102,228 @@ static void fail_opaque_promise(const paradox_upgrade_path_t *path) {
 }
 #endif
 
-static void schedule_binding(
-    paradox_upgrade_walker_t *walker,
-    SEXP environment,
-    SEXP symbol,
-    const paradox_upgrade_path_t *path) {
-  if (R_BindingIsActive(symbol, environment)) {
-    SEXP function = PROTECT(paradox_api_active_binding_function(
-      environment,
-      symbol
-    ));
-    if (function == R_UnboundValue) {
-      UNPROTECT(1);
-      SEXP location = PROTECT(render_path(path));
-      Rf_error(
-        "Recursive Paradox object upgrade cannot inspect an active binding "
-        "on R 3.6 (at `%s`); load and upgrade this object under R >= 4.0",
-        CHAR(location)
-      );
-    }
-    schedule_node(
-      walker,
-      function,
-      literal_path(path, ".active")
-    );
-    UNPROTECT(1);
-    return;
-  }
-
-#if R_VERSION >= R_Version(4, 6, 0)
-  if (symbol == R_DotsSymbol && R_DotsExist(environment)) {
-    const int count = R_DotsLength(environment);
-    for (int index = count; index > 0; --index) {
-      const paradox_upgrade_path_t *element_path = indexed_path(
-        path,
-        "[[",
-        (R_xlen_t) (index - 1),
-        "]]"
-      );
-      const R_DotType_t type = R_GetDotType(index, environment);
-      switch (type) {
-      case R_DotTypeValue: {
-        SEXP value = PROTECT(R_DotsElt(index, environment));
-        schedule_node(walker, value, element_path);
-        UNPROTECT(1);
-        break;
-      }
-      case R_DotTypeDelayed: {
-        SEXP expression = PROTECT(R_DotDelayedExpression(
-          index,
-          environment
-        ));
-        SEXP evaluation_environment = PROTECT(R_DotDelayedEnvironment(
-          index,
-          environment
-        ));
-        schedule_node(
-          walker,
-          evaluation_environment,
-          literal_path(element_path, ".promise.environment")
-        );
-        schedule_node(
-          walker,
-          expression,
-          literal_path(element_path, ".promise.expression")
-        );
-        UNPROTECT(2);
-        break;
-      }
-      case R_DotTypeForced: {
-        SEXP expression = PROTECT(R_DotForcedExpression(
-          index,
-          environment
-        ));
-        /* R_DotsElt() evaluates delayed elements, but this branch has already
-         * authenticated an existing forced value. */
-        SEXP value = PROTECT(R_DotsElt(index, environment));
-        schedule_node(
-          walker,
-          value,
-          literal_path(element_path, ".promise.value")
-        );
-        schedule_node(
-          walker,
-          expression,
-          literal_path(element_path, ".promise.expression")
-        );
-        UNPROTECT(2);
-        break;
-      }
-      case R_DotTypeMissing:
-        break;
-      }
-    }
-    return;
-  }
-
-  const R_BindingType_t type = R_GetBindingType(symbol, environment);
-  switch (type) {
-  case R_BindingTypeValue: {
-    SEXP value = PROTECT(R_getVar(symbol, environment, FALSE));
-    schedule_node(walker, value, path);
-    UNPROTECT(1);
-    return;
-  }
-  case R_BindingTypeDelayed: {
-    SEXP expression = PROTECT(R_DelayedBindingExpression(
-      symbol,
-      environment
-    ));
-    SEXP evaluation_environment = PROTECT(R_DelayedBindingEnvironment(
-      symbol,
-      environment
-    ));
-    schedule_node(
-      walker,
-      evaluation_environment,
-      literal_path(path, ".promise.environment")
-    );
-    schedule_node(
-      walker,
-      expression,
-      literal_path(path, ".promise.expression")
-    );
-    UNPROTECT(2);
-    return;
-  }
-  case R_BindingTypeForced: {
-    SEXP expression = PROTECT(R_ForcedBindingExpression(
-      symbol,
-      environment
-    ));
-    SEXP value = PROTECT(R_getVar(symbol, environment, FALSE));
-    schedule_node(
-      walker,
-      value,
-      literal_path(path, ".promise.value")
-    );
-    schedule_node(
-      walker,
-      expression,
-      literal_path(path, ".promise.expression")
-    );
-    UNPROTECT(2);
-    return;
-  }
-  case R_BindingTypeActive:
-    Rf_error("Object graph binding changed during inspection");
-  case R_BindingTypeUnbound:
-  case R_BindingTypeMissing:
-    return;
-  }
-  Rf_error("Internal error: unknown R binding type");
-#else
-  SEXP value = PROTECT(paradox_api_stored_binding_snapshot(
-    environment,
-    symbol
-  ));
-  if (value != R_UnboundValue) {
-    if (TYPEOF(value) == PROMSXP) {
-#if R_VERSION < R_Version(4, 5, 0)
-      schedule_promise_edges(walker, value, path);
-#elif R_VERSION < R_Version(4, 6, 0)
-      fail_opaque_promise(path);
-#endif
-    } else {
-      schedule_node(walker, value, path);
-    }
-  }
-  UNPROTECT(1);
-#endif
-}
-
-#if R_VERSION < R_Version(4, 0, 0)
-static void schedule_builtin_current_binding(
-    paradox_upgrade_walker_t *walker,
-    SEXP environment,
-    SEXP symbol,
-    const paradox_upgrade_path_t *path) {
-  if (symbol == Rf_install(".__enclos_env__") ||
-      R_BindingIsActive(symbol, environment)) {
-    return;
-  }
-  SEXP value = PROTECT(paradox_api_stored_binding_snapshot(
-    environment,
-    symbol
-  ));
-  /*
-   * An exact built-in R6 shell is locked against new public members. Its
-   * locked ordinary closures are treated as package-generated methods;
-   * following their R6 enclosure would only rediscover active facades already
-   * represented by the authenticated core. An unlocked replacement closure
-   * and every non-function public value remain graph edges. Replacing and then
-   * relocking a method is unsupported and indistinguishable on R 3.6, so that
-   * closure is opaque just like a replaced package active facade.
-   */
-  if (value != R_UnboundValue &&
-      (TYPEOF(value) != CLOSXP ||
-        !R_BindingIsLocked(symbol, environment))) {
-    if (TYPEOF(value) == PROMSXP) {
-      schedule_promise_edges(walker, value, path);
-    } else {
-      schedule_node(walker, value, path);
-    }
-  }
-  UNPROTECT(1);
-}
-#endif
-
-static void schedule_environment(
-    paradox_upgrade_walker_t *walker,
-    SEXP environment,
-    const paradox_upgrade_path_t *path) {
-  if (environment_boundary(walker, environment)) return;
-
-#if R_VERSION < R_Version(4, 0, 0)
-  int current_builtin = FALSE;
-#endif
-  /*
-   * Current shells are candidates as well as legacy shells.  R preflight
-   * distinguishes them and performs the complete callback-free capsule graph
-   * validation before any legacy shell is changed.  A shallow carrier/schema
-   * check here would otherwise let a semantically corrupt current capsule hide
-   * inside a mixed graph and violate the all-roots-before-commit guarantee.
-   */
-  if (is_candidate_shell(environment)) {
-    append_candidate(
-      &walker->candidates,
-      environment,
-      path
-    );
-#if R_VERSION < R_Version(4, 0, 0)
-    /*
-     * R 3.6 cannot retrieve an active binding's closure. Exact built-in
-     * current shells have already authenticated every R6 topology receipt,
-     * and their active facades expose only state held by the canonical core.
-     * Schedule that authority directly and continue through ordinary public
-     * fields. Additive/custom shells do not enter this exception.
-     */
-    SEXP core = PROTECT(paradox_builtin_current_core_snapshot(environment));
-    if (core != R_UnboundValue) {
-      current_builtin = TRUE;
-      schedule_node(
-        walker,
-        core,
-        literal_path(path, ".core")
-      );
-    }
-    UNPROTECT(1);
-#endif
-  }
-
-  SEXP parent = PROTECT(paradox_api_parent_environment(environment));
-  schedule_node(
-    walker,
-    parent,
-    literal_path(path, ".parent")
-  );
-  UNPROTECT(1);
-
-  SEXP names = PROTECT(environment_names(environment));
-  for (R_xlen_t index = XLENGTH(names); index > 0; --index) {
-    SEXP name = STRING_ELT(names, index - 1);
-    if (name == NA_STRING) {
-      UNPROTECT(1);
-      Rf_error("Internal error: missing environment binding name");
-    }
-    SEXP symbol = Rf_installChar(name);
-#if R_VERSION < R_Version(4, 0, 0)
-    if (current_builtin) {
-      schedule_builtin_current_binding(
-        walker,
-        environment,
-        symbol,
-        named_path(path, "[[\"", name, "\"]]")
-      );
-      continue;
-    }
-#endif
-    schedule_binding(
-      walker,
-      environment,
-      symbol,
-      named_path(path, "[[\"", name, "\"]]")
-    );
-  }
-  UNPROTECT(1);
-}
+enum upgrade_edge_snapshot_slot {
+  UPGRADE_EDGE_ATTRIBUTES = 0,
+  UPGRADE_EDGE_PRIMARY,
+  UPGRADE_EDGE_SLOT_COUNT
+};
 
 typedef struct {
-  paradox_upgrade_attribute_t *items;
   SEXP roots;
   R_xlen_t count;
   R_xlen_t capacity;
-} paradox_upgrade_attribute_map_t;
+  int current;
+} paradox_upgrade_attribute_capture_t;
 
-static void record_attribute(SEXP tag, SEXP value, void *data) {
-  paradox_upgrade_attribute_map_t *map = data;
-  if (map->count >= map->capacity) {
-    Rf_error("Internal error: attribute count changed during inspection");
+static void capture_upgrade_attribute(SEXP tag, SEXP value, void *data) {
+  paradox_upgrade_attribute_capture_t *capture = data;
+  if (!capture->current || capture->count >= capture->capacity ||
+      TYPEOF(tag) != SYMSXP || value == R_NilValue) {
+    capture->current = FALSE;
+    return;
   }
-  map->items[map->count] =
-    (paradox_upgrade_attribute_t) {tag, value};
-  SET_VECTOR_ELT(map->roots, map->count, value);
-  ++map->count;
+  const R_xlen_t offset = 2 * capture->count;
+  SET_VECTOR_ELT(capture->roots, offset, tag);
+  SET_VECTOR_ELT(capture->roots, offset + 1, value);
+  ++capture->count;
 }
 
-static void schedule_attributes(
-    paradox_upgrade_walker_t *walker,
-    SEXP node,
-    const paradox_upgrade_path_t *path) {
-  const R_xlen_t count = paradox_api_stored_attribute_count(node);
-  if (count == 0) return;
-  paradox_upgrade_attribute_t *attributes = paradox_temporary_alloc(
-    count,
-    sizeof(*attributes)
-  );
-  SEXP roots = PROTECT(Rf_allocVector(VECSXP, count));
-  paradox_upgrade_attribute_map_t map = {attributes, roots, 0, count};
-  paradox_api_map_stored_attributes(node, record_attribute, &map);
-  if (map.count != count) {
-    UNPROTECT(1);
-    Rf_error("Internal error: attribute count changed during inspection");
+static SEXP allocate_edge_snapshot(
+    R_xlen_t attribute_count, R_xlen_t primary_count) {
+  if (attribute_count < 0 ||
+      attribute_count > R_XLEN_T_MAX / 2 ||
+      primary_count < 0) {
+    Rf_error("Object graph is too large to inspect");
   }
+  SEXP snapshot = PROTECT(Rf_allocVector(VECSXP, UPGRADE_EDGE_SLOT_COUNT));
+  SEXP attributes = PROTECT(Rf_allocVector(
+    VECSXP,
+    2 * attribute_count
+  ));
+  SET_VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES, attributes);
+  UNPROTECT(1);
+  SEXP primary = PROTECT(Rf_allocVector(VECSXP, primary_count));
+  SET_VECTOR_ELT(snapshot, UPGRADE_EDGE_PRIMARY, primary);
+  UNPROTECT(2);
+  return snapshot;
+}
 
+static R_xlen_t upgrade_attribute_count(SEXP node) {
+  R_xlen_t count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      node,
+      PARADOX_UPGRADE_MAX_ATTRIBUTES,
+      NULL,
+      NULL,
+      &count
+    )) {
+    Rf_error(
+      "Object graph attribute set is malformed or too large to inspect"
+    );
+  }
+  return count;
+}
+
+/*
+ * Every destination already exists when this function starts. Raw stored
+ * attribute enumeration performs no allocation or dispatch, so the captured
+ * tag/value sequence belongs to the same selected node generation as the
+ * callback-free primary-edge reads immediately beside it.
+ */
+static int capture_attributes_into(
+    SEXP node, SEXP roots, R_xlen_t expected_count) {
+  if (TYPEOF(roots) != VECSXP || ALTREP(roots) ||
+      expected_count < 0 ||
+      expected_count > PARADOX_UPGRADE_MAX_ATTRIBUTES ||
+      XLENGTH(roots) != 2 * expected_count) {
+    return FALSE;
+  }
+  paradox_upgrade_attribute_capture_t capture = {
+    roots,
+    0,
+    expected_count,
+    TRUE
+  };
+  R_xlen_t observed_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+    node,
+    expected_count,
+    capture_upgrade_attribute,
+    &capture,
+    &observed_count
+  )) {
+    return FALSE;
+  }
+  return capture.current && capture.count == expected_count &&
+    observed_count == expected_count;
+}
+
+static int attribute_snapshots_equal(SEXP left, SEXP right) {
+  if (TYPEOF(left) != VECSXP || ALTREP(left) ||
+      TYPEOF(right) != VECSXP || ALTREP(right) ||
+      XLENGTH(left) != XLENGTH(right)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(left); ++index) {
+    if (VECTOR_ELT(left, index) != VECTOR_ELT(right, index)) return FALSE;
+  }
+  return TRUE;
+}
+
+#if R_VERSION < R_Version(4, 5, 0)
+static int edge_snapshots_equal(SEXP left, SEXP right) {
+  if (TYPEOF(left) != VECSXP || ALTREP(left) ||
+      TYPEOF(right) != VECSXP || ALTREP(right) ||
+      XLENGTH(left) != UPGRADE_EDGE_SLOT_COUNT ||
+      XLENGTH(right) != UPGRADE_EDGE_SLOT_COUNT) {
+    return FALSE;
+  }
+  SEXP left_attributes = VECTOR_ELT(left, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP right_attributes = VECTOR_ELT(right, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP left_primary = VECTOR_ELT(left, UPGRADE_EDGE_PRIMARY);
+  SEXP right_primary = VECTOR_ELT(right, UPGRADE_EDGE_PRIMARY);
+  if (!attribute_snapshots_equal(left_attributes, right_attributes) ||
+      TYPEOF(left_primary) != VECSXP || ALTREP(left_primary) ||
+      TYPEOF(right_primary) != VECSXP || ALTREP(right_primary) ||
+      XLENGTH(left_primary) != XLENGTH(right_primary)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(left_primary); ++index) {
+    if (VECTOR_ELT(left_primary, index) !=
+        VECTOR_ELT(right_primary, index)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+#endif
+
+static void schedule_snapshot_attributes(
+    paradox_upgrade_walker_t *walker,
+    SEXP attributes,
+    const paradox_upgrade_path_t *path) {
+  if (TYPEOF(attributes) != VECSXP || ALTREP(attributes) ||
+      XLENGTH(attributes) % 2 != 0) {
+    Rf_error("Internal error: malformed object graph attribute snapshot");
+  }
+  const R_xlen_t count = XLENGTH(attributes) / 2;
   for (R_xlen_t index = count; index > 0; --index) {
-    const paradox_upgrade_attribute_t attribute = attributes[index - 1];
+    SEXP tag = VECTOR_ELT(attributes, 2 * (index - 1));
+    SEXP value = VECTOR_ELT(attributes, 2 * (index - 1) + 1);
     const paradox_upgrade_path_t *attribute_path =
-      TYPEOF(attribute.tag) == SYMSXP
+      TYPEOF(tag) == SYMSXP
         ? named_path(
             path,
             "@attr[[\"",
-            PRINTNAME(attribute.tag),
+            PRINTNAME(tag),
             "\"]]"
           )
         : indexed_path(path, "@attributes[[", index - 1, "]]");
-    schedule_node(walker, attribute.value, attribute_path);
+    schedule_node(walker, value, attribute_path);
   }
-  UNPROTECT(1);
+}
+
+static void schedule_attributes_only(
+    paradox_upgrade_walker_t *walker,
+    SEXP node,
+    const paradox_upgrade_path_t *path) {
+  PROTECT(node);
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(node);
+  SEXP snapshot = PROTECT(allocate_edge_snapshot(attribute_count, 0));
+  SEXP attributes = VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES);
+  if (!capture_attributes_into(node, attributes, attribute_count)) {
+    UNPROTECT(2);
+    Rf_error("Object graph attributes changed during inspection");
+  }
+  schedule_snapshot_attributes(walker, attributes, path);
+  UNPROTECT(2);
 }
 
 static void schedule_vector(
     paradox_upgrade_walker_t *walker,
     SEXP vector,
     const paradox_upgrade_path_t *path) {
-  SEXP source = vector;
-  PROTECT_INDEX source_index;
-  PROTECT_WITH_INDEX(source, &source_index);
+  /*
+   * Lists and expression vectors are graph structure, not semantic vectors.
+   * Their ALTREP methods could evaluate arbitrary code while the crawler is
+   * selecting edges, and duplicating an ALTREP shell does not make a
+   * stateful provider coherent. `inspect_node()` rejects that boundary before
+   * even scheduling attributes; keep this local guard so the helper cannot
+   * accidentally regain an observing ALTREP path.
+   */
+  if (ALTREP(vector)) {
+    Rf_error(
+      "Object graph structural list/expression vectors must not use ALTREP"
+    );
+  }
+  SEXP source = PROTECT(vector);
   const SEXPTYPE source_type = (SEXPTYPE) TYPEOF(source);
   const R_xlen_t count = XLENGTH(source);
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(source);
   /*
-   * Path construction allocates.  Copy every child identity into one ordinary
-   * root carrier before constructing the first path, so a pending finalizer
-   * cannot make one discovery pass combine elements from different
-   * generations of an otherwise ordinary caller-owned list.  Allocate the
-   * carrier first: if that allocation changes the source, the receipt below
-   * rejects a changed length/type and the allocation-free copy observes only
-   * the post-allocation generation.
-   *
-   * An ALTREP list is duplicated once, retaining the existing stable-provider
-   * contract and the self-returning Duplicate-method protection invariant,
-   * before its elements are materialized into the same carrier.
+   * Path construction allocates. Allocate both attribute and child carriers
+   * first, then capture the complete edge set in one callback-free pass. This
+   * prevents a finalizer from pairing attributes from one list generation
+   * with elements from another.
    */
-  SEXP children = PROTECT(Rf_allocVector(VECSXP, count));
-  if (ALTREP(source)) {
-    REPROTECT(source = Rf_duplicate(source), source_index);
-  }
-  if ((SEXPTYPE) TYPEOF(source) != source_type ||
-      XLENGTH(source) != count) {
+  SEXP snapshot = PROTECT(allocate_edge_snapshot(
+    attribute_count,
+    count
+  ));
+  SEXP attributes = VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP children = VECTOR_ELT(snapshot, UPGRADE_EDGE_PRIMARY);
+  if (ALTREP(source) || (SEXPTYPE) TYPEOF(source) != source_type ||
+      XLENGTH(source) != count ||
+      !capture_attributes_into(source, attributes, attribute_count)) {
     UNPROTECT(2);
     Rf_error("Object graph vector changed during inspection");
   }
   for (R_xlen_t index = 0; index < count; ++index) {
     SET_VECTOR_ELT(children, index, VECTOR_ELT(source, index));
   }
+  schedule_snapshot_attributes(walker, attributes, path);
   for (R_xlen_t index = count; index > 0; --index) {
     SEXP child = VECTOR_ELT(children, index - 1);
     const paradox_upgrade_path_t *child_path = indexed_path(
@@ -1434,31 +1341,68 @@ static void schedule_vector(
   UNPROTECT(2);
 }
 
+enum upgrade_closure_primary_slot {
+  UPGRADE_CLOSURE_FORMALS = 0,
+  UPGRADE_CLOSURE_EXPRESSION,
+  UPGRADE_CLOSURE_ENVIRONMENT,
+  UPGRADE_CLOSURE_PRIMARY_COUNT
+};
+
+static int capture_closure_edges(SEXP closure, SEXP snapshot) {
+  SEXP attributes = VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP primary = VECTOR_ELT(snapshot, UPGRADE_EDGE_PRIMARY);
+  const R_xlen_t attribute_count = XLENGTH(attributes) / 2;
+  if (TYPEOF(closure) != CLOSXP ||
+      TYPEOF(primary) != VECSXP || ALTREP(primary) ||
+      XLENGTH(primary) != UPGRADE_CLOSURE_PRIMARY_COUNT ||
+      !capture_attributes_into(closure, attributes, attribute_count)) {
+    return FALSE;
+  }
+  SEXP formals = PROTECT(paradox_api_closure_formals(closure));
+  SEXP expression = PROTECT(paradox_api_closure_expression(closure));
+  SEXP environment = PROTECT(paradox_api_closure_environment(closure));
+  SET_VECTOR_ELT(primary, UPGRADE_CLOSURE_FORMALS, formals);
+  SET_VECTOR_ELT(primary, UPGRADE_CLOSURE_EXPRESSION, expression);
+  SET_VECTOR_ELT(primary, UPGRADE_CLOSURE_ENVIRONMENT, environment);
+  UNPROTECT(3);
+  return TRUE;
+}
+
+static SEXP closure_edge_snapshot(SEXP closure) {
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(closure);
+  SEXP snapshot = PROTECT(allocate_edge_snapshot(
+    attribute_count,
+    UPGRADE_CLOSURE_PRIMARY_COUNT
+  ));
+  if (!capture_closure_edges(closure, snapshot)) {
+    UNPROTECT(1);
+    Rf_error("Object graph closure changed during inspection");
+  }
+  UNPROTECT(1);
+  return snapshot;
+}
+
 static void schedule_closure(
     paradox_upgrade_walker_t *walker,
     SEXP closure,
     const paradox_upgrade_path_t *path) {
   /*
-   * Before R 4.5 the public body()/environment() bridge evaluates small base
-   * calls and may therefore run a pending finalizer between field reads.
-   * Duplicate the closure shell once first; the private shell cannot then be
-   * rewired into a formals/body/environment combination that never existed.
-   * Current R exposes all three direct accessors, so retain its allocation-free
-   * path.
+   * Every supported runtime now reaches its closure fields through the
+   * allocation-free compatibility facade.  Allocate the complete root carrier
+   * first; capture_attributes_into() then proves the post-allocation attribute
+   * generation and all three primary edges are selected beside it without a
+   * callback or allocation.  This avoids both the old evaluating R bridge and
+   * R's unbounded shallow attribute duplicator.
    */
-#if R_VERSION < R_Version(4, 5, 0)
-  SEXP stable_closure = PROTECT(Rf_duplicate(closure));
-  if (TYPEOF(stable_closure) != CLOSXP || stable_closure == closure) {
-    UNPROTECT(1);
-    Rf_error("Object graph closure could not be snapshotted");
-  }
-#else
-  SEXP stable_closure = closure;
-  PROTECT(stable_closure);
-#endif
-  SEXP formals = PROTECT(paradox_api_closure_formals(stable_closure));
-  SEXP expression = PROTECT(paradox_api_closure_expression(stable_closure));
-  SEXP environment = PROTECT(paradox_api_closure_environment(stable_closure));
+  PROTECT(closure);
+  SEXP second = PROTECT(closure_edge_snapshot(closure));
+  SEXP attributes = VECTOR_ELT(second, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP primary = VECTOR_ELT(second, UPGRADE_EDGE_PRIMARY);
+  SEXP formals = VECTOR_ELT(primary, UPGRADE_CLOSURE_FORMALS);
+  SEXP expression = VECTOR_ELT(primary, UPGRADE_CLOSURE_EXPRESSION);
+  SEXP environment = VECTOR_ELT(primary, UPGRADE_CLOSURE_ENVIRONMENT);
+  schedule_snapshot_attributes(walker, attributes, path);
   schedule_node(
     walker,
     environment,
@@ -1474,23 +1418,1041 @@ static void schedule_closure(
     formals,
     literal_path(path, ".formals")
   );
-  UNPROTECT(4);
+  UNPROTECT(2);
 }
 
 static void schedule_pairlist(
     paradox_upgrade_walker_t *walker,
     SEXP cell,
     const paradox_upgrade_path_t *path) {
-  SEXP cdr = PROTECT(CDR(cell));
-  SEXP tag = PROTECT(TAG(cell));
-  SEXP car = PROTECT(CAR(cell));
+  PROTECT(cell);
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(cell);
+  SEXP snapshot = PROTECT(allocate_edge_snapshot(attribute_count, 3));
+  SEXP attributes = VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP primary = VECTOR_ELT(snapshot, UPGRADE_EDGE_PRIMARY);
+  if (!capture_attributes_into(cell, attributes, attribute_count)) {
+    UNPROTECT(2);
+    Rf_error("Object graph pairlist changed during inspection");
+  }
+  SET_VECTOR_ELT(primary, 0, CDR(cell));
+  SET_VECTOR_ELT(primary, 1, TAG(cell));
+  SET_VECTOR_ELT(primary, 2, CAR(cell));
+  SEXP cdr = VECTOR_ELT(primary, 0);
+  SEXP tag = VECTOR_ELT(primary, 1);
+  SEXP car = VECTOR_ELT(primary, 2);
+  schedule_snapshot_attributes(walker, attributes, path);
   const paradox_upgrade_path_t *cdr_path = literal_path(path, ".cdr");
   schedule_node(walker, cdr, cdr_path);
   const paradox_upgrade_path_t *tag_path = literal_path(path, ".tag");
   schedule_node(walker, tag, tag_path);
   const paradox_upgrade_path_t *car_path = literal_path(path, ".car");
   schedule_node(walker, car, car_path);
+  UNPROTECT(2);
+}
+
+#if R_VERSION < R_Version(4, 5, 0)
+enum upgrade_promise_primary_slot {
+  UPGRADE_PROMISE_EXPRESSION = 0,
+  UPGRADE_PROMISE_ENVIRONMENT,
+  UPGRADE_PROMISE_VALUE,
+  UPGRADE_PROMISE_PRIMARY_COUNT
+};
+
+static void schedule_promise_node(
+    paradox_upgrade_walker_t *walker,
+    SEXP promise,
+    const paradox_upgrade_path_t *path) {
+  PROTECT(promise);
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(promise);
+  SEXP snapshot = PROTECT(allocate_edge_snapshot(
+    attribute_count,
+    UPGRADE_PROMISE_PRIMARY_COUNT
+  ));
+  SEXP attributes = VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP primary = VECTOR_ELT(snapshot, UPGRADE_EDGE_PRIMARY);
+  paradox_api_promise_snapshot_t promise_snapshot;
+  if (!capture_attributes_into(promise, attributes, attribute_count)) {
+    UNPROTECT(2);
+    Rf_error("Object graph promise changed during inspection");
+  }
+  paradox_api_promise_snapshot(promise, &promise_snapshot);
+  SET_VECTOR_ELT(
+    primary,
+    UPGRADE_PROMISE_EXPRESSION,
+    promise_snapshot.expression
+  );
+  SET_VECTOR_ELT(
+    primary,
+    UPGRADE_PROMISE_ENVIRONMENT,
+    promise_snapshot.environment
+  );
+  SET_VECTOR_ELT(primary, UPGRADE_PROMISE_VALUE, promise_snapshot.value);
+
+  schedule_snapshot_attributes(walker, attributes, path);
+  if (promise_snapshot.forced) {
+    schedule_node(
+      walker,
+      VECTOR_ELT(primary, UPGRADE_PROMISE_VALUE),
+      literal_path(path, ".promise.value")
+    );
+  } else {
+    schedule_node(
+      walker,
+      VECTOR_ELT(primary, UPGRADE_PROMISE_ENVIRONMENT),
+      literal_path(path, ".promise.environment")
+    );
+  }
+  schedule_node(
+    walker,
+    VECTOR_ELT(primary, UPGRADE_PROMISE_EXPRESSION),
+    literal_path(path, ".promise.expression")
+  );
+  UNPROTECT(2);
+}
+#endif
+
+static SEXP bytecode_edge_snapshot(SEXP bytecode) {
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(bytecode);
+  SEXP snapshot = PROTECT(allocate_edge_snapshot(attribute_count, 1));
+  SEXP attributes = VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP primary = VECTOR_ELT(snapshot, UPGRADE_EDGE_PRIMARY);
+#if R_VERSION >= R_Version(4, 5, 0)
+  if (!capture_attributes_into(bytecode, attributes, attribute_count)) {
+    UNPROTECT(1);
+    Rf_error("Object graph bytecode changed during inspection");
+  }
+  SET_VECTOR_ELT(
+    primary,
+    0,
+    paradox_api_bytecode_expression(bytecode)
+  );
+#else
+  /*
+   * The old public bridge allocates while recovering the expression. A pair
+   * of independently rooted complete observations below detects a finalizer
+   * transition without adding another old-R internal accessor.
+   */
+  SEXP expression = PROTECT(paradox_api_bytecode_expression(bytecode));
+  if (!capture_attributes_into(bytecode, attributes, attribute_count)) {
+    UNPROTECT(2);
+    Rf_error("Object graph bytecode changed during inspection");
+  }
+  SET_VECTOR_ELT(primary, 0, expression);
+  UNPROTECT(1);
+#endif
+  UNPROTECT(1);
+  return snapshot;
+}
+
+static void schedule_bytecode(
+    paradox_upgrade_walker_t *walker,
+    SEXP bytecode,
+    const paradox_upgrade_path_t *path) {
+  PROTECT(bytecode);
+#if R_VERSION < R_Version(4, 5, 0)
+  SEXP first = PROTECT(bytecode_edge_snapshot(bytecode));
+  SEXP second = PROTECT(bytecode_edge_snapshot(bytecode));
+  if (!edge_snapshots_equal(first, second)) {
+    UNPROTECT(3);
+    Rf_error("Object graph bytecode changed during inspection");
+  }
+#else
+  SEXP second = PROTECT(bytecode_edge_snapshot(bytecode));
+#endif
+  SEXP attributes = VECTOR_ELT(second, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP primary = VECTOR_ELT(second, UPGRADE_EDGE_PRIMARY);
+  schedule_snapshot_attributes(walker, attributes, path);
+  schedule_node(
+    walker,
+    VECTOR_ELT(primary, 0),
+    literal_path(path, ".expression")
+  );
+#if R_VERSION < R_Version(4, 5, 0)
   UNPROTECT(3);
+#else
+  UNPROTECT(2);
+#endif
+}
+
+static void schedule_external_pointer(
+    paradox_upgrade_walker_t *walker,
+    SEXP pointer,
+    const paradox_upgrade_path_t *path) {
+  PROTECT(pointer);
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(pointer);
+  SEXP snapshot = PROTECT(allocate_edge_snapshot(attribute_count, 1));
+  SEXP attributes = VECTOR_ELT(snapshot, UPGRADE_EDGE_ATTRIBUTES);
+  SEXP primary = VECTOR_ELT(snapshot, UPGRADE_EDGE_PRIMARY);
+  if (!capture_attributes_into(pointer, attributes, attribute_count)) {
+    UNPROTECT(2);
+    Rf_error("Object graph external pointer changed during inspection");
+  }
+  SET_VECTOR_ELT(
+    primary,
+    0,
+    paradox_core_is_canonical(pointer)
+      ? R_ExternalPtrProtected(pointer)
+      : R_NilValue
+  );
+  schedule_snapshot_attributes(walker, attributes, path);
+  if (VECTOR_ELT(primary, 0) != R_NilValue) {
+    schedule_node(
+      walker,
+      VECTOR_ELT(primary, 0),
+      literal_path(path, ".protected")
+    );
+  }
+  UNPROTECT(2);
+}
+
+enum upgrade_environment_snapshot_slot {
+  UPGRADE_ENVIRONMENT_ATTRIBUTES = 0,
+  UPGRADE_ENVIRONMENT_PARENT,
+  UPGRADE_ENVIRONMENT_NAMES,
+  UPGRADE_ENVIRONMENT_KINDS,
+  UPGRADE_ENVIRONMENT_FIRST,
+  UPGRADE_ENVIRONMENT_SECOND,
+  UPGRADE_ENVIRONMENT_EXTRA,
+  UPGRADE_ENVIRONMENT_BINDING_LOCKED,
+  UPGRADE_ENVIRONMENT_FLAGS,
+  UPGRADE_ENVIRONMENT_SLOT_COUNT
+};
+
+enum upgrade_environment_flag {
+  UPGRADE_ENVIRONMENT_LOCKED = 0,
+  UPGRADE_ENVIRONMENT_S4,
+  UPGRADE_ENVIRONMENT_OBJECT,
+  UPGRADE_ENVIRONMENT_FLAG_COUNT
+};
+
+enum upgrade_binding_kind {
+  UPGRADE_BINDING_MISSING = 0,
+  UPGRADE_BINDING_UNBOUND,
+  UPGRADE_BINDING_VALUE,
+  UPGRADE_BINDING_ACTIVE,
+  UPGRADE_BINDING_DELAYED,
+  UPGRADE_BINDING_FORCED,
+  UPGRADE_BINDING_DOTS,
+  UPGRADE_BINDING_SKIP_ENCLOSURE,
+  UPGRADE_BINDING_SKIP_ACTIVE,
+  UPGRADE_BINDING_SKIP_LOCKED_CLOSURE
+};
+
+enum upgrade_dots_snapshot_slot {
+  UPGRADE_DOTS_KINDS = 0,
+  UPGRADE_DOTS_FIRST,
+  UPGRADE_DOTS_SECOND,
+  UPGRADE_DOTS_SLOT_COUNT
+};
+
+static void set_snapshot_vector_slot(
+    SEXP owner, R_xlen_t slot, SEXPTYPE type, R_xlen_t size) {
+  SEXP value = PROTECT(Rf_allocVector(type, size));
+  SET_VECTOR_ELT(owner, slot, value);
+  UNPROTECT(1);
+}
+
+static SEXP allocate_environment_snapshot(
+    SEXP names, R_xlen_t attribute_count) {
+  if (TYPEOF(names) != STRSXP || ALTREP(names) ||
+      Rf_isS4(names) || Rf_isObject(names) ||
+      !paradox_api_has_no_attributes(names) ||
+      attribute_count < 0 || attribute_count > R_XLEN_T_MAX / 2) {
+    Rf_error("Object graph environment could not be snapshotted");
+  }
+  const R_xlen_t binding_count = XLENGTH(names);
+  SEXP snapshot = PROTECT(Rf_allocVector(
+    VECSXP,
+    UPGRADE_ENVIRONMENT_SLOT_COUNT
+  ));
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_ENVIRONMENT_ATTRIBUTES,
+    VECSXP,
+    2 * attribute_count
+  );
+  SET_VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_NAMES, names);
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_ENVIRONMENT_KINDS,
+    INTSXP,
+    binding_count
+  );
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_ENVIRONMENT_FIRST,
+    VECSXP,
+    binding_count
+  );
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_ENVIRONMENT_SECOND,
+    VECSXP,
+    binding_count
+  );
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_ENVIRONMENT_EXTRA,
+    VECSXP,
+    binding_count
+  );
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_ENVIRONMENT_BINDING_LOCKED,
+    LGLSXP,
+    binding_count
+  );
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_ENVIRONMENT_FLAGS,
+    LGLSXP,
+    UPGRADE_ENVIRONMENT_FLAG_COUNT
+  );
+  UNPROTECT(1);
+  return snapshot;
+}
+
+static void active_binding_inspection_error(
+    const paradox_upgrade_path_t *path) {
+  SEXP location = PROTECT(render_path(path));
+  Rf_error(
+    "Recursive Paradox object upgrade cannot inspect an active binding "
+    "on R 3.6 (at `%s`); load and upgrade this object under R >= 4.0",
+    CHAR(location)
+  );
+}
+
+#if R_VERSION >= R_Version(4, 6, 0)
+static SEXP capture_dots_snapshot(SEXP environment) {
+  const int count = R_DotsLength(environment);
+  if (count < 0) {
+    Rf_error("Object graph dots binding changed during inspection");
+  }
+  SEXP snapshot = PROTECT(Rf_allocVector(VECSXP, UPGRADE_DOTS_SLOT_COUNT));
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_DOTS_KINDS,
+    INTSXP,
+    (R_xlen_t) count
+  );
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_DOTS_FIRST,
+    VECSXP,
+    (R_xlen_t) count
+  );
+  set_snapshot_vector_slot(
+    snapshot,
+    UPGRADE_DOTS_SECOND,
+    VECSXP,
+    (R_xlen_t) count
+  );
+  if (!R_DotsExist(environment) || R_DotsLength(environment) != count) {
+    UNPROTECT(1);
+    Rf_error("Object graph dots binding changed during inspection");
+  }
+
+  SEXP kinds = VECTOR_ELT(snapshot, UPGRADE_DOTS_KINDS);
+  SEXP first = VECTOR_ELT(snapshot, UPGRADE_DOTS_FIRST);
+  SEXP second = VECTOR_ELT(snapshot, UPGRADE_DOTS_SECOND);
+  for (int index = 1; index <= count; ++index) {
+    switch (R_GetDotType(index, environment)) {
+    case R_DotTypeValue: {
+      SEXP value = PROTECT(R_DotsElt(index, environment));
+      INTEGER(kinds)[index - 1] = UPGRADE_BINDING_VALUE;
+      SET_VECTOR_ELT(first, index - 1, value);
+      UNPROTECT(1);
+      break;
+    }
+    case R_DotTypeDelayed: {
+      SEXP expression = PROTECT(R_DotDelayedExpression(
+        index,
+        environment
+      ));
+      SEXP evaluation_environment = PROTECT(R_DotDelayedEnvironment(
+        index,
+        environment
+      ));
+      INTEGER(kinds)[index - 1] = UPGRADE_BINDING_DELAYED;
+      SET_VECTOR_ELT(first, index - 1, expression);
+      SET_VECTOR_ELT(second, index - 1, evaluation_environment);
+      UNPROTECT(2);
+      break;
+    }
+    case R_DotTypeForced: {
+      SEXP expression = PROTECT(R_DotForcedExpression(
+        index,
+        environment
+      ));
+      /* The type classifier proves that R_DotsElt() cannot force this cell. */
+      SEXP value = PROTECT(R_DotsElt(index, environment));
+      INTEGER(kinds)[index - 1] = UPGRADE_BINDING_FORCED;
+      SET_VECTOR_ELT(first, index - 1, expression);
+      SET_VECTOR_ELT(second, index - 1, value);
+      UNPROTECT(2);
+      break;
+    }
+    case R_DotTypeMissing:
+      INTEGER(kinds)[index - 1] = UPGRADE_BINDING_MISSING;
+      break;
+    default:
+      UNPROTECT(1);
+      Rf_error("Internal error: unknown R dots binding type");
+    }
+  }
+  UNPROTECT(1);
+  return snapshot;
+}
+#endif
+
+static void capture_environment_binding(
+    SEXP environment,
+    SEXP symbol,
+    R_xlen_t index,
+    SEXP snapshot,
+    const paradox_upgrade_path_t *path,
+    int current_builtin,
+    SEXP enclosure_symbol) {
+  SEXP kinds = VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_KINDS);
+  SEXP first = VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_FIRST);
+#if R_VERSION < R_Version(4, 5, 0) || \
+    R_VERSION >= R_Version(4, 6, 0)
+  SEXP second = VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_SECOND);
+  SEXP extra = VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_EXTRA);
+#endif
+  SEXP locked = VECTOR_ELT(
+    snapshot,
+    UPGRADE_ENVIRONMENT_BINDING_LOCKED
+  );
+  LOGICAL(locked)[index] =
+    R_BindingIsLocked(symbol, environment) != FALSE;
+
+#if R_VERSION < R_Version(4, 0, 0)
+  if (current_builtin && symbol == enclosure_symbol) {
+    if (R_BindingIsActive(symbol, environment)) {
+      INTEGER(kinds)[index] = UPGRADE_BINDING_SKIP_ACTIVE;
+    } else {
+      SEXP value = PROTECT(paradox_api_stored_binding_snapshot(
+        environment,
+        symbol
+      ));
+      INTEGER(kinds)[index] = UPGRADE_BINDING_SKIP_ENCLOSURE;
+      SET_VECTOR_ELT(first, index, value);
+      UNPROTECT(1);
+    }
+    return;
+  }
+#else
+  (void) current_builtin;
+  (void) enclosure_symbol;
+#endif
+
+  if (R_BindingIsActive(symbol, environment)) {
+#if R_VERSION < R_Version(4, 0, 0)
+    if (current_builtin) {
+      INTEGER(kinds)[index] = UPGRADE_BINDING_SKIP_ACTIVE;
+      return;
+    }
+#endif
+    SEXP function = PROTECT(paradox_api_active_binding_function(
+      environment,
+      symbol
+    ));
+    if (function == R_UnboundValue) {
+      UNPROTECT(1);
+      active_binding_inspection_error(path);
+    }
+    INTEGER(kinds)[index] = UPGRADE_BINDING_ACTIVE;
+    SET_VECTOR_ELT(first, index, function);
+    UNPROTECT(1);
+    return;
+  }
+
+#if R_VERSION >= R_Version(4, 6, 0)
+  if (symbol == R_DotsSymbol && R_DotsExist(environment)) {
+    SEXP dots = PROTECT(capture_dots_snapshot(environment));
+    INTEGER(kinds)[index] = UPGRADE_BINDING_DOTS;
+    SET_VECTOR_ELT(extra, index, dots);
+    UNPROTECT(1);
+    return;
+  }
+
+  switch (R_GetBindingType(symbol, environment)) {
+  case R_BindingTypeValue: {
+    SEXP value = PROTECT(R_getVar(symbol, environment, FALSE));
+    INTEGER(kinds)[index] = UPGRADE_BINDING_VALUE;
+    SET_VECTOR_ELT(first, index, value);
+    UNPROTECT(1);
+    return;
+  }
+  case R_BindingTypeDelayed: {
+    SEXP expression = PROTECT(R_DelayedBindingExpression(
+      symbol,
+      environment
+    ));
+    SEXP evaluation_environment = PROTECT(R_DelayedBindingEnvironment(
+      symbol,
+      environment
+    ));
+    INTEGER(kinds)[index] = UPGRADE_BINDING_DELAYED;
+    SET_VECTOR_ELT(first, index, expression);
+    SET_VECTOR_ELT(second, index, evaluation_environment);
+    UNPROTECT(2);
+    return;
+  }
+  case R_BindingTypeForced: {
+    SEXP expression = PROTECT(R_ForcedBindingExpression(
+      symbol,
+      environment
+    ));
+    SEXP value = PROTECT(R_getVar(symbol, environment, FALSE));
+    INTEGER(kinds)[index] = UPGRADE_BINDING_FORCED;
+    SET_VECTOR_ELT(first, index, expression);
+    SET_VECTOR_ELT(second, index, value);
+    UNPROTECT(2);
+    return;
+  }
+  case R_BindingTypeUnbound:
+    INTEGER(kinds)[index] = UPGRADE_BINDING_UNBOUND;
+    return;
+  case R_BindingTypeMissing:
+    INTEGER(kinds)[index] = UPGRADE_BINDING_MISSING;
+    return;
+  case R_BindingTypeActive:
+    Rf_error("Object graph binding changed during inspection");
+  }
+  Rf_error("Internal error: unknown R binding type");
+#else
+  SEXP value = PROTECT(paradox_api_stored_binding_snapshot(
+    environment,
+    symbol
+  ));
+  if (value == R_UnboundValue) {
+    INTEGER(kinds)[index] = UPGRADE_BINDING_UNBOUND;
+    UNPROTECT(1);
+    return;
+  }
+  if (value == R_MissingArg) {
+    INTEGER(kinds)[index] = UPGRADE_BINDING_MISSING;
+    UNPROTECT(1);
+    return;
+  }
+#if R_VERSION < R_Version(4, 0, 0)
+  if (current_builtin && TYPEOF(value) == CLOSXP &&
+      R_BindingIsLocked(symbol, environment)) {
+    INTEGER(kinds)[index] = UPGRADE_BINDING_SKIP_LOCKED_CLOSURE;
+    SET_VECTOR_ELT(first, index, value);
+    UNPROTECT(1);
+    return;
+  }
+#endif
+  if (TYPEOF(value) != PROMSXP) {
+    INTEGER(kinds)[index] = UPGRADE_BINDING_VALUE;
+    SET_VECTOR_ELT(first, index, value);
+    UNPROTECT(1);
+    return;
+  }
+#if R_VERSION < R_Version(4, 5, 0)
+  paradox_api_promise_snapshot_t promise;
+  paradox_api_promise_snapshot(value, &promise);
+  INTEGER(kinds)[index] = promise.forced
+    ? UPGRADE_BINDING_FORCED
+    : UPGRADE_BINDING_DELAYED;
+  SET_VECTOR_ELT(first, index, promise.expression);
+  SET_VECTOR_ELT(
+    second,
+    index,
+    promise.forced ? promise.value : promise.environment
+  );
+  /* Promise identity is part of the exact old-runtime binding receipt. */
+  SET_VECTOR_ELT(extra, index, value);
+  UNPROTECT(1);
+  return;
+#else
+  UNPROTECT(1);
+  fail_opaque_promise(path);
+#endif
+#endif
+}
+
+static SEXP capture_environment_snapshot(
+    SEXP environment,
+    const paradox_upgrade_path_t *path,
+    int current_builtin) {
+  SEXP names = PROTECT(environment_names(environment));
+  const R_xlen_t attribute_count =
+    upgrade_attribute_count(environment);
+  SEXP snapshot = PROTECT(allocate_environment_snapshot(
+    names,
+    attribute_count
+  ));
+  SEXP parent = PROTECT(paradox_api_parent_environment(environment));
+  SET_VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_PARENT, parent);
+  UNPROTECT(1);
+
+  SEXP enclosure_symbol = Rf_install(".__enclos_env__");
+  const R_xlen_t binding_count = XLENGTH(names);
+  for (R_xlen_t index = 0; index < binding_count; ++index) {
+    SEXP name = STRING_ELT(names, index);
+    if (name == NA_STRING) {
+      UNPROTECT(2);
+      Rf_error("Internal error: missing environment binding name");
+    }
+    SEXP symbol = Rf_installChar(name);
+    const paradox_upgrade_path_t *binding_path =
+      named_path(path, "[[\"", name, "\"]]");
+    capture_environment_binding(
+      environment,
+      symbol,
+      index,
+      snapshot,
+      binding_path,
+      current_builtin,
+      enclosure_symbol
+    );
+  }
+
+  SEXP attributes = VECTOR_ELT(
+    snapshot,
+    UPGRADE_ENVIRONMENT_ATTRIBUTES
+  );
+  SEXP flags = VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_FLAGS);
+  if (!capture_attributes_into(
+      environment,
+      attributes,
+      attribute_count
+    )) {
+    UNPROTECT(2);
+    Rf_error("Object graph environment changed during inspection");
+  }
+  LOGICAL(flags)[UPGRADE_ENVIRONMENT_LOCKED] =
+    R_EnvironmentIsLocked(environment) != FALSE;
+  LOGICAL(flags)[UPGRADE_ENVIRONMENT_S4] =
+    Rf_isS4(environment) != FALSE;
+  LOGICAL(flags)[UPGRADE_ENVIRONMENT_OBJECT] =
+    Rf_isObject(environment) != FALSE;
+
+  UNPROTECT(2);
+  return snapshot;
+}
+
+static int exact_snapshot_integer(SEXP left, SEXP right) {
+  if (TYPEOF(left) != INTSXP || ALTREP(left) ||
+      TYPEOF(right) != INTSXP || ALTREP(right) ||
+      XLENGTH(left) != XLENGTH(right)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(left); ++index) {
+    if (INTEGER(left)[index] != INTEGER(right)[index]) return FALSE;
+  }
+  return TRUE;
+}
+
+static int exact_snapshot_logical(SEXP left, SEXP right) {
+  if (TYPEOF(left) != LGLSXP || ALTREP(left) ||
+      TYPEOF(right) != LGLSXP || ALTREP(right) ||
+      XLENGTH(left) != XLENGTH(right)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(left); ++index) {
+    if (LOGICAL(left)[index] != LOGICAL(right)[index]) return FALSE;
+  }
+  return TRUE;
+}
+
+static int exact_snapshot_list(SEXP left, SEXP right) {
+  if (TYPEOF(left) != VECSXP || ALTREP(left) ||
+      TYPEOF(right) != VECSXP || ALTREP(right) ||
+      XLENGTH(left) != XLENGTH(right)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(left); ++index) {
+    if (VECTOR_ELT(left, index) != VECTOR_ELT(right, index)) return FALSE;
+  }
+  return TRUE;
+}
+
+static int exact_snapshot_names(SEXP left, SEXP right) {
+  if (TYPEOF(left) != STRSXP || ALTREP(left) ||
+      TYPEOF(right) != STRSXP || ALTREP(right) ||
+      XLENGTH(left) != XLENGTH(right)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(left); ++index) {
+    if (STRING_ELT(left, index) != STRING_ELT(right, index)) return FALSE;
+  }
+  return TRUE;
+}
+
+static int dots_snapshots_equal(SEXP left, SEXP right) {
+  if (TYPEOF(left) != VECSXP || ALTREP(left) ||
+      TYPEOF(right) != VECSXP || ALTREP(right) ||
+      XLENGTH(left) != UPGRADE_DOTS_SLOT_COUNT ||
+      XLENGTH(right) != UPGRADE_DOTS_SLOT_COUNT) {
+    return FALSE;
+  }
+  return exact_snapshot_integer(
+      VECTOR_ELT(left, UPGRADE_DOTS_KINDS),
+      VECTOR_ELT(right, UPGRADE_DOTS_KINDS)
+    ) && exact_snapshot_list(
+      VECTOR_ELT(left, UPGRADE_DOTS_FIRST),
+      VECTOR_ELT(right, UPGRADE_DOTS_FIRST)
+    ) && exact_snapshot_list(
+      VECTOR_ELT(left, UPGRADE_DOTS_SECOND),
+      VECTOR_ELT(right, UPGRADE_DOTS_SECOND)
+    );
+}
+
+static int environment_snapshots_equal(SEXP left, SEXP right) {
+  if (TYPEOF(left) != VECSXP || ALTREP(left) ||
+      TYPEOF(right) != VECSXP || ALTREP(right) ||
+      XLENGTH(left) != UPGRADE_ENVIRONMENT_SLOT_COUNT ||
+      XLENGTH(right) != UPGRADE_ENVIRONMENT_SLOT_COUNT ||
+      !attribute_snapshots_equal(
+        VECTOR_ELT(left, UPGRADE_ENVIRONMENT_ATTRIBUTES),
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_ATTRIBUTES)
+      ) ||
+      VECTOR_ELT(left, UPGRADE_ENVIRONMENT_PARENT) !=
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_PARENT) ||
+      !exact_snapshot_names(
+        VECTOR_ELT(left, UPGRADE_ENVIRONMENT_NAMES),
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_NAMES)
+      ) ||
+      !exact_snapshot_integer(
+        VECTOR_ELT(left, UPGRADE_ENVIRONMENT_KINDS),
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_KINDS)
+      ) ||
+      !exact_snapshot_list(
+        VECTOR_ELT(left, UPGRADE_ENVIRONMENT_FIRST),
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_FIRST)
+      ) ||
+      !exact_snapshot_list(
+        VECTOR_ELT(left, UPGRADE_ENVIRONMENT_SECOND),
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_SECOND)
+      ) ||
+      !exact_snapshot_logical(
+        VECTOR_ELT(left, UPGRADE_ENVIRONMENT_BINDING_LOCKED),
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_BINDING_LOCKED)
+      ) ||
+      !exact_snapshot_logical(
+        VECTOR_ELT(left, UPGRADE_ENVIRONMENT_FLAGS),
+        VECTOR_ELT(right, UPGRADE_ENVIRONMENT_FLAGS)
+      )) {
+    return FALSE;
+  }
+
+  SEXP kinds = VECTOR_ELT(left, UPGRADE_ENVIRONMENT_KINDS);
+  SEXP left_extra = VECTOR_ELT(left, UPGRADE_ENVIRONMENT_EXTRA);
+  SEXP right_extra = VECTOR_ELT(right, UPGRADE_ENVIRONMENT_EXTRA);
+  if (TYPEOF(left_extra) != VECSXP || ALTREP(left_extra) ||
+      TYPEOF(right_extra) != VECSXP || ALTREP(right_extra) ||
+      XLENGTH(left_extra) != XLENGTH(kinds) ||
+      XLENGTH(right_extra) != XLENGTH(kinds)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(kinds); ++index) {
+    SEXP left_value = VECTOR_ELT(left_extra, index);
+    SEXP right_value = VECTOR_ELT(right_extra, index);
+    if (INTEGER(kinds)[index] == UPGRADE_BINDING_DOTS) {
+      if (!dots_snapshots_equal(left_value, right_value)) return FALSE;
+    } else if (left_value != right_value) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static SEXP snapshot_attribute_value(SEXP attributes, SEXP tag) {
+  if (TYPEOF(attributes) != VECSXP || ALTREP(attributes) ||
+      XLENGTH(attributes) % 2 != 0) {
+    return R_UnboundValue;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(attributes); index += 2) {
+    if (VECTOR_ELT(attributes, index) == tag) {
+      return VECTOR_ELT(attributes, index + 1);
+    }
+  }
+  return R_NilValue;
+}
+
+static int environment_snapshot_is_candidate(SEXP snapshot) {
+  SEXP classes = snapshot_attribute_value(
+    VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_ATTRIBUTES),
+    R_ClassSymbol
+  );
+  return classes != R_UnboundValue && candidate_classes(classes);
+}
+
+static int environment_snapshot_has_name_prefix(
+    SEXP snapshot, const char *prefix, int require_suffix) {
+  SEXP name = snapshot_attribute_value(
+    VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_ATTRIBUTES),
+    R_NameSymbol
+  );
+  if (name == R_UnboundValue || TYPEOF(name) != STRSXP ||
+      ALTREP(name) || Rf_isS4(name) || Rf_isObject(name) ||
+      !paradox_api_has_no_attributes(name) || XLENGTH(name) != 1) {
+    return FALSE;
+  }
+  SEXP label = STRING_ELT(name, 0);
+  if (label == NA_STRING || Rf_getCharCE(label) == CE_BYTES) return FALSE;
+  const size_t prefix_size = strlen(prefix);
+  return strncmp(CHAR(label), prefix, prefix_size) == 0 &&
+    (!require_suffix || CHAR(label)[prefix_size] != '\0');
+}
+
+/*
+ * `environment_boundary()` owns identities and namespace registry
+ * authentication before any environment observation. Package/import/user
+ * database boundaries additionally depend only on fields already retained in
+ * the selected complete snapshot. Recheck those fields without allocating so
+ * a finalizer cannot make the crawler apply an old non-boundary decision to a
+ * new boundary generation.
+ */
+static int environment_snapshot_is_boundary(SEXP snapshot) {
+  SEXP attributes = VECTOR_ELT(
+    snapshot,
+    UPGRADE_ENVIRONMENT_ATTRIBUTES
+  );
+  SEXP flags = VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_FLAGS);
+  if (LOGICAL(flags)[UPGRADE_ENVIRONMENT_OBJECT] != FALSE) {
+    SEXP classes = snapshot_attribute_value(attributes, R_ClassSymbol);
+    if (classes == R_UnboundValue || !ordinary_class_value(classes)) {
+      return TRUE;
+    }
+    if (paradox_api_ordinary_class_contains(
+        classes,
+        "UserDefinedDatabase"
+      )) {
+      return TRUE;
+    }
+  }
+  if (environment_snapshot_has_name_prefix(
+      snapshot,
+      "package:",
+      TRUE
+    )) {
+    return TRUE;
+  }
+  return environment_snapshot_has_name_prefix(
+      snapshot,
+      "imports:",
+      FALSE
+    ) && VECTOR_ELT(snapshot, UPGRADE_ENVIRONMENT_PARENT) ==
+      R_BaseNamespace;
+}
+
+static void schedule_binding_edge(
+    paradox_upgrade_walker_t *walker,
+    int kind,
+    SEXP first,
+    SEXP second,
+    const paradox_upgrade_path_t *path);
+
+static void schedule_dots_edges(
+    paradox_upgrade_walker_t *walker,
+    SEXP snapshot,
+    const paradox_upgrade_path_t *path) {
+  SEXP kinds = VECTOR_ELT(snapshot, UPGRADE_DOTS_KINDS);
+  SEXP first = VECTOR_ELT(snapshot, UPGRADE_DOTS_FIRST);
+  SEXP second = VECTOR_ELT(snapshot, UPGRADE_DOTS_SECOND);
+  for (R_xlen_t index = XLENGTH(kinds); index > 0; --index) {
+    const paradox_upgrade_path_t *element_path = indexed_path(
+      path,
+      "[[",
+      index - 1,
+      "]]"
+    );
+    schedule_binding_edge(
+      walker,
+      INTEGER(kinds)[index - 1],
+      VECTOR_ELT(first, index - 1),
+      VECTOR_ELT(second, index - 1),
+      element_path
+    );
+  }
+}
+
+static void schedule_binding_edge(
+    paradox_upgrade_walker_t *walker,
+    int kind,
+    SEXP first,
+    SEXP second,
+    const paradox_upgrade_path_t *path) {
+  switch (kind) {
+  case UPGRADE_BINDING_VALUE:
+    schedule_node(walker, first, path);
+    return;
+  case UPGRADE_BINDING_ACTIVE:
+    schedule_node(
+      walker,
+      first,
+      literal_path(path, ".active")
+    );
+    return;
+  case UPGRADE_BINDING_DELAYED:
+    schedule_node(
+      walker,
+      second,
+      literal_path(path, ".promise.environment")
+    );
+    schedule_node(
+      walker,
+      first,
+      literal_path(path, ".promise.expression")
+    );
+    return;
+  case UPGRADE_BINDING_FORCED:
+    schedule_node(
+      walker,
+      second,
+      literal_path(path, ".promise.value")
+    );
+    schedule_node(
+      walker,
+      first,
+      literal_path(path, ".promise.expression")
+    );
+    return;
+  case UPGRADE_BINDING_MISSING:
+  case UPGRADE_BINDING_UNBOUND:
+  case UPGRADE_BINDING_SKIP_ENCLOSURE:
+  case UPGRADE_BINDING_SKIP_ACTIVE:
+  case UPGRADE_BINDING_SKIP_LOCKED_CLOSURE:
+    return;
+  case UPGRADE_BINDING_DOTS:
+    Rf_error("Internal error: nested dots graph snapshot");
+  }
+  Rf_error("Internal error: unknown object graph binding snapshot");
+}
+
+static void schedule_environment(
+    paradox_upgrade_walker_t *walker,
+    SEXP environment,
+    const paradox_upgrade_path_t *path) {
+  if (environment_boundary(walker, environment)) return;
+  PROTECT(environment);
+
+  int current_builtin = FALSE;
+#if R_VERSION < R_Version(4, 0, 0)
+  SEXP selected_core = R_NilValue;
+  const int preliminary_candidate = is_candidate_shell(environment);
+  int core_protected = FALSE;
+  if (preliminary_candidate) {
+    selected_core = PROTECT(paradox_builtin_current_core_snapshot(
+      environment
+    ));
+    core_protected = TRUE;
+    current_builtin = selected_core != R_UnboundValue;
+  }
+#endif
+
+  SEXP first_snapshot = PROTECT(capture_environment_snapshot(
+    environment,
+    path,
+    current_builtin
+  ));
+  SEXP second_snapshot = PROTECT(capture_environment_snapshot(
+    environment,
+    path,
+    current_builtin
+  ));
+  if (!environment_snapshots_equal(first_snapshot, second_snapshot)) {
+#if R_VERSION < R_Version(4, 0, 0)
+    UNPROTECT(3 + core_protected);
+#else
+    UNPROTECT(3);
+#endif
+    Rf_error("Object graph environment changed during inspection");
+  }
+
+  const int selected_candidate =
+    environment_snapshot_is_candidate(second_snapshot);
+#if R_VERSION < R_Version(4, 0, 0)
+  if (selected_candidate != preliminary_candidate) {
+    UNPROTECT(3 + core_protected);
+    Rf_error("Object graph environment changed during inspection");
+  }
+  if (current_builtin) {
+    SEXP terminal_core = PROTECT(paradox_builtin_current_core_snapshot(
+      environment
+    ));
+    if (terminal_core != selected_core) {
+      UNPROTECT(4 + core_protected);
+      Rf_error("Object graph environment changed during inspection");
+    }
+    UNPROTECT(1);
+  }
+#endif
+
+  if (environment_snapshot_is_boundary(second_snapshot)) {
+#if R_VERSION < R_Version(4, 0, 0)
+    UNPROTECT(3 + core_protected);
+#else
+    UNPROTECT(3);
+#endif
+    return;
+  }
+
+  SEXP attributes = VECTOR_ELT(
+    second_snapshot,
+    UPGRADE_ENVIRONMENT_ATTRIBUTES
+  );
+  schedule_snapshot_attributes(walker, attributes, path);
+  if (selected_candidate) {
+    append_candidate(&walker->candidates, environment, path);
+#if R_VERSION < R_Version(4, 0, 0)
+    if (current_builtin) {
+      schedule_node(
+        walker,
+        selected_core,
+        literal_path(path, ".core")
+      );
+    }
+#endif
+  }
+
+  schedule_node(
+    walker,
+    VECTOR_ELT(second_snapshot, UPGRADE_ENVIRONMENT_PARENT),
+    literal_path(path, ".parent")
+  );
+  SEXP names = VECTOR_ELT(second_snapshot, UPGRADE_ENVIRONMENT_NAMES);
+  SEXP kinds = VECTOR_ELT(second_snapshot, UPGRADE_ENVIRONMENT_KINDS);
+  SEXP first = VECTOR_ELT(second_snapshot, UPGRADE_ENVIRONMENT_FIRST);
+  SEXP second = VECTOR_ELT(second_snapshot, UPGRADE_ENVIRONMENT_SECOND);
+  SEXP extra = VECTOR_ELT(second_snapshot, UPGRADE_ENVIRONMENT_EXTRA);
+  for (R_xlen_t index = XLENGTH(names); index > 0; --index) {
+    SEXP name = STRING_ELT(names, index - 1);
+    const paradox_upgrade_path_t *binding_path =
+      named_path(path, "[[\"", name, "\"]]");
+    const int kind = INTEGER(kinds)[index - 1];
+    if (kind == UPGRADE_BINDING_DOTS) {
+      schedule_dots_edges(
+        walker,
+        VECTOR_ELT(extra, index - 1),
+        binding_path
+      );
+    } else {
+      schedule_binding_edge(
+        walker,
+        kind,
+        VECTOR_ELT(first, index - 1),
+        VECTOR_ELT(second, index - 1),
+        binding_path
+      );
+    }
+  }
+
+#if R_VERSION < R_Version(4, 0, 0)
+  UNPROTECT(3 + core_protected);
+#else
+  UNPROTECT(3);
+#endif
 }
 
 static void inspect_node(
@@ -1498,11 +2460,11 @@ static void inspect_node(
     paradox_upgrade_work_t work) {
   SEXP node = work.node;
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(node);
-  if (type == ENVSXP && environment_boundary(walker, node)) return;
-
-  /* Attributes, including S4 slots, are ordinary graph edges. Schedule them
-   * before primary children so LIFO processing visits primary structure first. */
-  schedule_attributes(walker, node, work.path);
+  if ((type == VECSXP || type == EXPRSXP) && ALTREP(node)) {
+    Rf_error(
+      "Object graph structural list/expression vectors must not use ALTREP"
+    );
+  }
 
   switch (type) {
   case VECSXP:
@@ -1522,35 +2484,24 @@ static void inspect_node(
     return;
   case PROMSXP:
 #if R_VERSION < R_Version(4, 5, 0)
-    schedule_promise_edges(walker, node, work.path);
+    schedule_promise_node(walker, node, work.path);
 #elif R_VERSION < R_Version(4, 6, 0)
     fail_opaque_promise(work.path);
+#else
+    schedule_attributes_only(walker, node, work.path);
 #endif
     return;
-  case BCODESXP: {
-    SEXP expression = PROTECT(paradox_api_bytecode_expression(node));
-    schedule_node(
-      walker,
-      expression,
-      literal_path(work.path, ".expression")
-    );
-    UNPROTECT(1);
+  case BCODESXP:
+    schedule_bytecode(walker, node, work.path);
     return;
-  }
   case EXTPTRSXP:
-    if (paradox_core_is_canonical(node)) {
-      SEXP payload = PROTECT(R_ExternalPtrProtected(node));
-      schedule_node(
-        walker,
-        payload,
-        literal_path(work.path, ".protected")
-      );
-      UNPROTECT(1);
-    }
+    schedule_external_pointer(walker, node, work.path);
     return;
   case WEAKREFSXP:
+    schedule_attributes_only(walker, node, work.path);
     return;
   default:
+    schedule_attributes_only(walker, node, work.path);
     return;
   }
 }
@@ -1580,8 +2531,10 @@ static SEXP build_result(const paradox_upgrade_walker_t *walker) {
   return result;
 }
 
-SEXP paradox_upgrade_graph_discover(SEXP root) {
+static SEXP upgrade_graph_discover_with_boundary_hook(
+    SEXP root, SEXP boundary_hook) {
   PROTECT(root);
+  PROTECT(boundary_hook);
   paradox_upgrade_walker_t walker = {0};
 
   walker.seen.capacity = 1024;
@@ -1625,7 +2578,20 @@ SEXP paradox_upgrade_graph_discover(SEXP root) {
     walker.boundaries.capacity,
     sizeof(*walker.boundaries.items)
   );
+  PROTECT_WITH_INDEX(
+    walker.boundaries.roots = Rf_allocVector(
+      VECSXP,
+      (R_xlen_t) walker.boundaries.capacity
+    ),
+    &walker.boundaries.roots_index
+  );
   initialize_search_boundaries(&walker.boundaries);
+  if (boundary_hook != R_NilValue) {
+    SEXP call = PROTECT(Rf_lang1(boundary_hook));
+    SEXP hook_result = PROTECT(Rf_eval(call, R_BaseEnv));
+    (void) hook_result;
+    UNPROTECT(2);
+  }
 
   const paradox_upgrade_path_t *root_path = literal_path(NULL, "x");
   schedule_node(&walker, root, root_path);
@@ -1638,6 +2604,17 @@ SEXP paradox_upgrade_graph_discover(SEXP root) {
   }
 
   SEXP result = PROTECT(build_result(&walker));
-  UNPROTECT(4);
+  UNPROTECT(6);
   return result;
+}
+
+SEXP paradox_upgrade_graph_discover(SEXP root) {
+  return upgrade_graph_discover_with_boundary_hook(root, R_NilValue);
+}
+
+SEXP paradox_test_upgrade_graph_boundary_lifetime(SEXP root, SEXP hook) {
+  if (!Rf_isFunction(hook)) {
+    Rf_error("Boundary lifetime test hook must be a function");
+  }
+  return upgrade_graph_discover_with_boundary_hook(root, hook);
 }

@@ -23,27 +23,29 @@ the user performs the listed manual actions:
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
 
-## Active replacement candidate
+## Current source and next candidate
 
-The active `paradox2` compatibility axis now pins
+There is no current frozen Paradox candidate while the final C17/C23,
+complete-minor-runtime, and focused admission corrections converge. The
+checked-in `paradox2` compatibility axis still pins the historical placeholder
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
-`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. The branch heads above are the
-current reviewed migration inputs. Historical Paradox-2 runs below predate
-some or all of the dormant-values, grid, source-reference, performance, R 3.6,
-and graph-root changes; the final candidate-owned
-`release-refresh-20260720`/`paradox2` overlay and prepared compatibility gates
-must bind these exact heads before the user publishes them.
+`b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`; it is not authority for the
+reopened source. The branch heads above are the current reviewed migration
+inputs. After source convergence, freeze one new immutable candidate, repoint
+the `release-refresh-20260720`/`paradox2` axis to it, and make the prepared
+compatibility gates bind these exact heads before the user publishes them.
 
 ## Historical retained evidence to refresh
 
 The dormant-value/default-aware dependency change reopened package-facing
 Paradox source after candidate `8797f11`. The exact runs below remain useful
 baselines for the recorded downstream heads, but they are not release evidence
-for the replacement candidate. Implementation and focused package tests have
-converged; the remaining action is to build a fresh Paradox-2 bridge overlay,
-rerun the affected dependency/value rows, and then run the normal broad
-downstream wave. Do not relabel the historical hashes or pass counts.
+for the next candidate. Source is still converging for the final C17/C23,
+all-minor runtime, and focused admission corrections. After that source is
+frozen, build a fresh Paradox-2 bridge overlay, rerun the affected
+dependency/value rows, and then run the normal broad downstream wave. Do not
+relabel the historical hashes or pass counts.
 
 ### Exact Paradox 1 owner conclusion
 

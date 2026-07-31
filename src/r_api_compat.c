@@ -4,10 +4,12 @@
 #include "r_api_compat.h"
 
 #define PARADOX_API_MAX_ALLOWED_ATTRIBUTES ((size_t) 16)
+#define PARADOX_API_MAX_STORED_ATTRIBUTES ((size_t) 64)
 
 #if R_VERSION < R_Version(4, 5, 0)
-/* Cold public-R bridge for accessors that became supported native API in
- * R 4.5. Compile it out entirely once every caller selects that direct API. */
+/* Cold public-R bridge for the remaining operations without an admitted
+ * allocation-free old-runtime accessor. Compile it out entirely once every
+ * caller selects the direct R >= 4.5 API. */
 static SEXP evaluate_base_unary(const char *name, SEXP argument) {
   if (name == NULL) {
     Rf_error("Internal error: missing base function name");
@@ -25,16 +27,23 @@ SEXP paradox_api_closure_formals(SEXP closure) {
 #if R_VERSION >= R_Version(4, 5, 0)
   return R_ClosureFormals(closure);
 #else
-  return FORMALS(closure);
+  /*
+   * Parentheses suppress the old function-like macro and select the
+   * header-declared exported accessor.  It is the same narrow pre-4.5
+   * exception already used for callback-formal admission, without exposing
+   * R's object layout.
+   */
+  return (FORMALS)(closure);
 #endif
 }
 
 SEXP paradox_api_closure_expression(SEXP closure) {
-#if R_VERSION >= R_Version(4, 5, 0)
+  /*
+   * Header-declared and exported on every supported runtime; documented as
+   * API from R 4.5.  The old-runtime use is confined here because the graph
+   * crawler needs one allocation-free closure generation.
+   */
   return R_ClosureExpr(closure);
-#else
-  return evaluate_base_unary("body", closure);
-#endif
 }
 
 SEXP paradox_api_bytecode_expression(SEXP bytecode) {
@@ -67,8 +76,46 @@ SEXP paradox_api_closure_environment(SEXP closure) {
 #if R_VERSION >= R_Version(4, 5, 0)
   return R_ClosureEnv(closure);
 #else
-  return evaluate_base_unary("environment", closure);
+  /*
+   * As for FORMALS above, suppress the historical macro and call the
+   * header-declared exported accessor.  This exception is compiled out once
+   * R_ClosureEnv is public.
+   */
+  return (CLOENV)(closure);
 #endif
+}
+
+int paradox_api_closure_formal_matches(
+    SEXP closure, SEXP sought, int *matches) {
+  if (matches == NULL || TYPEOF(sought) != SYMSXP) {
+    Rf_error("Internal error: invalid closure-formal query");
+  }
+  *matches = FALSE;
+  if (TYPEOF(closure) != CLOSXP) return TRUE;
+
+  SEXP slow = paradox_api_closure_formals(closure);
+  SEXP fast = slow;
+  while (slow != R_NilValue) {
+    if (TYPEOF(slow) != LISTSXP || TYPEOF(TAG(slow)) != SYMSXP) {
+      *matches = FALSE;
+      return FALSE;
+    }
+    if (TAG(slow) == sought) *matches = TRUE;
+    slow = CDR(slow);
+
+    for (int step = 0; step < 2 && fast != R_NilValue; ++step) {
+      if (TYPEOF(fast) != LISTSXP) {
+        *matches = FALSE;
+        return FALSE;
+      }
+      fast = CDR(fast);
+    }
+    if (fast != R_NilValue && slow == fast) {
+      *matches = FALSE;
+      return FALSE;
+    }
+  }
+  return TRUE;
 }
 
 SEXP paradox_api_parent_environment(SEXP environment) {
@@ -111,38 +158,64 @@ SEXP paradox_api_option_snapshot(SEXP symbol) {
 static inline SEXP stored_attributes_unchecked(SEXP value) {
   return ATTRIB(value);
 }
+#endif
+
+typedef struct {
+  SEXP symbols[PARADOX_API_MAX_ALLOWED_ATTRIBUTES];
+  unsigned char seen[PARADOX_API_MAX_ALLOWED_ATTRIBUTES];
+  size_t allowed_count;
+  R_xlen_t count;
+  int valid;
+} allowed_attribute_match_state_t;
+
+static void match_allowed_attribute(SEXP tag, SEXP value, void *data) {
+  (void) value;
+  allowed_attribute_match_state_t *state = data;
+  if (!state->valid || TYPEOF(tag) != SYMSXP) {
+    state->valid = FALSE;
+    return;
+  }
+  size_t allowed = 0;
+  while (allowed < state->allowed_count &&
+      tag != state->symbols[allowed]) {
+    ++allowed;
+  }
+  if (allowed == state->allowed_count || state->seen[allowed]) {
+    state->valid = FALSE;
+    return;
+  }
+  state->seen[allowed] = 1U;
+  ++state->count;
+}
 
 static int attributes_match(SEXP value,
     const char *const *allowed_names, size_t allowed_count,
     R_xlen_t required_count) {
-  unsigned char seen[PARADOX_API_MAX_ALLOWED_ATTRIBUTES] = {0};
+  allowed_attribute_match_state_t state = {
+    {R_NilValue},
+    {0},
+    allowed_count,
+    0,
+    TRUE
+  };
+  for (size_t index = 0; index < allowed_count; ++index) {
+    if (allowed_names[index] == NULL) {
+      Rf_error("Internal error: missing public attribute name");
+    }
+    state.symbols[index] = Rf_install(allowed_names[index]);
+  }
   R_xlen_t count = 0;
-  SEXP attributes = stored_attributes_unchecked(value);
-  while (attributes != R_NilValue) {
-    if (TYPEOF(attributes) != LISTSXP ||
-        count >= (R_xlen_t) allowed_count) {
-      return FALSE;
-    }
-    SEXP tag = TAG(attributes);
-    if (TYPEOF(tag) != SYMSXP) {
-      return FALSE;
-    }
-    const char *name = CHAR(PRINTNAME(tag));
-    size_t allowed = 0;
-    while (allowed < allowed_count &&
-        strcmp(name, allowed_names[allowed]) != 0) {
-      ++allowed;
-    }
-    if (allowed == allowed_count || seen[allowed]) {
-      return FALSE;
-    }
-    seen[allowed] = 1;
-    ++count;
-    attributes = CDR(attributes);
+  if (!paradox_api_map_bounded_stored_attributes(
+      value,
+      (R_xlen_t) allowed_count,
+      match_allowed_attribute,
+      &state,
+      &count
+    ) || !state.valid || state.count != count) {
+    return FALSE;
   }
   return required_count < 0 || count == required_count;
 }
-#endif
 
 int paradox_api_has_no_attributes(SEXP value) {
 #if R_VERSION >= R_Version(4, 5, 0)
@@ -156,13 +229,8 @@ int paradox_api_has_single_attribute(SEXP value, const char *name) {
   if (name == NULL) {
     Rf_error("Internal error: missing public attribute name");
   }
-#if R_VERSION >= R_Version(4, 6, 0)
-  SEXP symbol = Rf_install(name);
-  return R_getAttribCount(value) == 1 && R_hasAttrib(value, symbol);
-#else
   const char *const allowed[] = {name};
   return attributes_match(value, allowed, 1, 1);
-#endif
 }
 
 int paradox_api_has_only_attributes(SEXP value,
@@ -171,28 +239,12 @@ int paradox_api_has_only_attributes(SEXP value,
       (allowed_count != 0 && allowed_names == NULL)) {
     Rf_error("Internal error: invalid public attribute allow-list");
   }
-#if R_VERSION >= R_Version(4, 6, 0)
-  SEXP symbols[PARADOX_API_MAX_ALLOWED_ATTRIBUTES];
-  for (size_t index = 0; index < allowed_count; ++index) {
-    symbols[index] = Rf_install(allowed_names[index]);
-  }
-  const R_xlen_t count = R_getAttribCount(value);
-  if (count > (R_xlen_t) allowed_count) {
-    return FALSE;
-  }
-  R_xlen_t present = 0;
-  for (size_t index = 0; index < allowed_count; ++index) {
-    present += R_hasAttrib(value, symbols[index]);
-  }
-  return count == present;
-#else
   return attributes_match(
     value,
     allowed_names,
     allowed_count,
     -1
   );
-#endif
 }
 
 #if R_VERSION >= R_Version(4, 6, 0)
@@ -238,71 +290,129 @@ SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol) {
 typedef struct {
   paradox_api_attribute_callback_t callback;
   void *data;
+  R_xlen_t limit;
   R_xlen_t count;
-} attribute_map_state_t;
+  int overflow;
+} bounded_attribute_map_state_t;
 
-static SEXP map_stored_attribute(SEXP tag, SEXP value, void *data) {
-  attribute_map_state_t *state = data;
+static SEXP map_bounded_stored_attribute(
+    SEXP tag, SEXP attribute, void *data) {
+  bounded_attribute_map_state_t *state = data;
+  if (state->count >= state->limit) {
+    state->overflow = TRUE;
+    /*
+     * Any non-NULL SEXP stops R_mapAttrib().  A malformed raw cell may have a
+     * NULL tag, so use R's permanently rooted names symbol rather than the
+     * selected tag.  This keeps even a cyclic malformed spine bounded.
+     */
+    return R_NamesSymbol;
+  }
   if (state->callback != NULL) {
-    state->callback(tag, value, state->data);
+    state->callback(tag, attribute, state->data);
   }
   ++state->count;
   return NULL;
 }
 #endif
 
-R_xlen_t paradox_api_stored_attribute_count(SEXP value) {
+int paradox_api_map_bounded_stored_attributes(
+    SEXP value,
+    R_xlen_t limit,
+    paradox_api_attribute_callback_t callback,
+    void *data,
+    R_xlen_t *count) {
+  if (limit < 0 || count == NULL) {
+    Rf_error("Internal error: invalid bounded attribute-map request");
+  }
 #if R_VERSION >= R_Version(4, 6, 0)
-  attribute_map_state_t state = {NULL, NULL, 0};
-  (void) R_mapAttrib(value, map_stored_attribute, &state);
-  return state.count;
+  bounded_attribute_map_state_t state = {
+    callback,
+    data,
+    limit,
+    0,
+    FALSE
+  };
+  (void) R_mapAttrib(value, map_bounded_stored_attribute, &state);
+  *count = state.count;
+  return !state.overflow;
 #else
-  R_xlen_t count = 0;
+  R_xlen_t selected = 0;
   for (SEXP attributes = stored_attributes_unchecked(value);
       attributes != R_NilValue;
       attributes = CDR(attributes)) {
-    if (TYPEOF(attributes) != LISTSXP) {
-      Rf_error("Internal error: malformed attribute pairlist");
+    if (TYPEOF(attributes) != LISTSXP || selected >= limit) {
+      *count = selected;
+      return FALSE;
     }
-    if (count == R_XLEN_T_MAX) {
-      Rf_error("Internal error: too many stored attributes");
+    if (callback != NULL) {
+      callback(TAG(attributes), CAR(attributes), data);
     }
-    ++count;
+    ++selected;
   }
-  return count;
+  *count = selected;
+  return TRUE;
 #endif
 }
 
-void paradox_api_map_stored_attributes(
-    SEXP value,
-    paradox_api_attribute_callback_t callback,
-    void *data) {
-  if (callback == NULL) {
-    Rf_error("Internal error: missing attribute callback");
+typedef struct {
+  SEXP tags[PARADOX_API_MAX_STORED_ATTRIBUTES];
+  SEXP classes;
+  R_xlen_t count;
+  int found;
+  int valid;
+} ordinary_class_snapshot_state_t;
+
+static void capture_ordinary_class_attribute(
+    SEXP tag, SEXP value, void *data) {
+  ordinary_class_snapshot_state_t *state = data;
+  if (!state->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue ||
+      state->count >= (R_xlen_t) PARADOX_API_MAX_STORED_ATTRIBUTES) {
+    state->valid = FALSE;
+    return;
   }
-#if R_VERSION >= R_Version(4, 6, 0)
-  attribute_map_state_t state = {callback, data, 0};
-  (void) R_mapAttrib(value, map_stored_attribute, &state);
-#else
-  for (SEXP attributes = stored_attributes_unchecked(value);
-      attributes != R_NilValue;
-      attributes = CDR(attributes)) {
-    if (TYPEOF(attributes) != LISTSXP) {
-      Rf_error("Internal error: malformed attribute pairlist");
+  for (R_xlen_t index = 0; index < state->count; ++index) {
+    if (state->tags[index] == tag) {
+      state->valid = FALSE;
+      return;
     }
-    callback(TAG(attributes), CAR(attributes), data);
   }
-#endif
+  state->tags[state->count] = tag;
+  ++state->count;
+  if (tag == R_ClassSymbol) {
+    state->classes = value;
+    state->found = TRUE;
+  }
 }
 
 int paradox_api_ordinary_class_snapshot(SEXP value, SEXP *classes) {
   if (classes == NULL) {
     Rf_error("Internal error: missing class snapshot destination");
   }
-  *classes = paradox_api_raw_attribute(value, R_ClassSymbol);
-  if (*classes == R_NilValue) {
+  if (paradox_api_has_no_attributes(value)) {
+    *classes = R_NilValue;
     return TRUE;
   }
+  ordinary_class_snapshot_state_t state = {
+    {R_NilValue},
+    R_NilValue,
+    0,
+    FALSE,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      value,
+      (R_xlen_t) PARADOX_API_MAX_STORED_ATTRIBUTES,
+      capture_ordinary_class_attribute,
+      &state,
+      &count
+    ) || !state.valid || state.count != count) {
+    *classes = R_NilValue;
+    return FALSE;
+  }
+  *classes = state.found ? state.classes : R_NilValue;
+  if (!state.found) return TRUE;
   if (TYPEOF(*classes) != STRSXP || ALTREP(*classes) ||
       Rf_isS4(*classes) || !paradox_api_has_no_attributes(*classes)) {
     return FALSE;
@@ -332,6 +442,27 @@ int paradox_api_ordinary_class_contains(SEXP classes, const char *label) {
     }
   }
   return FALSE;
+}
+
+int paradox_api_ordinary_class_matches(
+    SEXP value, const char *label, int *matches) {
+  if (label == NULL || matches == NULL) {
+    Rf_error("Internal error: invalid ordinary class-membership request");
+  }
+  *matches = FALSE;
+  /*
+   * R's object bit is the allocation-free negative inheritance certificate.
+   * Preserve opaque unclassed values (including ParamUty environments with
+   * arbitrary unrelated attributes) without walking metadata that cannot
+   * contribute a class.
+   */
+  if (!Rf_isObject(value)) return TRUE;
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(value, &classes)) {
+    return FALSE;
+  }
+  *matches = paradox_api_ordinary_class_contains(classes, label);
+  return TRUE;
 }
 
 static int valid_binding_request(SEXP environment, SEXP symbol) {

@@ -116,6 +116,25 @@ hazards that Paradox 2 is intended to remove.
   The outer `special_vals` list is structural for every Domain kind and follows
   the ordinary non-ALTREP/non-S4 rule; only its leaves follow the typed or
   opaque ParamUty policies below.
+* Every public operation on a typed built-in Domain validates the exact
+  complete sixteen-column outward shell, including typed zero-row and
+  empty-value exits; the canonical zero-column empty Domain retains its
+  dedicated exact validator. The identity spine is always interpreted, while
+  each operation declares only the bounds, levels, special values, cargo,
+  tags, and transformation rules it consumes. One native closure function
+  expands rule dependencies, `domain_check()` requests every rule, and no
+  operation restates a rule locally. Thus malformed semantic state outside an
+  operation's closed mask is reported by the first operation that interprets
+  it. Constructor-owned `default`, requirement, and initialization contents
+  stay opaque at this public boundary, but their columns must have canonical
+  presence, uniqueness, storage type, and row count. `domain_check()` and
+  `domain_qunif()` perform a bounded shape probe before an observable ALTREP
+  Length callback and one complete masked admission afterward; quantile
+  mapping observes that Length exactly once, so it cannot combine
+  pre-callback Domain metadata with a post-callback table generation.
+  Operations that complete and root admission before a later value-side
+  callback, including `domain_sanitize()`, retain that already coherent
+  snapshot.
 * Base `extra_trafo` callbacks retain unnamed list results, including the
   one-dimensional form used by `to_tune(ParamSet)`. Collection child callbacks
   require names so their output can be translated into the collection namespace.
@@ -245,6 +264,13 @@ hazards that Paradox 2 is intended to remove.
   BASE/SHADOW dependency results now complete their outward data.table facades
   natively instead of copying/finalizing the same new shell again in R;
   caller-owned input continues to use the defensive finalizer.
+  Caller-owned attribute spines are now copied through bounded package-owned
+  metadata operations instead of R's general pairlist/recursive duplicators.
+  Public detached built-in metadata supports ordinary acyclic graphs up to 64
+  attributes/recursive frames and 65,536 nodes; setter-invalid raw spellings,
+  cycles, closures/`DOTSXP` used as presentation metadata, and overbound graphs
+  reject cleanly. Quantile and typed-list compatibility retain shallow nested
+  metadata identity while applying the same 64-attribute top-level bound.
 * Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small
   serializable mapping closures directly instead of compiling a fresh
   `crate()` closure for every Domain instance.
@@ -299,11 +325,18 @@ hazards that Paradox 2 is intended to remove.
   directly to the shared params loader. This removes a temporary environment
   allocation and redundant capsule lookup and avoids requiring the
   post-R-3.6 `R_NewEnv()` API.
-* The package supports R >= 3.6 and uses portable C99. Current R releases keep
-  their public-API fast paths; small version adapters cover old API spellings
-  without a second semantic implementation. The reusable runtime harness now
-  includes real R 3.6.3 execution and strict compilation against R 3.6.0,
-  4.0.0, and 4.2.0 transition headers.
+* The package supports R >= 3.6 and uses portable C99. Normal current-R source
+  installation selects a language dialect no later than C17, avoiding an
+  implicit switch to a compiler's C23 default. The release harness separately
+  verifies explicit C23 installation with GCC 15 and recent Clang; the strict
+  GNU C99 gates remain unchanged. Current R releases keep their public-API fast
+  paths; small version adapters cover old API spellings without a second
+  semantic implementation. The reusable runtime harness now runs the complete
+  package suite on R 3.6.3 and every R 4 minor through R 4.5.2: 4.0.5, 4.1.3,
+  4.2.3, 4.3.3, 4.4.3, and 4.5.2. The full native lane owns the same complete
+  execution on current R 4.6.1 rather than duplicating it as an eighth runtime
+  stage. Strict compilation separately covers R 3.6.0, 4.0.0, and 4.2.0
+  transition headers.
   The R 3.6 stage also reinstalls the candidate against every exact declared
   direct dependency floor, authenticates every installed package identity and
   dependency namespace origin, and verifies the candidate Paradox DLL origin
@@ -314,10 +347,12 @@ hazards that Paradox 2 is intended to remove.
   build/install/check environment inputs, so caller files or concurrent
   checkout edits cannot change a frozen candidate.
   Exact old-runtime API exceptions are centralized and count-audited. One raw
-  attribute iterator remains through R 4.5, and one allocation-free
-  closure-formals accessor remains before R 4.5 for transformation callback
-  admission. Cold closure and directly reached bytecode traversal use public
-  base bridges until their native accessors become API.
+  attribute iterator remains through R 4.5. Before R 4.5, the exact ledgered
+  `FORMALS`, `R_ClosureExpr`, and `CLOENV` accessors capture one coherent,
+  allocation-free closure generation for callback admission and recursive
+  traversal; all three compile out from R 4.5 onward. Only a directly reached
+  old-runtime bytecode object uses the cold public
+  `as.function.default()`/`body()` bridge.
   Callback-backed `UserDefinedDatabase` environments are rejected before
   native binding inspection; they are not supported ParamSet/R6 frames, and
   old binding helpers assume the ordinary frame layout.
@@ -499,6 +534,14 @@ hazards that Paradox 2 is intended to remove.
   global/search/package/namespace environment infrastructure, invoke an active
   binding or serialized method, or inspect generic external-pointer or weak
   reference internals. Authenticated Paradox core payloads remain traversable.
+  The precomputed search-boundary identities stay rooted for the complete
+  allocating crawl, including if a pending finalizer detaches an environment.
+  Attributes and primary edges are selected as one rooted node generation.
+  The exact old-R closure facade is allocation-free once its carrier is rooted;
+  the allocating old-R bytecode bridge and environments must reproduce one
+  exact complete snapshot twice or migration fails closed. Structural
+  list/expression ALTREP is rejected before its provider or attributes are
+  observed.
   A native direct-binding classifier distinguishes realized language/symbol
   values from delayed promises without using `substitute()` or evaluating
   either. R 3.6--4.4 inspect reached promises through their compatibility

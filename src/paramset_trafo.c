@@ -85,6 +85,19 @@ static SEXP snapshot_list(SEXP source, int require_names,
     );
   }
   const R_xlen_t count = XLENGTH(source);
+  /*
+   * Authenticate and bound the complete list metadata before the raw names
+   * selector.  Both operations are allocation-free after the classifier
+   * returns, so an old-R compatibility lookup can never enter an unbounded
+   * caller-owned attribute spine.
+   */
+  if (!valid_list_shell(source, policy)) {
+    Rf_error(
+      "%s must be an ordinary%s list",
+      description,
+      require_names ? " named" : ""
+    );
+  }
   SEXP source_names = PROTECT(paradox_api_raw_attribute(
     source,
     R_NamesSymbol
@@ -199,18 +212,21 @@ static int callback_accepts_param_set(SEXP callback) {
   if (TYPEOF(callback) != CLOSXP) {
     return FALSE;
   }
-  for (SEXP formal = paradox_api_closure_formals(callback);
-      formal != R_NilValue;
-      formal = CDR(formal)) {
-    if (TYPEOF(formal) != LISTSXP) {
-      Rf_error("A ParamSet extra_trafo has malformed formals");
-    }
-    if (TAG(formal) == Rf_install("param_set") ||
-        TAG(formal) == R_DotsSymbol) {
-      return TRUE;
-    }
+  SEXP param_set_symbol = Rf_install("param_set");
+  int accepts_param_set = FALSE;
+  int accepts_dots = FALSE;
+  if (!paradox_api_closure_formal_matches(
+      callback,
+      param_set_symbol,
+      &accepts_param_set
+    ) || !paradox_api_closure_formal_matches(
+      callback,
+      R_DotsSymbol,
+      &accepts_dots
+    )) {
+    Rf_error("A ParamSet extra_trafo has malformed formals");
   }
-  return FALSE;
+  return accepts_param_set || accepts_dots;
 }
 
 static void validate_trafo_table(trafo_snapshot_t *snapshot,

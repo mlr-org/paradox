@@ -68,31 +68,34 @@ service ceiling is never silently invisible. Its
 It fails closed when even one job would invade the reserved memory headroom.
 Inside a top-level verification worker it also converts
 `PARADOX_VERIFY_ASSIGNED_CPUS` and
-`PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` into a cooperative job-count ceiling, so
-several aggregate-contained coarse tasks cannot each rediscover and spend the
-complete service envelope.
+`PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` into a cooperative job-count ceiling.
 Every schema-2 report records its containment mode, and both live derivation
-and `--verify-report` replay select the policy from that mode. Direct
-(uncontained or per-worker contained) admission stays deliberately
-conservative because nothing else protects unrelated host processes:
+and `--verify-report` replay select the policy from that mode. Direct,
+uncontained admission stays deliberately conservative because nothing else
+protects unrelated host processes:
 `compile`, one CPU and 1024 MiB per job with a 16-job cap; `api-compile`, one
 CPU and 768 MiB per job; `light-test`, one CPU and 2048 MiB per job with a
 16-job cap; and `consumer`, two CPUs and 8192 MiB per job with a four-job cap
-and 16384 MiB minimum reserve. Inside the authenticated aggregate systemd
-service -- the environment marker is honoured only when the process actually
-sits in the dedicated `/system.slice/paradox-verify-aggregate-*` leaf -- the
-root-owned launcher has already withheld the host reserve while sizing the
-hard ceiling, so admission switches to measured cooperative weights: consumer
-rows use 2048 MiB with an eight-row cap, light-test jobs use 1024 MiB, and
-all cooperative profiles keep only a 4096-MiB intra-envelope reserve floor
-above the live one-quarter dynamic reserve. These are admission weights, not
-hard per-row limits; the service cgroup remains the hard boundary, and the
-live headroom-based derivation shrinks later admissions as real usage grows.
+and 16384 MiB minimum reserve. A proved per-worker Podman/Docker container
+uses measured cooperative weights inside its exact live CPU/RAM cgroup:
+consumer rows use 2048 MiB with an eight-row cap, light-test jobs use 1024
+MiB, and cooperative profiles keep a 1024-MiB intra-worker reserve floor
+above the live one-quarter dynamic reserve. The controller-only marker is
+accepted only with the complete assigned envelope and raw v1/v2 cgroup limits
+no larger than that envelope. Inside the authenticated aggregate systemd
+service, the same cooperative weights use a 4096-MiB shared reserve floor.
+These are admission weights, not hard per-row limits; the worker or service
+cgroup remains the hard boundary, and live headroom shrinks later admissions.
+The report is the retained arithmetic decision, not a self-contained cgroup
+attestation: generation authenticates the live limits, while the source-bound
+controller and worker receipts prove the containment that supplied the marker.
+Offline `--verify-report` deliberately replays only the recorded policy and
+arithmetic.
 The serial `rchk` profile admits one analyzer only
 with a 20480 MiB address-space budget and at least 16384 MiB retained for the
 host; the analyzer also receives an independent hard `RLIMIT_AS`. The
-valgrind/rchk analyzer profiles keep one identical conservative policy in
-both containment modes because they never run inside the envelope.
+valgrind/rchk analyzer profiles keep one identical conservative policy in all
+containment modes because they are not nested schedulers.
 `run-compiler-batch` executes isolated compiler admissions under that ceiling,
 keeps deterministic input-order aggregates, and waits for the complete batch
 before failing. Its schema-4 plan binds the admission report, authenticated
@@ -408,6 +411,17 @@ The conda R `Makeconf` includes a linker-only option in `CPPFLAGS`; profiles
 replace that with the equivalent compile-only preprocessor flags instead of
 disabling Clang's unused-command-line warning.
 
+Normal installations advertise `USE_C17` so current R selects no dialect
+newer than C17, while the strict and analyzer profiles deliberately route
+R's `CC17` choice back through their existing GNU C99 warning-as-error
+configuration. Forward compatibility is a separate current-R slice:
+`scripts/bootstrap-c23-gcc` provisions and receipts an exact GCC 15.2 overlay,
+and `scripts/check-c23-compatibility` builds the same source archive with
+explicit `R CMD INSTALL --use-C23` under both that compiler and the recent
+Clang in the main toolchain. Each mode must prove final C23 semantics and run
+the registered native probes; it neither replaces nor weakens the C99,
+supported-runtime, sanitizer, or portability lanes.
+
 The GCC analyzer profile intentionally uses `-O0` for path fidelity and omits
 `_FORTIFY_SOURCE`: glibc itself emits a preprocessor warning when fortification
 is requested without optimization, which the warning-as-error analyzer gate
@@ -541,8 +555,10 @@ mode-0700 XDG runtime root.
 Header compilation cannot prove that versioned public-API paths behave
 correctly inside the actual R interpreter. The opt-in runtime matrix therefore
 uses the authenticated `environment/runtime-matrix.tsv` registry to provision
-exact conda environments for R 3.6.3, R 4.0.5, R 4.3.3, and R 4.5.2 from their
-SHA-256 explicit locks. It separately compiles shipped source against R 3.6.0,
+exact conda environments for R 3.6.3, R 4.0.5, R 4.1.3, R 4.2.3, R 4.3.3,
+R 4.4.3, and R 4.5.2 from their SHA-256 explicit locks. The full native lane
+owns current R 4.6.1 package execution rather than duplicating that complete
+suite here. The header gate separately compiles shipped source against R 3.6.0,
 4.0.0, and 4.2.0 headers (plus the later existing axes) so every old-R native
 API transition is represented:
 
@@ -573,16 +589,16 @@ clean shells and proves every activation repairs injected R libraries, startup
 files, compiler/linker/pkg-config inputs, caches, temporary paths, and XDG
 runtime state. It also re-sources activation to prove idempotence. No matrix
 command reads or mutates `.local/compat/R/library-dependencies` or either
-consumer system prefix. R 3.6.3 and R 4.0.5 additionally use their exact
+consumer system prefix. R 3.6.3 through R 4.2.3 additionally use their exact
 `environment/runtime-r-*-packages.lock` source closures in separately
 receipted repository-local libraries; they do not write to the immutable
-prefix, host R, operator HOME, or a user library. Both runtimes still execute
-the atomic ALTREP tests. Their sole ALTREP capability exclusion is the
+prefix, host R, operator HOME, or a user library. All four runtimes still
+execute the atomic ALTREP tests. Their sole ALTREP capability exclusion is the
 adversarial list fixture: R did not expose VECSXP ALTREP classes until R 4.3,
-so the corresponding production branch cannot arise on either interpreter.
-The real R 4.0.5 axis uniquely executes active-binding inspection while still
-exercising the pre-R-4.2 optional-binding and element-setter compatibility
-branches.
+so the corresponding production branch cannot arise on those interpreters.
+R 4.0.5 and R 4.1.3 execute active-binding inspection while still exercising
+the pre-R-4.2 optional-binding and element-setter compatibility branches;
+R 4.2.3 begins the next public-API branch.
 
 Whenever R 3.6.3 is provisioned, `bootstrap-runtime-matrix` also prepares the
 `declared-floor` profile of `runtime-matrix-library`; its `--verify` mode
@@ -625,12 +641,12 @@ no remaining pre-R-4.6 implementation exclusions. The coordinator validates
 that zero-row contract from the exact extracted candidate before admitting
 any build/install worker, and each old-runtime runner reuses the same
 validator. R 3.6--4.5 use one exact, ledgered raw-attribute traversal; before
-R 4.5 one ledgered `FORMALS` accessor keeps transformation callback admission
-allocation-free, while cold closure inspection uses public base calls instead
-of native accessors that were not yet API.
-Directly reached bytecode takes a cold, non-executing public
-`as.function.default()`/`body()` bridge. Every genuine exception remains
-count-audited.
+R 4.5 exact ledgered `FORMALS`, `R_ClosureExpr`, and `CLOENV` accessors capture
+one allocation-free closure generation for callback admission and recursive
+migration. All three exceptions compile out at R 4.5. Directly reached
+bytecode alone takes a cold, non-executing public
+`as.function.default()`/`body()` bridge on old R. Every genuine exception
+remains count-audited.
 R 3.6--4.1 use a cold `base::exists()` path only for optional
 absence checks and an old-only `R_HasFancyBindings()` receipt-scan exception;
 required authenticated ordinary-frame binding reads remain allocation-free.

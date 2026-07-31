@@ -42,6 +42,110 @@ test_that("native transpose materializes compact inputs and owns row shells", {
   expect_identical(data$y, c("a", "b", "c"))
 })
 
+test_that("native transpose owns flat Design metadata for every scalar", {
+  native = get("C_design_transpose", envir = asNamespace("paradox"))
+  factor_column = factor(c("a", "b"), levels = c("a", "b"))
+  elapsed = structure(c(1, 2), class = "difftime", units = "secs")
+  result = .Call(
+    native,
+    list(factor = factor_column, elapsed = elapsed),
+    FALSE
+  )
+
+  expect_identical(result[[1L]]$factor, factor("a", levels = c("a", "b")))
+  expect_identical(result[[2L]]$factor, factor("b", levels = c("a", "b")))
+  expect_identical(
+    attr(result[[1L]]$elapsed, "units", exact = TRUE),
+    "secs"
+  )
+  expect_false(identical(
+    data.table::address(levels(result[[1L]]$factor)),
+    data.table::address(levels(result[[2L]]$factor))
+  ))
+  expect_false(identical(
+    data.table::address(attr(result[[1L]]$elapsed, "units", exact = TRUE)),
+    data.table::address(attr(result[[2L]]$elapsed, "units", exact = TRUE))
+  ))
+  data.table::setattr(levels(result[[1L]]$factor), "marker", TRUE)
+  data.table::setattr(
+    attr(result[[1L]]$elapsed, "units", exact = TRUE),
+    "marker",
+    TRUE
+  )
+  expect_null(attr(levels(result[[2L]]$factor), "marker", exact = TRUE))
+  expect_null(attr(
+    attr(result[[2L]]$elapsed, "units", exact = TRUE),
+    "marker",
+    exact = TRUE
+  ))
+})
+
+test_that("native transpose rejects recursive Design attribute metadata", {
+  native = get("C_design_transpose", envir = asNamespace("paradox"))
+  attach_metadata = function(column, metadata) {
+    pointer = .Call(
+      get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
+      attr(column, "levels", exact = TRUE),
+      "metadata",
+      metadata
+    )
+    rm(pointer)
+    for (attempt in seq_len(3L)) {
+      invisible(gc(full = TRUE))
+    }
+    stopifnot(identical(
+      data.table::address(attr(
+        attr(column, "levels", exact = TRUE),
+        "metadata",
+        exact = TRUE
+      )),
+      data.table::address(metadata)
+    ))
+    invisible(column)
+  }
+  exercise = function(metadata) {
+    column = factor(c("a", "b"), levels = c("a", "b"))
+    attach_metadata(column, metadata)
+    .Call(native, list(value = column), FALSE)
+  }
+  exercise_cycle = function() {
+    metadata = list(NULL)
+    column = factor(c("a", "b"), levels = c("a", "b"))
+    # Install the acyclic carrier first. R 3.6's public attribute setter tries
+    # to duplicate an already-cyclic value and overflows its C stack before
+    # the package can inspect it.
+    attach_metadata(column, metadata)
+    pointer = .Call(
+      get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+      metadata,
+      0L,
+      metadata
+    )
+    rm(pointer)
+    for (attempt in seq_len(3L)) {
+      invisible(gc(full = TRUE))
+    }
+    stopifnot(identical(
+      data.table::address(metadata[[1L]]),
+      data.table::address(metadata)
+    ))
+    .Call(native, list(value = column), FALSE)
+  }
+
+  deep = TRUE
+  for (depth in seq_len(100L)) {
+    deep = list(deep)
+  }
+  expect_error(
+    exercise(deep),
+    "ordinary structural attributes"
+  )
+  expect_error(
+    exercise_cycle(),
+    "ordinary structural attributes"
+  )
+})
+
 test_that("native transpose rejects malformed state without a sentinel", {
   native = get("C_design_transpose", envir = asNamespace("paradox"))
   expect_error(.Call(native, 1:2, FALSE), "list-like")
@@ -52,6 +156,15 @@ test_that("native transpose rejects malformed state without a sentinel", {
   expect_error(.Call(native, list(x = 1L), logical()), "filter_na")
   expect_error(
     .Call(native, list(x = matrix(1:4, 2L)), FALSE),
+    "structural attributes"
+  )
+  overlong = 1:2
+  attributes(overlong) = stats::setNames(
+    as.list(seq_len(6L)),
+    sprintf("unsupported_%02d", seq_len(6L))
+  )
+  expect_error(
+    .Call(native, list(x = overlong), FALSE),
     "structural attributes"
   )
 })

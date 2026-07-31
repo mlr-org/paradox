@@ -66,6 +66,16 @@ Python/ConfigSpace prefixes before and after testing and passes their
 interpreters by exact environment-variable path. A missing or incomplete
 profile fails closed; it is never repaired or deleted by verification.
 
+The orthogonal `c23-compatibility` release task consumes the sealed
+`.local/c23-gcc` GCC 15.2 overlay and its receipts read-only, alongside Clang
+22 from the main local toolchain. It builds one archive from the selected full
+`source_ref`, installs those exact bytes separately with explicit
+`R CMD INSTALL --use-C23` under both compilers, proves
+`__STDC_VERSION__ == 202311L`, and verifies the complete registered native
+probe inventory against each installed DSO. Its strict GNU23 builds are
+forward-compatibility evidence only; the ordinary strict and old-runtime
+lanes continue to prove the package's portable GNU C99 source contract.
+
 Its current-R package checks construct their repository metadata inside the
 attempt. The source-bound helper authenticates the exact locked source-archive
 closure, adds the candidate archive, writes and seals the standard CRAN
@@ -209,7 +219,11 @@ For per-worker containment the controller:
 Every real worker in this mode receives
 `--memory`, equal `--memory-swap`, `--cpus`, `--pids-limit`, a bounded
 `--shm-size`, no implicit pull, no privilege escalation, and dropped
-capabilities.
+capabilities. The controller injects a reserved hard-worker marker plus the
+exact assigned CPU/RAM envelope. Nested `resource-jobs` accepts that marker
+only when raw v1/v2 memory and CPU quota/period constraints prove a live cap no
+larger than the assignment. It then uses measured cooperative weights with a
+1-GiB intra-worker reserve; a missing or inconsistent cap fails closed.
 
 For aggregate containment the controller instead proves all of the following:
 
@@ -231,13 +245,17 @@ allocations are scheduler reservations inside one hard envelope, not separate
 hard task limits. This permits multiple independent checks to run in parallel
 without pretending cgroup v1 can isolate them individually. The worker entry
 point and nested `resource-jobs` calls cooperatively cap Make/test waves by
-the assigned CPU and RAM. Schema-2 resource reports record their containment
-mode explicitly, and the aggregate policy applies only after the process
+the assigned CPU and RAM. Schema-2 resource reports distinguish `direct`,
+`worker-hard`, and `aggregate-systemd`; offline validation re-derives the
+selected policy and arithmetic. A report is not by itself a cgroup
+attestation: generation-time live authentication plus the source-bound
+controller/worker receipts prove the containment and marker. The aggregate
+policy applies only after the process
 proves it sits inside the dedicated service cgroup: consumer rows then use
 the measured 2-GiB cooperative weight with an eight-row cap, light-test jobs
 the 1-GiB weight, and cooperative profiles a 4-GiB intra-envelope reserve
 floor, because the root-owned launcher already withheld the host reserve when
-sizing the hard ceiling. Ordinary live/direct admission retains the
+sizing the hard ceiling. Ordinary uncontained/direct admission retains the
 conservative 8-GiB estimate, 16-GiB reserve floor, and four-row cap. Thus a
 16-GiB coarse allocation can run eight ordinary rows when CPU permits without
 weakening the aggregate hard ceiling. The nested planner's live
@@ -331,8 +349,8 @@ Profiles are intentionally coarse:
 - `harness`: every deterministic harness fixture, without real consumers;
 - `focused`: default internal development validation;
 - `compat`: focused validation plus the offline Paradox-1 differential;
-- `release-core`: fresh native/API/runtime/differential foundation for a clean
-  frozen ref;
+- `release-core`: fresh native/C23/API/runtime/differential foundation for a
+  clean frozen ref;
 - `prepared-downstream`: exact focused and broad consumer gates for an already
   installed and authenticated candidate overlay on either reviewed axis;
 - `prepared-reverse`: real priority-zero/one pinned reverse dependencies for a
@@ -352,7 +370,9 @@ Impact mapping changes development selection/order only. It never reduces a
 release profile. `release-core` requires a clean tree and resolves
 `source_ref^{commit,tree}` before planning; it must equal the captured HEAD
 commit/tree, so runtime evidence cannot silently test a different source than
-native, API, and differential gates.
+native, C23, API, and differential gates. Before this profile is started,
+`scripts/bootstrap` must have provisioned and sealed the exact GCC C23 overlay;
+the release task verifies it but never downloads, repairs, or mutates it.
 
 ```sh
 scripts/verify run --profile release-core \
@@ -379,9 +399,9 @@ was actually too tight and start a replacement run. Diagnose first:
   run `scripts/verify self-test` after editing.
 - **One row killed inside a wave (exit 137 / killed by signal 9) while the
   run survived.** A single consumer/test row exceeded its cooperative weight
-  badly. Either raise the aggregate per-row weight — `consumer` 2048 MiB or
-  `light-test` 1024 MiB in `scripts/environment/resource-jobs` — or lower the
-  wave width for that gate only with the lowering-only knobs below. A weight
+  badly. Either raise the containment-aware per-row weight — `consumer` 2048
+  MiB or `light-test` 1024 MiB in `scripts/environment/resource-jobs` — or
+  lower the wave width for that gate only with the lowering-only knobs below. A weight
   change must be applied in lockstep to the re-derivation validators
   (`compat/repository-runner.R`, `compat/reverse-runner.R`,
   `scripts/native-check`, `scripts/environment/validate-native-source-run`,
@@ -393,13 +413,15 @@ was actually too tight and start a replacement run. Diagnose first:
   `cpu_min`/`memory_mib_min` (after proving the inner driver degrades safely
   there) or raise the envelope.
 - **`resource-jobs` fails closed** (`insufficient memory for one ... job`).
-  Outside the envelope this is the direct policy protecting the host — free
-  memory or use the envelope. Inside the envelope it means the service is
-  genuinely near its ceiling; let running work finish or raise the envelope.
+  In direct mode this is the host-protecting policy — free memory or use hard
+  containment. In `worker-hard`, raise that task's reviewed allocation or
+  lower its inner width. In the aggregate envelope, let running work finish
+  or raise the shared envelope target within the approved ceiling.
 
 Lowering-only per-gate knobs (never raise the derived ceiling):
 `PARADOX_REVERSE_JOBS` (reverse waves), `PARADOX_RUNTIME_MATRIX_JOBS`
-(runtime stages, 1–4), `PARADOX_API_JOBS` (header syntax compiles),
+(runtime stages, from one through the selected registered-runtime count),
+`PARADOX_API_JOBS` (header syntax compiles),
 `PARADOX_NATIVE_COMPILE_JOBS` / `PARADOX_NATIVE_TEST_JOBS` (native install
 and both direct and `--as-cran` testthat parallelism), and each helper's
 `--max-jobs`.
@@ -587,10 +609,10 @@ protected-input attestations, and its rows are fully hidden behind the
 corpus/reverse branches in `prepared-release-compat`. Parallelizing it would
 rename retained evidence for approximately zero critical-path gain; revisit
 only if documentation ever becomes the phase-30 long pole. The runtime
-matrix's supported stages run the package suite with a capability-probed
-two-worker parallel testthat (testthat 3.2+ with callr in that stage's
-sealed library); old runtimes keep the exact serial path, and the retained
-stage log records the decision as `testthat_parallel`/`testthat_workers`.
+matrix parallelizes across supported minor-version stages and keeps testthat
+serial inside each stage, so the outer one-CPU admissions remain truthful.
+The retained stage log records the exact
+`testthat_parallel=false`/`testthat_workers=1` decision.
 
 Run the complete prepared compatibility DAG unattended with:
 

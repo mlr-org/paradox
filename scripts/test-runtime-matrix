@@ -45,8 +45,10 @@ source-derived old-runtime GC/reentry slice with NOT_CRAN=true.  A complete
 under R 4.0 and loads, exercises, mutates, and reserializes it under R 3.6.
 The R 3.6 stage also reinstalls the candidate against the exact declared
 direct-dependency floors and runs a dependency-origin and imported-path smoke.
-The isolated stages share one resource-aware light-test admission; at most
-four run concurrently. PARADOX_RUNTIME_MATRIX_JOBS may lower that ceiling.
+The isolated stages share one resource-aware light-test admission. All
+selected minor-version stages may run concurrently when the aggregate
+containment envelope admits them; PARADOX_RUNTIME_MATRIX_JOBS may lower that
+ceiling.
 USAGE
 }
 
@@ -89,14 +91,12 @@ elif "$REGISTRY" contains "$selection"; then
 else
   fail "Runtime must be registered or all: $selection"
 fi
-runtime_jobs_limit=4
+runtime_jobs_limit=${#versions[@]}
 if [[ -n "${PARADOX_RUNTIME_MATRIX_JOBS:-}" ]]; then
-  [[ "$PARADOX_RUNTIME_MATRIX_JOBS" =~ ^[1-4]$ ]] ||
-    fail "PARADOX_RUNTIME_MATRIX_JOBS may only lower the stage ceiling to 1-4"
+  [[ "$PARADOX_RUNTIME_MATRIX_JOBS" =~ ^[1-9][0-9]*$ &&
+    "$PARADOX_RUNTIME_MATRIX_JOBS" -le "$runtime_jobs_limit" ]] ||
+    fail "PARADOX_RUNTIME_MATRIX_JOBS must lower the selected stage count"
   runtime_jobs_limit=$PARADOX_RUNTIME_MATRIX_JOBS
-fi
-if ((runtime_jobs_limit > ${#versions[@]})); then
-  runtime_jobs_limit=${#versions[@]}
 fi
 [[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
   fail "--run-id is required and must have a safe shape"
@@ -307,7 +307,7 @@ for version in "${versions[@]}"; do
     if [[ "$version" == 3.6.3 || "$version" == 4.0.5 ]]; then
       printf 'old-runtime-stress\tNOT_CRAN=true Rscript run-runtime-matrix-old-r-stress.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
     fi
-    printf 'scheduling\tresource-jobs light-test; at most four outer stages; nested pools fixed to one except a capability-probed two-worker testthat suite\n'
+    printf 'scheduling\tresource-jobs light-test; up to every selected minor-version stage; all nested make, testthat, BLAS, and OpenMP pools fixed to one\n'
   } > "$inputs/commands.tsv"
 done
 
@@ -349,7 +349,8 @@ wave_directory="$run_root/metadata/stage-wave"
   > "$resource_report.staging"
 mv "$resource_report.staging" "$resource_report"
 runtime_jobs=$(awk -F '\t' '$1 == "jobs" {print $2}' "$resource_report")
-[[ "$runtime_jobs" =~ ^[1-4]$ && "$runtime_jobs" -le "${#versions[@]}" ]] ||
+[[ "$runtime_jobs" =~ ^[1-9][0-9]*$ &&
+  "$runtime_jobs" -le "${#versions[@]}" ]] ||
   fail "Runtime stage admission returned an invalid worker count"
 {
   printf 'ordinal\tversion\n'

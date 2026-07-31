@@ -703,8 +703,22 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
   SEXP stable_sets = PROTECT(Rf_allocVector(VECSXP, source_child_count));
   SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, source_child_count));
   if (!paradox_capture_list_identities(sets, stable_names, stable_sets)) {
-    SEXP observed_names =
-      paradox_api_raw_attribute(sets, R_NamesSymbol);
+    /*
+     * The capture can fail because a pending finalizer changed or malformed
+     * the complete attribute spine. Re-establish the bound immediately before
+     * selecting names for the more specific diagnostic; never replay an
+     * unbounded selector merely to explain a bounded-capture failure.
+     */
+    if (!paradox_params_names_are_only_attribute(sets)) {
+      UNPROTECT(2);
+      Rf_error(
+        "`sets` changed or became malformed while being snapshotted"
+      );
+    }
+    SEXP observed_names = paradox_api_raw_attribute(
+      sets,
+      R_NamesSymbol
+    );
     UNPROTECT(2);
     if (TYPEOF(observed_names) != STRSXP || ALTREP(observed_names) ||
         Rf_isS4(observed_names) || Rf_isObject(observed_names) ||

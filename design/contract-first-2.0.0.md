@@ -208,8 +208,28 @@ reproducing R-version-specific `data.table::CJ()` order.
 Ownership extends below the table shell. Public `$params`, `$domains`, `$data`,
 static property vectors, raw `$values`, and `$get_values()` results own every
 mutable interpreted carrier and every built-in typed atomic value leaf,
-including its complete nested attribute metadata, that they expose. Mutating
-such a result by reference cannot mutate the capsule.
+including its complete supported ordinary, acyclic, bounded nested attribute
+metadata, that they expose. Mutating such a result by reference cannot mutate
+the capsule. A closure recursively embedded in presentation metadata is not a
+supported metadata node and rejects cleanly: supported old R has no
+allocation-free public receipt for the closure shell that R's deep duplicator
+would create. This does not affect a function supplied as a semantic value,
+default, initialization value, special value, or callback; those leaves retain
+the exact identity or source-normalization behavior documented for their
+semantic position.
+These outward ownership paths never give a caller-owned attribute spine or
+nested presentation graph to R's shallow/deep duplicators. A package-owned
+copier bounds each attribute spine and recursive path at 64 and the complete
+graph at 65,536 nodes, roots every selected edge before recursion, installs
+attributes through public setters in one fixed dependency-safe order, and
+finishes with an allocation-free graph receipt. Raw spellings normalized by a
+public setter reject instead of disappearing. Closure and `DOTSXP`
+presentation nodes are outside the supported graph; semantic functions remain
+opaque. Operations whose historical contract is shallow metadata identity,
+not outward detachment (notably direct quantile mapping and typed list-leaf
+snapshotting), use a separate bounded top-level tag/value copier: nested values
+remain identical, valid-cell cycles/overlength reject, and the attr-free path
+allocates no metadata carrier.
 ParamUty leaves, callbacks, environments, external pointers, typed S4
 pointer-identity tokens, and ParamSet child shells are deliberately opaque:
 their exact identity is the contract and is not recursively cloned. A
@@ -454,6 +474,18 @@ extracting the row it receives an admitted built-in kind and validated fields
 and must not reproduce those semantic rules. This division keeps outward
 Domain-facade corruption diagnostics exact without creating a second Domain
 engine.
+
+Public Domain kernels share that owner while declaring only what they
+interpret. Every nonempty or typed-zero kernel admits the complete exact
+sixteen-column structure, and the canonical zero-column empty Domain uses its
+dedicated exact validator. The identity spine is always interpreted. One mask
+covers bounds, levels, special values, cargo, tags, and transformation;
+`paradox_domain_interpretation_closure()` alone expands dependencies among
+those rules, and `domain_check()` requests them all. A rule outside the closed
+mask is skipped whole rather than restated by the operation, so malformed
+semantic state outside one mask is diagnosed by the first operation that
+interprets it. The four constructor-only fields remain content-opaque to these
+public kernels while their columns remain structurally exact.
 
 All outward Domain shells, table/class/name structures, row containers, cargo
 containers, interpreted cargo entries, and other interpreted metadata are
@@ -775,7 +807,11 @@ restarts the operation through a second implementation.
 Native code may evaluate documented user callbacks through R. It may also use
 ordinary R helpers for genuine language capture or error construction. It must
 not call checkmate or data.table to implement a hot semantic operation. Shipped
-code is portable C99 and supports R >= 3.6. Equivalent API spellings are
+code is portable C99 and supports R >= 3.6. Normal current-R installation is
+capped at C17-or-earlier by `SystemRequirements: USE_C17`, while an orthogonal
+explicit GCC >= 15 and recent-Clang `--use-C23` gate proves that the same
+source remains forward-compatible; strict compiler and old-runtime evidence
+continues to compile as GNU C99. Equivalent API spellings are
 centralized in `src/r_api_compat.c`; current R retains its public,
 allocation-free ordinary-frame fast path and no semantic translation unit
 gains a parallel old-R engine. Authentication keeps one conservative rooting
@@ -1313,9 +1349,30 @@ migration boundary for a containing object:
   is therefore a value, while a delayed promise whose expression is a language
   object or symbol remains a promise; both are traversed according to their
   actual binding kind without forcing.
+- Discovery schedules only rooted edges from one coherent observable
+  generation of each node. Structural list/expression ALTREP rejects before
+  any attribute or provider observation. Ordinary vector, pairlist, and
+  direct-access closure snapshots allocate all carriers before capturing
+  attributes beside their primary edges. The exact old-runtime closure facade
+  likewise allocates its carrier first and then captures one coherent
+  allocation-free `FORMALS`/`R_ClosureExpr`/`CLOENV` generation. The allocating
+  old-runtime bytecode bridge uses two exact snapshots, as do environments on
+  every runtime. The environment snapshots cover their exact stored attributes,
+  parent, sorted binding names, binding kinds and selected edges, binding
+  locks, and environment lock/object/S4 state. Neither snapshot invokes an
+  active binding or forces a promise. Package/import/user-database boundary
+  policy is applied again from the selected snapshot; discovery never combines
+  a boundary decision, attributes, and primary edges selected on opposite
+  sides of a finalizer mutation.
 - `.GlobalEnv`, every attached search-path environment (including Autoloads),
   package and namespace environments, imports environments, base, and the empty
-  environment are traversal boundaries. Imports classification requires an
+  environment are traversal boundaries. Their process-local identities are
+  captured before the allocating walk and retained in one indexed ordinary
+  `VECSXP` carrier through the complete call; the parallel native array is
+  lookup scratch only. If a finalizer detaches an attached environment during
+  discovery, unscanned `R_alloc()` memory must not become its sole owner, and
+  carrier growth therefore precedes publication of a new raw-array entry.
+  Imports classification requires an
   ordinary raw scalar `name` with the `imports:` prefix and
   `R_BaseNamespace` as the direct parent; a user environment cannot become a
   boundary by spoofing descriptive metadata alone. Thus a closure made by
@@ -1650,10 +1707,14 @@ dependency/acceptance order; independent long stages may overlap after their
 prerequisites and candidate bytes are frozen:
 
 1. strict GCC and Clang C99 builds, registered-routine/export audit, static
-   analyzers, and the complete package suite;
-2. R 3.6.3, R 4.0.5, R 4.3.3, R 4.5.2, and development-R execution plus
+   analyzers, and the complete package suite, plus the separate explicit
+   `--use-C23` installation and complete native-probe gate under
+   repository-local GCC >= 15 and recent Clang;
+2. R 3.6.3, R 4.0.5, R 4.1.3, R 4.2.3, R 4.3.3, R 4.4.3, and R 4.5.2
+   execution, with current R 4.6.1 complete execution owned by the full native
+   lane, plus
    compilation against all seven pinned R 3.6.0--4.6.1 header axes; the exact
-   raw-attribute/hot-closure-formals/stored-binding/promise exception ledger,
+   raw-attribute/old-R-closure-snapshot/stored-binding/promise exception ledger,
    raw-token/version-gated DSO audit, and option-access symbol policy; the
    authenticated R 3.6 complete-test closure and separate exact declared-floor
    smoke with `R_DEFAULT_PACKAGES` isolated; and the full-only sealed

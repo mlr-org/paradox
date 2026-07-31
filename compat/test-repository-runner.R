@@ -338,6 +338,18 @@ expect_error(
   repository_runner_parse_resource_report(noncanonical_resource),
   "canonical positive integer"
 )
+worker_resource <- c(
+  "field\tvalue", "schema\t2", "profile\tconsumer",
+  "containment\tworker-hard", "platform\tLinux", "online_cpus\t4",
+  "affinity_cpus\t4", "cgroup_cpu_limit\t4", "cpu_limit\t4",
+  "cpu_reserve\t1", "cpu_per_job\t2", "cpu_jobs\t1",
+  "memory_source\tproc_memavailable+cgroup",
+  "memory_available_mib\t8192", "cgroup_memory_available_mib\t8192",
+  "memory_reserve_mib\t2048", "memory_mib_per_job\t2048",
+  "memory_jobs\t3", "profile_max_jobs\t8",
+  "operator_max_jobs\tnone", "jobs\t1"
+)
+invisible(repository_runner_parse_resource_report(worker_resource))
 
 row_two <- repository_runner_reserve_directory(file.path(context$stage, "rows"),
   repository_runner_row_name(selection[2L, , drop = FALSE]),

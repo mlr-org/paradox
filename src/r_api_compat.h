@@ -7,17 +7,26 @@
 
 /* Keep version-dependent old-runtime spellings behind one small facade. R 4.5
  * promoted the native closure accessors below to API. Earlier runtimes retain
- * one exact FORMALS exception because callback-formal inspection is a semantic
- * hot path, while cold body/environment inspection uses public base calls and
- * a directly reached bytecode object takes the public
- * as.function.default()/body() bridge. R 4.6 added public raw-attribute
- * iteration; that genuinely irreplaceable older operation is also recorded in
- * the exact exception ledger. */
+ * exact header-declared/exported FORMALS, R_ClosureExpr, and CLOENV exceptions
+ * so recursive migration can capture one closure generation without
+ * evaluation or raw-layout macros. A directly reached bytecode object still
+ * takes the public as.function.default()/body() bridge there. R 4.6 added
+ * public raw-attribute iteration; that genuinely irreplaceable older
+ * operation is also recorded in the exact exception ledger. */
 
 attribute_hidden SEXP paradox_api_closure_formals(SEXP closure);
 attribute_hidden SEXP paradox_api_closure_expression(SEXP closure);
 attribute_hidden SEXP paradox_api_bytecode_expression(SEXP bytecode);
 attribute_hidden SEXP paradox_api_closure_environment(SEXP closure);
+/* Validate the complete closure-formals pairlist and report literal tag
+ * membership without allocation. Malformed, dotted, or cyclic formals return
+ * false and reset `matches`; a valid closure with no such formal returns true
+ * with `matches` false. */
+attribute_hidden int paradox_api_closure_formal_matches(
+  SEXP closure,
+  SEXP sought,
+  int *matches
+);
 attribute_hidden SEXP paradox_api_parent_environment(SEXP environment);
 
 /* Snapshot one base option. R >= 4.5 uses the documented allocation-free
@@ -28,6 +37,9 @@ attribute_hidden SEXP paradox_api_parent_environment(SEXP environment);
  * across intervening allocations. */
 attribute_hidden SEXP paradox_api_option_snapshot(SEXP symbol);
 
+/* Exact raw stored-attribute predicates.  The one/allow-list forms use the
+ * same hard-bounded mapper as untrusted metadata admission, so a malformed or
+ * cyclic spine returns false instead of reaching an unbounded count/lookup. */
 attribute_hidden int paradox_api_has_no_attributes(SEXP value);
 attribute_hidden int paradox_api_has_single_attribute(
   SEXP value,
@@ -45,9 +57,10 @@ attribute_hidden int paradox_api_has_only_attributes(
  * unprotected and remains owned by `value`. */
 attribute_hidden SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol);
 
-/* Select class metadata without inheritance dispatch or ALTREP observation.
- * A missing class is a valid ordinary result with `R_NilValue`; malformed,
- * attributed, S4, or structural-ALTREP class vectors return false. */
+/* Select class metadata through one allocation-free raw-attribute scan bounded
+ * to 64 cells, without inheritance dispatch or ALTREP observation. A missing
+ * class is a valid ordinary result with `R_NilValue`; malformed, duplicate,
+ * overlong, attributed, S4, or structural-ALTREP class metadata returns false. */
 attribute_hidden int paradox_api_ordinary_class_snapshot(
   SEXP value,
   SEXP *classes
@@ -55,6 +68,15 @@ attribute_hidden int paradox_api_ordinary_class_snapshot(
 attribute_hidden int paradox_api_ordinary_class_contains(
   SEXP classes,
   const char *label
+);
+/* Allocation-free literal inheritance query over one bounded ordinary class
+ * snapshot. TRUE means the class metadata was structurally admissible and
+ * `matches` reports membership; FALSE means it was malformed and `matches`
+ * is reset to false. This never invokes S3 inheritance or ALTREP methods. */
+attribute_hidden int paradox_api_ordinary_class_matches(
+  SEXP value,
+  const char *label,
+  int *matches
 );
 
 /* The R_NO_REMAP declarations for SET_RAW_ELT() / SET_COMPLEX_ELT(), and the
@@ -146,16 +168,20 @@ typedef void (*paradox_api_attribute_callback_t)(
   void *data
 );
 
-/* Enumerate the raw stored attribute pairlist without row.names expansion.
- * R >= 4.6 uses its public mapper; one reviewed ATTRIB exception remains
- * confined to this facade on R 3.6--4.5. The count and mapping deliberately
- * exclude the virtual names reported for tagged pairlists by
- * R_getAttribCount(): pairlist tags are not stored attributes. */
-attribute_hidden R_xlen_t paradox_api_stored_attribute_count(SEXP value);
-attribute_hidden void paradox_api_map_stored_attributes(
+/* Bounded raw-attribute iteration for caller-owned or otherwise untrusted
+ * presentation metadata.  A zero limit is an allocation-free no-attributes
+ * predicate.  The function returns false, without walking farther, when a
+ * valid-cell spine exceeds `limit`; callers validate every delivered tag and
+ * value.  On R >= 4.6 a guaranteed non-NULL stop value bounds cyclic and
+ * overlong pairlist spines, while the public R_mapAttrib API owns raw-cell
+ * decoding. Older R uses the same hard edge count around its one reviewed
+ * ATTRIB compatibility loop and can additionally reject a non-list cell. */
+attribute_hidden int paradox_api_map_bounded_stored_attributes(
   SEXP value,
+  R_xlen_t limit,
   paradox_api_attribute_callback_t callback,
-  void *data
+  void *data,
+  R_xlen_t *count
 );
 
 /* Return the stored pre-4.6 frame cell without forcing a promise. R 4.6 has

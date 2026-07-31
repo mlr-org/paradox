@@ -87,8 +87,8 @@ while (($#)); do
   esac
 done
 
-if ! positive_integer "${JOBS:-}" || ((JOBS > 4)); then
-  fail "--jobs must be between one and four"
+if ! positive_integer "${JOBS:-}"; then
+  fail "--jobs must be a positive integer"
 fi
 if ! positive_integer "${TASK_TIMEOUT_SECONDS:-}" ||
     ((TASK_TIMEOUT_SECONDS > 86400)); then
@@ -115,6 +115,10 @@ for directory in "$ROOT" "$RUN_ROOT"; do
     "$(cd "$directory" && pwd -P)" == "$directory" ]] ||
     fail "required directory is not canonical: $directory"
 done
+RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
+[[ -x "$RESOURCE_JOBS" && -f "$RESOURCE_JOBS" &&
+  ! -L "$RESOURCE_JOBS" ]] ||
+  fail "resource admission verifier is absent or symbolic"
 [[ "$OUTPUT_DIRECTORY" == /* && ! -e "$OUTPUT_DIRECTORY" &&
   ! -L "$OUTPUT_DIRECTORY" ]] ||
   fail "output directory must be one absent absolute path"
@@ -136,8 +140,9 @@ awk -F '\t' 'NR == 1 {next} NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 
 admitted_jobs=$(report_value jobs)
 [[ $(report_value schema) == 2 && $(report_value profile) == light-test ]] ||
   fail "admission report is not the light-test schema"
+"$RESOURCE_JOBS" light-test --verify-report "$ADMISSION_REPORT" >/dev/null
 positive_integer "$admitted_jobs" || fail "admission report jobs are malformed"
-((JOBS == admitted_jobs && JOBS <= 4)) ||
+((JOBS == admitted_jobs)) ||
   fail "requested jobs differ from the lowering-only admission report"
 
 [[ $(head -n 1 "$TASK_LIST") == $'ordinal\tversion' ]] ||

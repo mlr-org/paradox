@@ -50,6 +50,32 @@ test_that("Condition evaluation is closed over exact built-in classes", {
   expect_error(condition_test(structure(1L, class = "CondEqual"), 1L), unsupported, fixed = TRUE)
 })
 
+test_that("ALTREP Length mutation is bounded before Condition names lookup", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  attribute_names = sprintf(".paradox_condition_attr_%02d", seq_len(65L))
+  invisible(lapply(attribute_names, as.name))
+  state = new.env(parent = emptyenv())
+  operand = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = function() {
+      for (name in attribute_names) {
+        data.table::setattr(state$operand, name, TRUE)
+      }
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  state$operand = operand
+
+  expect_error(
+    condition_test(CondEqual(1L), operand),
+    "requires a plain atomic vector"
+  )
+})
+
 test_that("Condition evaluation has no package S3 method seam", {
   namespace = asNamespace("paradox")
 

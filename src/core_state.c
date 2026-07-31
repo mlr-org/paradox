@@ -309,9 +309,13 @@ int paradox_core_state_exact_schema(SEXP payload) {
     return FALSE;
   }
   PROTECT(payload);
+  if (!paradox_api_has_single_attribute(payload, "names")) {
+    UNPROTECT(1);
+    return FALSE;
+  }
   SEXP names = PROTECT(Rf_getAttrib(payload, R_NamesSymbol));
-  const int valid = paradox_api_has_single_attribute(payload, "names") &&
-    !Rf_isS4(names) && paradox_api_has_no_attributes(names) &&
+  const int valid = !Rf_isS4(names) &&
+    paradox_api_has_no_attributes(names) &&
     exact_names(names);
   UNPROTECT(2);
   return valid;
@@ -1371,18 +1375,44 @@ SEXP paradox_param_set_core_new(SEXP kind, SEXP state) {
       "`state` must use the exact canonical eleven-field ParamSet state schema"
     );
   }
-  /* Captured before the duplication below can allocate; the edge re-check
-   * after it is allocation-free, so a finalizer installing a capsule anywhere
-   * in between forfeits the stamp instead of being certified past. */
+
+  /*
+   * Own the two destination carriers before selecting any field from the
+   * caller-owned state.  R's shallow duplicator also copies an object's raw
+   * attribute pairlist; using it here would leave an allocation window in
+   * which a pending finalizer could replace the already-admitted names
+   * metadata.  The package-owned destination has one canonical names
+   * attribute by construction, and the terminal source admission immediately
+   * below precedes an allocation-free field copy.
+   */
+  SEXP payload = PROTECT(Rf_allocVector(VECSXP, PARADOX_CORE_FIELD_COUNT));
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, PARADOX_CORE_FIELD_COUNT));
+  for (int field = 0; field < PARADOX_CORE_FIELD_COUNT; ++field) {
+    SET_STRING_ELT(names, field, Rf_mkCharCE(core_field_names[field], CE_UTF8));
+  }
+  Rf_setAttrib(payload, R_NamesSymbol, names);
+  if (!paradox_core_state_exact_schema(state)) {
+    UNPROTECT(2);
+    Rf_error("ParamSet state changed while constructing its core capsule");
+  }
+
+  /*
+   * Captured after every destination allocation but before the allocation-free
+   * field selection.  The edge re-check after new_core() is allocation-free,
+   * so a finalizer installing a capsule during external-pointer allocation
+   * forfeits the verification stamp instead of being certified past.
+   */
   const uintptr_t entry_epoch = core_state_epoch;
-  SEXP payload = PROTECT(Rf_shallow_duplicate(state));
+  for (int field = 0; field < PARADOX_CORE_FIELD_COUNT; ++field) {
+    SET_VECTOR_ELT(payload, field, VECTOR_ELT(state, field));
+  }
   SEXP result = PROTECT(new_core(parsed_kind, payload));
   if (parsed_kind == PARADOX_CORE_COLLECTION &&
       collection_edges_current(result) &&
       core_state_epoch == entry_epoch) {
     paradox_core_stamp_verified(result);
   }
-  UNPROTECT(2);
+  UNPROTECT(3);
   return result;
 }
 
@@ -1576,17 +1606,34 @@ SEXP paradox_param_set_core_replace(SEXP owner, SEXP updates) {
     UNPROTECT(1);
     Rf_error("Internal error: ParamSet state updates must be a named list");
   }
-  SEXP names = PROTECT(Rf_getAttrib(updates, R_NamesSymbol));
   const R_xlen_t update_count = XLENGTH(updates);
-  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
-      XLENGTH(names) != update_count) {
-    UNPROTECT(2);
-    Rf_error("Internal error: ParamSet state updates must be named");
-  }
 
+  /*
+   * Own the replacement payload before selecting the caller-owned update
+   * names and values.  The shallow copy is safe here because its source is
+   * the authenticated package capsule; after it returns, the exact update
+   * admission and complete field transfer are allocation-free.
+   */
   SEXP payload = PROTECT(Rf_shallow_duplicate(
     R_ExternalPtrProtected(old_core)
   ));
+  if (!paradox_api_has_single_attribute(updates, "names")) {
+    UNPROTECT(2);
+    Rf_error(
+      "Internal error: ParamSet state updates must have only names metadata"
+    );
+  }
+  if (TYPEOF(updates) != VECSXP || ALTREP(updates) || Rf_isS4(updates) ||
+      XLENGTH(updates) != update_count) {
+    UNPROTECT(2);
+    Rf_error("ParamSet state updates changed during native mutation");
+  }
+  SEXP names = PROTECT(Rf_getAttrib(updates, R_NamesSymbol));
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+      XLENGTH(names) != update_count) {
+    UNPROTECT(3);
+    Rf_error("Internal error: ParamSet state updates must be named");
+  }
   /* Classify the installation while both generations are in hand: replacing a
    * field with the object it already held changes nothing, and only the fields
    * some other node's schema is derived from can invalidate a cached

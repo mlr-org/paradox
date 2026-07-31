@@ -68,6 +68,7 @@ Encoding: UTF-8
 Config/testthat/edition: 3
 Config/testthat/parallel: false
 NeedsCompilation: yes
+SystemRequirements: USE_C17
 Roxygen: list(markdown = TRUE, r6 = TRUE)
 VignetteBuilder: knitr, rmarkdown
 Collate:

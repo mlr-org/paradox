@@ -79,11 +79,31 @@ static int condition_outer_exact(SEXP condition,
   condition_attribute_snapshot_t attributes = {
     R_NilValue, R_NilValue, 0, FALSE, FALSE, TRUE
   };
-  paradox_api_map_stored_attributes(
+  R_xlen_t observed_attribute_count = 0;
+  const int bounded_attributes =
+    paradox_api_map_bounded_stored_attributes(
     condition,
+    2,
     snapshot_condition_attribute,
-    &attributes
+    &attributes,
+    &observed_attribute_count
   );
+  if (!bounded_attributes || !attributes.exact ||
+      attributes.count != (R_xlen_t) observed_attribute_count) {
+    return FALSE;
+  }
+  /*
+   * Class selection owns the public closed-dispatch diagnostic even when the
+   * remaining Condition shell is malformed. This preserves the useful
+   * distinction between an unsupported/missing Condition kind and corrupt
+   * payload fields without reading an unbounded attribute spine.
+   */
+  if (!attributes.saw_classes) {
+    Rf_error(
+      "Unsupported Condition class; supported classes are 'CondEqual' and 'CondAnyOf'."
+    );
+  }
+
   SEXP classes = PROTECT(attributes.classes);
   const int plain_classes = !Rf_isS4(classes) &&
     paradox_api_has_no_attributes(classes);
@@ -106,17 +126,16 @@ static int condition_outer_exact(SEXP condition,
       "Unsupported Condition class; supported classes are 'CondEqual' and 'CondAnyOf'."
     );
   }
-  *kind = is_equal
-    ? PARADOX_BUILTIN_CONDITION_EQUAL
-    : PARADOX_BUILTIN_CONDITION_ANY_OF;
-
-  if (TYPEOF(condition) != VECSXP || ALTREP(condition) || Rf_isS4(condition) ||
-      XLENGTH(condition) != 2 || !attributes.exact ||
-      attributes.count != 2 || !attributes.saw_names ||
-      !attributes.saw_classes) {
+  if (TYPEOF(condition) != VECSXP || ALTREP(condition) ||
+      Rf_isS4(condition) || XLENGTH(condition) != 2 ||
+      attributes.count != 2 || observed_attribute_count != 2 ||
+      !attributes.saw_names) {
     UNPROTECT(1);
     return FALSE;
   }
+  *kind = is_equal
+    ? PARADOX_BUILTIN_CONDITION_EQUAL
+    : PARADOX_BUILTIN_CONDITION_ANY_OF;
 
   SEXP condition_names = PROTECT(attributes.names);
   if (Rf_isS4(condition_names) ||
@@ -192,8 +211,22 @@ static int scalar_leaf_is_inspectable(SEXP value, SEXP rhs) {
     Rf_getCharCE(STRING_ELT(value, 0)) != CE_BYTES;
 }
 
+static int condition_operand_is_tune_token(SEXP value) {
+  int token = FALSE;
+  if (!paradox_api_ordinary_class_matches(
+      value,
+      "TuneToken",
+      &token
+    )) {
+    Rf_error(
+      "Dependency value class metadata must be ordinary and bounded"
+    );
+  }
+  return token;
+}
+
 int paradox_builtin_condition_scalar_supported(SEXP value, SEXP rhs) {
-  if (value == R_NilValue || Rf_inherits(value, "TuneToken")) {
+  if (value == R_NilValue || condition_operand_is_tune_token(value)) {
     return TRUE;
   }
   return scalar_leaf_is_inspectable(value, rhs) &&
@@ -209,7 +242,7 @@ int paradox_builtin_condition_scalar_supported(SEXP value, SEXP rhs) {
  * leaf the comparator cannot inspect at all is a shape the caller must
  * diagnose separately. */
 int paradox_builtin_condition_scalar_type_mismatch(SEXP value, SEXP rhs) {
-  return value != R_NilValue && !Rf_inherits(value, "TuneToken") &&
+  return value != R_NilValue && !condition_operand_is_tune_token(value) &&
     scalar_leaf_is_inspectable(value, rhs);
 }
 
@@ -431,13 +464,29 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
     return result;
   }
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(x);
-  if ((type != LGLSXP && type != INTSXP && type != REALSXP &&
-      type != STRSXP) || Rf_isObject(x) || Rf_isS4(x) ||
+  const int source_altrep = ALTREP(x);
+  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
+      type != STRSXP) {
+    UNPROTECT(2);
+    Rf_error("Condition comparison requires a plain atomic vector");
+  }
+  if (Rf_isObject(x) || Rf_isS4(x)) {
+    UNPROTECT(2);
+    Rf_error("Condition comparison requires a plain atomic vector");
+  }
+  /*
+   * Length may dispatch for an admitted ALTREP. Observe it before the
+   * terminal bounded attribute proof so no callback can splice a malformed
+   * attribute spine between that proof and the raw names selector.
+   */
+  const R_xlen_t initial_size = XLENGTH(x);
+  if ((source_altrep &&
+        ((SEXPTYPE) TYPEOF(x) != type || !ALTREP(x) ||
+          Rf_isObject(x) || Rf_isS4(x))) ||
       !paradox_api_has_only_attributes(x, allowed_attributes, 1)) {
     UNPROTECT(2);
     Rf_error("Condition comparison requires a plain atomic vector");
   }
-  const R_xlen_t initial_size = XLENGTH(x);
   /* Deferred-string and wrapper ALTREP names are ordinary base-R output
    * (`names(x) <- as.character(...)`), so the names shell admits ALTREP.
    * This boundary never reads a name element: the ordinary path attaches the

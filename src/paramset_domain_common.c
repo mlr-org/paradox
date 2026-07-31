@@ -25,9 +25,9 @@ const char *const paradox_domain_column_names[PARADOX_DOMAIN_COLUMN_COUNT] = {
   ".trafo", ".requirements", ".init_given", ".init"
 };
 
-static const SEXPTYPE permanent_column_types[PARADOX_DOMAIN_TAGS] = {
+const SEXPTYPE paradox_domain_column_types[PARADOX_DOMAIN_COLUMN_COUNT] = {
   STRSXP, STRSXP, STRSXP, VECSXP, REALSXP, REALSXP, REALSXP, VECSXP,
-  VECSXP, VECSXP, STRSXP
+  VECSXP, VECSXP, STRSXP, VECSXP, VECSXP, VECSXP, LGLSXP, VECSXP
 };
 
 int paradox_domain_string_is(SEXP string, const char *expected) {
@@ -48,8 +48,9 @@ void paradox_domain_intern_column_names(void) {
   }
 }
 
-void paradox_domain_select_columns(SEXP table, const char *corrupt_context,
-    const char *storage_name, unsigned int required_mask, SEXP *columns) {
+void paradox_domain_select_columns_with_positions(SEXP table,
+    const char *corrupt_context, const char *storage_name,
+    unsigned int required_mask, SEXP *columns, R_xlen_t *positions) {
   if (TYPEOF(table) != VECSXP || Rf_isS4(table)) {
     Rf_error("Corrupt %s: `%s` must be a list", corrupt_context, storage_name);
   }
@@ -61,7 +62,28 @@ void paradox_domain_select_columns(SEXP table, const char *corrupt_context,
     );
   }
 
-  SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
+  /*
+   * Bound the complete caller-owned attribute spine before selecting names.
+   * The raw selector is allocation-free but cannot itself stop on a cyclic
+   * pre-4.6 pairlist; the bounded query also rejects duplicate/malformed
+   * tag/value cells.
+   */
+  int has_names = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      table,
+      R_NamesSymbol,
+      &has_names
+    ) || !has_names) {
+    Rf_error(
+      "Corrupt %s: `%s` must be a named list",
+      corrupt_context,
+      storage_name
+    );
+  }
+  SEXP names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_NamesSymbol
+  ));
   const R_xlen_t n_columns = XLENGTH(table);
   if (TYPEOF(names) != STRSXP || Rf_isS4(names) ||
       Rf_isObject(names) || !paradox_api_has_no_attributes(names)) {
@@ -86,20 +108,54 @@ void paradox_domain_select_columns(SEXP table, const char *corrupt_context,
     );
   }
 
-  int counts[PARADOX_DOMAIN_COLUMN_COUNT] = {0};
+  int canonical_layout =
+    n_columns == (R_xlen_t) PARADOX_DOMAIN_COLUMN_COUNT;
+  const SEXP *name_values = canonical_layout
+    ? STRING_PTR_RO(names)
+    : NULL;
   for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
     columns[target] = R_NilValue;
+    if (positions != NULL) positions[target] = R_XLEN_T_MAX;
+    if (canonical_layout &&
+        name_values[target] != interned_domain_column_names[target]) {
+      canonical_layout = FALSE;
+    }
   }
+  /*
+   * Exact canonical sixteen-column tables prove every requested name present
+   * and unique in one pointer-only pass. This is also the pre-value-callback
+   * fast path for the Domain shape probe: malformed, reordered, or foreign
+   * layouts retain the complete diagnostic selector below.
+   */
+  if (canonical_layout) {
+    const SEXP *table_values = (const SEXP *) DATAPTR_RO(table);
+    for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
+      if ((required_mask >> target) & 1U) {
+        columns[target] = table_values[target];
+        if (positions != NULL) positions[target] = (R_xlen_t) target;
+      }
+    }
+    UNPROTECT(1);
+    return;
+  }
+
+  int counts[PARADOX_DOMAIN_COLUMN_COUNT] = {0};
   for (R_xlen_t index = 0; index < n_columns; ++index) {
     SEXP name = STRING_ELT(names, index);
     if (name == NA_STRING) {
       continue;
     }
-    int matched = -1;
-    for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
-      if (name == interned_domain_column_names[target]) {
-        matched = target;
-        break;
+    int matched =
+      index < (R_xlen_t) PARADOX_DOMAIN_COLUMN_COUNT &&
+        name == interned_domain_column_names[index]
+        ? (int) index
+        : -1;
+    if (matched < 0) {
+      for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
+        if (name == interned_domain_column_names[target]) {
+          matched = target;
+          break;
+        }
       }
     }
     if (matched < 0) {
@@ -117,6 +173,7 @@ void paradox_domain_select_columns(SEXP table, const char *corrupt_context,
       continue;
     }
     columns[matched] = VECTOR_ELT(table, index);
+    if (positions != NULL) positions[matched] = index;
     ++counts[matched];
   }
   for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
@@ -139,6 +196,75 @@ void paradox_domain_select_columns(SEXP table, const char *corrupt_context,
     );
   }
   UNPROTECT(1);
+}
+
+void paradox_domain_select_columns(SEXP table, const char *corrupt_context,
+    const char *storage_name, unsigned int required_mask, SEXP *columns) {
+  paradox_domain_select_columns_with_positions(
+    table,
+    corrupt_context,
+    storage_name,
+    required_mask,
+    columns,
+    NULL
+  );
+}
+
+int paradox_domain_column_shell_is_exact(SEXP column,
+    enum paradox_domain_column selected, R_xlen_t row_count) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
+  const int numeric = selected == PARADOX_DOMAIN_LOWER ||
+    selected == PARADOX_DOMAIN_UPPER ||
+    selected == PARADOX_DOMAIN_TOLERANCE;
+  return !ALTREP(column) && !Rf_isS4(column) &&
+    !Rf_isObject(column) && paradox_api_has_no_attributes(column) &&
+    XLENGTH(column) == row_count && (numeric
+      ? type == INTSXP || type == REALSXP
+      : type == paradox_domain_column_types[selected]);
+}
+
+int paradox_domain_selected_columns_current(SEXP table, const SEXP *columns,
+    const R_xlen_t *positions, R_xlen_t row_count) {
+  if (TYPEOF(table) != VECSXP || ALTREP(table) || Rf_isS4(table) ||
+      XLENGTH(table) != PARADOX_DOMAIN_COLUMN_COUNT) {
+    return FALSE;
+  }
+  int has_names = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      table,
+      R_NamesSymbol,
+      &has_names
+    ) || !has_names) {
+    return FALSE;
+  }
+  SEXP names = paradox_api_raw_attribute(table, R_NamesSymbol);
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+      Rf_isObject(names) || !paradox_api_has_no_attributes(names) ||
+      XLENGTH(names) != PARADOX_DOMAIN_COLUMN_COUNT) {
+    return FALSE;
+  }
+  const SEXP *table_values = (const SEXP *) DATAPTR_RO(table);
+  const SEXP *name_values = STRING_PTR_RO(names);
+  for (int target = 0; target < PARADOX_DOMAIN_COLUMN_COUNT; ++target) {
+    const R_xlen_t position = positions[target];
+    if (position < 0 || position >= PARADOX_DOMAIN_COLUMN_COUNT) {
+      return FALSE;
+    }
+    SEXP name = name_values[position];
+    SEXP column = table_values[position];
+    if ((name != interned_domain_column_names[target] &&
+        (name == NA_STRING ||
+          strcmp(CHAR(name), paradox_domain_column_names[target]) != 0)) ||
+        column != columns[target] ||
+        !paradox_domain_column_shell_is_exact(
+          column,
+          (enum paradox_domain_column) target,
+          row_count
+        )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
 }
 
 SEXP paradox_domain_character_vector(const char *const *values,
@@ -382,24 +508,83 @@ int paradox_domain_exact_string_vector(SEXP value,
   return TRUE;
 }
 
+typedef struct {
+  SEXP names;
+  SEXP classes;
+  SEXP row_names;
+  int valid;
+} exact_plain_table_attributes_t;
+
+static void capture_exact_plain_table_attribute(
+    SEXP tag, SEXP value, void *data) {
+  exact_plain_table_attributes_t *attributes = data;
+  if (!attributes->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue) {
+    attributes->valid = FALSE;
+    return;
+  }
+  SEXP *destination = NULL;
+  if (tag == R_NamesSymbol) {
+    destination = &attributes->names;
+  } else if (tag == R_ClassSymbol) {
+    destination = &attributes->classes;
+  } else if (tag == R_RowNamesSymbol) {
+    destination = &attributes->row_names;
+  } else {
+    attributes->valid = FALSE;
+    return;
+  }
+  if (*destination != R_NilValue) {
+    attributes->valid = FALSE;
+    return;
+  }
+  *destination = value;
+}
+
+static int capture_exact_plain_table_attributes(
+    SEXP table, exact_plain_table_attributes_t *attributes) {
+  *attributes = (exact_plain_table_attributes_t) {
+    R_NilValue,
+    R_NilValue,
+    R_NilValue,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  return paradox_api_map_bounded_stored_attributes(
+      table,
+      3,
+      capture_exact_plain_table_attribute,
+      attributes,
+      &count
+    ) && attributes->valid && count == 3 &&
+    attributes->names != R_NilValue &&
+    attributes->classes != R_NilValue &&
+    attributes->row_names != R_NilValue;
+}
+
 int paradox_domain_exact_plain_table(SEXP table,
     const char *const *column_names, R_xlen_t column_count,
     R_xlen_t *row_count, R_xlen_t *work_since_interrupt) {
   static const char *const table_classes[] = {"data.frame"};
-  static const char *const allowed_attributes[] = {
-    "names", "class", "row.names"
-  };
   if (TYPEOF(table) != VECSXP || ALTREP(table) || Rf_isS4(table)) {
     return FALSE;
   }
   PROTECT(table);
   const R_xlen_t observed_column_count = XLENGTH(table);
-  SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
-  SEXP classes = PROTECT(Rf_getAttrib(table, R_ClassSymbol));
-  SEXP row_names = PROTECT(paradox_api_raw_attribute(
-    table,
-    R_RowNamesSymbol
-  ));
+  /*
+   * Prove and select the complete three-cell metadata generation in the same
+   * hard-bounded pass. No cyclic or overlong pre-4.6 pairlist can reach an
+   * unbounded compatibility selector, and the ordinary path avoids a second
+   * attribute-spine scan.
+   */
+  exact_plain_table_attributes_t attributes;
+  if (!capture_exact_plain_table_attributes(table, &attributes)) {
+    UNPROTECT(1);
+    return FALSE;
+  }
+  SEXP names = PROTECT(attributes.names);
+  SEXP classes = PROTECT(attributes.classes);
+  SEXP row_names = PROTECT(attributes.row_names);
   R_xlen_t observed_row_count = 0;
   int valid = observed_column_count == column_count &&
     !Rf_isS4(names) && !Rf_isObject(names) &&
@@ -416,7 +601,6 @@ int paradox_domain_exact_plain_table(SEXP table,
     if (valid) observed_row_count = XLENGTH(first);
   }
   valid = valid &&
-    paradox_api_has_only_attributes(table, allowed_attributes, 3) &&
     has_no_attributes(names) &&
     has_no_attributes(classes) &&
     paradox_domain_exact_string_vector(
@@ -694,18 +878,20 @@ static int validate_param_row(domain_kind_t kind, SEXP levels,
     SEXP special_values, R_xlen_t row, R_xlen_t *work_since_interrupt) {
   SEXP row_levels = PROTECT(VECTOR_ELT(levels, row));
   SEXP row_special_values = PROTECT(VECTOR_ELT(special_values, row));
-  SEXP special_classes = PROTECT(Rf_getAttrib(
+  int has_class = FALSE;
+  const int bounded_metadata = paradox_bounded_metadata_has_tag(
     row_special_values,
-    R_ClassSymbol
-  ));
+    R_ClassSymbol,
+    &has_class
+  );
   const int valid = canonical_levels(
       kind,
       row_levels,
       work_since_interrupt
     ) && TYPEOF(row_special_values) == VECSXP &&
       !ALTREP(row_special_values) && !Rf_isS4(row_special_values) &&
-      special_classes == R_NilValue;
-  UNPROTECT(3);
+      bounded_metadata && !has_class;
+  UNPROTECT(2);
   return valid;
 }
 
@@ -729,7 +915,7 @@ static int validate_params_rooted(SEXP params, SEXP selected_id,
       column == PARADOX_DOMAIN_TOLERANCE;
     if (ALTREP(value) || Rf_isS4(value) || Rf_isObject(value) || (numeric
           ? type != REALSXP && type != INTSXP
-          : type != permanent_column_types[column]) ||
+          : type != paradox_domain_column_types[column]) ||
         !has_no_attributes(value) || XLENGTH(value) != row_count) {
       return FALSE;
     }

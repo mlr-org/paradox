@@ -9,6 +9,13 @@
  * Current capsule-backed shells are traversed but are not candidates. */
 attribute_hidden SEXP paradox_upgrade_graph_discover(SEXP root);
 
+/* Test-only post-boundary-initialization hook proving that every raw boundary
+ * identity remains rooted for the complete allocating crawl. */
+attribute_hidden SEXP paradox_test_upgrade_graph_boundary_lifetime(
+  SEXP root,
+  SEXP hook
+);
+
 /* Own exact ordinary class metadata without inheritance dispatch or ALTREP
  * observation. NULL denotes no class; FALSE denotes malformed structure. */
 attribute_hidden SEXP paradox_upgrade_class_snapshot(SEXP value);

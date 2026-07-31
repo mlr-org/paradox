@@ -743,6 +743,71 @@ test_that("user-database environments are opaque graph boundaries", {
   expect_identical(namespace_reads, 0L)
 })
 
+test_that("detached search boundaries stay rooted through discovery", {
+  search_prefix = paste0(
+    "paradox_boundary_lifetime_",
+    Sys.getpid()
+  )
+  search_names = paste0(search_prefix, "_", seq_len(40L))
+  expect_false(any(search_names %in% search()))
+  attached = character()
+  on.exit({
+    for (search_name in rev(attached)) {
+      if (search_name %in% search()) {
+        detach(search_name, character.only = TRUE)
+      }
+    }
+  }, add = TRUE)
+
+  for (index in seq_along(search_names)) {
+    search_name = search_names[[index]]
+    attach(
+      setNames(list(TRUE), paste0(search_prefix, "_binding_", index)),
+      name = search_name
+    )
+    attached = c(attached, search_name)
+  }
+  # The first attached environment is now preceded by at least 39 other
+  # search-path boundaries. This deliberately crosses the native carrier's
+  # initial capacity and exercises its rooted growth path.
+  boundary = as.environment(search_names[[1L]])
+  state = new.env(parent = emptyenv())
+  state$detached = FALSE
+  state$finalized = FALSE
+  state$finalized_during_call = NA
+  reg.finalizer(boundary, function(unused) {
+    state$finalized = TRUE
+  })
+  rm(boundary)
+
+  hook = function() {
+    for (search_name in search_names) {
+      detach(search_name, character.only = TRUE)
+    }
+    attached <<- character()
+    state$detached = TRUE
+    gc(full = TRUE)
+    state$finalized_during_call = state$finalized
+  }
+  result = .Call(
+    get(
+      "C_test_upgrade_graph_boundary_lifetime",
+      envir = asNamespace("paradox")
+    ),
+    list(),
+    hook
+  )
+
+  expect_true(state$detached)
+  expect_identical(state$finalized_during_call, FALSE)
+  expect_identical(result, list(objects = list(), paths = character()))
+  for (iteration in 1:4) {
+    if (state$finalized) break
+    gc(full = TRUE)
+  }
+  expect_true(state$finalized)
+})
+
 test_that("native graph discovery does not consume the C or R stack", {
   candidate = graph_candidate("deep")
   root = candidate
@@ -752,23 +817,202 @@ test_that("native graph discovery does not consume the C or R stack", {
   expect_identical(discovery$objects[[1L]], candidate)
 })
 
-test_that("graph discovery balances a self-duplicating ALTREP root", {
+test_that("closure discovery shallow-snapshots deep and cyclic structure", {
+  candidate = graph_candidate("deep-closure")
+  expression = candidate
+  for (index in seq_len(5000L)) {
+    expression = call("identity", expression)
+  }
+  closure = function() NULL
+  body(closure) = expression
+  cyclic_metadata = new.env(parent = emptyenv())
+  cyclic_metadata$self = cyclic_metadata
+  attr(closure, "paradox.cyclic.environment") = cyclic_metadata
+  # Install a genuine self-edge through the native by-reference fixture,
+  # without replacement-function copy-on-write where the runtime permits it.
+  # R 3.6 may retain the pre-attribute closure shell instead; the independent
+  # environment edge above still provides a portable metadata cycle. The old-R
+  # closure snapshot must not recursively duplicate either the deep body or
+  # closure-valued metadata before the iterative walker sees them.
+  pointer = .Call(
+    get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
+    closure,
+    "paradox.self",
+    closure
+  )
+  rm(pointer)
+  for (iteration in 1:3) {
+    invisible(gc(full = TRUE))
+  }
+  installed_self = attr(closure, "paradox.self", exact = TRUE)
+  expect_true(is.function(installed_self))
+  if (getRversion() >= "4.5.0") {
+    expect_identical(installed_self, closure)
+  }
+  expect_identical(cyclic_metadata$self, cyclic_metadata)
+
+  discovery = discover_upgrade_candidates(closure)
+
+  expect_true(same_environment_set(discovery$objects, list(candidate)))
+  expect_identical(
+    attr(closure, "paradox.self", exact = TRUE),
+    installed_self
+  )
+  expect_identical(
+    attr(closure, "paradox.cyclic.environment", exact = TRUE),
+    cyclic_metadata
+  )
+})
+
+test_that("graph discovery never splices vector attributes and elements", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = graph_candidate("vector-generation-old")
+  state$new = graph_candidate("vector-generation-new")
+  state$carrier = list(value = state$old)
+  attr(state$carrier, "paradox.edge") = state$old
+  state$fired = FALSE
+  carrier = state$carrier
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    # Both changes are by-reference and form one finalizer generation. A
+    # crawler may select either side, but not one attribute edge from the old
+    # side and one primary edge from the new side.
+    data.table::setattr(state$carrier, "paradox.edge", state$new)
+    data.table::setattr(state$carrier, "class", "data.frame")
+    data.table::setattr(state$carrier, "row.names", 1L)
+    data.table::set(state$carrier, j = 1L, value = list(state$new))
+    data.table::setattr(state$carrier, "class", NULL)
+    data.table::setattr(state$carrier, "row.names", NULL)
+  })
+  trigger = NULL
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  discovery = discover_upgrade_candidates(carrier)
+  gctorture(previous)
+
+  expect_true(
+    same_environment_set(discovery$objects, list(state$old)) ||
+      same_environment_set(discovery$objects, list(state$new))
+  )
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("environment discovery uses two equal complete edge snapshots", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = graph_candidate("environment-generation-old")
+  state$new = graph_candidate("environment-generation-new")
+  state$host = new.env(parent = state$old)
+  state$host$value = state$old
+  attr(state$host, "paradox.edge") = state$old
+  state$fired = FALSE
+  host = state$host
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    attr(state$host, "paradox.edge") = state$new
+    assign("value", state$new, envir = state$host)
+    parent.env(state$host) = state$new
+  })
+  trigger = NULL
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  discovery = tryCatch(
+    discover_upgrade_candidates(host),
+    error = identity
+  )
+  gctorture(previous)
+
+  if (inherits(discovery, "error")) {
+    expect_match(
+      conditionMessage(discovery),
+      "environment changed during inspection",
+      fixed = TRUE
+    )
+  } else {
+    expect_true(
+      same_environment_set(discovery$objects, list(state$old)) ||
+        same_environment_set(discovery$objects, list(state$new))
+    )
+  }
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("environment boundary policy comes from the selected generation", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = graph_candidate("environment-boundary-old")
+  state$new = graph_candidate("environment-boundary-new")
+  state$host = new.env(parent = state$old)
+  state$host$value = state$old
+  state$fired = FALSE
+  host = state$host
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    assign("value", state$new, envir = state$host)
+    parent.env(state$host) = state$new
+    attr(state$host, "name") = "package:finalizer-boundary"
+  })
+  trigger = NULL
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  discovery = tryCatch(
+    discover_upgrade_candidates(host),
+    error = identity
+  )
+  gctorture(previous)
+
+  if (inherits(discovery, "error")) {
+    expect_match(
+      conditionMessage(discovery),
+      "environment changed during inspection",
+      fixed = TRUE
+    )
+  } else {
+    expect_true(
+      same_environment_set(discovery$objects, list(state$old)) ||
+        same_environment_set(discovery$objects, list())
+    )
+  }
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("graph discovery rejects structural ALTREP without observation", {
   skip_if_no_list_altrep()
 
-  candidate = graph_candidate("self-duplicating-altrep")
+  callbacks = 0L
+  candidate = graph_candidate("structural-altrep")
   carrier = native_stateful_altrep(
     list(candidate),
     list(candidate),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+    },
+    callback_after = c(0L, 0L),
     duplicate_returns_self = TRUE
   )
 
-  diagnostics = capture.output(
-    discovery <- discover_upgrade_candidates(carrier),
-    type = "message"
+  expect_error(
+    discover_upgrade_candidates(carrier),
+    "structural list/expression vectors must not use ALTREP",
+    fixed = TRUE
   )
-  expect_false(any(grepl("stack imbalance", diagnostics, fixed = TRUE)))
-  expect_identical(discovery$objects, list(candidate))
-  expect_identical(discovery$paths, "x[[1]]")
+  expect_identical(callbacks, 0L)
 })
 
 test_that("graph paths render multi-digit indices portably", {

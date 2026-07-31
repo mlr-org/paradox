@@ -87,6 +87,371 @@ test_that("the general data.table finalizer materializes stable ALTREP columns",
   ))
 })
 
+test_that("package facades own ordinary structure and reject structural ALTREP", {
+  facade = paradox:::param_set_data_table_facade(list(
+    left = 1:3,
+    right = letters[1:3]
+  ))
+  expect_s3_class(facade, "data.table")
+  expect_identical(facade$left, 1:3)
+  expect_identical(facade$right, letters[1:3])
+  expect_identical(row.names(facade), as.character(1:3))
+  expect_identical(.row_names_info(facade, 0L), c(NA_integer_, -3L))
+
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  structural_altrep = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L)
+  )
+  source = structure(
+    list(value = 1:2),
+    names = "value",
+    row.names = c(NA_integer_, -2L),
+    class = c("data.table", "data.frame"),
+    metadata = structural_altrep
+  )
+  expect_error(
+    .Call(paradox:::C_finalize_data_table, source),
+    "expected bounded data.table metadata"
+  )
+})
+
+test_that("the general data.table finalizer bounds recursive column metadata", {
+  finalize_column = function(column) {
+    table = structure(
+      list(value = column),
+      names = "value",
+      row.names = c(NA_integer_, -2L),
+      class = c("data.table", "data.frame")
+    )
+    .Call(paradox:::C_finalize_data_table, table)
+  }
+  finalize = function(metadata) {
+    finalize_column(structure(1:2, metadata = metadata))
+  }
+  finalize_cycle = function() {
+    metadata = list(NULL)
+    # Build the complete input while its metadata is acyclic. R 3.6's public
+    # structure/attribute setters recursively duplicate an already-cyclic
+    # value and overflow before the package can inspect it.
+    column = structure(1:2, metadata = metadata)
+    table = structure(
+      list(value = column),
+      names = "value",
+      row.names = c(NA_integer_, -2L),
+      class = c("data.table", "data.frame")
+    )
+    pointer = .Call(
+      get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+      metadata,
+      0L,
+      metadata
+    )
+    rm(pointer)
+    for (attempt in seq_len(3L)) {
+      invisible(gc(full = TRUE))
+    }
+    stopifnot(identical(
+      data.table::address(metadata[[1L]]),
+      data.table::address(metadata)
+    ))
+    .Call(paradox:::C_finalize_data_table, table)
+  }
+
+  deep = TRUE
+  for (depth in seq_len(100L)) {
+    deep = list(deep)
+  }
+  expect_error(
+    finalize(deep),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+  expect_error(
+    finalize_cycle(),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+})
+
+test_that("ALTREP column callbacks cannot introduce recursive metadata", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  state = new.env(parent = emptyenv())
+  state$callbacks = 0L
+  column = native_stateful_altrep(
+    structure(1:2, metadata = list(NULL)),
+    structure(1:2, metadata = list(NULL)),
+    callback = function() {
+      state$callbacks = state$callbacks + 1L
+      pointer = state$mutator
+      state$mutator = NULL
+      rm(pointer)
+      invisible(gc(full = TRUE))
+    },
+    callback_after = 0L
+  )
+  metadata = attr(column, "metadata", exact = TRUE)
+  state$mutator = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    metadata,
+    0L,
+    metadata
+  )
+  table = structure(
+    list(value = column),
+    names = "value",
+    row.names = c(NA_integer_, -2L),
+    class = c("data.table", "data.frame")
+  )
+
+  expect_error(
+    .Call(paradox:::C_finalize_data_table, table),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+  expect_identical(state$callbacks, 1L)
+})
+
+test_that("metadata mutation after preflight cannot enter R's duplicator", {
+  metadata = list(NULL)
+  value = structure(3L, metadata = metadata)
+  state = new.env(parent = emptyenv())
+  state$hook_calls = 0L
+  mutator = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    metadata,
+    0L,
+    metadata
+  )
+  hook = function() {
+    state$hook_calls = state$hook_calls + 1L
+    pointer = mutator
+    mutator <<- NULL
+    rm(pointer)
+    for (attempt in seq_len(3L)) {
+      invisible(gc(full = TRUE))
+    }
+  }
+
+  expect_error(
+    .Call(
+      get(
+        "C_test_builtin_metadata_copy_reentry",
+        envir = asNamespace("paradox")
+      ),
+      value,
+      hook
+    ),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+  expect_identical(state$hook_calls, 1L)
+  expect_identical(
+    data.table::address(metadata[[1L]]),
+    data.table::address(metadata)
+  )
+})
+
+test_that("finalizer-expanded attribute spines remain bounded", {
+  value = structure(3L, metadata = "selected")
+  labels = sprintf("late_attribute_%03d", seq_len(65L))
+  # Intern every label before the finalizers run so this fixture tests the
+  # bounded spine walk rather than symbol allocation inside the GC callback.
+  invisible(lapply(labels, as.name))
+  mutators = lapply(seq_along(labels), function(index) {
+    .Call(
+      get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
+      value,
+      labels[[index]],
+      index
+    )
+  })
+  hook = function() {
+    pointers = mutators
+    mutators <<- NULL
+    rm(pointers)
+    for (attempt in seq_len(3L)) {
+      invisible(gc(full = TRUE))
+    }
+  }
+
+  expect_error(
+    .Call(
+      get(
+        "C_test_builtin_metadata_copy_reentry",
+        envir = asNamespace("paradox")
+      ),
+      value,
+      hook
+    ),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+  expect_true(all(labels %in% names(attributes(value))))
+})
+
+test_that("preexisting overlong attribute spines reject cleanly", {
+  value = 3L
+  labels = sprintf("attribute_%03d", seq_len(65L))
+  attributes(value) = stats::setNames(as.list(seq_along(labels)), labels)
+
+  expect_error(
+    .Call(
+      get(
+        "C_test_builtin_metadata_copy_reentry",
+        envir = asNamespace("paradox")
+      ),
+      value,
+      NULL
+    ),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+})
+
+test_that("setter-normalized raw attributes cannot disappear silently", {
+  # Public setters remove an empty `class`, so create the same raw serialized
+  # pairlist by renaming an equally long ordinary attribute in the bytes.
+  value = structure(3L, zzzzz = character())
+  bytes = serialize(value, NULL, version = 2L)
+  marker = charToRaw("zzzzz")
+  offsets = which(vapply(
+    seq_len(length(bytes) - length(marker) + 1L),
+    function(offset) {
+      identical(
+        bytes[offset:(offset + length(marker) - 1L)],
+        marker
+      )
+    },
+    logical(1L)
+  ))
+  expect_length(offsets, 1L)
+  bytes[offsets[[1L]]:(offsets[[1L]] + length(marker) - 1L)] =
+    charToRaw("class")
+  value = unserialize(bytes)
+  expect_identical(attr(value, "class", exact = TRUE), character())
+
+  expect_error(
+    .Call(
+      get(
+        "C_test_builtin_metadata_copy_reentry",
+        envir = asNamespace("paradox")
+      ),
+      value,
+      NULL
+    ),
+    "Built-in value changed while being snapshotted"
+  )
+})
+
+test_that("metadata root back-edges reject at the bounded graph root", {
+  metadata = list(NULL)
+  value = structure(3L, metadata = metadata)
+  mutator = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    metadata,
+    0L,
+    value
+  )
+  rm(mutator)
+  for (attempt in seq_len(3L)) {
+    invisible(gc(full = TRUE))
+  }
+  expect_identical(
+    data.table::address(attr(metadata[[1L]], "metadata")),
+    data.table::address(metadata)
+  )
+  expect_error(
+    .Call(
+      get(
+        "C_test_builtin_metadata_copy_reentry",
+        envir = asNamespace("paradox")
+      ),
+      value,
+      NULL
+    ),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+})
+
+test_that("bounded metadata copying preserves public attribute families", {
+  named = stats::setNames(c(1, 2), c("left", "right"))
+  matrixish = 1:4
+  attributes(matrixish) = list(
+    dim = c(2L, 2L),
+    names = letters[1:4],
+    dimnames = list(c("r1", "r2"), c("c1", "c2")),
+    matrix_note = list(labels = c("one", "two")),
+    class = "matrixish"
+  )
+  frame = data.frame(
+    value = c(3L, 4L),
+    row.names = c("row-a", "row-b")
+  )
+  series = stats::ts(c(5, 6, 7, 8), start = c(2001, 2), frequency = 4)
+  comment(series) = "bounded metadata"
+  categorical = factor(c("b", "a"), levels = c("a", "b"))
+  custom = structure(
+    c("x", "y"),
+    custom = list(labels = structure(c("X", "Y"), marker = TRUE))
+  )
+  source = structure(
+    11L,
+    metadata = list(
+      named = named,
+      matrixish = matrixish,
+      frame = frame,
+      series = series,
+      categorical = categorical,
+      custom = custom
+    )
+  )
+
+  result = .Call(
+    get(
+      "C_test_builtin_metadata_copy_reentry",
+      envir = asNamespace("paradox")
+    ),
+    source,
+    NULL
+  )
+  source_metadata = attr(source, "metadata", exact = TRUE)
+  result_metadata = attr(result, "metadata", exact = TRUE)
+  expect_identical(unclass(result), unclass(source))
+  expect_identical(names(result_metadata), names(source_metadata))
+  expect_false(identical(
+    data.table::address(result_metadata),
+    data.table::address(source_metadata)
+  ))
+  for (name in names(source_metadata)) {
+    source_value = source_metadata[[name]]
+    result_value = result_metadata[[name]]
+    expect_identical(typeof(result_value), typeof(source_value))
+    expect_identical(length(result_value), length(source_value))
+    source_attributes = attributes(source_value)
+    result_attributes = attributes(result_value)
+    expect_setequal(names(result_attributes), names(source_attributes))
+    for (attribute in names(source_attributes)) {
+      expect_identical(
+        attr(result_value, attribute, exact = TRUE),
+        attr(source_value, attribute, exact = TRUE)
+      )
+    }
+    expect_false(identical(
+      data.table::address(result_value),
+      data.table::address(source_value)
+    ))
+  }
+  expect_false(identical(
+    data.table::address(levels(result_metadata$categorical)),
+    data.table::address(levels(source_metadata$categorical))
+  ))
+  expect_false(identical(
+    data.table::address(attr(result_metadata$custom, "custom")$labels),
+    data.table::address(attr(source_metadata$custom, "custom")$labels)
+  ))
+})
+
 test_that("ParamSet schema accessors own interpreted and typed leaves", {
   aggregate = function(x) sum(unlist(x))
   convert = function(domain, param_vals) param_vals[[1L]]
@@ -328,6 +693,67 @@ test_that("typed special ingress is owned while opaque identity is retained", {
   expect_identical(utility_set$special_vals$value[[1L]], opaque)
   expect_identical(utility_set$default$value, opaque)
   expect_identical(utility_set$domains$value$special_vals[[1L]][[1L]], opaque)
+})
+
+test_that("typed special ingress bounds metadata before duplication", {
+  metadata = TRUE
+  for (depth in seq_len(300L)) {
+    metadata = list(metadata)
+  }
+  typed = structure(3L, metadata = metadata)
+  expect_error(
+    p_int(0, 5, special_vals = list(typed)),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+
+  wide = 3L
+  attributes(wide) = stats::setNames(
+    as.list(seq_len(65L)),
+    paste0("metadata_", seq_len(65L))
+  )
+  expect_error(
+    p_int(0, 5, special_vals = list(wide)),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+
+  broad = structure(3L, metadata = rep(list(NULL), 65536L))
+  expect_error(
+    p_int(0, 5, special_vals = list(broad)),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+})
+
+test_that("semantic functions retain identity but closure metadata rejects", {
+  semantic_function = function(value) value
+  utility_domain = p_uty(
+    special_vals = list(semantic_function),
+    default = semantic_function
+  )
+  expect_identical(
+    data.table::address(utility_domain$special_vals[[1L]][[1L]]),
+    data.table::address(semantic_function)
+  )
+  expect_identical(
+    data.table::address(utility_domain$default[[1L]]),
+    data.table::address(semantic_function)
+  )
+
+  typed = structure(3L, metadata = semantic_function)
+  expect_error(
+    p_int(0, 5, special_vals = list(typed)),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
+
+  table = structure(
+    list(value = structure(1:2, metadata = semantic_function)),
+    names = "value",
+    row.names = c(NA_integer_, -2L),
+    class = c("data.table", "data.frame")
+  )
+  expect_error(
+    .Call(paradox:::C_finalize_data_table, table),
+    "metadata must be ordinary, acyclic, and bounded"
+  )
 })
 
 test_that("raw and filtered value accessors detach typed values on every graph", {

@@ -2,7 +2,10 @@
 # warnings are fatal.  This is intentionally separate from runtime testing.
 
 CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
-CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+# DESCRIPTION requests USE_C17 for ordinary installs.  Keep this release lane
+# on its stronger portable-source contract by deliberately supplying GNU C99
+# through R's selected no-later-than-C17 variable.
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
 SHLIB_LD = $(CC)
 # glibc deliberately diagnoses _FORTIFY_SOURCE at -O0. The analyzer stays
 # unoptimized for path fidelity; the strict and runtime profiles retain

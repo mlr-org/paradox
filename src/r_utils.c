@@ -134,18 +134,20 @@ static SEXP canonical_public_table_class(paradox_public_table_kind_t kind) {
   return classes;
 }
 
-static int ordinary_ignored_data_table_metadata(SEXP table) {
+static int ordinary_ignored_data_table_metadata(
+    SEXP table, SEXP self_reference_symbol, SEXP sorted_symbol,
+    SEXP index_symbol) {
   SEXP self_reference = PROTECT(paradox_api_raw_attribute(
     table,
-    Rf_install(".internal.selfref")
+    self_reference_symbol
   ));
   SEXP sorted = PROTECT(paradox_api_raw_attribute(
     table,
-    Rf_install("sorted")
+    sorted_symbol
   ));
   SEXP index = PROTECT(paradox_api_raw_attribute(
     table,
-    Rf_install("index")
+    index_symbol
   ));
   const int valid_self_reference = self_reference == R_NilValue ||
     (TYPEOF(self_reference) == EXTPTRSXP && !Rf_isS4(self_reference) &&
@@ -169,6 +171,31 @@ paradox_public_table_kind_t paradox_public_table_kind(SEXP table) {
   if (TYPEOF(table) != VECSXP || Rf_isS4(table)) {
     return PARADOX_PUBLIC_TABLE_NONE;
   }
+  if (paradox_api_has_no_attributes(table)) {
+    return PARADOX_PUBLIC_TABLE_NONE;
+  }
+  static const char *const frame_attributes[] = {
+    "names", "row.names", "class"
+  };
+  static const char *const table_attributes[] = {
+    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
+  };
+  /*
+   * Intern every non-global tag before selecting the caller-owned generation.
+   * One exact data.table-superset allow-list scan then proves the complete
+   * spine finite and validates every tag before the raw selectors below.
+   * Nothing between that proof and the final classifier allocates.
+   */
+  SEXP self_reference_symbol = Rf_install(".internal.selfref");
+  SEXP sorted_symbol = Rf_install("sorted");
+  SEXP index_symbol = Rf_install("index");
+  if (!paradox_api_has_only_attributes(
+      table,
+      table_attributes,
+      6
+    )) {
+    return PARADOX_PUBLIC_TABLE_NONE;
+  }
   SEXP classes = PROTECT(paradox_api_raw_attribute(
     table,
     R_ClassSymbol
@@ -185,12 +212,6 @@ paradox_public_table_kind_t paradox_public_table_kind(SEXP table) {
     (TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
       !Rf_isObject(names) && paradox_api_has_no_attributes(names));
   const paradox_public_table_kind_t kind = public_table_class_kind(classes);
-  static const char *const frame_attributes[] = {
-    "names", "row.names", "class"
-  };
-  static const char *const table_attributes[] = {
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-  };
   const int recognized_frame = ordinary_names &&
     kind == PARADOX_PUBLIC_DATA_FRAME &&
     paradox_api_has_only_attributes(
@@ -200,8 +221,12 @@ paradox_public_table_kind_t paradox_public_table_kind(SEXP table) {
     );
   const int recognized_table = ordinary_names &&
     kind == PARADOX_PUBLIC_DATA_TABLE &&
-    paradox_api_has_only_attributes(table, table_attributes, 6) &&
-    ordinary_ignored_data_table_metadata(table);
+    ordinary_ignored_data_table_metadata(
+      table,
+      self_reference_symbol,
+      sorted_symbol,
+      index_symbol
+    );
   UNPROTECT(2);
   return recognized_table
     ? PARADOX_PUBLIC_DATA_TABLE
@@ -239,10 +264,18 @@ int paradox_public_table_row_count(SEXP table, R_xlen_t *row_count) {
   if (row_count == NULL) {
     Rf_error("Internal error: missing public table row-count destination");
   }
-  SEXP row_names = PROTECT(paradox_api_raw_attribute(
-    table,
-    R_RowNamesSymbol
-  ));
+  int has_row_names = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      table,
+      R_RowNamesSymbol,
+      &has_row_names
+    )) {
+    return FALSE;
+  }
+  /* The bounded scan immediately precedes this allocation-free raw lookup. */
+  SEXP row_names = PROTECT(has_row_names
+    ? paradox_api_raw_attribute(table, R_RowNamesSymbol)
+    : R_NilValue);
   const int valid = public_row_names_count(row_names, row_count);
   UNPROTECT(1);
   return valid;
@@ -259,7 +292,18 @@ int paradox_capture_list_identities(SEXP source, SEXP stable_names,
   const R_xlen_t count = XLENGTH(source);
   if (XLENGTH(stable_values) != count) return FALSE;
 
-  SEXP source_names = paradox_api_raw_attribute(source, R_NamesSymbol);
+  int has_source_names = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      source,
+      R_NamesSymbol,
+      &has_source_names
+    )) {
+    return FALSE;
+  }
+  /* The complete bounded scan and this raw lookup are both allocation-free. */
+  SEXP source_names = has_source_names
+    ? paradox_api_raw_attribute(source, R_NamesSymbol)
+    : R_NilValue;
   if (stable_names == R_NilValue) {
     if (source_names != R_NilValue) return FALSE;
   } else {
@@ -396,7 +440,17 @@ static SEXP argument_class(SEXP value) {
     return R_NilValue;
   }
 
-  SEXP classes = PROTECT(Rf_getAttrib(value, R_ClassSymbol));
+  /*
+   * This cold diagnostic accepts a caller-owned object.  Do not let its class
+   * lookup hand an unbounded or cyclic attribute spine to R's compatibility
+   * accessor on an old runtime; the shared snapshot validates the complete
+   * spine and returns the exact ordinary class carrier without allocation.
+   */
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(value, &classes)) {
+    return R_NilValue;
+  }
+  PROTECT(classes);
   SEXP result = R_NilValue;
   if (TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
       paradox_api_has_no_attributes(classes) && XLENGTH(classes) > 0) {
@@ -422,7 +476,25 @@ SEXP paradox_get_named_column_checked(SEXP table, const char *corrupt_context,
     );
   }
 
-  SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
+  int has_names = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      table,
+      R_NamesSymbol,
+      &has_names
+    ) || !has_names) {
+    Rf_error(
+      "Corrupt %s: `%s` must be a named list",
+      corrupt_context,
+      storage_name
+    );
+  }
+  /* The complete bounded scan immediately precedes this allocation-free raw
+   * lookup.  A malformed old-R attribute pairlist therefore cannot enter an
+   * unbounded compatibility traversal. */
+  SEXP names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_NamesSymbol
+  ));
   const R_xlen_t n_columns = XLENGTH(table);
   if (TYPEOF(names) != STRSXP || Rf_isS4(names) ||
       Rf_isObject(names) || !paradox_api_has_no_attributes(names)) {
@@ -1026,6 +1098,92 @@ NORET void paradox_assertion_error(const char *variable, SEXP diagnostic) {
   paradox_error_from_scalar_string(message);
 }
 
+#define PARADOX_BUILTIN_METADATA_MAX_DEPTH 64U
+#define PARADOX_BUILTIN_METADATA_MAX_NODES 65536U
+
+static int bounded_metadata_attribute_count(
+    SEXP value, R_xlen_t *count) {
+  if (paradox_api_has_no_attributes(value)) {
+    *count = 0;
+    return TRUE;
+  }
+  return paradox_api_map_bounded_stored_attributes(
+    value,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    NULL,
+    NULL,
+    count
+  );
+}
+
+static int bounded_metadata_attribute_count_is(
+    SEXP value, R_xlen_t expected) {
+  R_xlen_t count = 0;
+  return bounded_metadata_attribute_count(value, &count) &&
+    count == expected;
+}
+
+static int builtin_metadata_has_no_attributes(SEXP value) {
+  return paradox_api_has_no_attributes(value);
+}
+
+typedef struct {
+  SEXP selected;
+  SEXP tags[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  R_xlen_t count;
+  int found;
+  int valid;
+} bounded_metadata_tag_query_t;
+
+static void select_bounded_metadata_tag(
+    SEXP tag, SEXP value, void *data) {
+  bounded_metadata_tag_query_t *query = data;
+  if (!query->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue ||
+      query->count >=
+        (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH) {
+    query->valid = FALSE;
+    return;
+  }
+  for (R_xlen_t index = 0; index < query->count; ++index) {
+    if (query->tags[index] == tag) {
+      query->valid = FALSE;
+      return;
+    }
+  }
+  query->tags[query->count] = tag;
+  ++query->count;
+  if (tag == query->selected) query->found = TRUE;
+}
+
+int paradox_bounded_metadata_has_tag(
+    SEXP value, SEXP tag, int *found) {
+  if (TYPEOF(tag) != SYMSXP || found == NULL) {
+    Rf_error("Internal error: invalid bounded metadata query");
+  }
+  if (paradox_api_has_no_attributes(value)) {
+    *found = FALSE;
+    return TRUE;
+  }
+  bounded_metadata_tag_query_t query = {
+    tag,
+    {R_NilValue},
+    0,
+    FALSE,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  const int bounded = paradox_api_map_bounded_stored_attributes(
+    value,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    select_bounded_metadata_tag,
+    &query,
+    &count
+  );
+  *found = query.found;
+  return bounded && query.valid && query.count == count;
+}
+
 SEXP paradox_snapshot_semantic_vector(SEXP value) {
   if (value == R_NilValue) {
     return value;
@@ -1049,8 +1207,13 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
    * supported R headers. Normalize the predicate before retaining it so the
    * exact-generation comparisons below stay warning-free on every runtime. */
   const int source_object = Rf_isObject(value) != FALSE;
-  const R_xlen_t source_attribute_count =
-    paradox_api_stored_attribute_count(value);
+  R_xlen_t source_attribute_count = 0;
+  if (!bounded_metadata_attribute_count(
+      value,
+      &source_attribute_count
+    )) {
+    Rf_error("Semantic vector metadata is not bounded");
+  }
   /*
    * Names identify the meaning of semantic elements. Allocate both
    * destinations before selecting either side, then capture an ordinary
@@ -1061,8 +1224,14 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
    * structural names are owned first, then each semantic element is observed
    * exactly once.
    */
-  const int has_names =
-    paradox_api_raw_attribute(value, R_NamesSymbol) != R_NilValue;
+  int has_names = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      value,
+      R_NamesSymbol,
+      &has_names
+    )) {
+    Rf_error("Semantic vector metadata is not ordinary and bounded");
+  }
   SEXP result = PROTECT(Rf_allocVector(type, size));
   int protect_count = 1;
   SEXP stable_names = R_NilValue;
@@ -1070,17 +1239,31 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
     stable_names = PROTECT(Rf_allocVector(STRSXP, size));
     ++protect_count;
   }
-  SEXP source_names = PROTECT(paradox_api_raw_attribute(
-    value,
-    R_NamesSymbol
-  ));
-  ++protect_count;
+  int selected_has_names = FALSE;
   if (Rf_isS4(value) ||
       (Rf_isObject(value) != FALSE) != source_object ||
-      paradox_api_stored_attribute_count(value) != source_attribute_count) {
+      !bounded_metadata_attribute_count_is(
+        value,
+        source_attribute_count
+      ) ||
+      !paradox_bounded_metadata_has_tag(
+        value,
+        R_NamesSymbol,
+        &selected_has_names
+      ) ||
+      selected_has_names != has_names) {
     UNPROTECT(protect_count);
     Rf_error("Semantic vector structure changed while being snapshotted");
   }
+  /*
+   * The bounded tag scan is allocation-free and immediately precedes this raw
+   * selection.  It therefore proves the live spine finite before the selector
+   * can walk it; PROTECT itself performs no intervening allocation.
+   */
+  SEXP source_names = PROTECT(selected_has_names
+    ? paradox_api_raw_attribute(value, R_NamesSymbol)
+    : R_NilValue);
+  ++protect_count;
   /* Deferred-string and wrapper ALTREP names are ordinary base-R output
    * (`names(x) <- as.character(...)`), so the names shell admits ALTREP; the
    * capture below observes each name exactly once, before any semantic
@@ -1181,8 +1364,10 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
   if (semantic_altrep &&
       (Rf_isS4(value) ||
         (Rf_isObject(value) != FALSE) != source_object ||
-        paradox_api_stored_attribute_count(value) !=
-          source_attribute_count)) {
+        !bounded_metadata_attribute_count_is(
+          value,
+          source_attribute_count
+        ))) {
     UNPROTECT(protect_count);
     Rf_error("Semantic vector structure changed while being snapshotted");
   }
@@ -1232,7 +1417,7 @@ static void compare_atomic_leaf_attribute(SEXP tag, SEXP value, void *data) {
   ++receipt->count;
 }
 
-static int ordinary_vector_payload_equal(SEXP left, SEXP right) {
+int paradox_ordinary_vector_payload_equal(SEXP left, SEXP right) {
   if (TYPEOF(left) != TYPEOF(right) || ALTREP(left) || ALTREP(right) ||
       XLENGTH(left) != XLENGTH(right) ||
       Rf_isS4(left) != Rf_isS4(right)) {
@@ -1291,7 +1476,1514 @@ static int ordinary_vector_payload_equal(SEXP left, SEXP right) {
   }
 }
 
-SEXP paradox_snapshot_builtin_value_leaf(SEXP value) {
+/*
+ * Allocate and copy one ordinary vector payload without asking R to duplicate
+ * its caller-owned attribute pairlist. VECSXP/EXPRSXP elements are opaque
+ * payload identities here; callers separately own the bounded presentation
+ * metadata graph when their boundary requires it.
+ */
+static inline SEXP snapshot_ordinary_vector_payload(
+    SEXP source, int require_attribute_free) {
+  if (ALTREP(source) || Rf_isS4(source)) {
+    Rf_error("Cannot own a non-ordinary vector payload");
+  }
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
+      type != CPLXSXP && type != RAWSXP && type != STRSXP &&
+      type != VECSXP && type != EXPRSXP) {
+    Rf_error(
+      "Cannot own vector payload of type `%s`",
+      Rf_type2char(type)
+    );
+  }
+  const R_xlen_t size = XLENGTH(source);
+  /* Every private caller roots `source` across this sole allocation. */
+  SEXP result = PROTECT(Rf_allocVector(type, size));
+  if (ALTREP(source) || Rf_isS4(source) ||
+      (SEXPTYPE) TYPEOF(source) != type || XLENGTH(source) != size ||
+      (require_attribute_free &&
+        (!builtin_metadata_has_no_attributes(source) ||
+          Rf_isObject(source)))) {
+    UNPROTECT(1);
+    Rf_error("Vector payload changed while being snapshotted");
+  }
+  switch (type) {
+  case LGLSXP:
+    if ((uintmax_t) size > SIZE_MAX / sizeof(int)) {
+      UNPROTECT(1);
+      Rf_error("Vector payload is too large to own");
+    }
+    memcpy(
+      LOGICAL(result),
+      LOGICAL_RO(source),
+      (size_t) size * sizeof(int)
+    );
+    break;
+  case INTSXP:
+    if ((uintmax_t) size > SIZE_MAX / sizeof(int)) {
+      UNPROTECT(1);
+      Rf_error("Vector payload is too large to own");
+    }
+    memcpy(
+      INTEGER(result),
+      INTEGER_RO(source),
+      (size_t) size * sizeof(int)
+    );
+    break;
+  case REALSXP:
+    if ((uintmax_t) size > SIZE_MAX / sizeof(double)) {
+      UNPROTECT(1);
+      Rf_error("Vector payload is too large to own");
+    }
+    memcpy(
+      REAL(result),
+      REAL_RO(source),
+      (size_t) size * sizeof(double)
+    );
+    break;
+  case CPLXSXP:
+    if ((uintmax_t) size > SIZE_MAX / sizeof(Rcomplex)) {
+      UNPROTECT(1);
+      Rf_error("Vector payload is too large to own");
+    }
+    memcpy(
+      COMPLEX(result),
+      COMPLEX_RO(source),
+      (size_t) size * sizeof(Rcomplex)
+    );
+    break;
+  case RAWSXP:
+    if ((uintmax_t) size > SIZE_MAX / sizeof(Rbyte)) {
+      UNPROTECT(1);
+      Rf_error("Vector payload is too large to own");
+    }
+    memcpy(
+      RAW(result),
+      RAW_RO(source),
+      (size_t) size * sizeof(Rbyte)
+    );
+    break;
+  case STRSXP:
+    for (R_xlen_t index = 0; index < size; ++index) {
+      SET_STRING_ELT(result, index, STRING_ELT(source, index));
+    }
+    break;
+  case VECSXP:
+  case EXPRSXP:
+    for (R_xlen_t index = 0; index < size; ++index) {
+      SET_VECTOR_ELT(result, index, VECTOR_ELT(source, index));
+    }
+    break;
+  default:
+    UNPROTECT(1);
+    Rf_error("Internal error: unsupported vector payload type");
+  }
+  UNPROTECT(1);
+  return result;
+}
+
+/*
+ * R's ordinary deep duplicator is itself recursive and does not detect
+ * cycles. Built-in leaves deliberately retain arbitrary *ordinary* metadata,
+ * so both the preflight and package-owned bounded copier below enforce the
+ * same explicit depth, per-node attribute-count, and total-node limits.
+ * Malformed native cycles or adversarially broad/deep metadata therefore
+ * become a clean rejection even when a pending finalizer changes a shared
+ * metadata node after preflight.
+ *
+ * These bounds are intentionally far above ordinary class/names/dim/
+ * dimnames/levels metadata.  The node bound also caps a broad acyclic graph;
+ * repeated nodes in a DAG are counted each time because R's deep duplicator
+ * visits them each time too.
+ */
+typedef struct {
+  SEXP path[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  size_t nodes;
+} builtin_metadata_graph_t;
+
+typedef struct {
+  builtin_metadata_graph_t *graph;
+  size_t depth;
+  SEXP tags[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  size_t count;
+  int valid;
+} builtin_metadata_attribute_graph_t;
+
+static int builtin_metadata_graph_is_ordinary(SEXP value,
+  builtin_metadata_graph_t *graph,
+  size_t depth
+);
+
+static int builtin_metadata_attribute_graph_is_ordinary(
+  SEXP value,
+  builtin_metadata_graph_t *graph,
+  size_t depth
+);
+
+static void builtin_metadata_attribute_is_ordinary(SEXP tag, SEXP value,
+    void *data) {
+  builtin_metadata_attribute_graph_t *state = data;
+  if (!state->valid || TYPEOF(tag) != SYMSXP || value == R_NilValue ||
+      state->count >= PARADOX_BUILTIN_METADATA_MAX_DEPTH) {
+    state->valid = FALSE;
+    return;
+  }
+  for (size_t index = 0; index < state->count; ++index) {
+    if (state->tags[index] == tag) {
+      state->valid = FALSE;
+      return;
+    }
+  }
+  state->tags[state->count] = tag;
+  ++state->count;
+  if (state->graph->nodes >= PARADOX_BUILTIN_METADATA_MAX_NODES) {
+    state->valid = FALSE;
+    return;
+  }
+  /* Count the stored attribute edge separately from the value node reached
+   * below, matching the copy and terminal-receipt budgets. */
+  ++state->graph->nodes;
+  if (!builtin_metadata_graph_is_ordinary(
+        value,
+        state->graph,
+        state->depth
+      )) {
+    state->valid = FALSE;
+  }
+}
+
+static int builtin_metadata_attribute_graph_is_ordinary(
+    SEXP value, builtin_metadata_graph_t *graph, size_t depth) {
+  builtin_metadata_attribute_graph_t attribute_state = {
+    graph,
+    depth,
+    {R_NilValue},
+    0U,
+    TRUE
+  };
+  R_xlen_t attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+    value,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    builtin_metadata_attribute_is_ordinary,
+    &attribute_state,
+    &attribute_count
+  )) {
+    return FALSE;
+  }
+  return attribute_state.valid &&
+    attribute_state.count == (size_t) attribute_count;
+}
+
+static int builtin_metadata_graph_is_ordinary(SEXP value,
+    builtin_metadata_graph_t *graph, size_t depth) {
+  if (ALTREP(value) || Rf_isS4(value)) return FALSE;
+  if (graph->nodes >= PARADOX_BUILTIN_METADATA_MAX_NODES) return FALSE;
+  ++graph->nodes;
+
+  /*
+   * These are identity leaves for R's deep duplicator.  In particular, do
+   * not follow an environment or external pointer into a graph it owns by
+   * reference; Paradox's opaque-leaf policy retains that exact identity.
+   */
+  switch ((SEXPTYPE) TYPEOF(value)) {
+  case NILSXP:
+  case SYMSXP:
+  case ENVSXP:
+  case SPECIALSXP:
+  case BUILTINSXP:
+  case EXTPTRSXP:
+  case BCODESXP:
+  case WEAKREFSXP:
+  case CHARSXP:
+  case PROMSXP:
+    return TRUE;
+  default:
+    break;
+  }
+
+  if (depth >= PARADOX_BUILTIN_METADATA_MAX_DEPTH) {
+    return FALSE;
+  }
+  for (size_t index = 0; index < depth; ++index) {
+    if (graph->path[index] == value) return FALSE;
+  }
+  graph->path[depth] = value;
+
+  if (!builtin_metadata_attribute_graph_is_ordinary(
+      value,
+      graph,
+      depth + 1U
+    )) {
+    return FALSE;
+  }
+
+  switch ((SEXPTYPE) TYPEOF(value)) {
+  case VECSXP:
+  case EXPRSXP:
+    for (R_xlen_t index = 0; index < XLENGTH(value); ++index) {
+      if (!builtin_metadata_graph_is_ordinary(
+          VECTOR_ELT(value, index),
+          graph,
+          depth + 1U
+        )) {
+        return FALSE;
+      }
+    }
+    return TRUE;
+  case LISTSXP:
+  case LANGSXP:
+    return builtin_metadata_graph_is_ordinary(
+        CAR(value),
+        graph,
+        depth + 1U
+      ) && builtin_metadata_graph_is_ordinary(
+        CDR(value),
+        graph,
+        depth + 1U
+      );
+  case LGLSXP:
+  case INTSXP:
+  case REALSXP:
+  case CPLXSXP:
+  case RAWSXP:
+  case STRSXP:
+    return TRUE;
+  case CLOSXP:
+    /* R duplicates a closure shell but old supported R has no allocation-free
+     * public formals/body/environment accessors for the terminal receipt. */
+    return FALSE;
+  case DOTSXP:
+    /* No supported R release exposes a public allocator for a fresh DOTSXP
+     * node. Promise-list internals are not ordinary presentation metadata. */
+    return FALSE;
+  default:
+    return FALSE;
+  }
+}
+
+static int builtin_metadata_attributes_are_ordinary(SEXP value) {
+  if (Rf_isS4(value)) return FALSE;
+  builtin_metadata_graph_t graph;
+  /* Count the selected carrier exactly as the complete-graph preflight does,
+   * but deliberately do not traverse its semantic payload. */
+  graph.path[0] = value;
+  graph.nodes = 1U;
+  return builtin_metadata_attribute_graph_is_ordinary(
+    value,
+    &graph,
+    1U
+  );
+}
+
+typedef struct {
+  SEXP source_path[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  size_t nodes;
+  const char *failure_message;
+} builtin_metadata_copy_t;
+
+typedef struct {
+  SEXP entries;
+  R_xlen_t capacity;
+  R_xlen_t count;
+  int valid;
+} builtin_metadata_copy_attribute_capture_t;
+
+static void capture_builtin_metadata_copy_attribute(SEXP tag, SEXP value,
+    void *data) {
+  builtin_metadata_copy_attribute_capture_t *capture = data;
+  if (!capture->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue || capture->count >= capture->capacity) {
+    capture->valid = FALSE;
+    return;
+  }
+  for (R_xlen_t index = 0; index < capture->count; ++index) {
+    if (VECTOR_ELT(capture->entries, 3 * index) == tag) {
+      capture->valid = FALSE;
+      return;
+    }
+  }
+  SET_VECTOR_ELT(capture->entries, 3 * capture->count, tag);
+  SET_VECTOR_ELT(capture->entries, 3 * capture->count + 1, value);
+  ++capture->count;
+}
+
+static NORET void builtin_metadata_copy_error(
+    const builtin_metadata_copy_t *copy) {
+  Rf_error("%s", copy->failure_message);
+}
+
+static SEXP copy_builtin_metadata_graph(
+  SEXP source,
+  builtin_metadata_copy_t *copy,
+  size_t depth
+);
+
+typedef struct {
+  SEXP tags;
+  R_xlen_t capacity;
+  R_xlen_t count;
+  int valid;
+} builtin_metadata_tag_capture_t;
+
+static void capture_builtin_metadata_tag(SEXP tag, SEXP value, void *data) {
+  (void) value;
+  builtin_metadata_tag_capture_t *capture = data;
+  if (!capture->valid || TYPEOF(tag) != SYMSXP ||
+      capture->count >= capture->capacity) {
+    capture->valid = FALSE;
+    return;
+  }
+  for (R_xlen_t index = 0; index < capture->count; ++index) {
+    if (VECTOR_ELT(capture->tags, index) == tag) {
+      capture->valid = FALSE;
+      return;
+    }
+  }
+  SET_VECTOR_ELT(capture->tags, capture->count, tag);
+  ++capture->count;
+}
+
+static void clear_builtin_metadata_attributes(
+    SEXP destination, builtin_metadata_copy_t *copy) {
+  R_xlen_t empty_count = 0;
+  if (paradox_api_map_bounded_stored_attributes(
+      destination,
+      0,
+      NULL,
+      NULL,
+      &empty_count
+    )) {
+    if (empty_count != 0 || Rf_isObject(destination)) {
+      builtin_metadata_copy_error(copy);
+    }
+    return;
+  }
+
+  SEXP tags = PROTECT(Rf_allocVector(
+    VECSXP,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH
+  ));
+  builtin_metadata_tag_capture_t capture = {
+    tags,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    0,
+    TRUE
+  };
+  R_xlen_t selected_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+    destination,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    capture_builtin_metadata_tag,
+    &capture,
+    &selected_count
+  )) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  if (!capture.valid || capture.count != selected_count) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  for (R_xlen_t index = 0; index < selected_count; ++index) {
+    Rf_setAttrib(destination, VECTOR_ELT(tags, index), R_NilValue);
+  }
+  if (!builtin_metadata_has_no_attributes(destination) ||
+      Rf_isObject(destination)) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  UNPROTECT(1);
+}
+
+static int builtin_metadata_attribute_priority(
+    SEXP tag, SEXP comment_symbol) {
+  if (tag == R_DimSymbol) return 0;
+  if (tag == R_DimNamesSymbol) return 2;
+  if (tag == R_ClassSymbol) return 3;
+  /*
+   * Names, row.names, tsp, comment, and general attributes all retain their
+   * relative selected order after dimension installation. Naming these cases
+   * explicitly documents that they intentionally use their public setters.
+   */
+  if (tag == R_NamesSymbol || tag == R_RowNamesSymbol ||
+      tag == R_TspSymbol || tag == comment_symbol) {
+    return 1;
+  }
+  return 1;
+}
+
+typedef struct {
+  SEXP entries;
+  R_xlen_t capacity;
+  R_xlen_t count;
+  int valid;
+} bounded_shallow_attribute_capture_t;
+
+static void capture_bounded_shallow_attribute(
+    SEXP tag, SEXP value, void *data) {
+  bounded_shallow_attribute_capture_t *capture = data;
+  if (!capture->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue || capture->count >= capture->capacity) {
+    capture->valid = FALSE;
+    return;
+  }
+  for (R_xlen_t index = 0; index < capture->count; ++index) {
+    if (VECTOR_ELT(capture->entries, 2 * index) == tag) {
+      capture->valid = FALSE;
+      return;
+    }
+  }
+  SET_VECTOR_ELT(capture->entries, 2 * capture->count, tag);
+  SET_VECTOR_ELT(capture->entries, 2 * capture->count + 1, value);
+  ++capture->count;
+}
+
+typedef struct {
+  SEXP entries;
+  R_xlen_t expected;
+  R_xlen_t count;
+  int current;
+} bounded_shallow_source_receipt_t;
+
+static void compare_bounded_shallow_source_attribute(
+    SEXP tag, SEXP value, void *data) {
+  bounded_shallow_source_receipt_t *receipt = data;
+  if (!receipt->current || receipt->count >= receipt->expected ||
+      VECTOR_ELT(receipt->entries, 2 * receipt->count) != tag ||
+      VECTOR_ELT(receipt->entries, 2 * receipt->count + 1) != value) {
+    receipt->current = FALSE;
+    return;
+  }
+  ++receipt->count;
+}
+
+typedef struct {
+  SEXP tags[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  SEXP values[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  R_xlen_t count;
+  int valid;
+} shallow_container_metadata_t;
+
+static void capture_shallow_container_attribute(
+    SEXP tag, SEXP value, void *data) {
+  shallow_container_metadata_t *metadata = data;
+  if (!metadata->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue ||
+      metadata->count >= PARADOX_BUILTIN_METADATA_MAX_DEPTH) {
+    metadata->valid = FALSE;
+    return;
+  }
+  for (R_xlen_t index = 0; index < metadata->count; ++index) {
+    if (metadata->tags[index] == tag) {
+      metadata->valid = FALSE;
+      return;
+    }
+  }
+  metadata->tags[metadata->count] = tag;
+  metadata->values[metadata->count] = value;
+  ++metadata->count;
+}
+
+typedef struct {
+  const shallow_container_metadata_t *expected;
+  unsigned char seen[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  R_xlen_t count;
+  int current;
+} shallow_container_metadata_receipt_t;
+
+static void compare_shallow_container_attribute(
+    SEXP tag, SEXP value, void *data) {
+  shallow_container_metadata_receipt_t *receipt = data;
+  if (!receipt->current || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue) {
+    receipt->current = FALSE;
+    return;
+  }
+  R_xlen_t selected = 0;
+  while (selected < receipt->expected->count &&
+      receipt->expected->tags[selected] != tag) {
+    ++selected;
+  }
+  if (selected == receipt->expected->count ||
+      receipt->seen[selected] ||
+      receipt->expected->values[selected] != value) {
+    receipt->current = FALSE;
+    return;
+  }
+  receipt->seen[selected] = 1U;
+  ++receipt->count;
+}
+
+/*
+ * R's public dimnames setter deliberately shallow-duplicates the outer list.
+ * That normalization changes only the outer carrier: its elements and its
+ * own bounded metadata values retain exact identity.  Admit precisely that
+ * documented setter result while continuing to reject every other
+ * normalization or mutation.
+ */
+static int shallow_dimnames_setter_result_matches(
+    SEXP source, SEXP destination) {
+  if (source == destination) return TRUE;
+  if (TYPEOF(source) != VECSXP || TYPEOF(destination) != VECSXP ||
+      ALTREP(source) || ALTREP(destination) ||
+      Rf_isS4(source) || Rf_isS4(destination) ||
+      (Rf_isObject(source) != FALSE) !=
+        (Rf_isObject(destination) != FALSE) ||
+      XLENGTH(source) != XLENGTH(destination)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+    if (VECTOR_ELT(source, index) != VECTOR_ELT(destination, index)) {
+      return FALSE;
+    }
+  }
+
+  shallow_container_metadata_t expected = {
+    {R_NilValue},
+    {R_NilValue},
+    0,
+    TRUE
+  };
+  R_xlen_t expected_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      source,
+      (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+      capture_shallow_container_attribute,
+      &expected,
+      &expected_count
+    ) || !expected.valid || expected.count != expected_count) {
+    return FALSE;
+  }
+  shallow_container_metadata_receipt_t receipt = {
+    &expected,
+    {0},
+    0,
+    TRUE
+  };
+  R_xlen_t destination_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      destination,
+      (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+      compare_shallow_container_attribute,
+      &receipt,
+      &destination_count
+    ) || !receipt.current ||
+      receipt.count != expected.count ||
+      destination_count != expected_count) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < expected.count; ++index) {
+    if (!receipt.seen[index]) return FALSE;
+  }
+  return TRUE;
+}
+
+static int compact_row_names_count(SEXP value, R_xlen_t *count) {
+  if (TYPEOF(value) != INTSXP || XLENGTH(value) != 2 ||
+      INTEGER_ELT(value, 0) != NA_INTEGER) {
+    return FALSE;
+  }
+  const int encoded = INTEGER_ELT(value, 1);
+  if (encoded == NA_INTEGER || encoded == INT_MIN) return FALSE;
+  *count = encoded < 0
+    ? (R_xlen_t) -encoded
+    : (R_xlen_t) encoded;
+  return TRUE;
+}
+
+static int explicit_row_names_sequence(SEXP value, R_xlen_t count) {
+  if (TYPEOF(value) != INTSXP || XLENGTH(value) != count) return FALSE;
+  if (count > INT_MAX) return FALSE;
+  for (R_xlen_t index = 0; index < count; ++index) {
+    if (INTEGER_ELT(value, index) != (int) index + 1) return FALSE;
+  }
+  return TRUE;
+}
+
+/*
+ * The public row.names setter may duplicate a carrier and may interchange R's
+ * compact c(NA, +/-n) representation with the explicit ordinary 1:n spelling.
+ * Accept only those representation-preserving normalizations; arbitrary row
+ * labels still require exact ordinary payload equality.
+ */
+static int shallow_row_names_setter_result_matches(
+    SEXP source, SEXP destination) {
+  if (source == destination) return TRUE;
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+  if ((type != INTSXP && type != STRSXP) ||
+      (SEXPTYPE) TYPEOF(destination) != type ||
+      ALTREP(source) || ALTREP(destination) ||
+      Rf_isS4(source) || Rf_isS4(destination) ||
+      Rf_isObject(source) || Rf_isObject(destination) ||
+      !paradox_api_has_no_attributes(source) ||
+      !paradox_api_has_no_attributes(destination)) {
+    return FALSE;
+  }
+  if (paradox_ordinary_vector_payload_equal(source, destination)) {
+    return TRUE;
+  }
+  if (type != INTSXP) return FALSE;
+  R_xlen_t source_count = 0;
+  R_xlen_t destination_count = 0;
+  const int source_compact =
+    compact_row_names_count(source, &source_count);
+  const int destination_compact =
+    compact_row_names_count(destination, &destination_count);
+  if (source_compact && destination_compact) {
+    return source_count == destination_count;
+  }
+  if (source_compact) {
+    return explicit_row_names_sequence(destination, source_count);
+  }
+  return destination_compact &&
+    explicit_row_names_sequence(source, destination_count);
+}
+
+static int bounded_shallow_attribute_is_selected(
+    SEXP tag, paradox_shallow_attribute_policy_t policy, int has_dimensions) {
+  if (policy == PARADOX_SHALLOW_ATTRIBUTES_ALL) return TRUE;
+  return tag == R_DimSymbol || tag == R_DimNamesSymbol ||
+    (tag == R_NamesSymbol && !has_dimensions);
+}
+
+typedef struct {
+  SEXP entries;
+  R_xlen_t captured;
+  paradox_shallow_attribute_policy_t policy;
+  int has_dimensions;
+  unsigned char seen[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  R_xlen_t count;
+  int current;
+} bounded_shallow_destination_receipt_t;
+
+static void compare_bounded_shallow_destination_attribute(
+    SEXP tag, SEXP value, void *data) {
+  bounded_shallow_destination_receipt_t *receipt = data;
+  if (!receipt->current) return;
+  R_xlen_t selected = receipt->captured;
+  for (R_xlen_t index = 0; index < receipt->captured; ++index) {
+    if (VECTOR_ELT(receipt->entries, 2 * index) == tag) {
+      selected = index;
+      break;
+    }
+  }
+  if (selected == receipt->captured ||
+      !bounded_shallow_attribute_is_selected(
+        tag,
+        receipt->policy,
+        receipt->has_dimensions
+      ) ||
+      receipt->seen[selected] ||
+      (VECTOR_ELT(receipt->entries, 2 * selected + 1) != value &&
+        !((tag == R_DimNamesSymbol &&
+          shallow_dimnames_setter_result_matches(
+            VECTOR_ELT(receipt->entries, 2 * selected + 1),
+            value
+          )) ||
+          (tag == R_RowNamesSymbol &&
+            shallow_row_names_setter_result_matches(
+              VECTOR_ELT(receipt->entries, 2 * selected + 1),
+              value
+            ))))) {
+    receipt->current = FALSE;
+    return;
+  }
+  receipt->seen[selected] = 1U;
+  ++receipt->count;
+}
+
+void paradox_copy_bounded_shallow_attributes(
+    SEXP destination, SEXP source,
+    paradox_shallow_attribute_policy_t policy,
+    const char *failure_message) {
+  if (failure_message == NULL ||
+      (policy != PARADOX_SHALLOW_ATTRIBUTES_ALL &&
+        policy != PARADOX_SHALLOW_ATTRIBUTES_LOGICAL_STRUCTURE)) {
+    Rf_error("Internal error: invalid bounded attribute-copy request");
+  }
+  if (Rf_isS4(destination) || Rf_isObject(destination) ||
+      !builtin_metadata_has_no_attributes(destination)) {
+    Rf_error("%s", failure_message);
+  }
+
+  R_xlen_t initial_count = 0;
+  if (!bounded_metadata_attribute_count(source, &initial_count)) {
+    Rf_error("%s", failure_message);
+  }
+  if (initial_count == 0) {
+    if (Rf_isS4(source) || Rf_isObject(source)) {
+      Rf_error("%s", failure_message);
+    }
+    return;
+  }
+
+  PROTECT(destination);
+  PROTECT(source);
+  /*
+   * Intern the one non-global standard tag before selecting the generation.
+   * The fixed scanned carrier is likewise allocated first.  Every subsequent
+   * source observation and the complete capture are allocation-free.
+   */
+  SEXP comment_symbol = Rf_install("comment");
+  SEXP entries = PROTECT(Rf_allocVector(
+    VECSXP,
+    (R_xlen_t) (2U * PARADOX_BUILTIN_METADATA_MAX_DEPTH)
+  ));
+  bounded_shallow_attribute_capture_t capture = {
+    entries,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    0,
+    TRUE
+  };
+  R_xlen_t selected_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      source,
+      (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+      capture_bounded_shallow_attribute,
+      &capture,
+      &selected_count
+    ) || !capture.valid || capture.count != selected_count) {
+    UNPROTECT(3);
+    Rf_error("%s", failure_message);
+  }
+  const int source_object = Rf_isObject(source) != FALSE;
+  if (Rf_isS4(source)) {
+    UNPROTECT(3);
+    Rf_error("%s", failure_message);
+  }
+
+  int has_dimensions = FALSE;
+  int has_raw_class = FALSE;
+  R_xlen_t expected_destination_count = 0;
+  for (R_xlen_t index = 0; index < selected_count; ++index) {
+    SEXP tag = VECTOR_ELT(entries, 2 * index);
+    if (tag == R_DimSymbol) has_dimensions = TRUE;
+    if (tag == R_ClassSymbol) has_raw_class = TRUE;
+  }
+  if (policy == PARADOX_SHALLOW_ATTRIBUTES_LOGICAL_STRUCTURE &&
+      (source_object || has_raw_class)) {
+    UNPROTECT(3);
+    Rf_error("%s", failure_message);
+  }
+  for (R_xlen_t index = 0; index < selected_count; ++index) {
+    if (bounded_shallow_attribute_is_selected(
+        VECTOR_ELT(entries, 2 * index),
+        policy,
+        has_dimensions
+      )) {
+      ++expected_destination_count;
+    }
+  }
+
+  /*
+   * Use only public setters, in the same dependency-safe order as the deep
+   * metadata owner.  The captured values remain exact shallow identities;
+   * nested metadata is deliberately neither inspected nor duplicated.
+   */
+  for (int priority = 0; priority <= 3; ++priority) {
+    for (R_xlen_t index = 0; index < selected_count; ++index) {
+      SEXP tag = VECTOR_ELT(entries, 2 * index);
+      if (!bounded_shallow_attribute_is_selected(
+          tag,
+          policy,
+          has_dimensions
+        ) || builtin_metadata_attribute_priority(
+          tag,
+          comment_symbol
+        ) != priority) {
+        continue;
+      }
+      Rf_setAttrib(
+        destination,
+        tag,
+        VECTOR_ELT(entries, 2 * index + 1)
+      );
+    }
+  }
+
+  bounded_shallow_source_receipt_t source_receipt = {
+    entries,
+    selected_count,
+    0,
+    TRUE
+  };
+  R_xlen_t source_count = 0;
+  bounded_shallow_destination_receipt_t destination_receipt = {
+    entries,
+    selected_count,
+    policy,
+    has_dimensions,
+    {0},
+    0,
+    TRUE
+  };
+  R_xlen_t destination_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      source,
+      (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+      compare_bounded_shallow_source_attribute,
+      &source_receipt,
+      &source_count
+    ) || !source_receipt.current ||
+      source_receipt.count != selected_count ||
+      source_count != selected_count ||
+      Rf_isS4(source) ||
+      (Rf_isObject(source) != FALSE) != source_object ||
+      !paradox_api_map_bounded_stored_attributes(
+        destination,
+        (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+        compare_bounded_shallow_destination_attribute,
+        &destination_receipt,
+        &destination_count
+      ) || !destination_receipt.current ||
+      destination_receipt.count != expected_destination_count ||
+      destination_count != expected_destination_count ||
+      Rf_isS4(destination) ||
+      (Rf_isObject(destination) != FALSE) !=
+        (policy == PARADOX_SHALLOW_ATTRIBUTES_ALL && source_object)) {
+    UNPROTECT(3);
+    Rf_error("%s", failure_message);
+  }
+  for (R_xlen_t index = 0; index < selected_count; ++index) {
+    if (bounded_shallow_attribute_is_selected(
+        VECTOR_ELT(entries, 2 * index),
+        policy,
+        has_dimensions
+      ) && !destination_receipt.seen[index]) {
+      UNPROTECT(3);
+      Rf_error("%s", failure_message);
+    }
+  }
+  UNPROTECT(3);
+}
+
+/*
+ * Copy one attribute graph without ever handing a caller-owned nested node to
+ * R's recursive duplicator. The fixed source carrier is allocated before its
+ * allocation-free tag/value capture, so every selected value remains rooted
+ * even if a later allocation runs a finalizer that rewrites the live source.
+ * Rf_setAttrib() sees only a package-owned bounded copy.
+ */
+static void copy_builtin_metadata_attributes(
+    SEXP destination, SEXP source, builtin_metadata_copy_t *copy,
+    size_t depth) {
+  if (Rf_isS4(source)) {
+    builtin_metadata_copy_error(copy);
+  }
+  R_xlen_t empty_count = 0;
+  if (paradox_api_map_bounded_stored_attributes(
+      source,
+      0,
+      NULL,
+      NULL,
+      &empty_count
+    )) {
+    if (empty_count != 0 ||
+        !builtin_metadata_has_no_attributes(destination) ||
+        (Rf_isObject(destination) != FALSE) !=
+        (Rf_isObject(source) != FALSE)) {
+      builtin_metadata_copy_error(copy);
+    }
+    return;
+  }
+
+  SEXP captured = PROTECT(Rf_allocVector(
+    VECSXP,
+    (R_xlen_t) (3U * PARADOX_BUILTIN_METADATA_MAX_DEPTH)
+  ));
+  builtin_metadata_copy_attribute_capture_t capture = {
+    captured,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    0,
+    TRUE
+  };
+  R_xlen_t selected_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+    source,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    capture_builtin_metadata_copy_attribute,
+    &capture,
+    &selected_count
+  )) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  if (!capture.valid || capture.count != selected_count) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  if ((uintmax_t) selected_count >
+      PARADOX_BUILTIN_METADATA_MAX_NODES - copy->nodes) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  copy->nodes += (size_t) selected_count;
+  const int source_object = Rf_isObject(source) != FALSE;
+
+  for (R_xlen_t index = 0; index < selected_count; ++index) {
+    SEXP value = VECTOR_ELT(captured, 3 * index + 1);
+    SEXP owned = PROTECT(copy_builtin_metadata_graph(
+      value,
+      copy,
+      depth
+    ));
+    SET_VECTOR_ELT(captured, 3 * index + 2, owned);
+    UNPROTECT(1);
+  }
+  clear_builtin_metadata_attributes(destination, copy);
+  SEXP comment_symbol = Rf_install("comment");
+  /*
+   * Rf_setAttrib() is the sole cross-version public setter. Install
+   * dependency-sensitive standard attributes in one fixed order: dim before
+   * names/general metadata and dimnames, then class last so its object bit is
+   * terminal. Names, row.names, tsp, comment, and general attributes retain
+   * their relative selected order in the middle wave.
+   * Unsupported raw spellings that public R normalizes are rejected by the
+   * allocation-free receipt rather than reproduced through SET_ATTRIB.
+   */
+  for (int priority = 0; priority <= 3; ++priority) {
+    for (R_xlen_t index = 0; index < selected_count; ++index) {
+      SEXP tag = VECTOR_ELT(captured, 3 * index);
+      if (builtin_metadata_attribute_priority(
+          tag,
+          comment_symbol
+        ) != priority) {
+        continue;
+      }
+      Rf_setAttrib(
+        destination,
+        tag,
+        VECTOR_ELT(captured, 3 * index + 2)
+      );
+    }
+  }
+  if ((Rf_isObject(destination) != FALSE) != source_object) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  UNPROTECT(1);
+}
+
+static int builtin_metadata_copy_source_shape(
+    SEXP source, SEXPTYPE type, R_xlen_t size) {
+  return !ALTREP(source) && !Rf_isS4(source) &&
+    (SEXPTYPE) TYPEOF(source) == type && XLENGTH(source) == size;
+}
+
+/*
+ * Native recursion is hard-bounded to 64 frames by the same contract as the
+ * preflight and terminal receipt. Every child edge is selected into a scanned
+ * VECSXP before the first recursive allocation. Thus a finalizer may make the
+ * operation reject at the terminal receipt, but it cannot redirect this walk
+ * into an unbounded or cyclic live graph.
+ */
+static SEXP copy_builtin_metadata_graph(
+    SEXP source, builtin_metadata_copy_t *copy, size_t depth) {
+  PROTECT(source);
+  if (ALTREP(source) || Rf_isS4(source) ||
+      copy->nodes >= PARADOX_BUILTIN_METADATA_MAX_NODES) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  ++copy->nodes;
+
+  switch ((SEXPTYPE) TYPEOF(source)) {
+  case NILSXP:
+  case SYMSXP:
+  case ENVSXP:
+  case SPECIALSXP:
+  case BUILTINSXP:
+  case EXTPTRSXP:
+  case BCODESXP:
+  case WEAKREFSXP:
+  case CHARSXP:
+  case PROMSXP:
+    UNPROTECT(1);
+    return source;
+  default:
+    break;
+  }
+
+  if (depth >= PARADOX_BUILTIN_METADATA_MAX_DEPTH) {
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+  for (size_t index = 0; index < depth; ++index) {
+    if (copy->source_path[index] == source) {
+      UNPROTECT(1);
+      builtin_metadata_copy_error(copy);
+    }
+  }
+  copy->source_path[depth] = source;
+
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+  switch (type) {
+  case LGLSXP:
+  case INTSXP:
+  case REALSXP:
+  case CPLXSXP:
+  case RAWSXP:
+  case STRSXP: {
+    const R_xlen_t size = XLENGTH(source);
+    SEXP result = PROTECT(Rf_allocVector(type, size));
+    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+      UNPROTECT(2);
+      builtin_metadata_copy_error(copy);
+    }
+    switch (type) {
+    case LGLSXP:
+      if ((uintmax_t) size > SIZE_MAX / sizeof(int)) {
+        UNPROTECT(2);
+        builtin_metadata_copy_error(copy);
+      }
+      memcpy(
+        LOGICAL(result),
+        LOGICAL_RO(source),
+        (size_t) size * sizeof(int)
+      );
+      break;
+    case INTSXP:
+      if ((uintmax_t) size > SIZE_MAX / sizeof(int)) {
+        UNPROTECT(2);
+        builtin_metadata_copy_error(copy);
+      }
+      memcpy(
+        INTEGER(result),
+        INTEGER_RO(source),
+        (size_t) size * sizeof(int)
+      );
+      break;
+    case REALSXP:
+      if ((uintmax_t) size > SIZE_MAX / sizeof(double)) {
+        UNPROTECT(2);
+        builtin_metadata_copy_error(copy);
+      }
+      memcpy(
+        REAL(result),
+        REAL_RO(source),
+        (size_t) size * sizeof(double)
+      );
+      break;
+    case CPLXSXP:
+      if ((uintmax_t) size > SIZE_MAX / sizeof(Rcomplex)) {
+        UNPROTECT(2);
+        builtin_metadata_copy_error(copy);
+      }
+      memcpy(
+        COMPLEX(result),
+        COMPLEX_RO(source),
+        (size_t) size * sizeof(Rcomplex)
+      );
+      break;
+    case RAWSXP:
+      if ((uintmax_t) size > SIZE_MAX / sizeof(Rbyte)) {
+        UNPROTECT(2);
+        builtin_metadata_copy_error(copy);
+      }
+      memcpy(
+        RAW(result),
+        RAW_RO(source),
+        (size_t) size * sizeof(Rbyte)
+      );
+      break;
+    case STRSXP:
+      for (R_xlen_t index = 0; index < size; ++index) {
+        SET_STRING_ELT(result, index, STRING_ELT(source, index));
+      }
+      break;
+    default:
+      UNPROTECT(2);
+      Rf_error("Internal error: unreachable metadata vector type");
+    }
+    copy_builtin_metadata_attributes(
+      result,
+      source,
+      copy,
+      depth + 1U
+    );
+    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+      UNPROTECT(2);
+      builtin_metadata_copy_error(copy);
+    }
+    UNPROTECT(2);
+    return result;
+  }
+  case VECSXP:
+  case EXPRSXP: {
+    const R_xlen_t size = XLENGTH(source);
+    if ((uintmax_t) size >
+        PARADOX_BUILTIN_METADATA_MAX_NODES - copy->nodes) {
+      UNPROTECT(1);
+      builtin_metadata_copy_error(copy);
+    }
+    SEXP result = PROTECT(Rf_allocVector(type, size));
+    SEXP selected = PROTECT(Rf_allocVector(VECSXP, size));
+    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+      UNPROTECT(3);
+      builtin_metadata_copy_error(copy);
+    }
+    for (R_xlen_t index = 0; index < size; ++index) {
+      SET_VECTOR_ELT(selected, index, VECTOR_ELT(source, index));
+    }
+    for (R_xlen_t index = 0; index < size; ++index) {
+      SEXP value = PROTECT(copy_builtin_metadata_graph(
+        VECTOR_ELT(selected, index),
+        copy,
+        depth + 1U
+      ));
+      SET_VECTOR_ELT(result, index, value);
+      UNPROTECT(1);
+    }
+    copy_builtin_metadata_attributes(
+      result,
+      source,
+      copy,
+      depth + 1U
+    );
+    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+      UNPROTECT(3);
+      builtin_metadata_copy_error(copy);
+    }
+    UNPROTECT(3);
+    return result;
+  }
+  case LISTSXP:
+  case LANGSXP: {
+    SEXP result = PROTECT(Rf_allocVector(type, 1));
+    SEXP selected = PROTECT(Rf_allocVector(VECSXP, 3));
+    if (ALTREP(source) || Rf_isS4(source) ||
+        (SEXPTYPE) TYPEOF(source) != type ||
+        (TAG(source) != R_NilValue && TYPEOF(TAG(source)) != SYMSXP)) {
+      UNPROTECT(3);
+      builtin_metadata_copy_error(copy);
+    }
+    SET_VECTOR_ELT(selected, 0, CAR(source));
+    SET_VECTOR_ELT(selected, 1, CDR(source));
+    SET_VECTOR_ELT(selected, 2, TAG(source));
+    SEXP owned_car = PROTECT(copy_builtin_metadata_graph(
+      VECTOR_ELT(selected, 0),
+      copy,
+      depth + 1U
+    ));
+    SEXP owned_cdr = PROTECT(copy_builtin_metadata_graph(
+      VECTOR_ELT(selected, 1),
+      copy,
+      depth + 1U
+    ));
+    SETCAR(result, owned_car);
+    SETCDR(result, owned_cdr);
+    SET_TAG(result, VECTOR_ELT(selected, 2));
+    UNPROTECT(2);
+    copy_builtin_metadata_attributes(
+      result,
+      source,
+      copy,
+      depth + 1U
+    );
+    if (ALTREP(source) || Rf_isS4(source) ||
+        (SEXPTYPE) TYPEOF(source) != type) {
+      UNPROTECT(3);
+      builtin_metadata_copy_error(copy);
+    }
+    UNPROTECT(3);
+    return result;
+  }
+  case CLOSXP:
+  case DOTSXP:
+  default:
+    UNPROTECT(1);
+    builtin_metadata_copy_error(copy);
+  }
+}
+
+static void own_builtin_metadata_attributes(
+    SEXP destination, SEXP source, const char *failure_message) {
+  builtin_metadata_copy_t copy;
+  copy.source_path[0] = source;
+  copy.nodes = 1U;
+  copy.failure_message = failure_message;
+  copy_builtin_metadata_attributes(destination, source, &copy, 1U);
+}
+
+typedef struct {
+  SEXP source_path[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  SEXP snapshot_path[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  size_t nodes;
+} builtin_metadata_receipt_t;
+
+typedef struct {
+  SEXP tags[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  SEXP values[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  size_t count;
+  int valid;
+} builtin_metadata_attribute_capture_t;
+
+static void capture_builtin_metadata_attribute(SEXP tag, SEXP value,
+    void *data) {
+  builtin_metadata_attribute_capture_t *capture = data;
+  if (!capture->valid || TYPEOF(tag) != SYMSXP || value == R_NilValue ||
+      capture->count >= PARADOX_BUILTIN_METADATA_MAX_DEPTH) {
+    capture->valid = FALSE;
+    return;
+  }
+  for (size_t index = 0; index < capture->count; ++index) {
+    if (capture->tags[index] == tag) {
+      capture->valid = FALSE;
+      return;
+    }
+  }
+  capture->tags[capture->count] = tag;
+  capture->values[capture->count] = value;
+  ++capture->count;
+}
+
+typedef struct {
+  const builtin_metadata_attribute_capture_t *snapshot;
+  builtin_metadata_receipt_t *receipt;
+  size_t depth;
+  unsigned char seen[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
+  size_t count;
+  int current;
+} builtin_metadata_attribute_receipt_t;
+
+static int builtin_metadata_receipt_current(SEXP source, SEXP snapshot,
+  builtin_metadata_receipt_t *receipt,
+  size_t depth
+);
+
+static void compare_builtin_metadata_attribute(SEXP tag, SEXP value,
+    void *data) {
+  builtin_metadata_attribute_receipt_t *state = data;
+  if (!state->current || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue || state->count >= state->snapshot->count) {
+    state->current = FALSE;
+    return;
+  }
+  size_t selected = 0U;
+  while (selected < state->snapshot->count &&
+      state->snapshot->tags[selected] != tag) {
+    ++selected;
+  }
+  if (selected == state->snapshot->count || state->seen[selected] ||
+      !builtin_metadata_receipt_current(
+        value,
+        state->snapshot->values[selected],
+        state->receipt,
+        state->depth
+      )) {
+    state->current = FALSE;
+    return;
+  }
+  state->seen[selected] = 1U;
+  ++state->count;
+}
+
+/*
+ * Compare only the stored attribute graphs of two selected carriers.  The
+ * Attribute tags and every recursively copied value have one exact
+ * allocation-free receipt.
+ */
+static int builtin_metadata_attribute_graph_receipt_current(
+    SEXP source, SEXP snapshot, builtin_metadata_receipt_t *receipt,
+    size_t depth) {
+  if (Rf_isS4(source) || Rf_isS4(snapshot)) {
+    return FALSE;
+  }
+  builtin_metadata_attribute_capture_t attributes = {
+    {R_NilValue},
+    {R_NilValue},
+    0U,
+    TRUE
+  };
+  R_xlen_t snapshot_attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+    snapshot,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    capture_builtin_metadata_attribute,
+    &attributes,
+    &snapshot_attribute_count
+  )) {
+    return FALSE;
+  }
+  if (!attributes.valid ||
+      attributes.count != (size_t) snapshot_attribute_count) {
+    return FALSE;
+  }
+  if ((uintmax_t) snapshot_attribute_count >
+      PARADOX_BUILTIN_METADATA_MAX_NODES - receipt->nodes) {
+    return FALSE;
+  }
+  receipt->nodes += (size_t) snapshot_attribute_count;
+  builtin_metadata_attribute_receipt_t attribute_receipt = {
+    &attributes,
+    receipt,
+    depth,
+    {0},
+    0U,
+    TRUE
+  };
+  R_xlen_t source_attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+    source,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    compare_builtin_metadata_attribute,
+    &attribute_receipt,
+    &source_attribute_count
+  )) {
+    return FALSE;
+  }
+  return attribute_receipt.current &&
+    source_attribute_count == snapshot_attribute_count &&
+    attribute_receipt.count == attributes.count;
+}
+
+static int builtin_metadata_receipt_current(SEXP source, SEXP snapshot,
+    builtin_metadata_receipt_t *receipt, size_t depth) {
+  if (ALTREP(source) || ALTREP(snapshot) ||
+      Rf_isS4(source) || Rf_isS4(snapshot) ||
+      TYPEOF(source) != TYPEOF(snapshot) ||
+      (Rf_isObject(source) != FALSE) !=
+        (Rf_isObject(snapshot) != FALSE)) {
+    return FALSE;
+  }
+  if (receipt->nodes >= PARADOX_BUILTIN_METADATA_MAX_NODES) return FALSE;
+  ++receipt->nodes;
+
+  /*
+   * These are exactly the identity leaves returned unchanged by R's ordinary
+   * deep duplicator on every supported runtime.  Every mutable ordinary
+   * vector or pairlist is freshly allocated, including zero-length vectors,
+   * so pointer identity for one of those carriers is evidence of sharing, not
+   * a successful receipt.
+   */
+  switch ((SEXPTYPE) TYPEOF(source)) {
+  case NILSXP:
+  case SYMSXP:
+  case ENVSXP:
+  case SPECIALSXP:
+  case BUILTINSXP:
+  case EXTPTRSXP:
+  case BCODESXP:
+  case WEAKREFSXP:
+  case CHARSXP:
+  case PROMSXP:
+    return source == snapshot;
+  default:
+    break;
+  }
+  if (source == snapshot) return FALSE;
+
+  if (depth >= PARADOX_BUILTIN_METADATA_MAX_DEPTH) {
+    return FALSE;
+  }
+  for (size_t index = 0; index < depth; ++index) {
+    if (receipt->source_path[index] == source ||
+        receipt->snapshot_path[index] == snapshot) {
+      return FALSE;
+    }
+  }
+  receipt->source_path[depth] = source;
+  receipt->snapshot_path[depth] = snapshot;
+
+  if (!builtin_metadata_attribute_graph_receipt_current(
+      source,
+      snapshot,
+      receipt,
+      depth + 1U
+    )) {
+    return FALSE;
+  }
+
+  switch ((SEXPTYPE) TYPEOF(source)) {
+  case LGLSXP:
+  case INTSXP:
+  case REALSXP:
+  case CPLXSXP:
+  case RAWSXP:
+  case STRSXP:
+    return paradox_ordinary_vector_payload_equal(source, snapshot);
+  case VECSXP:
+  case EXPRSXP:
+    if (XLENGTH(source) != XLENGTH(snapshot)) return FALSE;
+    for (R_xlen_t index = 0; index < XLENGTH(source); ++index) {
+      if (!builtin_metadata_receipt_current(
+          VECTOR_ELT(source, index),
+          VECTOR_ELT(snapshot, index),
+          receipt,
+          depth + 1U
+        )) {
+        return FALSE;
+      }
+    }
+    return TRUE;
+  case LISTSXP:
+  case LANGSXP:
+    return TAG(source) == TAG(snapshot) &&
+      builtin_metadata_receipt_current(
+        CAR(source),
+        CAR(snapshot),
+        receipt,
+        depth + 1U
+      ) && builtin_metadata_receipt_current(
+        CDR(source),
+        CDR(snapshot),
+        receipt,
+        depth + 1U
+      );
+  case CLOSXP:
+  case DOTSXP:
+    return FALSE;
+  default:
+    return FALSE;
+  }
+}
+
+int paradox_builtin_value_leaf_receipt_current(SEXP source, SEXP snapshot) {
+  /* Typed S4 leaves are documented opaque identity tokens. */
+  if (Rf_isS4(source) || Rf_isS4(snapshot)) {
+    return source == snapshot;
+  }
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
+      type != CPLXSXP && type != STRSXP && type != RAWSXP) {
+    return source == snapshot;
+  }
+  builtin_metadata_receipt_t receipt;
+  receipt.nodes = 0U;
+  return builtin_metadata_receipt_current(
+    source,
+    snapshot,
+    &receipt,
+    0U
+  );
+}
+
+static int builtin_metadata_attributes_receipt_current(
+    SEXP source, SEXP snapshot) {
+  builtin_metadata_receipt_t receipt;
+  /* The preflight counts the selected attribute carrier itself. */
+  receipt.source_path[0] = source;
+  receipt.snapshot_path[0] = snapshot;
+  receipt.nodes = 1U;
+  return builtin_metadata_attribute_graph_receipt_current(
+    source,
+    snapshot,
+    &receipt,
+    1U
+  );
+}
+
+static void run_builtin_metadata_copy_hook(SEXP hook) {
+  if (hook == R_NilValue) return;
+  PROTECT(hook);
+  SEXP call = PROTECT(Rf_lang1(hook));
+  SEXP result = PROTECT(Rf_eval(call, R_BaseEnv));
+  (void) result;
+  UNPROTECT(3);
+}
+
+static SEXP snapshot_builtin_value_leaf(SEXP value, SEXP hook) {
   if (Rf_isS4(value)) {
     return value;
   }
@@ -1303,68 +2995,42 @@ SEXP paradox_snapshot_builtin_value_leaf(SEXP value) {
 
   PROTECT(value);
   if (!ALTREP(value)) {
-    /*
-     * For an ordinary atomic vector, one shallow duplicate selects payload
-     * and the complete arbitrary attribute pairlist after its sole
-     * allocation. A pending finalizer therefore runs before that indivisible
-     * copy rather than between separate payload and attribute snapshots.
-     * Attribute values are mutable presentation carriers in their own right
-     * (factor levels and nested dimnames/custom metadata are common examples),
-     * so deep-own that selected pairlist without recursively touching any
-     * separate opaque leaf.
-     */
-    SEXP result = PROTECT(Rf_shallow_duplicate(value));
-    if (result == value || (SEXPTYPE) TYPEOF(result) != type ||
-        ALTREP(result)) {
+    if (hook == R_NilValue &&
+        builtin_metadata_has_no_attributes(value) &&
+        !Rf_isObject(value)) {
+      SEXP result = PROTECT(snapshot_ordinary_vector_payload(value, TRUE));
       UNPROTECT(2);
-      Rf_error("Cannot own an ordinary built-in value leaf");
+      return result;
     }
-    const R_xlen_t attribute_count =
-      paradox_api_stored_attribute_count(result);
-    if (attribute_count != 0) {
-      SEXP attribute_tags = PROTECT(Rf_allocVector(
-        VECSXP,
-        attribute_count
-      ));
-      SEXP attribute_values = PROTECT(Rf_allocVector(
-        VECSXP,
-        attribute_count
-      ));
-      atomic_leaf_attribute_capture_t capture = {
-        attribute_tags,
-        attribute_values,
-        attribute_count,
-        0,
-        TRUE
-      };
-      paradox_api_map_stored_attributes(
-        result,
-        capture_atomic_leaf_attribute,
-        &capture
+    /*
+     * The package-owned graph copier allocates an attribute-free payload and
+     * copies every supported metadata node itself.  The attribute-free hot
+     * path is therefore one allocation plus one memcpy/pointer loop; it never
+     * asks R's pairlist duplicator to traverse a caller-owned attribute spine.
+     */
+    if (!builtin_metadata_attributes_are_ordinary(value)) {
+      UNPROTECT(1);
+      Rf_error(
+        "Built-in value metadata must be ordinary, acyclic, and bounded"
       );
-      if (!capture.valid || capture.count != attribute_count) {
-        UNPROTECT(4);
-        Rf_error("Built-in value attributes changed before ownership");
-      }
-      DUPLICATE_ATTRIB(result, result);
-      atomic_leaf_attribute_receipt_t receipt = {
-        attribute_tags,
-        attribute_values,
-        attribute_count,
-        0,
-        TRUE
-      };
-      paradox_api_map_stored_attributes(
-        value,
-        compare_atomic_leaf_attribute,
-        &receipt
-      );
-      if (!receipt.current || receipt.count != attribute_count ||
-          !ordinary_vector_payload_equal(value, result)) {
-        UNPROTECT(4);
-        Rf_error("Built-in value changed while being snapshotted");
-      }
+    }
+    /* The package-owned copier repeats the complete bound after this
+     * test-only seam.  A pending finalizer can therefore make the operation
+     * reject, but cannot redirect R's recursive pairlist duplicator. */
+    run_builtin_metadata_copy_hook(hook);
+    builtin_metadata_copy_t copy;
+    copy.nodes = 0U;
+    copy.failure_message =
+      "Built-in value metadata must be ordinary, acyclic, and bounded";
+    SEXP result = PROTECT(copy_builtin_metadata_graph(
+      value,
+      &copy,
+      0U
+    ));
+    if (!paradox_ordinary_vector_payload_equal(value, result) ||
+        !builtin_metadata_attributes_receipt_current(value, result)) {
       UNPROTECT(2);
+      Rf_error("Built-in value changed while being snapshotted");
     }
     UNPROTECT(2);
     return result;
@@ -1376,8 +3042,13 @@ SEXP paradox_snapshot_builtin_value_leaf(SEXP value) {
    * Names are independently owned by the semantic-vector snapshot; the
    * remaining attribute values keep their ordinary shallow-copy identity.
    */
-  const R_xlen_t attribute_count =
-    paradox_api_stored_attribute_count(value);
+  R_xlen_t attribute_count = 0;
+  if (!bounded_metadata_attribute_count(value, &attribute_count)) {
+    UNPROTECT(1);
+    Rf_error(
+      "Built-in value metadata must be ordinary, acyclic, and bounded"
+    );
+  }
   SEXP attribute_tags = PROTECT(Rf_allocVector(VECSXP, attribute_count));
   SEXP attribute_values = PROTECT(Rf_allocVector(VECSXP, attribute_count));
   atomic_leaf_attribute_capture_t capture = {
@@ -1387,12 +3058,15 @@ SEXP paradox_snapshot_builtin_value_leaf(SEXP value) {
     0,
     TRUE
   };
-  paradox_api_map_stored_attributes(
+  R_xlen_t captured_attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
     value,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
     capture_atomic_leaf_attribute,
-    &capture
-  );
-  if (!capture.valid || capture.count != attribute_count) {
+    &capture,
+    &captured_attribute_count
+  ) || !capture.valid || capture.count != attribute_count ||
+      captured_attribute_count != attribute_count) {
     UNPROTECT(3);
     Rf_error("Built-in value attributes changed before snapshot");
   }
@@ -1405,44 +3079,43 @@ SEXP paradox_snapshot_builtin_value_leaf(SEXP value) {
     0,
     TRUE
   };
-  paradox_api_map_stored_attributes(
+  R_xlen_t receipt_attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
     value,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
     compare_atomic_leaf_attribute,
-    &receipt
-  );
-  if (!receipt.current || receipt.count != attribute_count) {
+    &receipt,
+    &receipt_attribute_count
+  ) || !receipt.current || receipt.count != attribute_count ||
+      receipt_attribute_count != attribute_count) {
     UNPROTECT(4);
     Rf_error("Built-in value attributes changed while being snapshotted");
   }
 
   if (attribute_count != 0) {
     /*
-     * Select the exact receipted attribute pairlist into an ordinary carrier,
-     * then deep-own all of its mutable metadata. This preserves arbitrary
-     * classes/attributes without sharing their nested vectors with either the
-     * caller or a capsule.
+     * Copy directly from the receipted live carrier through the bounded
+     * package-owned mapper. No R duplicator sees its attribute pairlist.
      */
-    SEXP attribute_source = PROTECT(Rf_allocVector(VECSXP, 0));
-    SHALLOW_DUPLICATE_ATTRIB(attribute_source, value);
-    atomic_leaf_attribute_receipt_t selected_receipt = {
-      attribute_tags,
-      attribute_values,
-      attribute_count,
-      0,
-      TRUE
-    };
-    paradox_api_map_stored_attributes(
-      attribute_source,
-      compare_atomic_leaf_attribute,
-      &selected_receipt
-    );
-    if (!selected_receipt.current ||
-        selected_receipt.count != attribute_count) {
-      UNPROTECT(5);
-      Rf_error("Built-in value attributes changed before ownership");
+    if (!builtin_metadata_attributes_are_ordinary(value)) {
+      UNPROTECT(4);
+      Rf_error(
+        "Built-in value metadata must be ordinary, acyclic, and bounded"
+      );
     }
-    DUPLICATE_ATTRIB(result, attribute_source);
-    UNPROTECT(1);
+    run_builtin_metadata_copy_hook(hook);
+    own_builtin_metadata_attributes(
+      result,
+      value,
+      "Built-in value metadata must be ordinary, acyclic, and bounded"
+    );
+    if (!builtin_metadata_attributes_receipt_current(
+        value,
+        result
+      )) {
+      UNPROTECT(4);
+      Rf_error("Built-in value changed while being snapshotted");
+    }
     atomic_leaf_attribute_receipt_t final_receipt = {
       attribute_tags,
       attribute_values,
@@ -1450,19 +3123,33 @@ SEXP paradox_snapshot_builtin_value_leaf(SEXP value) {
       0,
       TRUE
     };
-    paradox_api_map_stored_attributes(
+    R_xlen_t final_attribute_count = 0;
+    if (!paradox_api_map_bounded_stored_attributes(
       value,
+      (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
       compare_atomic_leaf_attribute,
-      &final_receipt
-    );
-    if (!final_receipt.current ||
-        final_receipt.count != attribute_count) {
+      &final_receipt,
+      &final_attribute_count
+    ) || !final_receipt.current ||
+        final_receipt.count != attribute_count ||
+        final_attribute_count != attribute_count) {
       UNPROTECT(4);
       Rf_error("Built-in value changed while being snapshotted");
     }
   }
   UNPROTECT(4);
   return result;
+}
+
+SEXP paradox_snapshot_builtin_value_leaf(SEXP value) {
+  return snapshot_builtin_value_leaf(value, R_NilValue);
+}
+
+SEXP paradox_test_builtin_metadata_copy_reentry(SEXP value, SEXP hook) {
+  if (hook != R_NilValue && !Rf_isFunction(hook)) {
+    Rf_error("Metadata-copy test hook must be a function or NULL");
+  }
+  return snapshot_builtin_value_leaf(value, hook);
 }
 
 SEXP paradox_own_builtin_special_value_leaves(SEXP special_values,
@@ -1482,19 +3169,32 @@ SEXP paradox_own_builtin_special_value_leaves(SEXP special_values,
   return special_values;
 }
 
+static SEXP snapshot_public_data_table_column(SEXP value);
+
 static void own_named_data_table_columns(SEXP table) {
   PROTECT(table);
   for (R_xlen_t column = 0; column < XLENGTH(table); ++column) {
     SEXP value = VECTOR_ELT(table, column);
-    if (Rf_getAttrib(value, R_NamesSymbol) != R_NilValue) {
+    int has_names = FALSE;
+    if (!paradox_bounded_metadata_has_tag(
+        value,
+        R_NamesSymbol,
+        &has_names
+      )) {
+      UNPROTECT(1);
+      Rf_error(
+        "Internal error: expected bounded package-owned column metadata"
+      );
+    }
+    if (has_names) {
       /*
-       * `table` normally owns `value`, but the shallow duplicate below may
-       * run a pending finalizer that replaces this very column.  Root the
-       * selected column before that sole allocation; canonical unnamed
-       * columns still pay no protection-stack traffic.
+       * This is a rare normalization path for package-built columns. Use the
+       * same bounded payload/metadata snapshot as the defensive public path
+       * so a future producer cannot expose an unbounded attribute spine to
+       * R's pairlist duplicator. Canonical unnamed columns stay allocation-
+       * and protection-stack-free here.
        */
-      PROTECT(value);
-      SEXP owned = PROTECT(Rf_shallow_duplicate(value));
+      SEXP owned = PROTECT(snapshot_public_data_table_column(value));
       if (owned == value) {
         Rf_error(
           "Internal error: cannot own named data.table column %.0f",
@@ -1503,7 +3203,7 @@ static void own_named_data_table_columns(SEXP table) {
       }
       Rf_setAttrib(owned, R_NamesSymbol, R_NilValue);
       SET_VECTOR_ELT(table, column, owned);
-      UNPROTECT(2);
+      UNPROTECT(1);
     }
   }
   UNPROTECT(1);
@@ -1514,160 +3214,176 @@ static void own_named_data_table_columns(SEXP table) {
  * leaves. The payload and its arbitrary attribute metadata have deliberately
  * different ownership rules:
  *
- * - ordinary vector/list payloads need one shallow duplicate, so a VECSXP
- *   column keeps the exact opaque elements selected from the source;
+ * - ordinary vector/list payloads use one package-owned allocation and
+ *   memcpy/pointer loop, so a VECSXP column keeps the exact opaque elements
+ *   selected from the source without duplicating its attribute pairlist;
  * - stable ALTREP payloads must be materialized through their typed Elt API
- *   because a legitimate class need not expose a Dataptr to
- *   Rf_shallow_duplicate();
+ *   because a legitimate class need not expose a Dataptr;
  * - every attribute carrier is presentation metadata and must be
- *   independently owned. DUPLICATE_ATTRIB() deep-copies that pairlist without
- *   recursively touching VECSXP payload elements.
+ *   independently owned. The bounded package-owned copier detaches that graph
+ *   without recursively touching VECSXP payload elements.
  *
  * For ALTREP, retain an exact tag/value receipt across materialization and
- * select the attribute pairlist into an ordinary carrier before duplicating
- * it. An Elt callback may therefore make the operation reject, but it cannot
- * pair one payload generation with a different top-level attribute
- * generation.
+ * pass the live carrier directly to the bounded metadata copier. An Elt
+ * callback may therefore make the operation reject, but it cannot pair one
+ * payload generation with a different top-level attribute generation.
  */
 static SEXP snapshot_public_data_table_column(SEXP value) {
   PROTECT(value);
   int protect_count = 1;
-  SEXP owned;
-  SEXP attribute_source = R_NilValue;
-  SEXP attribute_tags = R_NilValue;
-  SEXP attribute_values = R_NilValue;
-  R_xlen_t attribute_count;
-  int source_altrep = ALTREP(value);
-
-  if (source_altrep) {
-    attribute_count = paradox_api_stored_attribute_count(value);
-    attribute_tags = PROTECT(Rf_allocVector(
-      VECSXP,
-      attribute_count
-    ));
-    ++protect_count;
-    attribute_values = PROTECT(Rf_allocVector(
-      VECSXP,
-      attribute_count
-    ));
-    ++protect_count;
-    atomic_leaf_attribute_capture_t capture = {
-      attribute_tags,
-      attribute_values,
-      attribute_count,
-      0,
-      TRUE
-    };
-    paradox_api_map_stored_attributes(
+  const int source_altrep = ALTREP(value);
+  R_xlen_t initial_attribute_count = 0;
+  if (!bounded_metadata_attribute_count(
       value,
-      capture_atomic_leaf_attribute,
-      &capture
+      &initial_attribute_count
+    )) {
+    UNPROTECT(protect_count);
+    Rf_error(
+      "data.table column metadata must be ordinary, acyclic, and bounded"
     );
-    if (!capture.valid || capture.count != attribute_count) {
-      UNPROTECT(protect_count);
-      Rf_error("data.table column attributes changed before snapshot");
-    }
-
-    owned = PROTECT(paradox_snapshot_semantic_vector(value));
-    ++protect_count;
-    if (attribute_count != 0) {
-      attribute_source = PROTECT(Rf_allocVector(VECSXP, 0));
-      ++protect_count;
-      SHALLOW_DUPLICATE_ATTRIB(attribute_source, value);
-
-      atomic_leaf_attribute_receipt_t receipt = {
-        attribute_tags,
-        attribute_values,
-        attribute_count,
-        0,
-        TRUE
-      };
-      paradox_api_map_stored_attributes(
-        attribute_source,
-        compare_atomic_leaf_attribute,
-        &receipt
-      );
-      if (!receipt.current || receipt.count != attribute_count) {
-        UNPROTECT(protect_count);
-        Rf_error(
-          "data.table column attributes changed while being snapshotted"
-        );
-      }
-    }
-  } else {
-    owned = PROTECT(Rf_shallow_duplicate(value));
-    ++protect_count;
-    if (owned == value || ALTREP(owned) ||
-        TYPEOF(owned) != TYPEOF(value) ||
-        XLENGTH(owned) != XLENGTH(value)) {
-      UNPROTECT(protect_count);
-      Rf_error("Cannot own an ordinary data.table column");
-    }
-    attribute_count = paradox_api_stored_attribute_count(owned);
-    if (attribute_count != 0) {
-      attribute_tags = PROTECT(Rf_allocVector(
-        VECSXP,
-        attribute_count
-      ));
-      ++protect_count;
-      attribute_values = PROTECT(Rf_allocVector(
-        VECSXP,
-        attribute_count
-      ));
-      ++protect_count;
-      atomic_leaf_attribute_capture_t capture = {
-        attribute_tags,
-        attribute_values,
-        attribute_count,
-        0,
-        TRUE
-      };
-      paradox_api_map_stored_attributes(
-        owned,
-        capture_atomic_leaf_attribute,
-        &capture
-      );
-      if (!capture.valid || capture.count != attribute_count) {
-        UNPROTECT(protect_count);
-        Rf_error("data.table column attributes changed before ownership");
-      }
-      attribute_source = PROTECT(Rf_allocVector(VECSXP, 0));
-      ++protect_count;
-      SHALLOW_DUPLICATE_ATTRIB(attribute_source, owned);
-    }
   }
 
-  if (attribute_count != 0) {
-    /*
-     * `attribute_source` owns its pairlist and retains the exact selected
-     * attribute values. Deep duplication here owns nested mutable metadata
-     * such as factor levels, dimnames, and user class metadata. It does not
-     * inspect or duplicate the column payload's list elements.
-     *
-     * Both selecting that pairlist and duplicating it allocate.  A terminal
-     * content comparison closes the finalizer window between payload and
-     * metadata selection.  Canonical attribute-free columns avoid all of this
-     * work and return immediately after the shallow payload copy.
-     */
-    DUPLICATE_ATTRIB(owned, attribute_source);
-    atomic_leaf_attribute_receipt_t receipt = {
-      attribute_tags,
-      attribute_values,
-      attribute_count,
-      0,
-      TRUE
-    };
-    paradox_api_map_stored_attributes(
-      value,
-      compare_atomic_leaf_attribute,
-      &receipt
-    );
-    if (!receipt.current || receipt.count != attribute_count ||
-        (!source_altrep &&
-          !ordinary_vector_payload_equal(value, owned))) {
+  /*
+   * Canonical ordinary columns take exactly one payload allocation and one
+   * memcpy/pointer loop.  The zero-limit raw mapper before and after that
+   * allocation prevents an attribute spine introduced by a pending finalizer
+   * from escaping the slow bounded-metadata path.
+   */
+  if (!source_altrep && initial_attribute_count == 0) {
+    if (Rf_isObject(value)) {
+      UNPROTECT(protect_count);
+      Rf_error(
+        "data.table column metadata must be ordinary, acyclic, and bounded"
+      );
+    }
+    SEXP owned = PROTECT(snapshot_ordinary_vector_payload(value, TRUE));
+    ++protect_count;
+    UNPROTECT(protect_count);
+    return owned;
+  }
+
+  if (source_altrep && initial_attribute_count == 0) {
+    if (Rf_isObject(value)) {
+      UNPROTECT(protect_count);
+      Rf_error(
+        "data.table column metadata must be ordinary, acyclic, and bounded"
+      );
+    }
+    SEXP owned = PROTECT(paradox_snapshot_semantic_vector(value));
+    ++protect_count;
+    if (!builtin_metadata_has_no_attributes(value) ||
+        Rf_isObject(value)) {
       UNPROTECT(protect_count);
       Rf_error("data.table column changed while being snapshotted");
     }
+    UNPROTECT(protect_count);
+    return owned;
+  }
+
+  SEXP attribute_tags = PROTECT(Rf_allocVector(
+    VECSXP,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH
+  ));
+  ++protect_count;
+  SEXP attribute_values = PROTECT(Rf_allocVector(
+    VECSXP,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH
+  ));
+  ++protect_count;
+  SEXP owned;
+  R_xlen_t attribute_count = 0;
+  atomic_leaf_attribute_capture_t capture = {
+    attribute_tags,
+    attribute_values,
+    (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+    0,
+    TRUE
+  };
+
+  if (source_altrep) {
+    if (!paradox_api_map_bounded_stored_attributes(
+        value,
+        (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+        capture_atomic_leaf_attribute,
+        &capture,
+        &attribute_count
+      ) || !capture.valid ||
+        capture.count != attribute_count) {
+      UNPROTECT(protect_count);
+      Rf_error("data.table column attributes changed before snapshot");
+    }
+    owned = PROTECT(paradox_snapshot_semantic_vector(value));
+    ++protect_count;
+  } else {
+    owned = PROTECT(snapshot_ordinary_vector_payload(value, FALSE));
+    ++protect_count;
+    if (!paradox_api_map_bounded_stored_attributes(
+        value,
+        (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+        capture_atomic_leaf_attribute,
+        &capture,
+        &attribute_count
+      ) || !capture.valid ||
+        capture.count != attribute_count) {
+      UNPROTECT(protect_count);
+      Rf_error("data.table column attributes changed before ownership");
+    }
+  }
+
+  atomic_leaf_attribute_receipt_t selected_receipt = {
+    attribute_tags,
+    attribute_values,
+    attribute_count,
+    0,
+    TRUE
+  };
+  R_xlen_t selected_attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      value,
+      (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+      compare_atomic_leaf_attribute,
+      &selected_receipt,
+      &selected_attribute_count
+    ) || !selected_receipt.current ||
+      selected_receipt.count != attribute_count ||
+      selected_attribute_count != attribute_count ||
+      !builtin_metadata_attributes_are_ordinary(value)) {
+    UNPROTECT(protect_count);
+    Rf_error(
+      "data.table column metadata must be ordinary, acyclic, and bounded"
+    );
+  }
+
+  own_builtin_metadata_attributes(
+    owned,
+    value,
+    "data.table column metadata must be ordinary, acyclic, and bounded"
+  );
+  if (!builtin_metadata_attributes_receipt_current(value, owned)) {
+    UNPROTECT(protect_count);
+    Rf_error("data.table column changed while being snapshotted");
+  }
+  atomic_leaf_attribute_receipt_t final_receipt = {
+    attribute_tags,
+    attribute_values,
+    attribute_count,
+    0,
+    TRUE
+  };
+  R_xlen_t final_attribute_count = 0;
+  if (!paradox_api_map_bounded_stored_attributes(
+      value,
+      (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
+      compare_atomic_leaf_attribute,
+      &final_receipt,
+      &final_attribute_count
+    ) || !final_receipt.current ||
+      final_receipt.count != attribute_count ||
+      final_attribute_count != attribute_count ||
+      (!source_altrep &&
+        !paradox_ordinary_vector_payload_equal(value, owned))) {
+    UNPROTECT(protect_count);
+    Rf_error("data.table column changed while being snapshotted");
   }
   UNPROTECT(protect_count);
   return owned;
@@ -1729,68 +3445,49 @@ SEXP paradox_prepare_fresh_data_table(SEXP table) {
 }
 
 SEXP paradox_finalize_data_table(SEXP table) {
-  if (TYPEOF(table) != VECSXP || ALTREP(table) || Rf_isS4(table) ||
-      !Rf_inherits(table, "data.table")) {
+  if (TYPEOF(table) != VECSXP || ALTREP(table) || Rf_isS4(table)) {
     Rf_error("Internal error: expected an ordinary data.table shell");
   }
-  SEXP index_symbol = Rf_install("index");
-  SEXP sorted_symbol = Rf_install("sorted");
   SEXP selfref_symbol = Rf_install(".internal.selfref");
 
-  /* This is a registered entry point, so the input can have arbitrary aliases.
-   * Allocate the independent names destination before duplicating the shell.
-   * A pending finalizer may mutate the source during either allocation. The
-   * shallow duplicate then selects one post-allocation column/attribute
-   * generation, and the immediately following callback-free loop copies that
-   * exact shell's names before any further allocation. Selecting names before
-   * the shell duplicate could pair pre-finalizer names with post-finalizer
-   * columns; allocating their duplicate afterwards would leave the inverse
-   * tear available.
+  /*
+   * This is a registered entry point, so the input can have arbitrary aliases.
+   * First bound the complete presentation-metadata graph without invoking S3
+   * inheritance or R's pairlist duplicator. Then copy the outer column payload
+   * and metadata through the same package-owned operations used for public
+   * leaves. The terminal allocation-free receipt rejects a finalizer splice
+   * before any selected column is independently owned.
    *
-   * The shell duplicate deliberately selects one exact source generation.
-   * Every selected column is then shallow-duplicated at this defensive
-   * caller-owned boundary. List-column leaves retain identity, but a later
-   * `set()`/`:=` cannot mutate either an atomic source column or a list-column
-   * spine.
+   * Attribute values, including names, row names, class, and data.table cache
+   * carriers, are detached by the bounded copier. The stale input self-reference
+   * is removed below and replaced only after every column spine is private.
    */
   PROTECT(table);
-  const R_xlen_t entry_count = XLENGTH(table);
-  SEXP shell_names = PROTECT(Rf_allocVector(STRSXP, entry_count));
-  SEXP shell = PROTECT(Rf_shallow_duplicate(table));
+  if (!builtin_metadata_attributes_are_ordinary(table)) {
+    UNPROTECT(1);
+    Rf_error("Internal error: expected bounded data.table metadata");
+  }
+  SEXP shell = PROTECT(snapshot_ordinary_vector_payload(table, FALSE));
+  own_builtin_metadata_attributes(
+    shell,
+    table,
+    "Internal error: expected bounded data.table metadata"
+  );
+  if (!paradox_ordinary_vector_payload_equal(table, shell) ||
+      !builtin_metadata_attributes_receipt_current(table, shell)) {
+    UNPROTECT(2);
+    Rf_error("data.table shell changed while being snapshotted");
+  }
+  const R_xlen_t entry_count = XLENGTH(shell);
   SEXP names = PROTECT(Rf_getAttrib(shell, R_NamesSymbol));
   if (TYPEOF(shell) != VECSXP || ALTREP(shell) || Rf_isS4(shell) ||
       !Rf_inherits(shell, "data.table") || XLENGTH(shell) != entry_count ||
       TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
       Rf_isObject(names) || !paradox_api_has_no_attributes(names) ||
       XLENGTH(names) != entry_count) {
-    UNPROTECT(4);
+    UNPROTECT(3);
     Rf_error("Internal error: expected ordinary data.table names");
   }
-  for (R_xlen_t column = 0; column < entry_count; ++column) {
-    SET_STRING_ELT(shell_names, column, STRING_ELT(names, column));
-  }
-
-  /* Select the detached shell's cache carriers before their copies allocate.
-   * Replacement of the caller's attribute pairlist can no longer switch the
-   * chosen generation. These are cache metadata only; semantic column/name
-   * ownership was already closed above. */
-  SEXP source_index = PROTECT(Rf_getAttrib(
-    shell,
-    index_symbol
-  ));
-  SEXP source_sorted = PROTECT(Rf_getAttrib(
-    shell,
-    sorted_symbol
-  ));
-  Rf_setAttrib(shell, R_NamesSymbol, shell_names);
-  SEXP shell_index = PROTECT(Rf_shallow_duplicate(
-    source_index
-  ));
-  SEXP shell_sorted = PROTECT(Rf_duplicate(
-    source_sorted
-  ));
-  Rf_setAttrib(shell, index_symbol, shell_index);
-  Rf_setAttrib(shell, sorted_symbol, shell_sorted);
   /* An input facade may carry a copied or names-stale self-reference. Remove
    * it before installing the independently owned result reference. */
   Rf_setAttrib(shell, selfref_symbol, R_NilValue);
@@ -1799,6 +3496,6 @@ SEXP paradox_finalize_data_table(SEXP table) {
   SEXP result_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
   Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
   Rf_setAttrib(result, R_NamesSymbol, result_names);
-  UNPROTECT(10);
+  UNPROTECT(5);
   return result;
 }

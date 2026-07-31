@@ -30,6 +30,8 @@ enum paradox_domain_column {
 #define PARADOX_DOMAIN_PERMANENT_COLUMNS ((R_xlen_t) PARADOX_DOMAIN_TAGS)
 attribute_hidden extern const char *const
   paradox_domain_column_names[PARADOX_DOMAIN_COLUMN_COUNT];
+attribute_hidden extern const SEXPTYPE
+  paradox_domain_column_types[PARADOX_DOMAIN_COLUMN_COUNT];
 
 /* Intern the canonical column names once at package load, so column selection
  * can decide a canonical name with one pointer comparison. */
@@ -47,6 +49,43 @@ attribute_hidden void paradox_domain_select_columns(
   const char *storage_name,
   unsigned int required_mask,
   SEXP *columns
+);
+
+/* The same canonical selector with an optional exact physical-position
+ * receipt. Every position slot is initialized to R_XLEN_T_MAX; requested
+ * columns receive their selected R_xlen_t index. This is structural
+ * operation-local evidence, not a second name-matching implementation. */
+attribute_hidden void paradox_domain_select_columns_with_positions(
+  SEXP table,
+  const char *corrupt_context,
+  const char *storage_name,
+  unsigned int required_mask,
+  SEXP *columns,
+  R_xlen_t *positions
+);
+
+/*
+ * Allocation-free terminal companion to the selector above. The initial
+ * selector has already proved that `positions` is a bijection from the
+ * sixteen canonical names to one exact sixteen-column ordinary table.
+ * Rechecking each physical position, canonical spelling, captured column
+ * identity, and exact row-count/type shell therefore proves the complete
+ * pairing and rectangularity without another table loop.
+ */
+attribute_hidden int paradox_domain_selected_columns_current(
+  SEXP table,
+  const SEXP *columns,
+  const R_xlen_t *positions,
+  R_xlen_t row_count
+);
+
+/* Exact callback-free shell predicate shared by initial admission and the
+ * fused terminal selector receipt. Numeric schema columns admit either
+ * ordinary integer or real storage; every other column has its fixed type. */
+attribute_hidden int paradox_domain_column_shell_is_exact(
+  SEXP column,
+  enum paradox_domain_column selected,
+  R_xlen_t row_count
 );
 
 typedef struct {

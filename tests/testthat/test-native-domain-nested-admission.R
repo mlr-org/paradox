@@ -71,6 +71,184 @@ expect_corrupt_matrix = function(domain, value, rejecting,
   }
 }
 
+zero_row_operations = function(domain) {
+  list(
+    check = function() domain_check(domain, list()),
+    nlevels = function() domain_nlevels(domain),
+    is_bounded = function() domain_is_bounded(domain),
+    is_number = function() domain_is_number(domain),
+    is_categ = function() domain_is_categ(domain),
+    sanitize = function() domain_sanitize(domain, list()),
+    qunif = function() domain_qunif(domain, 0.5)
+  )
+}
+
+test_that("typed public Domain operations admit the complete 16-column shell", {
+  domain = p_dbl(0, 1)
+  structurally_opaque = c(
+    "default", ".requirements", ".init_given", ".init"
+  )
+  wrong_type = list(
+    default = FALSE,
+    .requirements = FALSE,
+    .init_given = list(FALSE),
+    .init = FALSE
+  )
+  wrong_length = list(
+    default = list(),
+    .requirements = list(),
+    .init_given = logical(),
+    .init = list()
+  )
+
+  for (column in structurally_opaque) {
+    missing = data.table::copy(domain)
+    data.table::set(missing, j = column, value = NULL)
+    expect_corrupt_everywhere(
+      missing,
+      0.5,
+      label = paste(column, "missing", sep = "/")
+    )
+
+    duplicated_attributes = attributes(domain)
+    duplicated = unclass(domain)
+    duplicated[[length(duplicated) + 1L]] = domain[[column]]
+    duplicated_attributes$names = c(duplicated_attributes$names, column)
+    attributes(duplicated) = duplicated_attributes
+    expect_corrupt_everywhere(
+      duplicated,
+      0.5,
+      label = paste(column, "duplicated", sep = "/")
+    )
+
+    expect_corrupt_everywhere(
+      nested_corrupt(domain, column, wrong_type[[column]]),
+      0.5,
+      label = paste(column, "type", sep = "/")
+    )
+    expect_corrupt_everywhere(
+      nested_corrupt(domain, column, wrong_length[[column]]),
+      0.5,
+      label = paste(column, "length", sep = "/")
+    )
+  }
+
+  extra_attributes = attributes(domain)
+  extra = unclass(domain)
+  extra[[length(extra) + 1L]] = list(NULL)
+  extra_attributes$names = c(extra_attributes$names, ".unexpected")
+  attributes(extra) = extra_attributes
+  expect_corrupt_everywhere(extra, 0.5, label = "unexpected column")
+
+  # Structural admission does not turn these constructor-owned contents into
+  # a second semantic engine at the public-operation boundary.
+  opaque_contents = list(
+    default = list("not-an-admitted-default"),
+    .requirements = list(1L),
+    .init_given = NA,
+    .init = list("not-an-admitted-initial-value")
+  )
+  for (column in names(opaque_contents)) {
+    expect_corrupt_matrix(
+      nested_corrupt(domain, column, opaque_contents[[column]]),
+      0.5,
+      rejecting = character(),
+      label = paste(column, "opaque contents", sep = "/")
+    )
+  }
+})
+
+test_that("empty-value and typed-zero exits still admit the Domain", {
+  malformed_levels = nested_corrupt(
+    p_fct(c("a", "b")),
+    "levels",
+    list(c("a", "a"))
+  )
+  expect_error(
+    domain_check(malformed_levels, list()),
+    "Corrupt Domain storage"
+  )
+
+  malformed_zero = nested_corrupt(
+    p_dbl(0, 1)[0],
+    ".init",
+    list(NULL)
+  )
+  operations = zero_row_operations(malformed_zero)
+  for (name in names(operations)) {
+    expect_error(
+      operations[[name]](),
+      "Corrupt Domain storage",
+      info = name
+    )
+  }
+})
+
+test_that("empty ALTREP Length reentry re-admits the current Domain", {
+  domain = p_dbl(0, 1)
+  callbacks = 0L
+  attribute_mutator = get(
+    "C_test_gc_attribute_mutator",
+    envir = asNamespace("paradox")
+  )
+  replacement = c("ParamInt", "Domain", "data.table", "data.frame")
+  empty = native_stateful_altrep(
+    numeric(),
+    numeric(),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      # Leave a structurally ordinary but differently shaped current
+      # generation through a real pending finalizer. The pre-Length ParamDbl
+      # shape must not authenticate it.
+      pending = .Call(
+        attribute_mutator,
+        domain,
+        "class",
+        replacement
+      )
+      pending = NULL
+      invisible(gc(full = TRUE))
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+
+  expect_error(
+    domain_check(domain, empty),
+    "Domain shape changed during admission",
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 1L)
+  expect_identical(attr(domain, "class"), replacement)
+})
+
+test_that("qunif re-admits the Domain after one ALTREP Length observation", {
+  domain = p_dbl(0, 1)[c(1L, 1L)]
+  original_grouping = domain$grouping
+  callbacks = 0L
+  units = native_stateful_altrep(
+    c(0, 1),
+    c(0, 1),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      data.table::set(
+        domain,
+        i = 2L,
+        j = "grouping",
+        value = "changed"
+      )
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+
+  expect_error(
+    domain_qunif(domain, units),
+    "rows must share one grouping",
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 1L)
+  expect_identical(domain$grouping, c(original_grouping[[1L]], "changed"))
+})
+
 test_that("a special-value match does not suppress factor-level admission", {
   # The special-value fast path may skip a row's *value* check; it may never
   # skip that row's schema admission.

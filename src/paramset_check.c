@@ -357,7 +357,18 @@ static SEXP named_list_element(SEXP value, const char *target) {
   if (TYPEOF(value) != VECSXP || ALTREP(value) || Rf_isS4(value)) {
     return R_UnboundValue;
   }
-  SEXP names = PROTECT(Rf_getAttrib(value, R_NamesSymbol));
+  int has_names = FALSE;
+  if (!paradox_bounded_metadata_has_tag(
+      value,
+      R_NamesSymbol,
+      &has_names
+    ) || !has_names) {
+    return R_UnboundValue;
+  }
+  SEXP names = PROTECT(paradox_api_raw_attribute(
+    value,
+    R_NamesSymbol
+  ));
   if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
       Rf_isObject(names) || !no_attributes(names) ||
       XLENGTH(names) != XLENGTH(value)) {
@@ -556,10 +567,14 @@ static void reserve_graph(check_graph_t *graph) {
 static int exact_sets(SEXP sets, SEXP *names,
     R_xlen_t *work_since_interrupt) {
   if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
-      Rf_isObject(sets)) {
+      Rf_isObject(sets) ||
+      !paradox_api_has_single_attribute(sets, "names")) {
     return FALSE;
   }
-  SEXP observed_names = PROTECT(Rf_getAttrib(sets, R_NamesSymbol));
+  SEXP observed_names = PROTECT(paradox_api_raw_attribute(
+    sets,
+    R_NamesSymbol
+  ));
   if (TYPEOF(observed_names) != STRSXP || ALTREP(observed_names) ||
       Rf_isS4(observed_names) || Rf_isObject(observed_names) ||
       !no_attributes(observed_names) ||
@@ -869,7 +884,16 @@ static void validate_node_schema(check_node_t *node,
      * whose identity belongs to the caller; the engine never indexes them.
      * TuneToken metadata remains semantic even when assigned to ParamUty and
      * therefore still has to be ordinary canonical storage. */
-    if ((kind != VALUE_UTY || Rf_inherits(stored_value, "TuneToken")) &&
+    int stored_token = FALSE;
+    if (kind == VALUE_UTY &&
+        !paradox_api_ordinary_class_matches(
+          stored_value,
+          "TuneToken",
+          &stored_token
+        )) {
+      Rf_error("Corrupt ParamSet state: invalid stored parameter value");
+    }
+    if ((kind != VALUE_UTY || stored_token) &&
         !semantic_value_is_ordinary(stored_value)) {
       Rf_error("Corrupt ParamSet state: invalid stored parameter value");
     }
@@ -1395,9 +1419,12 @@ static void build_graph(SEXP private_environment, SEXP self,
 static int graph_receipts_are_current(const check_graph_t *graph) {
   for (R_xlen_t index = 0; index < graph->count; ++index) {
     const check_node_t *node = &graph->nodes[index];
+    SEXP current_classes = R_NilValue;
+    const paradox_core_kind_t current_kind =
+      paradox_param_set_class_kind_raw(node->self, &current_classes);
     if (node->classes == R_NilValue ||
-        Rf_getAttrib(node->self, R_ClassSymbol) != node->classes ||
-        paradox_param_set_class_kind_raw(node->self, NULL) != node->kind ||
+        current_classes != node->classes ||
+        current_kind != node->kind ||
         (node->kind == PARADOX_CORE_SHADOW &&
           !paradox_shadow_signature_receipt_is_current(
             node->selected_core,
@@ -1454,6 +1481,9 @@ static int internal_tuning_node_receipt_is_current(SEXP roots) {
   SEXP expected_state = VECTOR_ELT(roots, NODE_ROOT_STATE);
   const paradox_core_kind_t expected_kind =
     paradox_core_kind(expected_core);
+  SEXP current_classes = R_NilValue;
+  const paradox_core_kind_t current_kind =
+    paradox_param_set_class_kind_raw(self, &current_classes);
   if (TYPEOF(self) != ENVSXP || Rf_isS4(self) ||
       TYPEOF(expected_enclosure) != ENVSXP || Rf_isS4(expected_enclosure) ||
       TYPEOF(expected_private) != ENVSXP || Rf_isS4(expected_private) ||
@@ -1470,9 +1500,8 @@ static int internal_tuning_node_receipt_is_current(SEXP roots) {
         (expected_shadow_signature != R_NilValue ||
          expected_shadow_signature_content != R_NilValue)) ||
       paradox_core_payload(expected_core) != expected_state ||
-      Rf_getAttrib(self, R_ClassSymbol) != classes ||
-      paradox_param_set_class_kind_raw(self, NULL) !=
-        expected_kind) {
+      current_classes != classes ||
+      current_kind != expected_kind) {
     return FALSE;
   }
 
@@ -2323,9 +2352,12 @@ static int exact_base_param_set_shell(SEXP content,
   initialize_token_binding_symbols();
   if (TYPEOF(content) != ENVSXP || Rf_isS4(content)) return FALSE;
   R_xlen_t work_since_interrupt = 0;
-  SEXP observed_classes = PROTECT(Rf_getAttrib(content, R_ClassSymbol));
-  const int exact_class = !Rf_isS4(observed_classes) &&
-    paradox_api_has_no_attributes(observed_classes) &&
+  SEXP observed_classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(content, &observed_classes)) {
+    return FALSE;
+  }
+  PROTECT(observed_classes);
+  const int exact_class =
     paradox_domain_exact_string_vector(
       observed_classes,
       classes,
@@ -2465,7 +2497,8 @@ static int exact_base_receipt_unchanged(SEXP receipt) {
       TYPEOF(expected_core) != EXTPTRSXP || Rf_isS4(expected_core)) {
     return FALSE;
   }
-  SEXP classes = Rf_getAttrib(shell, R_ClassSymbol);
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(shell, &classes)) return FALSE;
   if (TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes) ||
       XLENGTH(classes) != 2 || !paradox_api_has_no_attributes(classes) ||
       STRING_ELT(classes, 0) == NA_STRING ||
@@ -2547,43 +2580,45 @@ static void verify_token_receipts(SEXP receipts) {
   paradox_param_set_scan_token_receipts(receipts);
 }
 
-static SEXP materialize_atomic(SEXP value) {
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
-  const R_xlen_t size = XLENGTH(value);
-  SEXP result = PROTECT(Rf_allocVector(type, size));
-  R_xlen_t work_since_interrupt = 0;
-  for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_account_work(&work_since_interrupt);
-    switch (type) {
-    case LGLSXP:
-      SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
-      break;
-    case INTSXP:
-      SET_INTEGER_ELT(result, index, INTEGER_ELT(value, index));
-      break;
-    case REALSXP:
-      SET_REAL_ELT(result, index, REAL_ELT(value, index));
-      break;
-    case CPLXSXP:
-      paradox_api_set_complex_elt(
-        result,
-        index,
-        COMPLEX_ELT(value, index)
-      );
-      break;
-    case STRSXP:
-      SET_STRING_ELT(result, index, STRING_ELT(value, index));
-      break;
-    case RAWSXP:
-      paradox_api_set_raw_elt(result, index, RAW_ELT(value, index));
-      break;
-    default:
-      UNPROTECT(1);
-      Rf_error("Unsupported ALTREP parameter value type");
-    }
+static SEXP snapshot_ordinary_list_leaf(SEXP value) {
+  /*
+   * A typed list value is interpreted only as an outer semantic carrier:
+   * its cells remain opaque identities. Structural ALTREP has no supported
+   * contract here and must be rejected before Length/Elt can dispatch.
+   */
+  if (TYPEOF(value) != VECSXP || ALTREP(value) || Rf_isS4(value)) {
+    Rf_error("Typed parameter list values must use ordinary list storage");
   }
-  SHALLOW_DUPLICATE_ATTRIB(result, value);
-  UNPROTECT(1);
+
+  PROTECT(value);
+  /*
+   * Allocate an attribute-free destination before selecting the opaque cells.
+   * The package-owned bounded attribute copier below never hands the
+   * caller-owned pairlist to R's recursive shallow duplicator.  Its terminal
+   * receipt plus the final payload comparison reject a finalizer splice
+   * between cell and metadata selection.
+   */
+  const R_xlen_t size = XLENGTH(value);
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
+  if (TYPEOF(value) != VECSXP || ALTREP(value) || Rf_isS4(value) ||
+      XLENGTH(value) != size) {
+    UNPROTECT(2);
+    Rf_error("Typed parameter list value changed while being snapshotted");
+  }
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SET_VECTOR_ELT(result, index, VECTOR_ELT(value, index));
+  }
+  paradox_copy_bounded_shallow_attributes(
+    result,
+    value,
+    PARADOX_SHALLOW_ATTRIBUTES_ALL,
+    "Typed parameter list metadata must use a bounded attribute set"
+  );
+  if (!paradox_ordinary_vector_payload_equal(value, result)) {
+    UNPROTECT(2);
+    Rf_error("Typed parameter list value changed while being snapshotted");
+  }
+  UNPROTECT(2);
   return result;
 }
 
@@ -2595,18 +2630,10 @@ static SEXP snapshot_parameter_leaf(SEXP value) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
   if (type == LGLSXP || type == INTSXP || type == REALSXP ||
       type == CPLXSXP || type == STRSXP || type == RAWSXP) {
-    if (ALTREP(value)) return materialize_atomic(value);
-    return Rf_duplicate(value);
+    return paradox_snapshot_builtin_value_leaf(value);
   }
   if (type == VECSXP) {
-    const R_xlen_t size = XLENGTH(value);
-    SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
-    for (R_xlen_t index = 0; index < size; ++index) {
-      SET_VECTOR_ELT(result, index, VECTOR_ELT(value, index));
-    }
-    SHALLOW_DUPLICATE_ATTRIB(result, value);
-    UNPROTECT(1);
-    return result;
+    return snapshot_ordinary_list_leaf(value);
   }
   return value;
 }
@@ -2735,25 +2762,27 @@ typedef enum {
 } token_claim_t;
 
 /*
- * Allocation-free and callback-free classification. It reproduces the
- * extension of `Rf_inherits(value, "TuneToken")` for every admissible token
- * while never observing a non-ordinary class vector: a TuneToken class vector
- * is contractually ordinary character, so a value whose class representation
- * is ALTREP, S4, or attributed is an opaque value and not a token. That also
- * keeps an ALTREP `Elt` method off the value-admission path, which the
- * surrounding snapshot rules already forbid.
+ * Allocation-free and callback-free classification. Exact admission requires
+ * one of the five plain, attribute-free character class vectors above. Other
+ * ordinary character carriers are inspected only for a literal "TuneToken"
+ * claim, which is selected and rejected as malformed; without that claim they
+ * remain ordinary values. A non-character or ALTREP class carrier cannot be
+ * proved to be an ordinary non-token under this closed contract, so it fails
+ * closed as malformed without observing any ALTREP element.
  */
 static token_claim_t exact_token_claim(SEXP value,
     token_snapshot_kind_t *kind) {
   *kind = TOKEN_SNAPSHOT_FULL;
   if (!Rf_isObject(value)) return TOKEN_CLAIM_NONE;
-  SEXP classes = Rf_getAttrib(value, R_ClassSymbol);
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(value, &classes)) {
+    return TOKEN_CLAIM_MALFORMED;
+  }
   if (classes == R_NilValue) return TOKEN_CLAIM_NONE;
-  /* A class representation that cannot describe an admitted token is a claim,
-   * not an ordinary value: it is selected and rejected by the erroring
-   * admission, exactly as it is today. An ALTREP class vector is the one
-   * shape whose elements cannot be read without dispatching into user code,
-   * so it is rejected without being observed. */
+  /* These carriers cannot describe an admitted token, but neither can they be
+   * safely classified as ordinary non-tokens. Select them as malformed claims
+   * so the erroring admission rejects them; never dispatch through ALTREP
+   * element access merely to refine that diagnostic. */
   if (TYPEOF(classes) != STRSXP || ALTREP(classes)) {
     return TOKEN_CLAIM_MALFORMED;
   }
@@ -2888,8 +2917,15 @@ static int token_number_or_null(SEXP value) {
 
 static void validate_token_content(SEXP content, token_snapshot_kind_t kind) {
   if (kind == TOKEN_SNAPSHOT_OBJECT) {
-    if (Rf_isS4(content) ||
-        (!Rf_inherits(content, "Domain") && TYPEOF(content) != ENVSXP)) {
+    if (TYPEOF(content) == ENVSXP && !Rf_isS4(content)) return;
+    int domain = FALSE;
+    if (TYPEOF(content) != VECSXP || ALTREP(content) ||
+        Rf_isS4(content) ||
+        !paradox_api_ordinary_class_matches(
+          content,
+          "Domain",
+          &domain
+        ) || !domain) {
       Rf_error(
         "Malformed ObjectTuneToken: content must be a Domain or ParamSet"
       );
@@ -3055,17 +3091,23 @@ static SEXP snapshot_tune_token_impl(SEXP token, int phase,
      * element in one allocation-free pass. From here the source spine is
      * never read again. */
     R_xlen_t work_since_interrupt = 0;
-    SEXP observed_names = Rf_getAttrib(content, R_NamesSymbol);
     if (TYPEOF(content) != VECSXP || ALTREP(content) ||
         Rf_isS4(content) || Rf_isObject(content) ||
         XLENGTH(content) != size ||
-        !paradox_api_has_single_attribute(content, "names") ||
-        !exact_token_string_vector(
-          observed_names,
-          layout.names,
-          size,
-          &work_since_interrupt
-        )) {
+        !paradox_api_has_single_attribute(content, "names")) {
+      UNPROTECT(4);
+      Rf_error("Malformed TuneToken content");
+    }
+    SEXP observed_names = paradox_api_raw_attribute(
+      content,
+      R_NamesSymbol
+    );
+    if (!exact_token_string_vector(
+        observed_names,
+        layout.names,
+        size,
+        &work_since_interrupt
+      )) {
       UNPROTECT(4);
       Rf_error("Malformed TuneToken content");
     }
@@ -3223,7 +3265,9 @@ SEXP paradox_test_tune_token_gc_mutation_snapshot(
   if (TYPEOF(token) != VECSXP || ALTREP(token) || XLENGTH(token) < 1) {
     Rf_error("Invalid TuneToken GC-mutation test fixture token");
   }
-  if (!Rf_inherits(token, "TuneToken")) {
+  token_snapshot_kind_t token_kind = TOKEN_SNAPSHOT_FULL;
+  const token_claim_t claim = exact_token_claim(token, &token_kind);
+  if (claim == TOKEN_CLAIM_NONE) {
     SEXP stable_values = PROTECT(snapshot_search_space_value_carrier(token));
     run_token_test_barrier(
       selected_phase == TOKEN_TEST_PHASE_CONTENT,
@@ -3241,6 +3285,9 @@ SEXP paradox_test_tune_token_gc_mutation_snapshot(
     ));
     UNPROTECT(2);
     return result;
+  }
+  if (claim != TOKEN_CLAIM_EXACT) {
+    Rf_error("Invalid TuneToken GC-mutation test fixture token");
   }
   SEXP content = VECTOR_ELT(token, 0);
   if (TYPEOF(content) != VECSXP || ALTREP(content)) {
@@ -3279,7 +3326,11 @@ static SEXP snapshot_value_for_spec(
 }
 
 static int representation_only_s3_classes(SEXP value) {
-  SEXP classes = PROTECT(Rf_getAttrib(value, R_ClassSymbol));
+  SEXP classes = R_NilValue;
+  if (!paradox_api_ordinary_class_snapshot(value, &classes)) {
+    return FALSE;
+  }
+  PROTECT(classes);
   if (classes == R_NilValue) {
     UNPROTECT(1);
     return TRUE;
@@ -3301,6 +3352,14 @@ static int representation_only_s3_classes(SEXP value) {
   return TRUE;
 }
 
+static int named_list_shell_is_current(SEXP values, R_xlen_t size) {
+  static const char *const allowed_attributes[] = {"names", "class"};
+  return TYPEOF(values) == VECSXP && !ALTREP(values) &&
+    !Rf_isS4(values) && XLENGTH(values) == size &&
+    paradox_api_has_only_attributes(values, allowed_attributes, 2) &&
+    representation_only_s3_classes(values);
+}
+
 static int ordinary_names_vector(SEXP value, R_xlen_t expected,
     int allow_absent) {
   if (value == R_NilValue) return allow_absent;
@@ -3310,21 +3369,25 @@ static int ordinary_names_vector(SEXP value, R_xlen_t expected,
 }
 
 static SEXP snapshot_named_list(SEXP values) {
-  static const char *const allowed_attributes[] = {"names", "class"};
   if (TYPEOF(values) != VECSXP) {
     return check_message(
       "Must be a list, not '%s'",
       Rf_type2char((SEXPTYPE) TYPEOF(values))
     );
   }
-  if (ALTREP(values) || Rf_isS4(values) ||
-      !paradox_api_has_only_attributes(values, allowed_attributes, 2) ||
-      !representation_only_s3_classes(values)) {
+  if (ALTREP(values) || Rf_isS4(values)) {
     return check_message("Must be an ordinary named list");
   }
   const R_xlen_t size = XLENGTH(values);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
-  SEXP names = PROTECT(Rf_getAttrib(values, R_NamesSymbol));
+  if (!named_list_shell_is_current(values, size)) {
+    UNPROTECT(1);
+    return check_message("Must be an ordinary named list");
+  }
+  SEXP names = PROTECT(paradox_api_raw_attribute(
+    values,
+    R_NamesSymbol
+  ));
   if (names == R_NilValue && size != 0) {
     UNPROTECT(2);
     return check_message("Must be a named list");
@@ -3346,7 +3409,11 @@ static SEXP snapshot_named_list(SEXP values) {
    * carrier was allocated; it may not leave a pre-callback name paired with a
    * post-callback value.
    */
-  names = Rf_getAttrib(values, R_NamesSymbol);
+  if (!named_list_shell_is_current(values, size)) {
+    UNPROTECT(3);
+    return check_message("Must be an ordinary named list");
+  }
+  names = paradox_api_raw_attribute(values, R_NamesSymbol);
   if (TYPEOF(stable_names) != STRSXP || ALTREP(stable_names) ||
       Rf_isS4(stable_names) || XLENGTH(stable_names) != size ||
       !no_attributes(stable_names) ||
@@ -3962,7 +4029,7 @@ static int optional_number(SEXP content, const char *name, double *result,
 static SEXP validate_object_token(const value_spec_t *spec, SEXP content,
     R_xlen_t *work_since_interrupt, SEXP *receipt_result) {
   if (receipt_result != NULL) *receipt_result = R_NilValue;
-  if (Rf_inherits(content, "Domain")) {
+  if (TYPEOF(content) == VECSXP) {
     /* Object Domain content was deeply owned, structurally admitted, and
      * bounded by snapshot_tune_token(). Candidate transformation and target
      * compatibility intentionally belong only to search-space conversion. */
@@ -4023,8 +4090,15 @@ static SEXP validate_tune_token(const value_spec_t *spec, SEXP token,
     );
   }
   SEXP call = token_call(token);
+  token_snapshot_kind_t kind = TOKEN_SNAPSHOT_FULL;
+  if (exact_token_claim(token, &kind) != TOKEN_CLAIM_EXACT) {
+    return utf8_message_1(
+      "", spec->id, ": tune token invalid: malformed token"
+    );
+  }
 
-  if (Rf_inherits(token, "RangeTuneToken")) {
+  if (kind == TOKEN_SNAPSHOT_RANGE ||
+      kind == TOKEN_SNAPSHOT_INTERNAL_RANGE) {
     if (spec->kind != VALUE_DBL && spec->kind != VALUE_INT) {
       return utf8_message_1(
         "", call,
@@ -4083,7 +4157,8 @@ static SEXP validate_tune_token(const value_spec_t *spec, SEXP token,
     return R_NilValue;
   }
 
-  if (Rf_inherits(token, "FullTuneToken")) {
+  if (kind == TOKEN_SNAPSHOT_FULL ||
+      kind == TOKEN_SNAPSHOT_INTERNAL_FULL) {
     int bounded = spec->kind == VALUE_FCT || spec->kind == VALUE_LGL ||
       ((spec->kind == VALUE_DBL || spec->kind == VALUE_INT) &&
        R_FINITE(spec->lower) && R_FINITE(spec->upper));
@@ -4111,7 +4186,7 @@ static SEXP validate_tune_token(const value_spec_t *spec, SEXP token,
     return R_NilValue;
   }
 
-  if (Rf_inherits(token, "ObjectTuneToken")) {
+  if (kind == TOKEN_SNAPSHOT_OBJECT) {
     return validate_object_token(
       spec,
       content,
@@ -4430,9 +4505,8 @@ static SEXP check_dependencies(check_plan_t *plan,
     const R_xlen_t child = plan->dependency_child[dependency];
     const R_xlen_t child_value = point->value_for_param[child];
     if (child_value == R_XLEN_T_MAX ||
-        Rf_inherits(
-          VECTOR_ELT(point->values, child_value),
-          "TuneToken"
+        value_is_tune_token(
+          VECTOR_ELT(point->values, child_value)
         )) {
       continue;
     }
@@ -4532,8 +4606,8 @@ static SEXP validate_initialized_point(check_plan_t *plan,
     .result = {NULL, NULL}
   };
   for (R_xlen_t index = 0; index < point->size; ++index) {
-    if (!allow_token && Rf_inherits(
-        VECTOR_ELT(point->values, index), "TuneToken"
+    if (!allow_token && value_is_tune_token(
+        VECTOR_ELT(point->values, index)
       )) {
       return Rf_mkString("TuneTokens are not allowed to be present.");
     }
@@ -4561,9 +4635,24 @@ static SEXP validate_initialized_point(check_plan_t *plan,
   for (R_xlen_t index = 0; index < point->size; ++index) {
     paradox_account_work(&work_since_interrupt);
     SEXP value = VECTOR_ELT(point->values, index);
-    if (!Rf_inherits(value, "TuneToken")) continue;
+    token_snapshot_kind_t token_kind = TOKEN_SNAPSHOT_FULL;
+    const token_claim_t token_claim = exact_token_claim(
+      value,
+      &token_kind
+    );
+    if (token_claim == TOKEN_CLAIM_NONE) continue;
+    if (token_claim != TOKEN_CLAIM_EXACT) {
+      UNPROTECT(protected_count);
+      return utf8_message_1(
+        "", plan->specs[point->param_rows[index]].id,
+        ": tune token invalid: malformed token"
+      );
+    }
     const value_spec_t *spec = &plan->specs[point->param_rows[index]];
-    if (Rf_inherits(value, "InternalTuneToken") && !has_tag(
+    const int internal =
+      token_kind == TOKEN_SNAPSHOT_INTERNAL_FULL ||
+      token_kind == TOKEN_SNAPSHOT_INTERNAL_RANGE;
+    if (internal && !has_tag(
         plan, spec->id, "internal_tuning", &work_since_interrupt
       )) {
       UNPROTECT(protected_count);
@@ -4614,7 +4703,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
     const value_spec_t *spec = &plan->specs[row];
     SEXP value = VECTOR_ELT(point->values, index);
     SEXP failure = R_NilValue;
-    if (!Rf_inherits(value, "TuneToken")) {
+    if (!value_is_tune_token(value)) {
       SEXP replacement = value;
       failure = validate_ordinary_value(
         spec, value, sanitize, &replacement, &work_since_interrupt
@@ -4697,15 +4786,11 @@ static SEXP snapshot_table_column(SEXP column) {
   if (TYPEOF(column) == VECSXP && Rf_isS4(column)) {
     return R_UnboundValue;
   }
-  if (TYPEOF(column) != VECSXP) return snapshot_parameter_value(column);
-  const R_xlen_t size = XLENGTH(column);
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
-  for (R_xlen_t row = 0; row < size; ++row) {
-    SET_VECTOR_ELT(result, row, VECTOR_ELT(column, row));
+  if (TYPEOF(column) == VECSXP && ALTREP(column)) {
+    return R_MissingArg;
   }
-  SHALLOW_DUPLICATE_ATTRIB(result, column);
-  UNPROTECT(1);
-  return result;
+  if (TYPEOF(column) != VECSXP) return snapshot_parameter_value(column);
+  return snapshot_ordinary_list_leaf(column);
 }
 
 static void stabilize_table_list_columns(
@@ -4795,6 +4880,10 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
     if (stable == R_UnboundValue) {
       UNPROTECT(4);
       return check_message("Table list-column shells must not be S4");
+    }
+    if (stable == R_MissingArg) {
+      UNPROTECT(4);
+      return check_message("Table list-column shells must use ordinary storage");
     }
     const SEXPTYPE type = (SEXPTYPE) TYPEOF(stable);
     if (type != LGLSXP && type != INTSXP && type != REALSXP &&

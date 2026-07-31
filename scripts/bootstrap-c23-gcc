@@ -1,0 +1,316 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Provision the one small GCC >= 15 overlay used only by the explicit C23
+# forward-compatibility gate.  R, Clang, package dependencies, and every
+# ordinary build profile remain in the main repository-local toolchain.
+
+umask 077
+LC_ALL=C
+LANG=C
+export LC_ALL LANG
+
+ROOT=$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
+PREFIX="$ROOT/.local/c23-gcc"
+RECEIPTS="$ROOT/.local/receipts/c23-gcc"
+TEMP_ROOT="$ROOT/.local/tmp"
+MAMBA_ROOT="$ROOT/.local/micromamba"
+LOCK="$ROOT/environment/c23-gcc-linux-64.lock"
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+MICROMAMBA_VERSION=2.5.0
+MICROMAMBA_ARCHIVE_SHA256=cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-${MICROMAMBA_VERSION}-linux-64.tar.bz2"
+TARGET=x86_64-conda-linux-gnu
+GCC="$PREFIX/bin/$TARGET-gcc"
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/bootstrap-c23-gcc [--verify] [--offline]
+
+Provision or verify the exact repository-local GCC 15.2 overlay used by the
+explicit C23 compatibility gate. --verify is read-only. --offline provisions
+an absent overlay only from the existing micromamba package cache.
+EOF
+}
+
+fail() {
+  printf 'bootstrap-c23-gcc: %s\n' "$*" >&2
+  exit 1
+}
+
+mode=provision
+offline=false
+while (($#)); do
+  case "$1" in
+    --verify)
+      [[ "$mode" == provision ]] ||
+        fail "verification mode was selected twice"
+      mode=verify
+      shift
+      ;;
+    --offline)
+      offline=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+[[ "$mode" == provision || "$offline" == false ]] ||
+  fail "--offline is meaningful only while provisioning"
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *) fail "the checked-in GCC C23 overlay targets Linux x86_64" ;;
+esac
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+require_plain_file() {
+  local path=$1 label=$2
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-regular, or symbolic: $path"
+}
+
+require_plain_directory() {
+  local path=$1 label=$2
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-directory, or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label is not canonical: $path"
+}
+
+ensure_plain_directory() {
+  local path=$1 label=$2
+  if [[ ! -e "$path" && ! -L "$path" ]]; then
+    mkdir -- "$path"
+  fi
+  require_plain_directory "$path" "$label"
+}
+
+validate_lock() {
+  local rows invalid
+  require_plain_file "$LOCK" "GCC C23 lock"
+  [[ "$(sed -n '1p' "$LOCK")" == '# platform: linux-64' &&
+    "$(sed -n '2p' "$LOCK")" == @EXPLICIT ]] ||
+    fail "GCC C23 lock has an unexpected explicit header"
+  read -r rows invalid < <(
+    sed -n '3,$p' "$LOCK" | awk '
+      BEGIN { rows = 0; invalid = 0 }
+      {
+        rows += 1
+        if ($0 !~ /^https:\/\/conda\.anaconda\.org\/conda-forge\/(linux-64|noarch)\/[^[:space:]#]+#[0-9a-f]{64}$/)
+          invalid = 1
+      }
+      END { print rows, invalid }
+    '
+  )
+  [[ "$rows" -eq 17 && "$invalid" -eq 0 ]] ||
+    fail "GCC C23 lock must contain 17 exact conda artifacts"
+  [[ "$(grep -Ec '/gcc_impl_linux-64-15[.]2[.]0-' "$LOCK")" -eq 1 &&
+    "$(grep -Ec '/gcc_linux-64-15[.]2[.]0-' "$LOCK")" -eq 1 ]] ||
+    fail "GCC C23 lock lacks its exact GCC 15.2 compiler pair"
+}
+
+write_inventory() {
+  local output=$1
+  {
+    printf '%s\n' '# platform: linux-64' '@EXPLICIT'
+    "$MICROMAMBA" list --no-rc --prefix "$PREFIX" --explicit --sha256 |
+      sed -n '3,$p'
+  } > "$output"
+}
+
+same_artifacts() {
+  local left=$1 right=$2
+  cmp -s \
+    <(sed -n '3,$p' "$left" | sort) \
+    <(sed -n '3,$p' "$right" | sort)
+}
+
+semantic_probe() (
+  local version std_version scratch
+  require_plain_file "$GCC" "GCC 15 compiler"
+  [[ -x "$GCC" ]] || fail "GCC 15 compiler is not executable"
+  version=$("$GCC" -dumpfullversion -dumpversion)
+  [[ "$version" == 15.2.0 ]] ||
+    fail "GCC C23 overlay reports $version instead of 15.2.0"
+  std_version=$(
+    "$GCC" -std=gnu23 -dM -E -x c /dev/null |
+      awk '$2 == "__STDC_VERSION__" { print $3 }'
+  )
+  [[ "$std_version" == 202311L ]] ||
+    fail "GCC 15 did not report the final C23 language version"
+
+  scratch=$(mktemp -d "$TEMP_ROOT/c23-gcc-probe.XXXXXX")
+  trap 'rm -rf -- "${scratch:-}"' EXIT
+  printf '%s\n' \
+    'int main(void) {' \
+    '  bool selected = true;' \
+    '  static_assert(sizeof(int) >= 2, "unsupported int");' \
+    '  typeof_unqual(selected) copied = selected;' \
+    '  return copied ? 0 : 1;' \
+    '}' > "$scratch/probe.c"
+  env -i \
+    "HOME=$scratch" \
+    "PATH=$PREFIX/bin:/usr/bin:/bin" \
+    "LC_ALL=C" \
+    "$GCC" -std=gnu23 -Wall -Wextra -Wpedantic -Werror \
+    "$scratch/probe.c" -o "$scratch/probe"
+  "$scratch/probe"
+  rm -rf -- "$scratch"
+  trap - EXIT
+)
+
+write_receipt() {
+  local inventory=$1 manifest=$2 output=$3
+  {
+    printf 'format\t1\n'
+    printf 'platform\tlinux-64\n'
+    printf 'prefix_relative\t.local/c23-gcc\n'
+    printf 'lock_relative\tenvironment/c23-gcc-linux-64.lock\n'
+    printf 'lock_sha256\t%s\n' "$(sha256_file "$LOCK")"
+    printf 'inventory_sha256\t%s\n' "$(sha256_file "$inventory")"
+    printf 'prefix_manifest_sha256\t%s\n' "$(sha256_file "$manifest")"
+    printf 'prefix_receipt_helper_sha256\t%s\n' \
+      "$(sha256_file "$PREFIX_RECEIPT")"
+    printf 'micromamba_version\t%s\n' "$MICROMAMBA_VERSION"
+    printf 'micromamba_archive_sha256\t%s\n' "$MICROMAMBA_ARCHIVE_SHA256"
+    printf 'micromamba_executable_sha256\t%s\n' \
+      "$(sha256_file "$MICROMAMBA")"
+    printf 'gcc_version\t%s\n' "$("$GCC" -dumpfullversion -dumpversion)"
+    printf 'gcc_sha256\t%s\n' "$(sha256_file "$GCC")"
+    printf 'c23_version\t202311L\n'
+  } > "$output"
+}
+
+verify_overlay() (
+  local inventory="$RECEIPTS/installed-explicit.lock"
+  local manifest="$RECEIPTS/prefix.manifest.tsv"
+  local receipt="$RECEIPTS/receipt.tsv"
+  local seal="$RECEIPTS/receipt.sha256"
+  local observed_inventory observed_receipt
+
+  validate_lock
+  require_plain_directory "$PREFIX" "GCC C23 prefix"
+  require_plain_directory "$RECEIPTS" "GCC C23 receipt directory"
+  for input in "$inventory" "$manifest" "$receipt" "$seal"; do
+    require_plain_file "$input" "GCC C23 receipt input"
+  done
+  [[ "$(wc -l < "$seal")" -eq 1 &&
+    "$(<"$seal")" == "$(sha256_file "$receipt")  receipt.tsv" ]] ||
+    fail "GCC C23 receipt seal is invalid"
+
+  observed_inventory=$(mktemp "$TEMP_ROOT/c23-gcc.inventory.XXXXXX")
+  observed_receipt=$(mktemp "$TEMP_ROOT/c23-gcc.receipt.XXXXXX")
+  trap 'rm -f -- "$observed_inventory" "$observed_receipt"' EXIT
+  write_inventory "$observed_inventory"
+  same_artifacts "$LOCK" "$observed_inventory" ||
+    fail "GCC C23 prefix differs from its exact package lock"
+  cmp -s "$inventory" "$observed_inventory" ||
+    fail "GCC C23 installed inventory receipt is stale"
+  "$PREFIX_RECEIPT" verify "$PREFIX" "$manifest" >/dev/null
+  semantic_probe
+  write_receipt "$inventory" "$manifest" "$observed_receipt"
+  cmp -s "$receipt" "$observed_receipt" ||
+    fail "GCC C23 metadata receipt is stale"
+  if find "$PREFIX" "$RECEIPTS" \( -type d -o -type f \) \
+      -perm /222 -print -quit | grep -q .; then
+    fail "GCC C23 prefix or receipts contain writable state"
+  fi
+  rm -f -- "$observed_inventory" "$observed_receipt"
+  trap - EXIT
+  printf 'c23_gcc_overlay=verified\n'
+  printf 'gcc_version=15.2.0\n'
+)
+
+validate_lock
+require_plain_file "$MICROMAMBA" "authenticated micromamba"
+[[ -x "$MICROMAMBA" ]] || fail "authenticated micromamba is not executable"
+require_plain_file "$MICROMAMBA_ARCHIVE" "pinned micromamba archive"
+require_plain_file "$PREFIX_RECEIPT" "prefix receipt helper"
+[[ -x "$PREFIX_RECEIPT" ]] || fail "prefix receipt helper is not executable"
+[[ "$(sha256_file "$MICROMAMBA_ARCHIVE")" == \
+  "$MICROMAMBA_ARCHIVE_SHA256" ]] ||
+  fail "micromamba archive differs from its SHA-256 pin"
+micromamba_member_sha256=$(
+  tar -xOjf "$MICROMAMBA_ARCHIVE" bin/micromamba |
+    sha256sum | cut -d ' ' -f 1
+)
+[[ "$(sha256_file "$MICROMAMBA")" == "$micromamba_member_sha256" &&
+  "$("$MICROMAMBA" --version)" == "$MICROMAMBA_VERSION" ]] ||
+  fail "installed micromamba differs from its authenticated archive member"
+
+require_plain_directory "$ROOT/.local" "local state root"
+require_plain_directory "$TEMP_ROOT" "local temporary root"
+if [[ "$mode" == verify ]]; then
+  verify_overlay
+  exit 0
+fi
+
+ensure_plain_directory "$ROOT/.local/receipts" "local receipt root"
+ensure_plain_directory "$MAMBA_ROOT" "micromamba state root"
+if [[ -e "$PREFIX" || -L "$PREFIX" ||
+      -e "$RECEIPTS" || -L "$RECEIPTS" ]]; then
+  if [[ -d "$PREFIX" && ! -L "$PREFIX" &&
+      -d "$RECEIPTS" && ! -L "$RECEIPTS" ]]; then
+    verify_overlay
+    exit 0
+  fi
+  fail "incomplete GCC C23 state; review and remove only $PREFIX and $RECEIPTS before reprovisioning"
+fi
+
+create_args=(
+  create --yes --no-rc --no-env --always-copy
+  --root-prefix "$MAMBA_ROOT"
+  --prefix "$PREFIX"
+  --file "$LOCK"
+)
+[[ "$offline" == false ]] || create_args+=(--offline)
+"$MICROMAMBA" "${create_args[@]}"
+
+inventory_stage=$(mktemp "$TEMP_ROOT/c23-gcc-installed.XXXXXX")
+receipt_stage=$(mktemp "$TEMP_ROOT/c23-gcc-receipt.XXXXXX")
+seal_stage=$(mktemp "$TEMP_ROOT/c23-gcc-seal.XXXXXX")
+trap 'rm -f -- "$inventory_stage" "$receipt_stage" "$seal_stage"' EXIT
+write_inventory "$inventory_stage"
+same_artifacts "$LOCK" "$inventory_stage" ||
+  fail "new GCC C23 prefix differs from its exact package lock"
+semantic_probe
+
+mkdir "$RECEIPTS"
+cp -- "$inventory_stage" "$RECEIPTS/installed-explicit.lock"
+
+# The prefix receipt includes file modes. Seal the newly provisioned prefix
+# before describing it, then create and seal the metadata in its separate
+# receipt directory.
+find "$PREFIX" -type d -exec chmod 0555 {} +
+find "$PREFIX" -type f -perm /111 -exec chmod 0555 {} +
+find "$PREFIX" -type f ! -perm /111 -exec chmod 0444 {} +
+"$PREFIX_RECEIPT" create "$PREFIX" \
+  "$RECEIPTS/prefix.manifest.tsv" >/dev/null
+write_receipt \
+  "$RECEIPTS/installed-explicit.lock" \
+  "$RECEIPTS/prefix.manifest.tsv" \
+  "$receipt_stage"
+cp -- "$receipt_stage" "$RECEIPTS/receipt.tsv"
+printf '%s  receipt.tsv\n' "$(sha256_file "$RECEIPTS/receipt.tsv")" \
+  > "$seal_stage"
+cp -- "$seal_stage" "$RECEIPTS/receipt.sha256"
+
+# Seal only the exact newly created receipt root. Symlink mode bits are not
+# access controls and are intentionally left alone.
+find "$RECEIPTS" -type d -exec chmod 0555 {} +
+find "$RECEIPTS" -type f -perm /111 -exec chmod 0555 {} +
+find "$RECEIPTS" -type f ! -perm /111 -exec chmod 0444 {} +
+rm -f -- "$inventory_stage" "$receipt_stage" "$seal_stage"
+trap - EXIT
+verify_overlay

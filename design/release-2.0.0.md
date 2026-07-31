@@ -2,11 +2,58 @@
 
 ## Status
 
-**The package-facing candidate is frozen; `release-core`, the repaired source
-proof, reviewed rchk policy, and the post-policy combined-memory gate are
-green. Fresh compatibility, benchmark, and hosted portability evidence remain
-pending.**
-The active candidate is
+**The focused adversarial source review is closed, but source remains reopened
+until it is committed and frozen as a new immutable candidate. The earlier
+candidate and all of its release evidence are historical until that new ref
+passes the fresh C17/C23, every-minor runtime, and remaining release gates
+below.**
+The bounded indexed-root Domain admission compaction is governed by
+[`domain-admission-receipt-compaction-plan.md`](domain-admission-receipt-compaction-plan.md).
+Its implementation and focused correctness proof are complete; the plan's
+source-bound three-way timing comparison remains pending and must use the next
+immutable candidate.
+
+The exact focused closure snapshot is
+`.local/checks/integrated-selectors-r9-20260731T122010Z`, with source-manifest
+SHA-256
+`0a000dfb692332aed5eacd80119b9ae3fdf037e21a31fa7bf1cf60956584db0a`.
+Independent review closed three last issues: Condition operands undergo one
+hard-bounded structural re-admission after callback-capable `Length`; the
+Domain empty-special names-presence workspace is initialized for every
+interpreted row; and the rejected broad structural-ALTREP-names exception was
+replaced by materializing only package-produced categorical names and emitting
+compact ordinary facade row names. The directly relevant package-source
+SHA-256 values are:
+
+- `src/r_utils.c`:
+  `f9b81c1d3aca0f99bae5bfc3625ba252eb513eb177c2e1b6dbf8d760110104fb`;
+- `src/domain_row_admission.c`:
+  `68233a976348f6b09ff42f5157fc780a3451fb52c797a91c85cbf82cc71e38c5`;
+- `src/builtin_condition.c`:
+  `621ce8498691a7ff60ba39e8cff617024664738c505a295cfa310cfd854aceff`;
+- `R/ParamFct.R`:
+  `4ee3b9179ff78880969acedcaafefb2f0eb8356c87d8a35b3d5ee590e16a3d53`;
+  and
+- `R/ParamSet.R`:
+  `e676006d826fc97089d56ff5852fa369b79de4f9250b44cb7bfba7b3a66d940d`.
+
+The retained current-R `Condition`, `native-design-transpose`,
+`native-domain-construction`, and `native-public-accessor-ownership` logs plus
+the actual-R-3.6.3 accessor-ownership log ended `DONE` with exit zero. Their
+SHA-256 values are
+`7e494791778fad9946d60883cf0d514b403dfd11b312c80af2bd3c550fd2a27d`,
+`eb1940f1604ef0174515ed11db7ad6584f7b78ecb1c3e2389178da29221e91e0`,
+`033caeaef2f31c11d05f2bcaefb584d47edc60bcfe3cf2737d61a9a980d24df3`,
+`9c97379a6cb472533ee656ceb683e83f850c7c15f9ced6e507bb38f086e4d3d6`,
+and
+`c95f6a004903c3bd1d4d0bdc70847254fcd2a8410438632ee770c5feec791b2f`.
+The C/R implementation is byte-identical to r8 manifest
+`6ed37e6c07ca17d8f487a949cfc2e4cf510eaded448e89fc1b11c7750a114634`,
+which owns the retained strict GCC/Clang GNU99 and current/R-3.6 package
+installation proof. This is focused development evidence only, not candidate
+acceptance.
+
+The previous candidate is
 `refs/paradox-release/candidate-20260727T152133Z`, commit
 `dbbdcc156cb52793e84e8767f0ce84b6ecbb85ea`, tree
 `b60b75e3923cdcb49f1ef2fb0f9b386d5cac291d`. It contains the complete
@@ -140,14 +187,20 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 
 ## Decisions frozen for the first public release
 
-- Version is 2.0.0; R >= 3.6; portable C99; data.table >= 1.18.4.
+- Version is 2.0.0; R >= 3.6; portable C99; ordinary current-R installation
+  selects C17-or-earlier through `USE_C17`; an explicit GCC >= 15 and
+  recent-Clang C23 gate supplies additive forward-compatibility evidence;
+  data.table >= 1.18.4.
 - R C API use is public except for the exact centralized, versioned
-  raw-attribute, hot closure-formals, and non-forcing stored-binding/promise compatibility
+  raw-attribute, coherent old-R closure-snapshot, and non-forcing
+  stored-binding/promise compatibility
   entries described below. Raw attribute selection uses `R_mapAttrib()` on
   R >= 4.6 and one ledgered `ATTRIB` traversal on R 3.6--4.5 without
-  evaluating R or data.table code. Before R 4.5, one ledgered `FORMALS`
-  accessor preserves callback hot-path speed; cold closure inspection uses
-  public base calls instead of native accessors that were not yet API.
+  evaluating R or data.table code. Before R 4.5, exact ledgered `FORMALS`,
+  `R_ClosureExpr`, and `CLOENV` accessors capture one allocation-free closure
+  generation for callback admission and recursive migration; all three
+  exceptions compile out at R 4.5. Directly reached bytecode alone uses the
+  cold, non-executing public `as.function.default()`/`body()` bridge on old R.
   R 3.6--4.1 use `base::exists(..., inherits = FALSE)` only for cold optional
   existence queries; required ordinary-frame binding snapshots stay
   allocation-free, and the terminal optional receipt scan uses exact old-only
@@ -221,6 +274,14 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   by constructor final-state validation, ParamSet construction, and
   ObjectTuneToken Domain admission. Boundary-specific outward table/class checks
   do not duplicate row semantics.
+- Every nonempty and typed-zero public Domain operation still proves the exact
+  complete sixteen-column structure; the canonical zero-column empty Domain
+  has its exact dedicated validator. The identity spine is always interpreted.
+  Each operation declares a semantic mask over bounds, levels, special values,
+  cargo, tags, and transformation, and
+  `paradox_domain_interpretation_closure()` alone expands rule dependencies.
+  `domain_check()` requests every rule. Irrelevant rules are skipped whole,
+  not duplicated in operation-specific validators.
 - Standalone `condition_test()` uses the registered closed comparator for
   `NULL` or plain logical/integer/double/character vectors with names only;
   stable ALTREP operands materialize once and classed/attributed operands do
@@ -461,12 +522,13 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 Changing one of these requires an explicit contract/design/NEWS/test update,
 not a local compatibility workaround.
 
-## Implementation convergence checklist
+## Implementation convergence and reopened-source acceptance
 
 Checked entries below record implemented architectural components or
 historical exact-payload conclusions. They do not make the reopened worktree
-release-ready and do not transfer an earlier candidate's green gates. The
-remaining convergence and acceptance steps are:
+release-ready and do not transfer an earlier candidate's green gates.
+
+### Historical implementation and candidate milestones
 
 - [x] converge the dormant-values/default-aware-activity implementation,
   focused contract tests, documentation, differential cases, and dependency-
@@ -484,19 +546,40 @@ remaining convergence and acceptance steps are:
 - [x] repair the independently discovered active graph-frame GC lifetime defect
   with one managed carrier plus ordinary and compile-time-instrumented
   regressions;
-- [x] freeze the replacement candidate at `dbbdcc1`;
-- [x] run the eight-task `release-core` profile; all rows pass, while the
-  native child source proof is retained only as informative execution evidence
-  because its copied modes do not replay;
-- [x] repoint the exact `paradox2` compatibility axis at the frozen `dbbdcc1`
-  ref/commit/tree and pass its structural profile fixtures;
+- [x] freeze the now-historical replacement candidate at `dbbdcc1`;
+- [x] run that candidate's eight-task `release-core` profile; all rows pass,
+  while the native child source proof is retained only as informative execution
+  evidence because its copied modes do not replay;
+- [x] repoint the then-current exact `paradox2` compatibility axis at the
+  frozen `dbbdcc1` ref/commit/tree and pass its structural profile fixtures;
 - [x] create and independently validate a fresh replayable native source run
   with the repaired harness;
 - [x] complete and audit exact-candidate rchk discovery, regenerate its
   source-bound policy, and add focused GCT coverage for the sole new
   branch-dependent protection-depth family;
-- [ ] create a fresh static/focused donor from the policy/harness commit and
-  complete the combined-memory gate from that exact source proof;
+- [x] use a fresh static/focused donor to complete that historical candidate's
+  combined-memory gate;
+
+### Current reopened-source acceptance
+
+- [x] close the final independent focused adversarial review at the exact r9
+  snapshot, including post-`Length` Condition admission, deterministic Domain
+  special-name receipts, and the ordinary structural-name boundary;
+- [ ] finish, review, and commit the final package-facing and harness changes,
+  including the C17 ceiling, dual-compiler C23 gate, seven supported-runtime
+  stages, and focused admission corrections;
+- [ ] freeze one new clean immutable candidate ref and repoint every active
+  candidate/compatibility identity to its exact commit and tree;
+- [ ] run the Domain receipt-compaction plan's source-bound three-way timing
+  comparison against that immutable candidate and its two exact historical
+  controls, rejecting mismatched package fingerprints or semantic keys;
+- [ ] run the complete `release-core` profile for that ref: current R 4.6.1
+  full native/package acceptance, both explicit C23 compiler modes, all seven
+  supported runtimes—exactly one complete stage for every minor line at R
+  3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2—all pinned header
+  axes, and the differential gate;
+- [ ] create a fresh replayable source donor and complete combined memory
+  analysis against the new candidate;
 - [ ] install one fresh candidate-owned
   `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
   reverse-dependency, repository, documentation, and benchmark gates;
@@ -720,9 +803,9 @@ suffixes and line locations; the reviewed UP/PB block inventory and rationale
 assignments are unchanged. The exact frozen-candidate memory gate retained the
 same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 
-The checklist below is the historical `8797f11` payload ledger. It is retained
-to explain old evidence and is not the acceptance state of the active R-3.6
-candidate. Current candidate progress is:
+The checklist below records historical R-3.6 candidate progress across
+superseded payloads. It is retained to explain old evidence and is not the
+acceptance state of reopened package-facing source:
 
 - [x] strict C99 compilation against R 3.6.0 and every later pinned header/API
   branch;
@@ -733,7 +816,8 @@ candidate. Current candidate progress is:
 - [x] the separate exact R 3.6 declared-floor install/smoke authenticates every
   package identity and dependency namespace origin plus the candidate Paradox
   DLL, with ambient `R_DEFAULT_PACKAGES` isolated;
-- [x] a complete four-runtime selection seals the exact
+- [ ] a fresh complete seven-runtime selection (R 3.6.3 plus every R 4 minor
+  through R 4.5.2) seals the exact
   R 4.0.5-to-R 3.6.3 current-v2 serialization handoff; a partial selection
   makes no cross-runtime claim;
 - [x] the source-derived bounded `NOT_CRAN=true` GC/reentry slice passes all
@@ -1029,9 +1113,9 @@ R/compiler/instrumentation profile; compatible evidence families may share
 that exact authenticated installation, and a sealed identical-payload ref may
 inherit the donor conclusion, never development component objects.
 
-## Active sealed candidate freeze record
+## Historical `dbbdcc1` sealed candidate freeze record
 
-The active immutable package-facing candidate is:
+The previous immutable package-facing candidate was:
 
 | Field | Value |
 |---|---|
@@ -1046,12 +1130,11 @@ The active immutable package-facing candidate is:
 | Combined memory gate | `release-candidate-dbbdcc1-memory-r3`; GCT, Valgrind, and reviewed rchk policy passed |
 | Portability companion | pending fresh direct child; candidate tag `paradox-2.0.0-ci-dbbdcc1` |
 
-All commits after this candidate are validation tooling, evidence ledgers, or
-downstream manifests under package-excluded roots. Before transferring a
-source-bound conclusion, prove that the exact candidate-to-tooling diff changes
-no package-facing path. Do not call generated archives byte-identical without
-a separate sealed payload proof. The refreshed compatibility overlay,
-benchmark, and hosted portability evidence remain pending.
+The historical transfers recorded for this candidate were limited to reviewed
+commits whose exact diffs changed only validation tooling, evidence ledgers, or
+downstream manifests under package-excluded roots. Later package-facing changes
+reopened source and invalidate those transfers for the next candidate. Do not
+call generated archives byte-identical without a separate sealed payload proof.
 
 ## Historical pre-cleanup candidate freeze record (superseded payload)
 
@@ -1152,15 +1235,19 @@ all remote writes after reviewing this record.
 For the exact candidate ref, retain and verify:
 
 1. strict GCC and Clang C99 warning-clean builds, registration/probe audit,
-   ASan/UBSan, complete unit tests, examples, and `R CMD check --as-cran`;
-2. real R 3.6.3, 4.0.5, 4.3.3, and 4.5.2 runtime stages plus development R;
+   ASan/UBSan, complete unit tests, examples, and `R CMD check --as-cran`,
+   plus the separate explicit `--use-C23` installation and complete
+   native-probe gate under repository-local GCC >= 15 and recent Clang;
+2. real R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 runtime
+   stages, with current R 4.6.1 complete execution owned by the full native
+   lane;
    compilation against all seven pinned R 3.6.0--4.6.1 header axes; and the
-   exact raw-attribute/hot-closure-formals/stored-binding/promise exception
+   exact raw-attribute/old-R-closure-snapshot/stored-binding/promise exception
    ledger, raw-token/version-gated DSO audit, and option-access symbol policy.
-   This includes the authenticated R-3.6/R-4.0 complete-test source-package
-   closures, the R-4.3 data.table 1.18.4 overlay, the separate exact R-3.6
-   declared-floor smoke with `R_DEFAULT_PACKAGES` isolated, and the full-only
-   sealed R-4.0.5-to-R-3.6.3 serialization handoff;
+   This includes the authenticated R-3.6-through-R-4.2 complete-test
+   source-package closures, the R-4.3 data.table 1.18.4 overlay, the separate
+   exact R-3.6 declared-floor smoke with `R_DEFAULT_PACKAGES` isolated, and
+   the full-only sealed R-4.0.5-to-R-3.6.3 serialization handoff;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
 4. every exact default head in `compat/github-bridge-provenance.tsv`, the four
    superseding heads in the `release-refresh-20260720` profile against both
@@ -1253,19 +1340,14 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending`. The managed graph-root fix is committed, the
-replacement candidate is frozen at `dbbdcc1`, and its eight-task
-`release-core` run is green. Its original native child is not a replayable
-memory donor and the first memory attempt stopped at harness provenance
-preflight, but the repaired
-`release-candidate-dbbdcc1-native-replay-r2-native-release-a001` source proof
-is green and independently replayable. It supplied a successful reviewed rchk
-discovery and regenerated policy. The replacement combined-memory run
-`release-candidate-dbbdcc1-memory-r3` passed GCT, Valgrind, and that reviewed
-rchk policy. The refreshed exact downstream overlay and prepared compatibility
-DAG, sealed benchmark, and hosted Windows x86-64/macOS ARM64 gates remain
-mandatory. User publication of prepared downstream branches/PRs, the release
-tag, and workflow also remains required.
+The release decision is `pending`. Package-facing source is reopened, so there
+is no current frozen candidate and none of the `dbbdcc1` release-core,
+source-proof, rchk, or combined-memory conclusions accepts the current source.
+After final source and harness convergence, freeze one new clean immutable ref
+and complete the unchecked acceptance list above against its exact bytes. The
+fresh downstream overlay and compatibility DAG, sealed benchmark, hosted
+Windows x86-64/macOS ARM64 gates, and user publication of prepared downstream
+branches/PRs, the release tag, and workflow all remain mandatory.
 
 ## Historical rejected or superseded refs
 

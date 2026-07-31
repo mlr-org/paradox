@@ -3,7 +3,7 @@
 # pragmas, not global warning suppressions.
 
 CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu99
-CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu99
 SHLIB_LD = $(CC)
 
 # Avoid passing the linker-only flag from the conda R Makeconf to `clang -c`.

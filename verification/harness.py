@@ -58,6 +58,10 @@ ALLOWED_CACHE = {"none", "success"}
 ALLOWED_POLICIES = {"adaptive", "keep-going", "fail-fast"}
 ALLOWED_ISOLATION = {"worker"}
 ALLOWED_CONTAINMENT = {"auto", "worker", "aggregate"}
+RESERVED_TASK_ENVIRONMENT = {
+    "PARADOX_VERIFY_AGGREGATE_SYSTEMD",
+    "PARADOX_VERIFY_HARD_WORKER",
+}
 EXCLUDED_INPUT_PARTS = {".git", ".local", ".cache", "__pycache__"}
 FORMATTER = string.Formatter()
 ATTEMPT_ID_SENTINEL = "__PARADOX_VERIFY_ATTEMPT_ID__"
@@ -646,6 +650,10 @@ def load_manifest(root: pathlib.Path, path: pathlib.Path) -> Manifest:
         for name, value in environment.items():
             if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,127}", name):
                 raise HarnessError(f"{label} has unsafe environment name: {name}")
+            if name in RESERVED_TASK_ENVIRONMENT:
+                raise HarnessError(
+                    f"{label} may not set controller-reserved environment {name}"
+                )
             if not isinstance(value, str) or "\x00" in value:
                 raise HarnessError(f"{label} environment {name} must be a string")
             checked_environment[name] = value
@@ -4375,6 +4383,8 @@ def print_plan(payload: Mapping[str, Any]) -> None:
 
 
 def clean_parallel_environment(environment: dict[str, str], cpu: float) -> None:
+    for name in RESERVED_TASK_ENVIRONMENT:
+        environment.pop(name, None)
     threads = max(1, int(math.floor(cpu)))
     environment.update(
         {
@@ -4492,6 +4502,10 @@ def container_command(
             ]
         )
     else:
+        if not probe.hard or probe.limit_mode != "worker":
+            raise FatalRunError(
+                "hard worker command lacks proved per-worker containment"
+            )
         command.extend(
             [
                 "--memory",
@@ -4620,6 +4634,8 @@ def container_command(
     )
     if probe.limit_mode == "aggregate":
         command.extend(["--env", "PARADOX_VERIFY_AGGREGATE_SYSTEMD=1"])
+    else:
+        command.extend(["--env", "PARADOX_VERIFY_HARD_WORKER=1"])
     command.extend(
         [
             item.image,

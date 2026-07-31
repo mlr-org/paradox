@@ -29,6 +29,20 @@ runtime_matrix_contains_named_call <- function(value, target) {
   ))
 }
 
+runtime_matrix_named_call_sequence <- function(value) {
+  sequence <- character()
+  walk <- function(node) {
+    if (!is.call(node) && !is.expression(node)) return(invisible(NULL))
+    if (is.call(node) && is.name(node[[1L]])) {
+      sequence <<- c(sequence, as.character(node[[1L]]))
+    }
+    for (child in runtime_matrix_skip_policy_children(node)) walk(child)
+    invisible(NULL)
+  }
+  walk(value)
+  sequence
+}
+
 runtime_matrix_literal_test_blocks <- function(path) {
   blocks <- list()
   walk <- function(value) {
@@ -272,6 +286,26 @@ runtime_matrix_validate_result_skip_policy <- function(
   }
   source_blocks <- setNames(lapply(test_paths, runtime_matrix_literal_test_blocks),
     test_files)
+  reviewed_triggers <- c(
+    "skip_on_cran", "skip_if_no_active_binding_inspection",
+    "skip_if_no_list_altrep"
+  )
+  for (blocks in source_blocks) {
+    for (block in blocks) {
+      sequence <- runtime_matrix_named_call_sequence(block$call)
+      positions <- match(reviewed_triggers, sequence)
+      if (!is.na(positions[[1L]]) &&
+          any(positions[[1L]] > positions[-1L], na.rm = TRUE)) {
+        stop("skip_on_cran must precede version-specific skip guards",
+          call. = FALSE)
+      }
+      if (!is.na(positions[[2L]]) && !is.na(positions[[3L]]) &&
+          positions[[2L]] > positions[[3L]]) {
+        stop("active-binding skip must precede the list-ALTREP skip",
+          call. = FALSE)
+      }
+    }
+  }
   extra_calls <- lapply(seq_len(nrow(extra)), function(index) {
     blocks <- source_blocks[[extra$file[[index]]]]
     positions <- which(vapply(
@@ -339,6 +373,18 @@ runtime_matrix_validate_result_skip_policy <- function(
   row.names(active_rows) <- NULL
   row.names(recorded_active) <- NULL
   active_rows <- active_order(active_rows)
+  baseline_keys <- paste(
+    expected_baseline$runtime, expected_baseline$file,
+    expected_baseline$test, sep = "\t"
+  )
+  active_rows <- active_rows[
+    !paste(
+      active_rows$runtime, active_rows$file, active_rows$test,
+      sep = "\t"
+    ) %in% baseline_keys,
+    ,
+    drop = FALSE
+  ]
   recorded_active <- active_order(recorded_active)
   row.names(active_rows) <- NULL
   row.names(recorded_active) <- NULL
@@ -375,6 +421,18 @@ runtime_matrix_validate_result_skip_policy <- function(
   if (is.null(list_altrep_rows)) {
     list_altrep_rows <- extra[FALSE, , drop = FALSE]
   }
+  earlier_keys <- c(
+    baseline_keys,
+    paste(active_rows$runtime, active_rows$file, active_rows$test, sep = "\t")
+  )
+  list_altrep_rows <- list_altrep_rows[
+    !paste(
+      list_altrep_rows$runtime, list_altrep_rows$file,
+      list_altrep_rows$test, sep = "\t"
+    ) %in% earlier_keys,
+    ,
+    drop = FALSE
+  ]
   recorded_list_altrep <- extra[
     extra$reason == allowed_extra_reasons[["list_altrep"]],
     ,

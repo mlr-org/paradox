@@ -178,6 +178,36 @@ test_that("closed constructor rejects extension and malformed Domain rows", {
     ".init",
     list(1e20)
   )
+  overlong_metadata = function(value, prefix) {
+    for (index in seq_len(65L)) {
+      attr(value, sprintf("%s.%03d", prefix, index)) = index
+    }
+    value
+  }
+  overlong_default = forge_column(
+    p_uty(),
+    "default",
+    list(overlong_metadata(
+      list(payload = TRUE),
+      "paradox.default.attribute"
+    ))
+  )
+  overlong_init = forge_column(
+    forge_column(p_uty(), ".init_given", TRUE),
+    ".init",
+    list(overlong_metadata(
+      list(payload = TRUE),
+      "paradox.init.attribute"
+    ))
+  )
+  overlong_no_default = forge_column(
+    p_dbl(),
+    "default",
+    list(overlong_metadata(
+      structure(list(), class = "NoDefault"),
+      "paradox.nodefault.attribute"
+    ))
+  )
   attributed_cargo = p_uty()$cargo[[1L]]
   attr(attributed_cargo, "external") = TRUE
   attributed_cargo = forge_column(
@@ -205,6 +235,26 @@ test_that("closed constructor rejects extension and malformed Domain rows", {
       field,
       fixed = TRUE,
       info = field
+    )
+  }
+  bounded_metadata_cases = list(
+    default = list(domain = overlong_default, pattern = "default"),
+    init = list(domain = overlong_init, pattern = ".init_given/.init"),
+    marker = list(domain = overlong_no_default, pattern = "default")
+  )
+  for (case in names(bounded_metadata_cases)) {
+    fixture = bounded_metadata_cases[[case]]
+    expect_error(
+      .Call(symbol, list(x = fixture$domain), FALSE),
+      fixture$pattern,
+      fixed = TRUE,
+      info = case
+    )
+    expect_error(
+      ParamSet$new(list(x = fixture$domain)),
+      fixture$pattern,
+      fixed = TRUE,
+      info = case
     )
   }
 })

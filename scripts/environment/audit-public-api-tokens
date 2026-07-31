@@ -2,7 +2,7 @@
 
 # Reject unsupported R internals even when they occur in inactive preprocessor
 # branches. Clang's raw lexer distinguishes identifiers from comments and
-# string literals without preprocessing the source. The seven non-API
+# string literals without preprocessing the source. The nine non-API
 # exceptions remain centralized and authenticated by their external ledger.
 # Public APIs that entered after R 3.6 are a separate concern: the exact table
 # below confines every reviewed occurrence to its version adapter or
@@ -58,6 +58,7 @@ TOKENS_PATTERN+='|SET_S4_OBJECT|UNSET_S4_OBJECT|Rf_allocSExp|R_GetCurrentEnv'
 TOKENS_PATTERN+='|R_data_class|isFrame|IS_ASCII|IS_UTF8|SETLENGTH'
 TOKENS_PATTERN+='|EXTPTR_PROT|EXTPTR_TAG|EXTPTR_PTR|GetOption|R_lsInternal'
 TOKENS_PATTERN+='|REAL0|COMPLEX0|STRING_PTR|DATAPTR|STDVEC_DATAPTR'
+TOKENS_PATTERN+='|R_ClosureExpr'
 LINE_PATTERN="^(raw_identifier '($TOKENS_PATTERN)'([[:space:]]|$)|hashhash )"
 REPORT_TEMP="$WORK/report"
 {
@@ -73,6 +74,8 @@ EXCEPTION_SOURCE=src/r_api_compat.c
 EXCEPTION_SYMBOLS=(
   ATTRIB
   FORMALS
+  R_ClosureExpr
+  CLOENV
   Rf_findVarInFrame
   R_HasFancyBindings
   R_PromiseExpr
@@ -82,6 +85,8 @@ EXCEPTION_SYMBOLS=(
 declare -A EXCEPTION_COUNTS=(
   [ATTRIB]=0
   [FORMALS]=0
+  [R_ClosureExpr]=0
+  [CLOENV]=0
   [Rf_findVarInFrame]=0
   [R_HasFancyBindings]=0
   [R_PromiseExpr]=0
@@ -93,7 +98,8 @@ EXCEPTION_PATTERN=$(IFS='|'; printf '%s' "${EXCEPTION_SYMBOLS[*]}")
 # Keep this ordered table source-bound. It is intentionally not part of the
 # non-API exception ledger: every entry is a public API on the runtime branch
 # where it is compiled. A symbol may have more than one reviewed owner, so the
-# source path is part of the key.
+# source path is part of the key. A zero count retains a recently removed API
+# in the token inventory and therefore rejects any accidental reintroduction.
 VERSIONED_PUBLIC_API=(
   'R_ClosureFormals|src/r_api_compat.c|1'
   'R_ClosureExpr|src/r_api_compat.c|1'
@@ -102,9 +108,9 @@ VERSIONED_PUBLIC_API=(
   'R_ParentEnv|src/r_api_compat.c|1'
   'Rf_GetOption1|src/r_api_compat.c|1'
   'ANY_ATTRIB|src/r_api_compat.c|1'
-  'R_getAttribCount|src/r_api_compat.c|2'
-  'R_hasAttrib|src/r_api_compat.c|2'
-  'R_mapAttrib|src/r_api_compat.c|3'
+  'R_getAttribCount|src/r_api_compat.c|0'
+  'R_hasAttrib|src/r_api_compat.c|0'
+  'R_mapAttrib|src/r_api_compat.c|2'
   'R_existsVarInFrame|src/r_api_compat.c|3'
   'R_ActiveBindingFunction|src/r_api_compat.c|1'
   'R_GetBindingType|src/r_api_compat.c|1'
@@ -114,8 +120,8 @@ VERSIONED_PUBLIC_API=(
   'IDENT_USE_CLOENV|src/r_api_compat.h|1'
   'R_GetBindingType|src/upgrade_graph.c|1'
   'R_getVar|src/upgrade_graph.c|2'
-  'R_DotsExist|src/upgrade_graph.c|1'
-  'R_DotsLength|src/upgrade_graph.c|1'
+  'R_DotsExist|src/upgrade_graph.c|2'
+  'R_DotsLength|src/upgrade_graph.c|2'
   'R_GetDotType|src/upgrade_graph.c|1'
   'R_DotsElt|src/upgrade_graph.c|2'
   'R_DotDelayedExpression|src/upgrade_graph.c|1'
@@ -133,7 +139,7 @@ for versioned_entry in "${VERSIONED_PUBLIC_API[@]}"; do
   IFS='|' read -r versioned_symbol versioned_source versioned_count \
     versioned_extra <<< "$versioned_entry"
   [[ -n "$versioned_symbol" && -n "$versioned_source" &&
-      "$versioned_count" =~ ^[1-9][0-9]*$ && -z "${versioned_extra:-}" ]] ||
+      "$versioned_count" =~ ^[0-9]+$ && -z "${versioned_extra:-}" ]] ||
     fail "invalid versioned public API policy entry: $versioned_entry"
   versioned_key="$versioned_symbol|$versioned_source"
   [[ -z "${VERSIONED_PUBLIC_EXPECTED_COUNTS[$versioned_key]+set}" ]] ||
@@ -273,6 +279,10 @@ if [[ -e "$EXCEPTION_LEDGER" ]] ||
             expected_versions='R-3.6.x--R-4.4.x'
             expected_policy='closure-formals-hot-path-pre-4.5-only'
             ;;
+          R_ClosureExpr|CLOENV)
+            expected_versions='R-3.6.x--R-4.4.x'
+            expected_policy='closure-generation-snapshot-pre-4.5-only'
+            ;;
           Rf_findVarInFrame)
             expected_versions='R-3.6.x--R-4.5.x'
             expected_policy='declared-exported-pre-4.6-only'
@@ -307,6 +317,11 @@ printf 'reviewed_attribute_accessor=%s:%s:%s\n' \
 printf 'reviewed_closure_formals=%s:%s:%s\n' \
   FORMALS "$EXCEPTION_SOURCE" \
   "${EXCEPTION_COUNTS[FORMALS]}" >> "$REPORT_TEMP"
+for closure_symbol in R_ClosureExpr CLOENV; do
+  printf 'reviewed_closure_accessor=%s:%s:%s\n' \
+    "$closure_symbol" "$EXCEPTION_SOURCE" \
+    "${EXCEPTION_COUNTS[$closure_symbol]}" >> "$REPORT_TEMP"
+done
 printf 'reviewed_legacy_binding=%s:%s:%s\n' \
   Rf_findVarInFrame "$EXCEPTION_SOURCE" \
   "${EXCEPTION_COUNTS[Rf_findVarInFrame]}" >> "$REPORT_TEMP"

@@ -980,17 +980,15 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
 }
 
 static int closure_has_formal(SEXP function, SEXP sought) {
-  if (TYPEOF(function) != CLOSXP) {
-    return FALSE;
+  int matches = FALSE;
+  if (!paradox_api_closure_formal_matches(
+      function,
+      sought,
+      &matches
+    )) {
+    Rf_error("Callback has malformed formals");
   }
-  for (SEXP formal = paradox_api_closure_formals(function);
-      formal != R_NilValue;
-      formal = CDR(formal)) {
-    if (TAG(formal) == sought) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+  return matches;
 }
 
 SEXP paradox_param_set_set_callback(SEXP private_environment, SEXP self,

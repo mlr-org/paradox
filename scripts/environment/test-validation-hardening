@@ -77,6 +77,7 @@ expect_failure() {
     -f "$COPY_SNAPSHOT_HELPER" && ! -L "$COPY_SNAPSHOT_HELPER" ]] ||
   fail "snapshot helpers are missing or symbolic"
 for fast_preflight in test-resource-jobs test-compiler-batch \
+    test-c23-evidence-validator \
     test-verification-economy test-memory-run-validator \
     test-bounded-rchk-bcheck-cache; do
   [[ -x "$ROOT/scripts/environment/$fast_preflight" &&
@@ -1105,9 +1106,9 @@ VERSIONED_PUBLIC_EXPECTATIONS=(
   'R_ParentEnv:src/r_api_compat.c:1'
   'Rf_GetOption1:src/r_api_compat.c:1'
   'ANY_ATTRIB:src/r_api_compat.c:1'
-  'R_getAttribCount:src/r_api_compat.c:2'
-  'R_hasAttrib:src/r_api_compat.c:2'
-  'R_mapAttrib:src/r_api_compat.c:3'
+  'R_getAttribCount:src/r_api_compat.c:0'
+  'R_hasAttrib:src/r_api_compat.c:0'
+  'R_mapAttrib:src/r_api_compat.c:2'
   'R_existsVarInFrame:src/r_api_compat.c:3'
   'R_ActiveBindingFunction:src/r_api_compat.c:1'
   'R_GetBindingType:src/r_api_compat.c:1'
@@ -1117,8 +1118,8 @@ VERSIONED_PUBLIC_EXPECTATIONS=(
   'IDENT_USE_CLOENV:src/r_api_compat.h:1'
   'R_GetBindingType:src/upgrade_graph.c:1'
   'R_getVar:src/upgrade_graph.c:2'
-  'R_DotsExist:src/upgrade_graph.c:1'
-  'R_DotsLength:src/upgrade_graph.c:1'
+  'R_DotsExist:src/upgrade_graph.c:2'
+  'R_DotsLength:src/upgrade_graph.c:2'
   'R_GetDotType:src/upgrade_graph.c:1'
   'R_DotsElt:src/upgrade_graph.c:2'
   'R_DotDelayedExpression:src/upgrade_graph.c:1'
@@ -1137,9 +1138,6 @@ write_versioned_public_fixture() {
     'R_BytecodeExpr(bytecode); R_ClosureEnv(closure);' \
     'R_ParentEnv(environment); Rf_GetOption1(symbol);' \
     'ANY_ATTRIB(value);' \
-    'R_getAttribCount(value); R_getAttribCount(value);' \
-    'R_hasAttrib(value, symbol); R_hasAttrib(value, symbol);' \
-    'R_mapAttrib(value, callback, data);' \
     'R_mapAttrib(value, callback, data);' \
     'R_mapAttrib(value, callback, data);' \
     'R_existsVarInFrame(environment, symbol);' \
@@ -1158,7 +1156,8 @@ write_versioned_public_fixture() {
     'R_GetBindingType(symbol, environment);' \
     'R_getVar(symbol, environment, 0);' \
     'R_getVar(symbol, environment, 0);' \
-    'R_DotsExist(environment); R_DotsLength(environment);' \
+    'R_DotsExist(environment); R_DotsExist(environment);' \
+    'R_DotsLength(environment); R_DotsLength(environment);' \
     'R_GetDotType(index, environment);' \
     'R_DotsElt(index, environment); R_DotsElt(index, environment);' \
     'R_DotDelayedExpression(index, environment);' \
@@ -1172,6 +1171,19 @@ write_versioned_public_fixture() {
 
 TOKEN_OK="$TEST_ROOT/public api tokens ok"
 write_versioned_public_fixture "$TOKEN_OK"
+mkdir -p "$TOKEN_OK/environment"
+printf '%s\n' \
+  $'symbol\tsource\tcount\tversions\tpolicy\trationale' \
+  $'ATTRIB\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.5.x\traw-attribute-traversal-pre-4.6-only\ttest fixture' \
+  $'FORMALS\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.4.x\tclosure-formals-hot-path-pre-4.5-only\ttest fixture' \
+  $'R_ClosureExpr\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tclosure-generation-snapshot-pre-4.5-only\ttest fixture' \
+  $'CLOENV\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.4.x\tclosure-generation-snapshot-pre-4.5-only\ttest fixture' \
+  $'Rf_findVarInFrame\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.5.x\tdeclared-exported-pre-4.6-only\ttest fixture' \
+  $'R_HasFancyBindings\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.1.x\tfancy-frame-terminal-scan-pre-4.2-only\ttest fixture' \
+  $'R_PromiseExpr\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.4.x\tdetached-promise-snapshot-pre-4.5-only\ttest fixture' \
+  $'PRENV\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.4.x\tdetached-promise-snapshot-pre-4.5-only\ttest fixture' \
+  $'PRVALUE\tsrc/r_api_compat.c\t0\tR-3.6.x--R-4.4.x\tdetached-promise-snapshot-pre-4.5-only\ttest fixture' \
+  > "$TOKEN_OK/environment/r-api-exceptions.tsv"
 printf '%s\n' \
   '/* ATTRIB BODY Rf_findVarInFrame3 */' \
   'const char *tokens = "FORMALS R_NamespaceRegistry";' \
@@ -1185,17 +1197,18 @@ grep -qx 'result=passed' "$TEST_ROOT/public-api-allowed.txt" ||
   fail "public API token auditor did not pass allowed identifiers"
 
 # R 3.6--4.5 have reviewed raw-attribute and non-forcing binding exceptions.
-# R 3.6--4.4 additionally retain allocation-free FORMALS for the callback hot
-# path and have three exact detached-promise accessors, while
+# R 3.6--4.4 additionally retain allocation-free FORMALS, R_ClosureExpr, and
+# CLOENV accessors for one coherent closure snapshot and have three exact
+# detached-promise accessors, while
 # R 3.6--4.1 needs the exported fancy-frame query for the allocation-free
-# terminal scan. Avoidable closure accessors use public R bridges on those
-# runtimes and need no exception. The raw-token auditor admits each exceptional
-# occurrence only at the centralized facade and with the exact ledger.
+# terminal scan. The raw-token auditor admits each exceptional occurrence only
+# at the centralized facade and with the exact ledger.
 TOKEN_EXCEPTION="$TEST_ROOT/reviewed legacy binding token"
 write_versioned_public_fixture "$TOKEN_EXCEPTION"
 mkdir -p "$TOKEN_EXCEPTION/environment"
 printf '%s\n' \
   'ATTRIB(value); FORMALS(closure);' \
+  'CLOENV(closure);' \
   'Rf_findVarInFrame(environment, symbol);' \
   'R_HasFancyBindings(environment);' \
   'R_PromiseExpr(promise); PRENV(promise);' \
@@ -1205,6 +1218,8 @@ printf '%s\n' \
   $'symbol\tsource\tcount\tversions\tpolicy\trationale' \
   $'ATTRIB\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\traw-attribute-traversal-pre-4.6-only\ttest fixture' \
   $'FORMALS\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tclosure-formals-hot-path-pre-4.5-only\ttest fixture' \
+  $'R_ClosureExpr\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tclosure-generation-snapshot-pre-4.5-only\ttest fixture' \
+  $'CLOENV\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tclosure-generation-snapshot-pre-4.5-only\ttest fixture' \
   $'Rf_findVarInFrame\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdeclared-exported-pre-4.6-only\ttest fixture' \
   $'R_HasFancyBindings\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.1.x\tfancy-frame-terminal-scan-pre-4.2-only\ttest fixture' \
   $'R_PromiseExpr\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.4.x\tdetached-promise-snapshot-pre-4.5-only\ttest fixture' \
@@ -1221,6 +1236,12 @@ grep -qx \
   'reviewed_closure_formals=FORMALS:src/r_api_compat.c:1' \
   "$TEST_ROOT/public-api-exception.txt" ||
   fail "public API token auditor did not ledger FORMALS"
+for closure_symbol in R_ClosureExpr CLOENV; do
+  grep -qx \
+    "reviewed_closure_accessor=$closure_symbol:src/r_api_compat.c:1" \
+    "$TEST_ROOT/public-api-exception.txt" ||
+    fail "public API token auditor did not ledger $closure_symbol"
+done
 grep -qx \
   'reviewed_legacy_binding=Rf_findVarInFrame:src/r_api_compat.c:1' \
   "$TEST_ROOT/public-api-exception.txt" ||
@@ -1260,9 +1281,20 @@ printf '%s\n' 'R_mapAttrib(value, callback, data);' \
 expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_VERSIONED_BAD_COUNT" \
   "$TEST_ROOT/public-api-versioned-wrong-count.txt"
 grep -qx \
-  'versioned_api_count_mismatch=R_mapAttrib:src/r_api_compat.c:3:4' \
+  'versioned_api_count_mismatch=R_mapAttrib:src/r_api_compat.c:2:3' \
   "$TEST_ROOT/public-api-versioned-wrong-count.txt" ||
   fail "public API token auditor accepted a versioned API count change"
+
+TOKEN_VERSIONED_REMOVED="$TEST_ROOT/removed versioned public token"
+cp -a "$TOKEN_OK" "$TOKEN_VERSIONED_REMOVED"
+printf '%s\n' 'R_getAttribCount(value);' \
+  >> "$TOKEN_VERSIONED_REMOVED/src/r_api_compat.c"
+expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_VERSIONED_REMOVED" \
+  "$TEST_ROOT/public-api-versioned-removed.txt"
+grep -qx \
+  'versioned_api_count_mismatch=R_getAttribCount:src/r_api_compat.c:0:1' \
+  "$TEST_ROOT/public-api-versioned-removed.txt" ||
+  fail "public API token auditor accepted a removed API reintroduction"
 
 TOKEN_EXCEPTION_BAD_POLICY="$TEST_ROOT/legacy binding CRAN allowlist claim"
 cp -a "$TOKEN_EXCEPTION" "$TOKEN_EXCEPTION_BAD_POLICY"

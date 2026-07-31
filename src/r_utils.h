@@ -189,12 +189,12 @@ attribute_hidden SEXP paradox_unary_callback_call(SEXP callback, SEXP value);
 
 /* Rf_error() consumes text in the current locale.  Translate and own the
  * bytes before entering its allocating formatter. */
-attribute_hidden NORET void paradox_error_from_scalar_string(SEXP message);
+NORET attribute_hidden void paradox_error_from_scalar_string(SEXP message);
 
 /* Raise the checkmate-style assertion wrapper used by public assert methods
  * and checked value assignment. `diagnostic` must be one non-missing string
  * and is treated as already formatted semantic text. */
-attribute_hidden NORET void paradox_assertion_error(
+NORET attribute_hidden void paradox_assertion_error(
   const char *variable,
   SEXP diagnostic
 );
@@ -211,6 +211,62 @@ attribute_hidden SEXP paradox_snapshot_semantic_vector(SEXP value);
 /* Snapshot a built-in typed value leaf with one coherent payload/attribute
  * generation. S4 and non-atomic opaque leaves retain exact identity. */
 attribute_hidden SEXP paradox_snapshot_builtin_value_leaf(SEXP value);
+/* Test-only post-preflight seam for the bounded metadata copier. */
+attribute_hidden SEXP paradox_test_builtin_metadata_copy_reentry(
+  SEXP value,
+  SEXP hook
+);
+/*
+ * Allocation-free terminal receipt for an ordinary built-in atomic leaf
+ * returned by `paradox_snapshot_builtin_value_leaf()`.  The snapshot owns the
+ * complete finite ordinary attribute graph; this comparison verifies that the
+ * caller-owned source still has exactly that payload and metadata generation.
+ * Exotic ALTREP/S4, cyclic, or overdeep metadata is outside this boundary and
+ * returns false rather than recursing without a bound.
+ */
+attribute_hidden int paradox_builtin_value_leaf_receipt_current(
+  SEXP source,
+  SEXP snapshot
+);
+/* Allocation-free exact payload comparison for already ordinary vectors.
+ * Attributes are deliberately excluded. */
+attribute_hidden int paradox_ordinary_vector_payload_equal(
+  SEXP left,
+  SEXP right
+);
+
+typedef enum {
+  PARADOX_SHALLOW_ATTRIBUTES_ALL = 0,
+  PARADOX_SHALLOW_ATTRIBUTES_LOGICAL_STRUCTURE = 1
+} paradox_shallow_attribute_policy_t;
+
+/* Allocation-free bounded top-level metadata query. Every tag/value cell
+ * delivered by the runtime mapper must be ordinary and unique; malformed
+ * tags/values and cyclic or overlong pairlist spines return false. */
+attribute_hidden int paradox_bounded_metadata_has_tag(
+  SEXP value,
+  SEXP tag,
+  int *found
+);
+
+/*
+ * Copy one caller-owned top-level attribute generation onto a fresh,
+ * attribute-free destination without invoking R's recursive pairlist
+ * duplicator.  The attr-free path is allocation-free.  Otherwise one bounded
+ * tag/value capture roots the selected shallow metadata identities across
+ * public-setter installation, and terminal source/destination receipts reject
+ * mutation or normalization.  LOGICAL_STRUCTURE retains names only without
+ * dimensions, plus dim/dimnames, and requires an unclassed non-S4 source; ALL
+ * retains every attribute.  Nested metadata values deliberately retain exact
+ * identity and are not traversed.
+ */
+attribute_hidden void paradox_copy_bounded_shallow_attributes(
+  SEXP destination,
+  SEXP source,
+  paradox_shallow_attribute_policy_t policy,
+  const char *failure_message
+);
+
 /* Complete ownership of a freshly owned built-in `special_vals` list.
  * Typed atomic leaves are detached; typed S4/non-atomic leaves and every
  * ParamUty leaf retain identity. The input list shell itself must already be

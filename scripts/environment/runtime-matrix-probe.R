@@ -43,9 +43,9 @@ check <- function(value, message) {
 
 # These operations jointly exercise closure formals, attribute allow-lists,
 # callbacks, capsule-backed R6 shells, and outward facades through the native
-# engine. R 4.3 exercises the ledgered hot-formals/raw-attribute branches and
-# the public cold closure bridge; ordinary operations are not replayed through
-# a second semantic engine.
+# engine. R 4.3 exercises the ledgered closure-snapshot/raw-attribute branches
+# and the cold public bytecode bridge; ordinary operations are not replayed
+# through a second semantic engine.
 left <- ps(
   width = p_dbl(lower = 0, upper = 4, default = 1,
     tags = "numeric", trafo = function(x) x * 2),

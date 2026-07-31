@@ -107,34 +107,101 @@ static int ordinary_design_shell(SEXP data) {
   return valid_names;
 }
 
-static int ordinary_optional_classes(SEXP source) {
-  SEXP classes = PROTECT(Rf_getAttrib(source, R_ClassSymbol));
-  const int valid = classes == R_NilValue ||
-    (TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
-      !Rf_isS4(classes) && !Rf_isObject(classes) &&
-      paradox_api_has_no_attributes(classes) && XLENGTH(classes) != 0);
-  UNPROTECT(1);
-  return valid;
+#define DESIGN_COLUMN_METADATA_LIMIT ((R_xlen_t) 64)
+
+typedef struct {
+  SEXP entries;
+  R_xlen_t count;
+  SEXP classes;
+  SEXP levels;
+  int valid;
+} design_column_metadata_t;
+
+static void capture_design_column_attribute(
+    SEXP tag, SEXP value, void *data) {
+  design_column_metadata_t *metadata = data;
+  if (!metadata->valid || TYPEOF(tag) != SYMSXP ||
+      value == R_NilValue ||
+      metadata->count >= DESIGN_COLUMN_METADATA_LIMIT) {
+    metadata->valid = FALSE;
+    return;
+  }
+  for (R_xlen_t index = 0; index < metadata->count; ++index) {
+    if (VECTOR_ELT(metadata->entries, 2 * index) == tag) {
+      metadata->valid = FALSE;
+      return;
+    }
+  }
+  SET_VECTOR_ELT(metadata->entries, 2 * metadata->count, tag);
+  SET_VECTOR_ELT(metadata->entries, 2 * metadata->count + 1, value);
+  if (tag == R_ClassSymbol) metadata->classes = value;
+  if (tag == R_LevelsSymbol) metadata->levels = value;
+  ++metadata->count;
 }
 
-static SEXP snapshot_factor_levels(SEXP source,
-    R_xlen_t *work_since_interrupt) {
-  SEXP levels = PROTECT(Rf_getAttrib(source, R_LevelsSymbol));
-  if (TYPEOF(levels) != STRSXP) {
-    UNPROTECT(1);
-    Rf_error("A factor Design column has invalid levels");
+typedef struct {
+  SEXP entries;
+  R_xlen_t expected;
+  R_xlen_t count;
+  int current;
+} design_column_metadata_receipt_t;
+
+static void compare_design_column_attribute(
+    SEXP tag, SEXP value, void *data) {
+  design_column_metadata_receipt_t *receipt = data;
+  if (!receipt->current || receipt->count >= receipt->expected ||
+      VECTOR_ELT(receipt->entries, 2 * receipt->count) != tag ||
+      VECTOR_ELT(receipt->entries, 2 * receipt->count + 1) != value) {
+    receipt->current = FALSE;
+    return;
   }
-  SEXP result = PROTECT(snapshot_string_vector(
-    levels,
-    "Factor levels",
-    work_since_interrupt
-  ));
-  if (Rf_any_duplicated(result, FALSE) != 0) {
-    UNPROTECT(2);
-    Rf_error("A factor Design column has duplicate levels");
-  }
-  UNPROTECT(2);
-  return result;
+  ++receipt->count;
+}
+
+static int capture_design_column_metadata(
+    SEXP source, SEXP entries, design_column_metadata_t *metadata) {
+  *metadata = (design_column_metadata_t) {
+    entries,
+    0,
+    R_NilValue,
+    R_NilValue,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  return paradox_api_map_bounded_stored_attributes(
+      source,
+      DESIGN_COLUMN_METADATA_LIMIT,
+      capture_design_column_attribute,
+      metadata,
+      &count
+    ) && metadata->valid && metadata->count == count;
+}
+
+static int design_column_metadata_is_current(
+    SEXP source, const design_column_metadata_t *metadata) {
+  design_column_metadata_receipt_t receipt = {
+    metadata->entries,
+    metadata->count,
+    0,
+    TRUE
+  };
+  R_xlen_t count = 0;
+  return paradox_api_map_bounded_stored_attributes(
+      source,
+      DESIGN_COLUMN_METADATA_LIMIT,
+      compare_design_column_attribute,
+      &receipt,
+      &count
+    ) && receipt.current && receipt.count == metadata->count &&
+    count == metadata->count;
+}
+
+static int ordinary_design_classes(SEXP classes) {
+  if (classes == R_NilValue) return TRUE;
+  return TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
+    !Rf_isS4(classes) && !Rf_isObject(classes) &&
+    paradox_api_has_no_attributes(classes) &&
+    XLENGTH(classes) != 0;
 }
 
 static SEXP snapshot_column(SEXP source,
@@ -181,27 +248,61 @@ static SEXP snapshot_column(SEXP source,
       Rf_error("Internal error: unsupported Design column type");
     }
   }
-  /*
-   * An ALTREP element method may replace the source class carrier. Admit the
-   * post-observation metadata used by factor handling below rather than a
-   * pre-callback class generation. Ordinary columns pay the same single class
-   * validation as before.
-   */
+
   if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
-      XLENGTH(source) != count || !ordinary_optional_classes(source)) {
+      XLENGTH(source) != count) {
     UNPROTECT(1);
+    Rf_error("Design column changed while being snapshotted");
+  }
+  if (paradox_api_has_no_attributes(source)) {
+    UNPROTECT(1);
+    return result;
+  }
+
+  /*
+   * An ALTREP element method may replace the source class/levels carriers.
+   * Allocate their root carrier only for attributed columns, then select the
+   * complete bounded post-observation metadata generation into it. Every
+   * factor decision below uses this single rooted generation.
+   */
+  SEXP metadata_entries = PROTECT(Rf_allocVector(
+    VECSXP,
+    2 * DESIGN_COLUMN_METADATA_LIMIT
+  ));
+  design_column_metadata_t metadata;
+  if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
+      XLENGTH(source) != count ||
+      !capture_design_column_metadata(
+        source,
+        metadata_entries,
+        &metadata
+      ) ||
+      !ordinary_design_classes(metadata.classes) ||
+      (!ALTREP(source) &&
+        !paradox_ordinary_vector_payload_equal(source, result))) {
+    UNPROTECT(2);
     Rf_error("Design columns must have ordinary class metadata");
   }
 
-  if (Rf_inherits(source, "factor")) {
+  if (paradox_api_ordinary_class_contains(metadata.classes, "factor")) {
     if (type != INTSXP) {
-      UNPROTECT(1);
+      UNPROTECT(2);
       Rf_error("A factor Design column has invalid storage");
     }
-    SEXP levels = PROTECT(snapshot_factor_levels(
-      source,
+    SEXP stable_source_classes = PROTECT(snapshot_string_vector(
+      metadata.classes,
+      "Design column classes",
       work_since_interrupt
     ));
+    SEXP levels = PROTECT(snapshot_string_vector(
+      metadata.levels,
+      "Factor levels",
+      work_since_interrupt
+    ));
+    if (Rf_any_duplicated(levels, FALSE) != 0) {
+      UNPROTECT(4);
+      Rf_error("A factor Design column has duplicate levels");
+    }
     SEXP classes = PROTECT(Rf_allocVector(STRSXP, 1));
     SET_STRING_ELT(classes, 0, Rf_mkChar("factor"));
     Rf_setAttrib(result, R_LevelsSymbol, levels);
@@ -210,13 +311,29 @@ static SEXP snapshot_column(SEXP source,
       const int code = INTEGER_ELT(result, index);
       if (code != NA_INTEGER &&
           (code <= 0 || (R_xlen_t) code > XLENGTH(levels))) {
-        UNPROTECT(3);
+        UNPROTECT(5);
         Rf_error("A factor Design column contains an invalid level code");
       }
     }
-    UNPROTECT(2);
+    if ((SEXPTYPE) TYPEOF(source) != type || Rf_isS4(source) ||
+        XLENGTH(source) != count ||
+        !design_column_metadata_is_current(source, &metadata) ||
+        (!ALTREP(source) &&
+          !paradox_ordinary_vector_payload_equal(source, result)) ||
+        !paradox_ordinary_vector_payload_equal(
+          metadata.classes,
+          stable_source_classes
+        ) ||
+        !paradox_ordinary_vector_payload_equal(
+          metadata.levels,
+          levels
+        )) {
+      UNPROTECT(5);
+      Rf_error("Design column changed while being snapshotted");
+    }
+    UNPROTECT(3);
   }
-  UNPROTECT(1);
+  UNPROTECT(2);
   return result;
 }
 
@@ -507,19 +624,33 @@ static SEXP fixed_value(const dependency_snapshot_t *snapshot,
     : VECTOR_ELT(snapshot->values_data.values, value);
 }
 
+static int design_value_is_tune_token(SEXP value) {
+  int token = FALSE;
+  if (!paradox_api_ordinary_class_matches(
+      value,
+      "TuneToken",
+      &token
+    )) {
+    Rf_error(
+      "Design value class metadata must be ordinary and bounded"
+    );
+  }
+  return token;
+}
+
 static int parameter_value_is_tune_token(
     const dependency_snapshot_t *snapshot,
     R_xlen_t parameter, R_xlen_t row) {
   SEXP fixed = fixed_value(snapshot, parameter);
   if (fixed != R_UnboundValue) {
-    return Rf_inherits(fixed, "TuneToken") != FALSE;
+    return design_value_is_tune_token(fixed);
   }
   SEXP column = VECTOR_ELT(
     snapshot->columns,
     snapshot->column_by_parameter[parameter]
   );
   return TYPEOF(column) == VECSXP &&
-    Rf_inherits(VECTOR_ELT(column, row), "TuneToken");
+    design_value_is_tune_token(VECTOR_ELT(column, row));
 }
 
 static int rhs_matches_string(SEXP value, SEXP rhs,
@@ -546,7 +677,7 @@ static int condition_matches(const paradox_dependency_graph_edge_t *edge,
      * scalar leaves. TuneToken parents skip their edge just as they do in the
      * shared list-basis activity kernel; other supported scalar leaves enter
      * the same built-in comparator as native grid traversal. */
-    if (Rf_inherits(value, "TuneToken")) {
+    if (design_value_is_tune_token(value)) {
       return TRUE;
     }
     if (value == R_NilValue ||
@@ -612,7 +743,7 @@ static int parameter_condition_matches(
     parameter
   );
   if (!fixed_value_is_plain(fixed, storage_type)) {
-    if (Rf_inherits(fixed, "TuneToken")) {
+    if (design_value_is_tune_token(fixed)) {
       return TRUE;
     }
     if (fixed == R_NilValue) {
@@ -838,7 +969,7 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
       UNPROTECT(8);
       Rf_error("Corrupt ParamSet stored value ID in Design plan");
     }
-    if (Rf_inherits(fixed, "TuneToken")) {
+    if (design_value_is_tune_token(fixed)) {
       UNPROTECT(8);
       Rf_error(
         "Design generation cannot materialize the stored TuneToken value of parameter '%s'.",

@@ -1,5 +1,8 @@
 ordinal	runtime	platform	runtime_lock	dependency_mode	dependency_lock	api_branch	prefix_repair
 1	3.6.3	linux-64	environment/runtime-r-3.6.3-linux-64.lock	source-library	environment/runtime-r-3.6.3-packages.lock	r-3.6-ledgered-compatibility	environment/runtime-r-3.6.3-prefix-repair.lock
 2	4.0.5	linux-64	environment/runtime-r-4.0.5-linux-64.lock	source-library	environment/runtime-r-4.0.5-packages.lock	r-4.0-active-binding-pre-4.2-ledgered-compatibility	-
-3	4.3.3	linux-64	environment/runtime-r-4.3.3-linux-64.lock	data-table-overlay	-	pre-4.5-ledgered-compatibility	-
-4	4.5.2	linux-64	environment/runtime-r-4.5.2-linux-64.lock	prefix-library	-	r-4.5-policy-clean-promise-fail-closed	-
+3	4.1.3	linux-64	environment/runtime-r-4.1.3-linux-64.lock	source-library	environment/runtime-r-4.1.3-packages.lock	r-4.0-active-binding-pre-4.2-ledgered-compatibility	-
+4	4.2.3	linux-64	environment/runtime-r-4.2.3-linux-64.lock	source-library	environment/runtime-r-4.2.3-packages.lock	pre-4.5-ledgered-compatibility	-
+5	4.3.3	linux-64	environment/runtime-r-4.3.3-linux-64.lock	data-table-overlay	-	pre-4.5-ledgered-compatibility	-
+6	4.4.3	linux-64	environment/runtime-r-4.4.3-linux-64.lock	prefix-library	-	pre-4.5-ledgered-compatibility	-
+7	4.5.2	linux-64	environment/runtime-r-4.5.2-linux-64.lock	prefix-library	-	r-4.5-policy-clean-promise-fail-closed	-

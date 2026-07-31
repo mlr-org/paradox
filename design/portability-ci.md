@@ -10,8 +10,8 @@ for the superseded compatibility-first source are not accepted evidence.
 - Linux x86-64, Windows x86-64, and macOS Apple-silicon ARM64;
 - data.table >= 1.18.4 as an outward interoperability dependency;
 - public R C APIs available at the selected supported runtime, except for the
-  exact versioned old-runtime raw-attribute, closure-formals, stored-binding,
-  and promise compatibility entries described below.
+  exact versioned old-runtime raw-attribute, coherent closure-snapshot,
+  stored-binding, and promise compatibility entries described below.
 
 The source must not rely on GNU-only C behavior, x86 floating-point details,
 unaligned access, little-endian layout, pointer ordering, `long` width,
@@ -25,8 +25,10 @@ pedantic warnings remain errors for every Paradox declaration.
 
 ## Local supported-runtime matrix
 
-Repository-local pinned prefixes exercise R 3.6.3, R 4.0.5, R 4.3.3, and R 4.5.2
-independently of the development R 4.6.1 prefix. Pinned R 3.6.0, 4.0.0, and
+Repository-local pinned prefixes exercise R 3.6.3, R 4.0.5, R 4.1.3,
+R 4.2.3, R 4.3.3, R 4.4.3, and R 4.5.2
+independently of the current R 4.6.1 prefix owned by the full native lane.
+Pinned R 3.6.0, 4.0.0, and
 4.2.0 headers are explicit compile/API axes, so support is not inferred only
 from endpoint runtimes and every old-R preprocessor transition is compiled:
 
@@ -40,7 +42,7 @@ scripts/verify-runtime-matrix-evidence \
   --run-id release-runtime-YYYYMMDDTHHMMSSZ
 ```
 
-The four stages use isolated libraries and caches and may overlap only when
+The seven runtime stages use isolated libraries and caches and may overlap only when
 the memory-aware resource report admits the workers. Nested make, testthat,
 parallel/future, BLAS, and OpenMP pools remain one.
 
@@ -69,8 +71,8 @@ bzip2 and curl HTTPS probes omit `<stdlib.h>` (and the bzip2 probe also omits
 can run. Package compilation retains the full strict-warning policy, and R
 4.2.0 receives no warning adaptation.
 
-R 3.6.3 and R 4.0.5 use exact conda runtime locks plus separately authenticated
-source-package libraries from their
+R 3.6.3 through R 4.2.3 use exact conda runtime locks plus separately
+authenticated source-package libraries from their
 `environment/runtime-r-*-packages.lock` files. Those snapshot-compatible
 closures include the package imports, test framework, and focused test support
 without changing either prefix or host libraries. Their cache identities bind
@@ -82,7 +84,8 @@ optional-binding and element-setter branches. R 4.3 has no authenticated conda-f
 R-4.3 build of data.table 1.18.4. That stage therefore authenticates the source row in
 `environment/r-packages-linux-64.lock`, copies the cached exact archive into its
 retained inputs, installs it into the fresh stage library, verifies the resolved
-version, and then builds Paradox. R 4.5.2 already contains the exact minimum.
+version, and then builds Paradox. R 4.4.3 and R 4.5.2 already contain the exact
+minimum.
 This overlay never changes the host, persistent runtime prefix, or package
 minimum.
 
@@ -108,7 +111,7 @@ The binding includes `R_BUILD_ENVIRON`, `R_CHECK_ENVIRON`, and
 `R_INSTALL_ENVIRON`; an inherited command-specific environment file may not
 alter build, install, or check after source admission.
 
-A complete four-runtime selection additionally performs one sealed
+A complete seven-runtime selection additionally performs one sealed
 R 4.0.5-to-R 3.6.3 serialization handoff after all stages pass. The producer
 serializes a representative current-v2 BASE/COLLECTION/SHADOW graph; the
 consumer loads, exercises, mutates, and reserializes it. Exact stage package
@@ -149,11 +152,12 @@ select equivalent APIs, but may not select a different semantic engine. For
 older supported headers, the facade contains one exact, ledgered `ATTRIB`
 traversal through R 4.5, because no earlier public API enumerates raw stored
 attributes without expanding compact `row.names`. Before R 4.5, one ledgered
-`FORMALS` accessor preserves allocation-free transformation callback
-admission, while cold `body()` and `environment()` calls replace native
-accessors that only became supported API in that release. A directly reached
-bytecode object uses the cold public
-`as.function.default()`/`body()` bridge without execution.
+`FORMALS`, one `R_ClosureExpr`, and one `CLOENV` accessor capture a coherent,
+allocation-free closure generation for transformation callback admission and
+recursive migration; the two historical function-like macros are called with
+expansion suppressed. All three exceptions compile out at R 4.5. A directly
+reached bytecode object alone uses the cold public
+`as.function.default()`/`body()` bridge without execution on old R.
 R 4.5 uses public `ANY_ATTRIB` for the common no-attribute query; R 4.6 uses
 public `R_mapAttrib`, `R_getAttribCount`, and `R_hasAttrib` throughout. The
 hot attribute branches do not evaluate R-level `attributes()` or call
@@ -186,8 +190,9 @@ silently skipping user graphs and depending on R's internal environment
 layout.
 
 The only exceptions to the public-API rule are the exact versioned entries
-needed for raw attribute and hot closure-formals inspection and to inspect a stored environment
-binding or already reached promise without forcing it. Every occurrence is
+needed for raw attribute and coherent old-R closure inspection and to inspect
+a stored environment binding or already reached promise without forcing it.
+Every occurrence is
 centralized and count-ledgered. R 3.6--4.5 has no public non-forcing classifier for one
 binding. The public R-level `substitute()` workaround is non-forcing but
 insufficient for simultaneous generation/TuneToken receipt scans and recursive

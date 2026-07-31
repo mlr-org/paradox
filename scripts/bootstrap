@@ -118,13 +118,16 @@ assert_plain_file_or_absent() {
 # Validate every initially managed root before mkdir, download, extraction, or
 # execution can follow it.  The subordinate bootstraps perform their own
 # content checks; their top-level write roots are included here as a second
-# boundary at the orchestrator.
+# boundary at the orchestrator.  The C23 prefix and receipt entries are
+# validation-only here: the mkdir block below deliberately does not precreate
+# state whose subordinate bootstrap requires to be jointly absent.
 for managed_directory in \
   "$ROOT/.local" \
   "$ROOT/.local/bin" \
   "$ROOT/.local/micromamba" \
   "$ROOT/.local/tmp" \
   "$ROOT/.local/toolchain" \
+  "$ROOT/.local/c23-gcc" \
   "$ROOT/.local/R" \
   "$R_LIBRARY" \
   "$ROOT/.local/configspace" \
@@ -142,6 +145,7 @@ for managed_directory in \
   "$ROOT/.local/.TinyTeX" \
   "$ROOT/.local/quarto" \
   "$ROOT/.local/receipts" \
+  "$ROOT/.local/receipts/c23-gcc" \
   "$ROOT/.local/receipts/quarto" \
   "$ROOT/.local/receipts/podman" \
   "$ROOT/.local/locks" \
@@ -268,6 +272,11 @@ if ! cmp -s "$TOOLCHAIN_LOCK" "$toolchain_actual"; then
 fi
 rm -f "$toolchain_actual"
 trap - EXIT
+
+# C23 is a forward-compatibility gate, not the package's ordinary compilation
+# mode. Provision its small exact GCC 15 overlay separately; Clang and R remain
+# supplied by the primary authenticated toolchain.
+"$ROOT/scripts/bootstrap-c23-gcc"
 
 # conda-forge's compact texlive-core omits Perl modules needed to generate
 # formats and therefore cannot complete R's PDF manual check by itself. Use the

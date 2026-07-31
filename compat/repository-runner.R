@@ -846,14 +846,15 @@ repository_runner_resource_fields <- function() c(
   "operator_max_jobs", "jobs"
 )
 
-# The consumer policy is containment-dependent.  Direct admission keeps the
-# conservative 8192-MiB weight, 16384-MiB reserve floor, and four-row cap;
-# inside the authenticated aggregate systemd envelope the launcher already
-# withheld the host reserve, so rows use the measured 2048-MiB cooperative
-# weight, a 4096-MiB intra-envelope floor, and an eight-row cap.
+# The consumer policy is containment-dependent. Direct admission keeps the
+# conservative host policy. Hard workers and the aggregate envelope use the
+# measured 2048-MiB row weight inside their hard ceilings, with local and
+# shared reserve floors respectively.
 repository_runner_consumer_policy <- function(containment) {
   if (identical(containment, "aggregate-systemd")) {
     list(memory_per_job = 2048L, reserve_floor = 4096L, profile_max = 8L)
+  } else if (identical(containment, "worker-hard")) {
+    list(memory_per_job = 2048L, reserve_floor = 1024L, profile_max = 8L)
   } else if (identical(containment, "direct")) {
     list(memory_per_job = 8192L, reserve_floor = 16384L, profile_max = 4L)
   } else {
