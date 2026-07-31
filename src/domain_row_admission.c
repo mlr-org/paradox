@@ -394,25 +394,30 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) != 0;
   const int captures_special_values =
     (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) != 0;
-  const size_t workspace_element_size =
-    (captures_bounds ? 3U * sizeof(double) : 0U) +
-    (captures_special_values ? sizeof(unsigned char) : 0U);
-  double *numeric_storage = NULL;
+  double *lower_values = NULL;
+  double *upper_values = NULL;
+  double *tolerance_values = NULL;
   unsigned char *empty_special_names_present = NULL;
-  if (workspace_element_size != 0U) {
+  if (captures_bounds) {
+    const size_t workspace_element_size =
+      3U * sizeof(double) +
+      (captures_special_values ? sizeof(unsigned char) : 0U);
     void *workspace = paradox_temporary_alloc(
       buffer_size,
       workspace_element_size
     );
-    if (captures_bounds) {
-      numeric_storage = (double *) workspace;
-    }
+    lower_values = (double *) workspace;
+    upper_values = lower_values + buffer_size;
+    tolerance_values = lower_values + 2 * buffer_size;
     if (captures_special_values) {
       empty_special_names_present = (unsigned char *) workspace +
-        (captures_bounds
-          ? (size_t) buffer_size * 3U * sizeof(double)
-          : 0U);
+        (size_t) buffer_size * 3U * sizeof(double);
     }
+  } else if (captures_special_values) {
+    empty_special_names_present = paradox_temporary_alloc(
+      buffer_size,
+      sizeof(*empty_special_names_present)
+    );
   }
 
   /*
@@ -507,15 +512,6 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     )) {
     Rf_error("Domain changed during admission");
   }
-  double *lower_values = NULL;
-  double *upper_values = NULL;
-  double *tolerance_values = NULL;
-  if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
-    lower_values = numeric_storage;
-    upper_values = numeric_storage + buffer_size;
-    tolerance_values = numeric_storage + 2 * buffer_size;
-  }
-
   /*
    * A stable row-name ALTREP may have dispatched its one allowed Length above.
    * Select and own the complete post-callback generation. Canonical Domains
@@ -617,7 +613,7 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     );
     REPROTECT(outward_repr, root_indices[DOMAIN_ADMISSION_ROOT_REPR]);
 
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) {
+    if (captures_bounds) {
       SEXP lower_column = selected_columns[PARADOX_DOMAIN_LOWER];
       SEXP upper_column = selected_columns[PARADOX_DOMAIN_UPPER];
       SEXP tolerance_column = selected_columns[PARADOX_DOMAIN_TOLERANCE];
@@ -732,7 +728,7 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
           VECTOR_ELT(levels_column, row)
         );
       }
-      if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+      if (captures_special_values) {
         SET_VECTOR_ELT(
           rows,
           offset + PARADOX_ADMITTED_SPECIAL_VALS,
@@ -875,7 +871,7 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
       UNPROTECT(1);
     }
     int special_values_reused = FALSE;
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+    if (captures_special_values) {
       SEXP source = PROTECT(VECTOR_ELT(
         rows,
         offset + PARADOX_ADMITTED_SPECIAL_VALS
@@ -994,7 +990,7 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     );
     paradox_special_values_receipt_t receipt;
     paradox_special_values_receipt_t *selected_receipt = NULL;
-    if (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES) {
+    if (captures_special_values) {
       empty_special_names_present[row] = 0U;
       if (!paradox_prepare_builtin_special_values_kind(
           resolved_kind,
@@ -1034,17 +1030,15 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
     paradox_builtin_domain_kind_t admitted_kind =
       PARADOX_BUILTIN_DOMAIN_UNKNOWN;
     paradox_domain_field_t failure = PARADOX_DOMAIN_FIELD_NONE;
-    const int admits_bounds =
-      (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS) != 0;
     const paradox_captured_domain_schema_t schema = {
       VECTOR_ELT(rows, offset + PARADOX_ADMITTED_ID),
       accepted_class,
       accepted_grouping,
       accepted_storage,
       resolved_kind,
-      admits_bounds ? lower_values[row] : NA_REAL,
-      admits_bounds ? upper_values[row] : NA_REAL,
-      admits_bounds ? tolerance_values[row] : NA_REAL
+      captures_bounds ? lower_values[row] : NA_REAL,
+      captures_bounds ? upper_values[row] : NA_REAL,
+      captures_bounds ? tolerance_values[row] : NA_REAL
     };
     /*
      * The schema half is exactly the rule set these operations interpret.
@@ -1125,7 +1119,7 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
       ) &&
       current_row_count == row_count;
   }
-  if (current && (interpreted & PARADOX_DOMAIN_INTERPRET_BOUNDS)) {
+  if (current && captures_bounds) {
     current = numeric_column_receipt_current(
         selected_columns[PARADOX_DOMAIN_LOWER],
         lower_values,
@@ -1220,8 +1214,7 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
       prior_owned_levels = snapshot;
       have_prior_levels = TRUE;
     }
-    if (current &&
-        (interpreted & PARADOX_DOMAIN_INTERPRET_SPECIAL_VALUES)) {
+    if (current && captures_special_values) {
       SEXP source = VECTOR_ELT(
         selected_columns[PARADOX_DOMAIN_SPECIAL_VALS],
         row

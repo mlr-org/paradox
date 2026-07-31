@@ -3,20 +3,53 @@
 ## Status
 
 **The corrected source-bound Domain performance obligation is closed. Candidate
-`41dc51dc4f6de4d92999a34cbd2cab6f17364db7` is rejected by its diagnostic
+`d892d94b11109fd2817b3f78db2127781cb35542` is rejected by its diagnostic
 `release-core` run. All four harness rows, differential, C23, the complete
-API-header matrix, both full native test executions, examples, and every
-substantive `R CMD check --as-cran` stage passed. The check nevertheless ended
-with one NOTE: the cold categorical Paradox-1 sampler gateway's shared body
-contains a syntactic `sample_truncated()` call while its generated environment
-bound that name to `NULL`. The every-minor runtime task was correctly blocked.
-Source is reopened only to bind the exact callable versioned target in both
-gateway environments and regress that serialized-closure contract. Freeze a
-replacement after this delta converges, then run C17/C23, the complete real R
-3.6, 4.0, 4.1, 4.2, 4.3, 4.4, 4.5, and current 4.6 runtime matrix, memory,
-compatibility, and all remaining release gates below.**
+API-header matrix, strict native full tests, examples, and a clean
+`R CMD check --as-cran` passed. GCC 14 `-fanalyzer` then exposed one relational
+false positive in the optional Domain receipt workspace: its model skipped the
+computed-nonzero workspace-size branch, then independently treated the same
+bounds bit as true and reported a NULL bounds buffer. The every-minor runtime
+task was correctly blocked. Source is reopened only for a structural,
+behavior-preserving rewrite that branches the existing single allocation
+directly on the cached bounds/special booleans and reuses those exact booleans
+at every access. It preserves allocation count and bytes and adds no runtime
+guard. Freeze a replacement after this delta converges, then run C17/C23, the
+complete real R 3.6, 4.0, 4.1, 4.2, 4.3, 4.4, 4.5, and current 4.6 runtime
+matrix, memory, compatibility, and all remaining release gates below.**
 
 The rejected ref is
+`refs/paradox-release/candidate-20260731T221636Z`, commit
+`d892d94b11109fd2817b3f78db2127781cb35542`, tree
+`6d93885457f42f57026a57d5a278bcd05dfde6ce`. In
+`.local/verify/runs/release-candidate-d892d94`, seven tasks passed:
+the four harness tasks, C23 compatibility under GCC 15.2 and Clang 22, the
+complete API-header matrix, and all 33 differential cases. `native-release`
+completed the strict full suite and clean package check, then stopped at the
+GCC analyzer diagnostic above; `runtime-supported` therefore never started.
+Completion, JSON-summary, and TSV-summary SHA-256 values are
+`5f40ae2ac9c61992430f6fb3336427a6406476b269ae01264740252daad55a6f`,
+`0f8bb02da2eb087f6044c4ebdad82cb227ca0b2a63e03b620dacb6f60d0d5221`,
+and
+`2e4c6f61b82f7b67c2897ab4eba45e911bdc722bef5343ea0dd5beb252327849`.
+This run is diagnostic only and transfers no candidate acceptance.
+
+The behavior-preserving workspace rewrite has a complete GCC-analyzer
+development preflight at
+`.local/checks/release-domain-workspace-analyzer-20260731-r2`. Its completion,
+source-manifest, and analyzer-install-log SHA-256 values are
+`5231952a3868b4a58d28084ba8b36aa4f35e99de925da4ac86b13761f94fb723`,
+`320e7a7a320e844b1267b73492fe672650a7d49d537a6188a89501fb20d31f13`,
+and
+`36a72e83ef84dc4f152536290c231133c030a813c5d1712fbd19bb168144b3eb`.
+The installed-package selection covering Domain construction, nested
+admission, Domain kernels, ParamSet domains/quantiles, and TuneTokens passes
+all 1,591 assertions with no skips. Independent strict R-3.6-header,
+GCC-15-C23, and Clang-22-C23 compilation also passes. These are focused
+development results only; the next immutable candidate owns every release
+gate.
+
+The preceding rejected ref is
 `refs/paradox-release/candidate-20260731T215429Z`, commit
 `41dc51dc4f6de4d92999a34cbd2cab6f17364db7`, tree
 `85f2bf5e84a9df32143e1b9d3e404c74be831de9`. In

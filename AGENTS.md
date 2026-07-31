@@ -20,6 +20,37 @@ package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
 The most recent frozen package-facing ref is the rejected diagnostic candidate
+`refs/paradox-release/candidate-20260731T221636Z`, commit
+`d892d94b11109fd2817b3f78db2127781cb35542`, tree
+`6d93885457f42f57026a57d5a278bcd05dfde6ce`. Its exact
+`release-candidate-d892d94` coordinator passed all four harness rows,
+differential, the complete API-header matrix, and explicit C23 builds under GCC
+15.2 and Clang 22. The strict native full tests and clean
+`R CMD check --as-cran` passed, then GCC 14 `-fanalyzer` exposed one relational
+false positive in the optional Domain receipt workspace: it skipped a
+computed-nonzero workspace-size branch and later independently treated the
+same bounds bit as true. The every-minor runtime task was correctly blocked.
+Completion, JSON-summary, and TSV-summary SHA-256 values are respectively
+`5f40ae2ac9c61992430f6fb3336427a6406476b269ae01264740252daad55a6f`,
+`0f8bb02da2eb087f6044c4ebdad82cb227ca0b2a63e03b620dacb6f60d0d5221`,
+and
+`2e4c6f61b82f7b67c2897ab4eba45e911bdc722bef5343ea0dd5beb252327849`.
+This is diagnostic evidence only. Source is reopened solely to branch the
+single existing workspace allocation directly on the cached bounds/special
+booleans and reuse those exact booleans at every access. The rewrite preserves
+the allocation count and exact bytes and adds no guard or hot-path work.
+The complete GCC-analyzer development preflight
+`.local/checks/release-domain-workspace-analyzer-20260731-r2` passes; its
+completion, source-manifest, and analyzer-install-log SHA-256 values are
+`5231952a3868b4a58d28084ba8b36aa4f35e99de925da4ac86b13761f94fb723`,
+`320e7a7a320e844b1267b73492fe672650a7d49d537a6188a89501fb20d31f13`,
+and
+`36a72e83ef84dc4f152536290c231133c030a813c5d1712fbd19bb168144b3eb`.
+The directly affected installed-package selection also passes 1,591
+assertions with no skips. This is focused development evidence, not candidate
+acceptance. Freeze and fully execute another immutable candidate.
+
+The preceding rejected diagnostic candidate was
 `refs/paradox-release/candidate-20260731T215429Z`, commit
 `41dc51dc4f6de4d92999a34cbd2cab6f17364db7`, tree
 `85f2bf5e84a9df32143e1b9d3e404c74be831de9`. Its
@@ -39,7 +70,7 @@ This is diagnostic evidence only. Source is reopened for the narrow cold
 gateway binding repair and its focused regression; freeze and fully execute a
 new immutable candidate afterward.
 
-The preceding rejected diagnostic candidate was
+The earlier rejected diagnostic candidate was
 `refs/paradox-release/candidate-20260731T150816Z`, commit
 `a153faeeed8735c4aeeba512a70fb71b11235469`, tree
 `2fe241b90b0e86381a6f884fd29d3a80baab6b7b`. Its corrected source-bound Domain
@@ -280,7 +311,11 @@ It does not reopen the P1--P5 slice experiments above. Its indexed-root and
 focused correctness work and the subsequent unified-capture recovery are
 complete, and candidate `a153fae` passed its corrected source-bound three-way
 comparison. That bounded obligation is closed; do not rerun it for unrelated
-cleanup.
+cleanup. Its optional bounds/special receipt workspace has one structural
+owner: allocation and every later access use the same cached interpretation
+booleans. Do not recover a computed workspace-size branch followed by repeated
+raw mask tests; besides obscuring the invariant, GCC's analyzer can lose that
+relational fact and invent an impossible NULL path.
 
 The exact focused adversarial review closure is retained at
 `.local/checks/integrated-selectors-r9-20260731T122010Z`; its source-manifest

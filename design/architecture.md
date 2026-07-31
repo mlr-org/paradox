@@ -692,7 +692,13 @@ rules. `domain_check()` supplies the complete mask. An irrelevant rule is
 skipped whole, never reimplemented by the caller, so malformed semantic state
 outside one mask is rejected by the first operation that interprets it. The
 compact indexed-root receipt retains the exact selected fields and proves one
-coherent terminal Domain generation without a parallel row validator.
+coherent terminal Domain generation without a parallel row validator. Its
+optional bounds/special receipt workspace performs one allocation under the
+cached interpretation booleans, and every capture, row admission, and terminal
+receipt reuses those exact booleans. This keeps the allocation and access
+invariant structural, preserves one allocation and the same packed byte count,
+and needs neither a runtime NULL guard nor a compiler-specific nonnull
+attribute.
 
 The shared owner rejects ALTREP or S4 structural Domain objects/metadata. For
 Dbl, Int, Fct, Lgl, and Uty the outer special-values list, names, and metadata
