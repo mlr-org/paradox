@@ -408,15 +408,16 @@ SEXP paradox_builtin_condition_snapshot(SEXP condition,
     R_xlen_t *work_since_interrupt) {
   paradox_builtin_condition_kind_t kind;
   PROTECT(condition);
-  SEXP stable_rhs = PROTECT(paradox_builtin_condition_admit(
+  SEXP stable_rhs = paradox_builtin_condition_admit(
     condition,
     &kind,
     work_since_interrupt
-  ));
+  );
   if (stable_rhs == R_NilValue) {
-    UNPROTECT(2);
+    UNPROTECT(1);
     return R_UnboundValue;
   }
+  PROTECT(stable_rhs);
 
   SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
   SET_VECTOR_ELT(result, 0, stable_rhs);
@@ -518,13 +519,14 @@ SEXP paradox_condition_test_builtin(SEXP condition, SEXP x) {
   paradox_builtin_condition_kind_t kind;
   R_xlen_t work_since_interrupt = 0;
   PROTECT(condition);
-  SEXP stable_rhs = PROTECT(paradox_builtin_condition_admit(
+  SEXP stable_rhs = paradox_builtin_condition_admit(
     condition, &kind, &work_since_interrupt
-  ));
+  );
   if (stable_rhs == R_NilValue) {
-    UNPROTECT(2);
+    UNPROTECT(1);
     Rf_error("Malformed built-in Condition object");
   }
+  PROTECT(stable_rhs);
 
   if (x == R_NilValue) {
     SEXP result = PROTECT(Rf_allocVector(LGLSXP, 0));

@@ -120,15 +120,16 @@ static SEXP snapshot_condition(SEXP condition,
     R_xlen_t *work_since_interrupt) {
   PROTECT(condition);
   paradox_builtin_condition_kind_t kind;
-  SEXP stable_rhs = PROTECT(paradox_builtin_condition_admit(
-      condition,
-      &kind,
-      work_since_interrupt
-  ));
+  SEXP stable_rhs = paradox_builtin_condition_admit(
+    condition,
+    &kind,
+    work_since_interrupt
+  );
   if (stable_rhs == R_NilValue) {
-    UNPROTECT(2);
+    UNPROTECT(1);
     Rf_error("Malformed built-in dependency Condition");
   }
+  PROTECT(stable_rhs);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
   SET_VECTOR_ELT(result, 0, stable_rhs);
   SET_VECTOR_ELT(

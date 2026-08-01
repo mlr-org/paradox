@@ -55,6 +55,9 @@ traced end to end.
 |---|---|---|---|---|
 | A1 | build blocker | compact data-frame row-name construction | fixed, proof pending | cppcheck `integerOverflowCond` at `paramset_domain_common.c`; negate while still `R_xlen_t`, after the existing `INT_MAX` proof |
 | A2 | build blocker | numeric Domain snapshot | fixed, proof pending | Clang analyzer nullable `tolerance` report; split required-tolerance and bounds-only snapshots so the data flow encodes the contract without an accepted-path guard |
+| A3 | analyzer-only release blocker | built-in Condition admission result/out-parameter correlation | fixed; complete Clang analyzer green | Clang modeled the external `R_NilValue` binding as mutable across an intervening `PROTECT()` and invented a failure-return path that used an unset `kind`. Each of the three consumers now tests the returned snapshot before any intervening call, then protects only the non-NULL result. No allocation or callback occurs in that interval; the accepted path keeps one protection, adds no enum initialization, and has identical or better code generation. |
+| A4 | analyzer hygiene | public Domain outer-metadata locals | fixed; complete Clang analyzer green | the A3 rerun exposed dead initial stores for `outward_class`, `outward_selfref`, and `outward_repr`. Every route to the capture loop's sole `break` assigns all three from the selected generation, while its earlier `continue` restarts and overwrites them; removing the stores changes no semantic or hot-path work. |
+| A5 | static-harness model | cppcheck R/platform declarations | fixed; complete 39-source harness replay green | cppcheck's selected `unix64` model omitted `UINTPTR_MAX` and its compiler-neutral C99 model erased R's `NORET`, selecting the package's deliberate unsupported-width `#error` and four impossible NULL continuations after `Rf_error()`. The harness supplies only those exact selected-platform and public-API facts. No diagnostic is suppressed and package source and runtime code are unchanged. |
 | I1 | high | internal-tuning multi-owner reads and commits | fixed, focused tests green | one native graph snapshot now supplies routes, cargo, owner/root values, and receipts; native stores validate all receipts before one atomic commit |
 | I2 | high | subset/subspace callback detachment | fixed, focused tests green | subset state and detached callback plans now come from one admitted generation; callback carriers retain the exact selected leaf core, including nested Collection/Shadow cases |
 | I3 | high | same-pointer Shadow signature mutation | fixed, focused tests green | receipted graph selection precedes dynamic admission and terminal checks compare carrier plus every entry; deterministic subset and deep-clone mutator regressions cover the former core-pointer blind spot |
@@ -534,12 +537,62 @@ and
 This transfer is limited to the byte-identical package implementation and is
 focused development evidence, not release acceptance.
 
-No immutable release candidate exists yet. In particular, the exact complete
-runtime selection remains mandatory: R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3,
-4.4.3, and 4.5.2 each own a complete supported-runtime stage, while the full
-native lane owns current R 4.6.1. The complete package, C23, API/header,
-sanitizer, memory, differential, downstream, documentation, benchmark, and
-hosted portability gates all remain pending.
+At the exact r9 closure no immutable release candidate existed. Its pending
+runtime obligation was already the complete minor-series selection: R 3.6.3,
+4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 each own a complete
+supported-runtime stage, while the full native lane owns current R 4.6.1.
+Later candidate sections supersede that historical status without weakening
+the same runtime obligation.
+
+## Candidate 1720d60 release-analyzer follow-up (2026-08-01)
+
+Frozen candidate `1720d60c3bb8eefbc02d9b0455a9ee537b95a97a`, tree
+`044a7fe8c58098f6739e5cef6e715c4bf30981d6`, passed the four harness
+tasks, C23 under GCC 15.2 and Clang 22, the complete API-header matrix, all 33
+differential cases, strict full tests, a clean `R CMD check --as-cran`, and the
+complete GCC analyzer. The Clang analyzer then reported the two A3 paths and
+the every-minor runtime task was correctly blocked. The coordinator completion,
+JSON-summary, and TSV-summary SHA-256 values are respectively
+`847829b78e6d5c58f360b10f0fef36c310514b3d2a42cb4ee5bc436a4ae65540`,
+`63cdfae9d5b266ccb74963a07425669642d0546c2519fee868c418f3f132c135`,
+and
+`9f5abf153eb7d5f6f95d0fb34d98ca385d907fce39750a83f453a7e5aa29c841`.
+The run is diagnostic evidence only.
+
+All three Condition admission consumers now test the returned sentinel before
+`PROTECT()` and protect only a successful snapshot. There is no allocation,
+callback, interrupt, or object access in that interval. Protection counts are
+unchanged on success and balanced on every failure path; the spelling adds no
+default enum store and has identical or better generated code. The first
+follow-up analyzer pass then exposed A4, whose three dead initial values were
+removed after proving every normal loop exit had overwritten them. The complete
+follow-up Clang analyzer run
+`.local/checks/release-condition-admit-clang-20260731-r2` passes every C
+translation unit. Its completion, source-manifest, and analyzer-report-list
+SHA-256 values are respectively
+`d8fa00a349db9561f1e0e014e653f963afb474ab9136d1a0636359f2eb496811`,
+`f2e055c67b833e380067d0eef6bec0429cb0b8ab5f42e631c8b9f9f6a2b2406c`,
+and
+`00ed8c7e5176591f023ceb7928cab3917949cb50fb2872e446561003f3cff595`.
+
+The ensuing package/harness-source-exact static/focused attempt passed both
+strict installs,
+focused tests, and both analyzers before exposing A5. The corrected cppcheck
+harness then processed all 39 translation units successfully in
+`.local/checks/release-cppcheck-model-20260801-r1`. Its completion,
+source-manifest, and cppcheck-log SHA-256 values are respectively
+`719792c414b3a51d0a7994aaf54a7352cc603dc299dac813b519ed40c8636fc2`,
+`8e0329bca4243941d42d8d10fafaa727033907b52a02f8cd0c79a65212ed01e2`,
+and
+`c88c365634d0813b982fc0a97c550a5feb0a8e7a833e423d39712d2a96faaad7`.
+The exact package/harness-source follow-up
+`.local/checks/release-static-focused-20260801-r2` then passed strict GCC and
+Clang, the focused suite and native probes, both analyzers, exhaustive
+cppcheck, and the symbol/registration audit. Its completion and source-manifest
+SHA-256 values are
+`f45c566a308340c45475dd25682ba31085c5d4e9a2c986e894d4a288c39a2415`
+and
+`222b0df99e5bec279d95bb7fab56e36533d2692767364be1be62084d688a618e`.
 
 ## Completion criteria
 

@@ -520,9 +520,9 @@ static SEXP admit_public_domain_table_impl(SEXP domain,
    * finalizer, so the loop restarts and overwrites every prior capture.
   */
   R_xlen_t expected_attribute_count = 0;
-  SEXP outward_class = R_NilValue;
-  SEXP outward_selfref = R_NilValue;
-  SEXP outward_repr = R_NilValue;
+  SEXP outward_class;
+  SEXP outward_selfref;
+  SEXP outward_repr;
   SEXP rare_grouping = R_NilValue;
   SEXP accepted_class = R_NilValue;
   SEXP accepted_grouping = R_NilValue;

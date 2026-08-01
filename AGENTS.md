@@ -20,6 +20,78 @@ package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
 The most recent frozen package-facing ref is the rejected diagnostic candidate
+`refs/paradox-release/candidate-20260731T225009Z`, commit
+`1720d60c3bb8eefbc02d9b0455a9ee537b95a97a`, tree
+`044a7fe8c58098f6739e5cef6e715c4bf30981d6`. Its exact
+`release-candidate-1720d60` coordinator passed all seven independent foundation
+tasks: the four harness rows, differential, the complete API-header matrix, and
+explicit C23 builds under GCC 15.2 and Clang 22. `native-release` then passed
+the strict native full tests, a clean `R CMD check --as-cran`, and the complete
+GCC analyzer. The Clang analyzer reported two uninitialized-`kind` paths in
+`builtin_condition.c`; the every-minor runtime task was correctly blocked.
+Both reports are analyzer false positives, not package defects. Admission
+returns `R_NilValue` on every path that may leave `kind` unset and a non-NULL
+snapshot only after exact built-in Condition admission, but Clang treated the
+externally declared `R_NilValue` binding as potentially mutable across the
+caller's intervening `PROTECT()` and therefore lost that sentinel/out-parameter
+implication. Completion, JSON-summary, and TSV-summary SHA-256 values are
+respectively
+`847829b78e6d5c58f360b10f0fef36c310514b3d2a42cb4ee5bc436a4ae65540`,
+`63cdfae9d5b266ccb74963a07425669642d0546c2519fee868c418f3f132c135`,
+and
+`9f5abf153eb7d5f6f95d0fb34d98ca385d907fce39750a83f453a7e5aa29c841`.
+This is diagnostic evidence only. Source was reopened solely to test the
+admission result before `PROTECT()` at all three consumers. No allocation,
+callback, or R transition occurs between return and that protection, so the
+selected non-NULL snapshot remains safe; the accepted path retains exactly one
+protection, adds no default enum store, and has identical or better generated
+code. The first follow-up Clang pass then exposed three dead `R_NilValue`
+initializers for `outward_class`, `outward_selfref`, and `outward_repr` in
+`domain_row_admission.c`. Every path to the loop's sole `break` assigns all
+three from the selected metadata generation, while the only earlier
+`continue` restarts and overwrites them; removing the initial stores changes no
+behavior or optimized code. The complete follow-up Clang analyzer preflight
+passes at
+`.local/checks/release-condition-admit-clang-20260731-r2`; its completion,
+source-manifest, and analyzer-report-list SHA-256 values are respectively
+`d8fa00a349db9561f1e0e014e653f963afb474ab9136d1a0636359f2eb496811`,
+`f2e055c67b833e380067d0eef6bec0429cb0b8ab5f42e631c8b9f9f6a2b2406c`,
+and
+`00ed8c7e5176591f023ceb7928cab3917949cb50fb2872e446561003f3cff595`.
+The first complete static/focused preflight,
+`release-static-focused-20260801-r1`, passed the strict GCC and Clang installs,
+focused tests, GCC analyzer, and complete Clang analyzer before cppcheck
+reported five harness-model diagnostics. Cppcheck's `unix64` model knew the
+size of `uintptr_t` but omitted `UINTPTR_MAX`, and its compiler-neutral C99
+model erased R's real `NORET` declaration; the package's unsupported-width
+`#error` and four impossible post-`Rf_error()` NULL paths were therefore
+selected. No package defect was found. The cppcheck invocation now completes
+those two exact model facts with `UINTPTR_MAX=UINT64_MAX` and R's
+`__attribute__((noreturn))`; it does not suppress a diagnostic, change package
+source, or make a broader compiler-model claim. The complete 39-translation-
+unit harness replay `release-cppcheck-model-20260801-r1` passes. Its completion,
+source-manifest, and cppcheck-log SHA-256 values are respectively
+`719792c414b3a51d0a7994aaf54a7352cc603dc299dac813b519ed40c8636fc2`,
+`8e0329bca4243941d42d8d10fafaa727033907b52a02f8cd0c79a65212ed01e2`,
+and
+`c88c365634d0813b982fc0a97c550a5feb0a8e7a833e423d39712d2a96faaad7`.
+The exact package/harness-source replacement preflight
+`release-static-focused-20260801-r2` now passes all six modes: strict GCC with
+the focused package suite, strict Clang probes, GCC analyzer, complete Clang
+analyzer, exhaustive cppcheck, and the symbol/registration audit. Its
+completion, source-manifest, GCC-analyzer, Clang-report-list, cppcheck-log, and
+registration-log SHA-256 values are respectively
+`f45c566a308340c45475dd25682ba31085c5d4e9a2c986e894d4a288c39a2415`,
+`222b0df99e5bec279d95bb7fab56e36533d2692767364be1be62084d688a618e`,
+`c4ecb5d84e31537baf2fab335b445b2311ec23cb2a68df3bc232505691ecac33`,
+`210b2dd82ad36618afd565499b1b780921e538787d3c13f320d9105e7508ac22`,
+`779667b845361e3b31367871745c6c74af7026e0dafda8aa04a5b1de6c2b9391`,
+and
+`bebd79a1f7b3333b0db3a671cf518e8391a5f89c1d68cd69689639e676753e68`.
+This is focused development evidence, not candidate acceptance. Freeze and
+fully execute another immutable candidate.
+
+The preceding rejected diagnostic candidate was
 `refs/paradox-release/candidate-20260731T221636Z`, commit
 `d892d94b11109fd2817b3f78db2127781cb35542`, tree
 `6d93885457f42f57026a57d5a278bcd05dfde6ce`. Its exact

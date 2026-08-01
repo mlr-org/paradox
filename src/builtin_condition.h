@@ -18,7 +18,11 @@ attribute_hidden int paradox_builtin_condition_exact(
 /* Admit an exact built-in Condition at a public native boundary. Its atomic
  * right-hand side is observed once into ordinary rooted storage before the
  * operation snapshot; this is also the stable/base ALTREP admission point.
- * R_NilValue denotes malformed input. */
+ * The returned snapshot is unprotected. R_NilValue denotes malformed input
+ * and may leave `*kind` unspecified. Callers must test that sentinel
+ * immediately, then protect a successful result before any allocating
+ * operation. Besides owning the result in time, that ordering preserves the
+ * conditional output contract for static analyzers. */
 attribute_hidden SEXP paradox_builtin_condition_admit(
   SEXP condition,
   paradox_builtin_condition_kind_t *kind,

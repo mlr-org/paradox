@@ -1655,6 +1655,10 @@ if [ "$MODE_CPPCHECK" = true ]; then
   prepare_mode cppcheck "$STRICT_GCC_PROFILE" none
   cppcheck_build_directory="$MODE_DIRECTORY/artifacts/cache"
   mkdir -p "$cppcheck_build_directory"
+  # Cppcheck's unix64/stdint model knows the uintptr_t size but omits its
+  # required maximum macro. Its compiler-neutral C99 model also erases R's
+  # real non-returning declaration. Complete those two selected-platform
+  # facts without changing or suppressing package source.
   set -- env -i "HOME=$MODE_DIRECTORY/home" \
     "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
     "PATH=$LOCAL_PATH" "CONDA_PREFIX=$TOOLCHAIN" \
@@ -1671,7 +1675,9 @@ if [ "$MODE_CPPCHECK" = true ]; then
     "-I$SOURCE_DIRECTORY/src" \
     "-I$TOOLCHAIN/lib/R/include" \
     "-I$TOOLCHAIN/include" \
-    -DR_NO_REMAP -DSTRICT_R_HEADERS
+    -DR_NO_REMAP -DSTRICT_R_HEADERS \
+    -DUINTPTR_MAX=UINT64_MAX \
+    '-DNORET=__attribute__((noreturn))'
   c_source_found=false
   for c_source in "$SOURCE_DIRECTORY"/src/*.c; do
     if [ -f "$c_source" ]; then

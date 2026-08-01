@@ -431,6 +431,14 @@ is requested without optimization, which the warning-as-error analyzer gate
 correctly refuses. Both strict compiler builds and all runtime profiles retain
 fortification; this exception affects analysis only, never a shipped DLL.
 
+Cppcheck's `unix64` model supplies type widths but omits the platform-dependent
+standard `UINTPTR_MAX` macro, and its compiler-neutral C99 preprocessing erases
+R's real `NORET` declaration. The native harness completes those two exact
+model facts as `UINTPTR_MAX=UINT64_MAX` and
+`NORET=__attribute__((noreturn))`. These are not diagnostic suppressions:
+cppcheck still analyzes every package branch selected by the declared
+64-bit/GNU99 environment, including the real non-returning error edges.
+
 The sanitizer results have deliberately limited scope:
 
 - ASan instruments and links the package DSO with Clang. Because the pinned R

@@ -2,23 +2,84 @@
 
 ## Status
 
-**The corrected source-bound Domain performance obligation is closed. Candidate
-`d892d94b11109fd2817b3f78db2127781cb35542` is rejected by its diagnostic
-`release-core` run. All four harness rows, differential, C23, the complete
-API-header matrix, strict native full tests, examples, and a clean
-`R CMD check --as-cran` passed. GCC 14 `-fanalyzer` then exposed one relational
-false positive in the optional Domain receipt workspace: its model skipped the
-computed-nonzero workspace-size branch, then independently treated the same
-bounds bit as true and reported a NULL bounds buffer. The every-minor runtime
-task was correctly blocked. Source is reopened only for a structural,
-behavior-preserving rewrite that branches the existing single allocation
-directly on the cached bounds/special booleans and reuses those exact booleans
-at every access. It preserves allocation count and bytes and adds no runtime
-guard. Freeze a replacement after this delta converges, then run C17/C23, the
-complete real R 3.6, 4.0, 4.1, 4.2, 4.3, 4.4, 4.5, and current 4.6 runtime
-matrix, memory, compatibility, and all remaining release gates below.**
+**Candidate `1720d60c3bb8eefbc02d9b0455a9ee537b95a97a` is rejected by
+its diagnostic `release-core` run. All seven foundation tasks passed.
+`native-release` passed strict full tests, a clean `R CMD check --as-cran`, and
+the GCC analyzer, then stopped on two Clang-analyzer false positives in
+built-in Condition admission; `runtime-supported` was correctly blocked.
+Source is reopened only for the allocation-free sentinel-test ordering repair
+at all three admission consumers and removal of the three dead Domain metadata
+initializers it unmasked. The bounded static/focused replacement preflight is
+green. Freeze a replacement, then run C17/C23, the complete real R 3.6, 4.0,
+4.1, 4.2, 4.3, 4.4, 4.5, and current 4.6 runtime matrix, memory,
+compatibility, and all remaining release gates below.**
 
 The rejected ref is
+`refs/paradox-release/candidate-20260731T225009Z`, commit
+`1720d60c3bb8eefbc02d9b0455a9ee537b95a97a`, tree
+`044a7fe8c58098f6739e5cef6e715c4bf30981d6`. In
+`.local/verify/runs/release-candidate-1720d60`, the four harness tasks, C23
+compatibility under GCC 15.2 and Clang 22, the complete API-header matrix, and
+all 33 differential cases passed. `native-release` passed the strict full
+suite, clean package check, and GCC analyzer, then failed only on the two
+Clang-analyzer reports described above; `runtime-supported` therefore never
+started. Completion, JSON-summary, and TSV-summary SHA-256 values are
+`847829b78e6d5c58f360b10f0fef36c310514b3d2a42cb4ee5bc436a4ae65540`,
+`63cdfae9d5b266ccb74963a07425669642d0546c2519fee868c418f3f132c135`,
+and
+`9f5abf153eb7d5f6f95d0fb34d98ca385d907fce39750a83f453a7e5aa29c841`.
+This run is diagnostic only and transfers no candidate acceptance.
+
+Clang's path model allowed the externally declared `R_NilValue` binding to
+change across the `PROTECT()` which followed Condition admission. That invented
+a path where an admission failure no longer compared equal to `R_NilValue` and
+an unset `kind` was read. All three consumers now compare the returned snapshot
+before the first intervening call and protect only a successful result. This is
+safe because no allocation or callback lies between return and `PROTECT()`; it
+adds no default enum store, retains the exact protection count, and compiles to
+identical or better code. The first follow-up analyzer pass exposed three dead
+`R_NilValue` initializers in `domain_row_admission.c`; the loop assigns all
+three selected metadata values before its sole `break`, and its sole earlier
+`continue` restarts the capture, so their removal is semantic- and
+performance-neutral. The complete Clang analyzer preflight
+`release-condition-admit-clang-20260731-r2` is green; its completion,
+source-manifest, and analyzer-report-list SHA-256 values are
+`d8fa00a349db9561f1e0e014e653f963afb474ab9136d1a0636359f2eb496811`,
+`f2e055c67b833e380067d0eef6bec0429cb0b8ab5f42e631c8b9f9f6a2b2406c`,
+and
+`00ed8c7e5176591f023ceb7928cab3917949cb50fb2872e446561003f3cff595`.
+The first complete static/focused attempt,
+`release-static-focused-20260801-r1`, passed strict GCC and Clang, focused
+tests, and both analyzers before cppcheck exposed five model-only diagnostics.
+Its `unix64` standard-library model omitted `UINTPTR_MAX`, and its
+compiler-neutral C99 model erased R's public `NORET`, selecting the deliberate
+unsupported-width `#error` and four impossible post-`Rf_error()` NULL paths.
+Package source was left unchanged. The harness now supplies those two exact
+facts rather than suppressing diagnostics or broadly impersonating GCC. The
+complete 39-source cppcheck harness replay
+`release-cppcheck-model-20260801-r1` passes; its completion, source-manifest,
+and cppcheck-log SHA-256 values are
+`719792c414b3a51d0a7994aaf54a7352cc603dc299dac813b519ed40c8636fc2`,
+`8e0329bca4243941d42d8d10fafaa727033907b52a02f8cd0c79a65212ed01e2`,
+and
+`c88c365634d0813b982fc0a97c550a5feb0a8e7a833e423d39712d2a96faaad7`.
+The exact package/harness-source replacement preflight
+`release-static-focused-20260801-r2` then passed all six selected modes:
+strict GCC plus the focused suite, strict Clang probes, both analyzers,
+exhaustive cppcheck, and the symbol/registration audit. Its completion,
+source-manifest, GCC-analyzer, Clang-report-list, cppcheck-log, and
+registration-log SHA-256 values are
+`f45c566a308340c45475dd25682ba31085c5d4e9a2c986e894d4a288c39a2415`,
+`222b0df99e5bec279d95bb7fab56e36533d2692767364be1be62084d688a618e`,
+`c4ecb5d84e31537baf2fab335b445b2311ec23cb2a68df3bc232505691ecac33`,
+`210b2dd82ad36618afd565499b1b780921e538787d3c13f320d9105e7508ac22`,
+`779667b845361e3b31367871745c6c74af7026e0dafda8aa04a5b1de6c2b9391`,
+and
+`bebd79a1f7b3333b0db3a671cf518e8391a5f89c1d68cd69689639e676753e68`.
+These are focused development results only; the next immutable candidate owns
+every release gate.
+
+The preceding rejected ref is
 `refs/paradox-release/candidate-20260731T221636Z`, commit
 `d892d94b11109fd2817b3f78db2127781cb35542`, tree
 `6d93885457f42f57026a57d5a278bcd05dfde6ce`. In
