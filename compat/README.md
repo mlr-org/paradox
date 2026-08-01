@@ -140,6 +140,38 @@ checkout and test manifests are maintained separately because reviewed
 mlr-org development heads, including non-CRAN books and galleries, are part of
 the compatibility surface.
 
+To prepare a new CRAN snapshot without changing either tracked manifest or the
+canonical cache, first write a tab-separated structural-review file when the
+live `Depends`/`Imports`/`Suggests` reverse set has additions, removals, or
+dependency-relation changes. Its exact header is `action`, `package`,
+`relation`, `priority`, `notes`; `action` is `add`, `remove`, or `relation`.
+A removal must repeat the old relation, priority, and notes. A relation change
+uses the new relation and the desired priority and notes. `LinkingTo` or
+`Enhances` use fails closed because neither belongs to this inventory's tested
+relation contract. Then run:
+
+```sh
+. scripts/activate
+refresh_id="$(date -u +%Y%m%dT%H%M%SZ)-cran-refresh"
+Rscript --vanilla compat/refresh-cran-snapshot.R \
+  --root "$PARADOX_ROOT" \
+  --run-id "$refresh_id" \
+  --reviewed-changes /path/to/reviewed-changes.tsv
+```
+
+Omit `--reviewed-changes` only when there are no structural changes. The
+command downloads `PACKAGES.gz` once, authenticates the existing cache, and
+stages complete proposed manifests and archives below
+`.local/compat/cran-refresh/$refresh_id/`. It rejects reused run IDs and
+unreviewed structural changes, retains the downloaded metadata and inputs, and
+never promotes its proposal automatically. Review and promote the proposal
+manually, then use `fetch-cran-sources.R --offline` to verify the promoted
+snapshot. The fail-closed planner tests are run with:
+
+```sh
+Rscript --vanilla compat/test-refresh-cran-snapshot.R
+```
+
 The Bioconductor reverse importer is pinned separately in
 `bioconductor-snapshot.tsv`; fetch it with
 `compat/fetch-bioconductor-sources`.
