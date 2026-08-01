@@ -420,6 +420,9 @@ for binding in \
     'install_source = install_source' \
     '--built-timestamp=' \
     '--without-keep.source' \
+    assert_provider_install_state_empty \
+    'before R CMD INSTALL' \
+    'after R CMD INSTALL' \
     canonical_snapshot_timestamp \
     'second > 59L' \
     'offset_seconds <- hour * 3600 + minute * 60' \

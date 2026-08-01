@@ -154,11 +154,14 @@ interrupted retained lock is never reaped automatically. Direct
 `R CMD INSTALL --without-keep.source` uses the commit instant as a fixed
 `Built` timestamp. Retained evidence binds both source trees, method, metadata,
 absence of run-local absolute paths, and unchanged full installed-package
-content. The final P1/P2 boundary must also reproduce one exact full shared-
-library endpoint hash. This is necessary because multiple Rush commits share
-version `1.2.1.9000`. Schema 4 remains readable only for sealed historical
-evidence; new runs emit schema 5. Legacy schema-3 evidence retains its old
-selection contract.
+content. The fixed private install HOME/TMP/cache/work directories must be
+exactly empty at both boundaries, and a canonical generation must remain
+retained while its evidence can be replayed. The final P1/P2 boundary must also
+reproduce one exact full shared-library endpoint hash. This is necessary
+because multiple Rush commits share version `1.2.1.9000`. Schema 4 keeps its
+old parsing branch for replay with matching historical tooling; the current
+verifier still rejects a stale retained harness hash. New runs emit schema 5.
+Legacy schema-3 evidence retains its old selection contract.
 
 The schema-4 diagnostic preparations
 `release-candidate-4e549f3-final-p1-55e8403-r1` and

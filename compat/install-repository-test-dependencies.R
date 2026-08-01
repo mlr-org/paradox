@@ -938,6 +938,24 @@ local({
         any(bitwAnd(install_state_modes, 511L) != 448L)) {
       stop("exact-provider installation state is not private", call. = FALSE)
     }
+    assert_provider_install_state_empty <- function(context) {
+      for (name in names(install_state)) {
+        entries <- repository_runner_entries(
+          install_state[[name]],
+          paste0("exact-provider installation ", name),
+          allow_symlinks = FALSE
+        )
+        if (nrow(entries)) {
+          stop(
+            "exact-provider installation state is not empty ", context,
+            ": ", name,
+            call. = FALSE
+          )
+        }
+      }
+      invisible(NULL)
+    }
+    assert_provider_install_state_empty("before dependency preparation")
     expected_makevars <- repository_runner_require_file(
       file.path(root, "environment", "Makevars"),
       "repository-local installation Makevars"
@@ -1494,6 +1512,7 @@ install_exact_dependency_provider <- function(repository, checkout) {
       ask = FALSE,
       dependencies = NA
     )
+    assert_provider_install_state_empty("before R CMD INSTALL")
     expected_r <- normalizePath(
       file.path(R.home(), "bin", "R"), winslash = "/", mustWork = TRUE
     )
@@ -1521,6 +1540,7 @@ install_exact_dependency_provider <- function(repository, checkout) {
         call. = FALSE
       )
     }
+    assert_provider_install_state_empty("after R CMD INSTALL")
     NULL
   }, error = identity)
   if (is.null(condition)) {
@@ -1779,8 +1799,9 @@ compat_system_verify_evidence(
 # A successful or failed evidence receipt is published only after strict lock
 # release.  Release is nonblocking and never reaps another process's lock; a
 # preserved lock requires manual authentication and cleanup.  Re-fingerprinting
-# immediately after release closes the bounded handoff and fails if another
-# writer reached the shared library before completion could be recorded.
+# immediately after release closes the bounded lock handoff and detects a
+# completed intervening mutation.  The next producer's authenticated `before`
+# hash closes the remaining publication interval at the P1/P2 boundary.
 writer_lock$release(strict = TRUE)
 dependency_content_after <- compat_tree_content_sha256(library)
 if (!identical(dependency_content_after, dependency_content_after_locked)) {

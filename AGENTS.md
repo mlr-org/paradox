@@ -191,11 +191,16 @@ manual authentication after interruption. Rush is installed directly with
 timestamp. The producer and independent verifier bind the archive, both source
 trees, installation method, canonical source, installed metadata, absence of
 run-local absolute paths, and identical initial/final full package hashes.
+The fixed private installation HOME/TMP/cache/work directories must be exactly
+empty before and after every install, and the authenticated canonical source
+generation must be retained for later evidence replay.
 Package/version alone is insufficient: several Rush commits share version
 `1.2.1.9000`. The final Paradox-1/Paradox-2 preparation must additionally prove
 the same full dependency-library hash before and after the second install.
-Schema-3 retains its old consumer-only semantics; schema-4 is read-only
-compatibility for sealed historical evidence and new runs never emit it.
+Schema-3 retains its old consumer-only semantics. Schema 4 keeps a parsing
+branch for sealed evidence replay under its matching historical tooling; the
+current verifier still rejects a stale retained harness hash, and new runs
+never emit schema 4.
 
 Diagnostic schema-4 runs
 `release-candidate-4e549f3-final-p1-55e8403-r1` and

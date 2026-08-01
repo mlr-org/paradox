@@ -806,18 +806,23 @@ run-local evidence path.
 Exact providers are currently restricted to pure-R packages without build or
 cleanup scripts. They are installed directly with `R CMD INSTALL`, without
 kept source references, and with the pinned commit instant supplied as the
-`Built` timestamp. The schema-5 ledgers bind the method, commit, tree, archive,
-timestamp, canonical `install_source`, and full installed-tree hashes before
-and after all consumer solves. Installed bytes may not retain an absolute
-run-directory, evidence-stage, or run-local source path. The canonical path is
-intentionally stable and explicitly recorded rather than treated as forbidden
-run-local provenance. The checkout verifier independently reauthenticates both
-extractions, reproduces the archive, validates the fixed `Built` metadata, and
-checks the installed endpoint unchanged. The P1/P2 equality check at the same
-shared library endpoint is the cross-run proof; this does not claim that R can
-produce reproducible lazy-load databases for every arbitrary package. Schema
-4 remains a read-only compatibility format for previously sealed evidence and
-retains its old pak-local fields; new dependency runs emit schema 5. This
+`Built` timestamp. Its fixed private HOME, temporary, cache, and working
+directories must have an exact empty inventory before and after every install.
+The schema-5 ledgers bind the method, commit, tree, archive, timestamp,
+canonical `install_source`, and full installed-tree hashes before and after all
+consumer solves. Installed bytes may not retain an absolute run-directory,
+evidence-stage, or run-local source path. The canonical path is intentionally
+stable and explicitly recorded rather than treated as forbidden run-local
+provenance. Retain that canonical generation for as long as its evidence may
+need replay: the verifier deliberately reauthenticates the live read-only
+generation as well as the sealed run-local extraction. The checkout verifier
+also reproduces the archive, validates the fixed `Built` metadata, and checks
+the installed endpoint unchanged. The P1/P2 equality check at the same shared
+library endpoint is the cross-run proof; this does not claim that R can produce
+reproducible lazy-load databases for every arbitrary package. Schema 4 retains
+its old pak-local parsing branch so sealed evidence can be replayed with its
+matching historical tooling. Current tooling still rejects an old stage whose
+retained harness hash is stale; new dependency runs emit schema 5. This
 retains exact `rush` development APIs required by the prepared bbotk and
 mlr3tuning heads, while retaining `fastshap` only as a priority-two fallback
 for `mlr3summary` because CRAN archived it after the consumer snapshot was
