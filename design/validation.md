@@ -7,11 +7,30 @@ file/count matrix.
 
 ## Current validation status
 
-Package-facing source is reopened for the final C17/C23, complete
-minor-version runtime, and focused admission changes. There is no current
-frozen candidate. Freeze one new clean ref only after source, tests,
-documentation, downstream bridges, and harness inputs converge; every
-applicable source-bound acceptance gate then runs against that ref.
+Package-facing source is frozen at
+`refs/paradox-release/candidate-20260801T000111Z` (`de1752f`). Its
+`release-candidate-de1752f` run passed every `release-core` task except
+`runtime-supported`: all seven runtime stages built, installed, loaded,
+probed, and symbol-audited the exact package before one common harness defect
+rejected the tracked recursive test-support directories, so none reached
+testthat. The completion/JSON-summary/TSV-summary SHA-256 values are
+`69634511a79c0d8ab2b6b8dd92aa3b35012f58d420e1333cc4c1ba821cbc44e9`,
+`6e6fa7f39e63a74890ecb9b2e062822b9add56a99b24ddc89986c057192a431c`,
+and
+`76d60a19e82fc0249e5f4bf8b3f8b81ff240181c04a8eec9f6e34676f1306e94`.
+This is diagnostic evidence, not complete acceptance.
+
+Only package-facing-source-identical validation tooling and release
+documentation are reopened. The repair recursively stages every ordinary
+support leaf while preserving testthat's top-level `test*.R`/`test*.r`
+discovery boundary, brackets execution with a deterministic tree receipt, and
+is independently reconstructed during evidence validation. Because that new
+trusted helper is absent from the old ref, commit the repair under one
+replacement immutable ref and run the complete seven-runtime matrix from that
+exact ref. The full native lane already executes current R 4.6.1; the runtime
+matrix executes 3.6.3 and one terminal release from every R 4.0--4.5 minor, so
+the combined release gate covers every minor series from R 3.6 through current
+without a duplicate R 4.6 suite.
 
 The rejected diagnostic ref
 `refs/paradox-release/candidate-20260731T150816Z` (`a153fae`) passed its

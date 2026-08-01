@@ -25,6 +25,8 @@ TEST_RUNNER="$ROOT/scripts/environment/run-native-tests.R"
 TEST_WORKER_GROUP="$ROOT/scripts/environment/run-native-test-worker-group"
 TEST_VERIFIER="$ROOT/scripts/environment/verify-native-test-ledger.R"
 RUNTIME_MATRIX_TEST_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+RUNTIME_MATRIX_TEST_SUPPORT="$ROOT/scripts/environment/runtime-matrix-test-support.R"
+RUNTIME_MATRIX_STRESS_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R"
 LEGACY_REPOSITORY_RUNNER="$ROOT/compat/test-repositories.R"
 HARDENING="$ROOT/scripts/environment/test-validation-hardening"
 TASK_ENTRY="$ROOT/scripts/environment/verify-task-entry"
@@ -41,7 +43,9 @@ for required in "$MEMORY" "$MEMORY_VALIDATOR" "$RECEIPTS" "$R_BUILD" \
     "$COMPILER_BATCH_RUNNER" \
     "$COMPILER_WAVE_RUNNER" "$COMPILER_IDENTITY_HELPER" \
     "$TEST_RUNNER" "$TEST_WORKER_GROUP" "$TEST_VERIFIER" \
-    "$RUNTIME_MATRIX_TEST_RUNNER" "$LEGACY_REPOSITORY_RUNNER" \
+    "$RUNTIME_MATRIX_TEST_RUNNER" "$RUNTIME_MATRIX_TEST_SUPPORT" \
+    "$RUNTIME_MATRIX_STRESS_RUNNER" \
+    "$LEGACY_REPOSITORY_RUNNER" \
     "$HARDENING" "$TASK_ENTRY"; do
   [[ -f "$required" && ! -L "$required" ]] ||
     fail "required harness is absent or symbolic: $required"
@@ -363,6 +367,17 @@ runtime_strict_summary=$(first_line \
   "$RUNTIME_MATRIX_TEST_RUNNER")
 ((runtime_test_start < runtime_strict_summary)) ||
   fail "runtime-matrix strict summary precedes its complete test batch"
+for runtime_tree_runner in "$RUNTIME_MATRIX_TEST_RUNNER" \
+    "$RUNTIME_MATRIX_STRESS_RUNNER"; do
+  grep -Fq '"runtime-matrix-test-support.R"' "$runtime_tree_runner" ||
+    fail "runtime tests do not use the shared support-tree projector"
+  grep -Fq 'staged_test_tree_receipt_created=passed' \
+    "$runtime_tree_runner" ||
+    fail "runtime tests do not retain their pre-test tree receipt"
+  grep -Fq 'staged_test_tree_receipt_verified=passed' \
+    "$runtime_tree_runner" ||
+    fail "runtime tests do not reverify their staged tree"
+done
 repository_test_start=$(first_line 'test_results <- testthat::test_local(' \
   "$LEGACY_REPOSITORY_RUNNER")
 repository_test_strict=$(first_line 'testthat:::test_files_check(' \
@@ -1055,14 +1070,15 @@ done
 # restore independent copies; rebuilding it before every one-line mutation adds
 # no information.
 hardening_fixture=$(function_body build_valid_native_fixture "$HARDENING")
-printf '%s\n' "$hardening_fixture" |
-  grep -Fq 'cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS-asan-$FIXTURE_ASAN"' ||
+grep -Fq \
+  'cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS-asan-$FIXTURE_ASAN"' \
+  <<<"$hardening_fixture" ||
   fail "hardening suite has no scope/ASan-specific valid-fixture cache"
-printf '%s\n' "$hardening_fixture" |
-  grep -Fq 'cp -a -- "$cached_fixture" "$RUN_DIRECTORY"' ||
+grep -Fq 'cp -a -- "$cached_fixture" "$RUN_DIRECTORY"' \
+  <<<"$hardening_fixture" ||
   fail "hardening suite regenerates valid fixtures instead of restoring copies"
-printf '%s\n' "$hardening_fixture" |
-  grep -Fq 'cp -a -- "$RUN_DIRECTORY" "$cached_fixture"' ||
+grep -Fq 'cp -a -- "$RUN_DIRECTORY" "$cached_fixture"' \
+  <<<"$hardening_fixture" ||
   fail "hardening suite never publishes its reusable valid fixture"
 
 printf '%s\n' \

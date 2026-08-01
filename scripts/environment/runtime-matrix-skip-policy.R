@@ -110,7 +110,7 @@ runtime_matrix_validate_pre46_exclusion_policy <- function(
   if (is.null(test_files)) {
     test_files <- dir(
       test_directory,
-      pattern = "^test.*\\.[rR]$",
+      pattern = "^test.*\\.[Rr]$",
       full.names = FALSE
     )
   }
@@ -168,7 +168,7 @@ runtime_matrix_validate_result_skip_policy <- function(
   if (is.null(test_files)) {
     test_files <- dir(
       test_directory,
-      pattern = "^test.*\\.[rR]$",
+      pattern = "^test.*\\.[Rr]$",
       full.names = FALSE
     )
   }
@@ -235,7 +235,7 @@ runtime_matrix_validate_result_skip_policy <- function(
       anyNA(policy) || any(!nzchar(policy$test)) ||
       any(!nzchar(policy$reason)) ||
       any(!policy$runtime %in% reviewed_runtimes) ||
-      any(!grepl("^test[-_][A-Za-z0-9_-]+[.]R$", policy$file)) ||
+      any(!grepl("^test[^/]*\\.[Rr]$", policy$file)) ||
       any(!policy$file %in% test_files) ||
       any(grepl("[\t\r\n]", policy$test)) ||
       any(grepl("[\t\r\n]", policy$reason)) ||

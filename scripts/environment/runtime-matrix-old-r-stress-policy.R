@@ -266,12 +266,19 @@ runtime_matrix_validate_old_r_stress_policy <- function(snapshot) {
     colClasses = "character",
     check.names = FALSE
   )
+  test_directory <- file.path(snapshot, "tests", "testthat")
+  test_files <- dir(
+    test_directory,
+    pattern = "^test.*\\.[Rr]$",
+    full.names = FALSE
+  )
   expected_names <- c("file", "test", "mode", "coverage")
   if (!identical(names(policy), expected_names) || !nrow(policy) ||
       anyNA(policy) || any(!nzchar(as.matrix(policy))) ||
       anyDuplicated(paste(policy$file, policy$test, sep = "\t")) ||
       anyDuplicated(policy$test) ||
-      any(!grepl("^test[-_][A-Za-z0-9_-]+[.]R$", policy$file)) ||
+      any(!grepl("^test[^/]*\\.[Rr]$", policy$file)) ||
+      any(!policy$file %in% test_files) ||
       any(!grepl("^[ -~]+$", policy$test)) ||
       any(!policy$mode %in% c("not-cran", "companion")) ||
       any(!grepl(
@@ -309,8 +316,6 @@ runtime_matrix_validate_old_r_stress_policy <- function(snapshot) {
     stop("old-runtime stress policy lost a required selection mode",
       call. = FALSE)
   }
-
-  test_directory <- file.path(snapshot, "tests", "testthat")
   parsed <- list()
   for (file in unique(policy$file)) {
     path <- file.path(test_directory, file)

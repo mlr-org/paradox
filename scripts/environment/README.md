@@ -573,6 +573,19 @@ suite here. The header gate separately compiles shipped source against R 3.6.0,
 4.0.0, and 4.2.0 headers (plus the later existing axes) so every old-R native
 API transition is represented:
 
+Runtime test staging mirrors testthat rather than flattening the source tree.
+Only top-level `test*.R` and `test*.r` files are executable tests; all other
+ordinary files are recursively projected as support at their exact relative
+paths. This keeps serialized fixtures available while nested diagnostic files
+whose names begin with `test` remain inert. The shared projector is compatible
+with R 3.6, preserves exact bytes and modes under a restrictive umask, and
+rejects symbolic links, special files, ambiguous paths, overlapping or
+non-empty destinations, and projection drift. A deterministic tree receipt is
+created before testthat and verified afterward. Promotion and independent
+evidence replay both verify that receipt and independently reconstruct the
+recursive source projection. The old-R stress slice uses the same projector;
+its generated top-level filter is the sole non-source-backed staged file.
+
 ```sh
 scripts/bootstrap-runtime-matrix
 scripts/bootstrap-runtime-matrix --verify

@@ -20,6 +20,27 @@ byte_sort <- function(value) {
   value[order(value, method = "radix")]
 }
 
+runner_file <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+if (length(runner_file) != 1L) {
+  stop("could not identify the runtime test runner", call. = FALSE)
+}
+runner_file <- normalizePath(
+  sub("^--file=", "", runner_file[[1L]]),
+  mustWork = TRUE
+)
+harness_directory <- dirname(runner_file)
+test_support_helper <- file.path(
+  harness_directory, "runtime-matrix-test-support.R"
+)
+test_tree_receipt_helper <- file.path(
+  harness_directory, "runtime-matrix-prefix-receipt"
+)
+if (!file.exists(test_support_helper) || dir.exists(test_support_helper) ||
+    is_symbolic(test_support_helper)) {
+  stop("runtime test-support helper is absent or symbolic", call. = FALSE)
+}
+sys.source(test_support_helper, envir = environment())
+
 snapshot <- normalizePath(args[[1L]], mustWork = TRUE)
 candidate_library <- normalizePath(args[[2L]], mustWork = TRUE)
 scope_parent <- normalizePath(dirname(args[[3L]]), mustWork = TRUE)
@@ -104,7 +125,7 @@ cat("mbo_config_fixture_source=retained-reviewed-git-objects\n")
 test_directory <- file.path(snapshot, "tests", "testthat")
 test_files <- dir(
   test_directory,
-  pattern = "^test.*\\.[rR]$",
+  pattern = "^test.*\\.[Rr]$",
   full.names = FALSE
 )
 test_paths <- file.path(test_directory, test_files)
@@ -140,7 +161,7 @@ if (!identical(
     ) || nrow(whole_skips) != 2L || anyNA(whole_skips) ||
     any(!nzchar(whole_skips$reason)) || anyDuplicated(whole_skips$file) ||
     !identical(whole_skips$file, byte_sort(whole_skips$file)) ||
-    any(!grepl("^test[-_][A-Za-z0-9_-]+[.]R$", whole_skips$file)) ||
+    any(!grepl("^test[^/]*\\.[Rr]$", whole_skips$file)) ||
     any(!grepl("^[A-Za-z][A-Za-z0-9.]*$", whole_skips$missing_package)) ||
     any(!grepl("^[A-Za-z0-9_:.,-]+$", whole_skips$leading_guards))) {
   stop("whole-file skip manifest is malformed", call. = FALSE)
@@ -274,47 +295,31 @@ scope <- data.frame(
 scope$reason[excluded] <- exclusions$reason[
   match(test_contexts[excluded], exclusions$context)
 ]
-source_entries <- dir(
-  test_directory,
-  all.files = TRUE,
-  no.. = TRUE,
-  full.names = FALSE
-)
-support_files <- setdiff(source_entries, test_files)
-support_paths <- file.path(test_directory, support_files)
-valid_support <- file.exists(support_paths) & !dir.exists(support_paths) &
-  !is_symbolic(support_paths)
-if (!all(valid_support) || anyDuplicated(support_files)) {
-  stop("testthat support inputs are not regular unambiguous files", call. = FALSE)
-}
-if (!dir.create(scope_directory, mode = "0700") ||
-    is_symbolic(scope_directory)) {
-  stop("unable to create an owned test-scope directory", call. = FALSE)
-}
+runtime_matrix_test_tree_create_private_directory(scope_directory)
 scope_output <- file.path(scope_directory, "scope.tsv")
 staged_directory <- file.path(scope_directory, "testthat")
-if (!dir.create(staged_directory, mode = "0700")) {
-  stop("unable to create the staged testthat directory", call. = FALSE)
-}
-copy_files <- c(support_files, executed_files)
-copied <- file.copy(
-  file.path(test_directory, copy_files),
+runtime_matrix_test_tree_create_private_directory(staged_directory)
+staging <- runtime_matrix_test_tree_stage(
+  test_directory,
   staged_directory,
-  copy.mode = TRUE,
-  copy.date = FALSE
+  executed_files
 )
-if (length(copied) != length(copy_files) || !all(copied)) {
-  stop("unable to stage the exact supported test files", call. = FALSE)
+if (!identical(
+    byte_sort(runtime_matrix_test_tree_discover(test_directory)$tests),
+    byte_sort(test_files)
+  )) {
+  stop("shared test-support discovery differs from testthat discovery",
+    call. = FALSE)
 }
-staged_tests <- dir(
+test_tree_receipt <- file.path(
+  scope_directory, "testthat-tree.manifest.tsv"
+)
+runtime_matrix_test_tree_receipt(
+  test_tree_receipt_helper,
+  "create",
   staged_directory,
-  pattern = "^test.*\\.[rR]$",
-  full.names = FALSE
+  test_tree_receipt
 )
-if (!identical(byte_sort(staged_tests), byte_sort(executed_files)) ||
-    any(is_symbolic(file.path(staged_directory, copy_files)))) {
-  stop("staged test inventory differs from the retained scope", call. = FALSE)
-}
 write.table(
   scope,
   file = scope_output,
@@ -333,7 +338,14 @@ cat("executed_test_context_count=", length(executed_contexts), "\n", sep = "")
 cat("excluded_test_file_count=", sum(excluded), "\n", sep = "")
 cat("excluded_test_context_count=", length(unique(test_contexts[excluded])),
   "\n", sep = "")
-cat("staged_test_support_file_count=", length(support_files), "\n", sep = "")
+cat(
+  "staged_test_support_file_count=",
+  length(staging$support_files),
+  "\n",
+  sep = ""
+)
+cat("staged_test_tree_receipt=testthat-tree.manifest.tsv\n")
+cat("staged_test_tree_receipt_created=passed\n")
 cat("whole_file_skip_manifest=", whole_skip_relative, "\n", sep = "")
 cat("expected_whole_file_skip_count=", nrow(whole_skips), "\n", sep = "")
 for (i in seq_len(nrow(whole_skips))) {
@@ -377,6 +389,13 @@ results <- testthat::test_dir(
   package = "paradox",
   load_package = "none"
 )
+runtime_matrix_test_tree_receipt(
+  test_tree_receipt_helper,
+  "verify",
+  staged_directory,
+  test_tree_receipt
+)
+cat("staged_test_tree_receipt_verified=passed\n")
 summary <- as.data.frame(results)
 result_audit <- runtime_matrix_audit_testthat_results(results, summary)
 raw_results <- result_audit$raw_results

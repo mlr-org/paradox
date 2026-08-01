@@ -20,6 +20,28 @@ byte_sort <- function(value) {
   value[order(value, method = "radix")]
 }
 
+runner_file <- grep("^--file=", commandArgs(FALSE), value = TRUE)
+if (length(runner_file) != 1L) {
+  stop("could not identify the old-runtime stress runner", call. = FALSE)
+}
+runner_file <- normalizePath(
+  sub("^--file=", "", runner_file[[1L]]),
+  winslash = "/",
+  mustWork = TRUE
+)
+harness_directory <- dirname(runner_file)
+test_support_helper <- file.path(
+  harness_directory, "runtime-matrix-test-support.R"
+)
+test_tree_receipt_helper <- file.path(
+  harness_directory, "runtime-matrix-prefix-receipt"
+)
+if (!file.exists(test_support_helper) || dir.exists(test_support_helper) ||
+    is_symbolic(test_support_helper)) {
+  stop("runtime test-support helper is absent or symbolic", call. = FALSE)
+}
+sys.source(test_support_helper, envir = environment())
+
 snapshot <- normalizePath(args[[1L]], winslash = "/", mustWork = TRUE)
 candidate_library <- normalizePath(
   args[[2L]], winslash = "/", mustWork = TRUE
@@ -95,56 +117,31 @@ if (any(!file.exists(selected_paths)) || any(dir.exists(selected_paths)) ||
   stop("old-runtime stress source inventory changed after policy validation",
     call. = FALSE)
 }
-source_entries <- dir(
-  test_directory, all.files = TRUE, no.. = TRUE, full.names = FALSE
-)
-source_entry_paths <- file.path(test_directory, source_entries)
-if (any(!file.exists(source_entry_paths)) ||
-    any(vapply(source_entry_paths, is_symbolic, logical(1L)))) {
-  stop("old-runtime stress source inventory is not plain and stable",
-    call. = FALSE)
-}
-regular_entries <- source_entries[!dir.exists(source_entry_paths)]
 all_test_files <- dir(
   test_directory,
   pattern = "^test.*\\.[rR]$",
   full.names = FALSE
 )
-support_files <- setdiff(regular_entries, all_test_files)
-support_paths <- file.path(test_directory, support_files)
-if (any(!file.exists(support_paths)) || any(dir.exists(support_paths)) ||
-    any(vapply(support_paths, is_symbolic, logical(1L))) ||
-    anyDuplicated(support_files)) {
-  stop("old-runtime stress support inventory is not plain and unambiguous",
-    call. = FALSE)
-}
 
-if (!dir.create(scope_directory, mode = "0700") ||
-    is_symbolic(scope_directory)) {
-  stop("could not reserve old-runtime stress scope", call. = FALSE)
-}
+runtime_matrix_test_tree_create_private_directory(scope_directory)
 staged_directory <- file.path(scope_directory, "testthat")
-if (!dir.create(staged_directory, mode = "0700")) {
-  stop("could not reserve staged old-runtime stress tests", call. = FALSE)
-}
-copy_files <- c(support_files, selected_files)
-copied <- file.copy(
-  file.path(test_directory, copy_files),
+runtime_matrix_test_tree_create_private_directory(staged_directory)
+staging <- runtime_matrix_test_tree_stage(
+  test_directory,
   staged_directory,
-  copy.mode = TRUE,
-  copy.date = FALSE
+  selected_files
 )
-if (length(copied) != length(copy_files) || !all(copied) ||
-    any(vapply(
-      file.path(staged_directory, copy_files),
-      is_symbolic,
-      logical(1L)
-    ))) {
-  stop("could not stage exact old-runtime stress inputs", call. = FALSE)
+if (!identical(
+    byte_sort(runtime_matrix_test_tree_discover(test_directory)$tests),
+    byte_sort(all_test_files)
+  )) {
+  stop("shared test-support discovery differs from testthat discovery",
+    call. = FALSE)
 }
 filter_file <- "helper_zz_runtime_old_r_stress_filter.R"
 filter_path <- file.path(staged_directory, filter_file)
-if (filter_file %in% support_files || file.exists(filter_path) ||
+if (filter_file %in% c(staging$support_files, selected_files) ||
+    file.exists(filter_path) ||
     is_symbolic(filter_path)) {
   stop("old-runtime stress title filter collides with source support",
     call. = FALSE)
@@ -168,6 +165,15 @@ staged_tests <- dir(
 if (!identical(byte_sort(staged_tests), selected_files)) {
   stop("staged old-runtime stress files differ from policy", call. = FALSE)
 }
+test_tree_receipt <- file.path(
+  scope_directory, "testthat-tree.manifest.tsv"
+)
+runtime_matrix_test_tree_receipt(
+  test_tree_receipt_helper,
+  "create",
+  staged_directory,
+  test_tree_receipt
+)
 
 selection_path <- file.path(scope_directory, "selection.tsv")
 write.table(
@@ -196,10 +202,12 @@ cat("selection_filter=", filter_file, "\n", sep = "")
 cat("selection_filter_self_test=passed\n")
 cat(
   "staged_test_support_file_count=",
-  length(support_files) + 1L,
+  length(staging$support_files) + 1L,
   "\n",
   sep = ""
 )
+cat("staged_test_tree_receipt=testthat-tree.manifest.tsv\n")
+cat("staged_test_tree_receipt_created=passed\n")
 
 results <- testthat::test_dir(
   staged_directory,
@@ -210,6 +218,13 @@ results <- testthat::test_dir(
   package = "paradox",
   load_package = "none"
 )
+runtime_matrix_test_tree_receipt(
+  test_tree_receipt_helper,
+  "verify",
+  staged_directory,
+  test_tree_receipt
+)
+cat("staged_test_tree_receipt_verified=passed\n")
 summary <- as.data.frame(results)
 audit <- runtime_matrix_audit_testthat_results(results, summary)
 raw_results <- audit$raw_results

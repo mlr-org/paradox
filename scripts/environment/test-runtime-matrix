@@ -157,6 +157,7 @@ for required_trusted_input in \
     scripts/environment/run-r36-declared-floor-smoke.R \
     scripts/environment/test-r36-declared-floor-smoke.R \
     scripts/environment/runtime-matrix-old-r-stress-policy.R \
+    scripts/environment/runtime-matrix-test-support.R \
     scripts/environment/run-runtime-matrix-cross-serialization \
     scripts/environment/run-runtime-matrix-old-r-stress.R \
     scripts/environment/verify-r36-declared-check-log \
@@ -204,7 +205,7 @@ awk -F '\t' '
     if ($0 != "file\tcontext\tmissing_package\tleading_guards\treason") exit 1
     next
   }
-  NF != 5 || $1 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ ||
+  NF != 5 || $1 !~ /^test[^/]*[.][Rr]$/ ||
     $2 == "" || $3 !~ /^[A-Za-z][A-Za-z0-9.]*$/ ||
     $4 !~ /^[A-Za-z0-9_:.,-]+$/ || $5 == "" || seen[$1]++ {exit 1}
   END {if (NR != 3) exit 1}
@@ -232,7 +233,7 @@ awk -F '\t' '
   NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
   NF != 4 ||
     $1 !~ /^(3[.]6[.]3|4[.]0[.]5|4[.]1[.]3|4[.]2[.]3|4[.]3[.]3|4[.]4[.]3|4[.]5[.]2)$/ ||
-    $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" ||
+    $2 !~ /^test[^/]*[.][Rr]$/ || $3 == "" ||
     ($4 != "Reason: On CRAN" &&
       $4 != "Reason: R < 4.0 cannot safely inspect active-binding functions" &&
       $4 != "Reason: R < 4.3 cannot construct list ALTREP test fixtures" &&
@@ -661,9 +662,236 @@ if command -v Rscript >/dev/null 2>&1; then
     "$ROOT/scripts/environment/runtime-matrix-old-r-stress-policy.R" \
     "$ROOT/scripts/environment/runtime-matrix-probe.R" \
     "$ROOT/scripts/environment/runtime-matrix-skip-policy.R" \
+    "$ROOT/scripts/environment/runtime-matrix-test-support.R" \
     "$ROOT/scripts/environment/runtime-matrix-testthat-audit.R" \
     "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R" \
     "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+  Rscript --vanilla - "$ROOT" <<'RSCRIPT'
+root <- commandArgs(trailingOnly = TRUE)[[1L]]
+helper <- file.path(
+  root, "scripts", "environment", "runtime-matrix-test-support.R"
+)
+receipt_helper <- file.path(
+  root, "scripts", "environment", "runtime-matrix-prefix-receipt"
+)
+sys.source(helper, envir = environment())
+
+expect_error <- function(expression) {
+  result <- try(
+    suppressWarnings(eval.parent(substitute(expression))),
+    silent = TRUE
+  )
+  stopifnot(inherits(result, "try-error"))
+}
+
+local({
+  temporary_root <- tempfile(
+    "runtime-matrix-test-support.",
+    tmpdir = file.path(root, ".local", "tmp")
+  )
+  stopifnot(dir.create(temporary_root, mode = "0700"))
+  on.exit({
+    cleanup_directories <- list.dirs(
+      temporary_root, full.names = TRUE, recursive = TRUE
+    )
+    if (length(cleanup_directories)) {
+      Sys.chmod(cleanup_directories, mode = "0700")
+    }
+    unlink(temporary_root, recursive = TRUE)
+    stopifnot(!file.exists(temporary_root))
+  })
+  source_tree <- file.path(temporary_root, "source")
+  scope <- file.path(temporary_root, "scope")
+  staged <- file.path(scope, "testthat")
+  stopifnot(dir.create(source_tree, mode = "0700"))
+  for (relative in c(
+    "_problems", "fixtures", "fixtures/nested", "empty-support",
+    "read-only-support"
+  )) {
+    stopifnot(dir.create(
+      file.path(source_tree, relative),
+      mode = "0700"
+    ))
+  }
+  writeLines("selected", file.path(source_tree, "test-a.R"), useBytes = TRUE)
+  writeLines("excluded", file.path(source_tree, "test_b.r"), useBytes = TRUE)
+  writeLines("helper", file.path(source_tree, "helper.R"), useBytes = TRUE)
+  file.create(file.path(source_tree, "empty-file"))
+  writeLines(
+    "nested test-shaped support",
+    file.path(source_tree, "_problems", "test-nested.R"),
+    useBytes = TRUE
+  )
+  writeBin(
+    as.raw(c(0L, 1L, 127L, 255L)),
+    file.path(source_tree, "fixtures", "blob.bin")
+  )
+  writeLines(
+    "same basename, first path",
+    file.path(source_tree, "fixtures", "shared.txt"),
+    useBytes = TRUE
+  )
+  writeLines(
+    "same basename, second path",
+    file.path(source_tree, "fixtures", "nested", "shared.txt"),
+    useBytes = TRUE
+  )
+  writeLines(
+    "member below a read-only source directory",
+    file.path(source_tree, "read-only-support", "member.txt"),
+    useBytes = TRUE
+  )
+  runtime_matrix_test_tree_chmod_exact(
+    file.path(source_tree, "fixtures"), "0751"
+  )
+  runtime_matrix_test_tree_chmod_exact(
+    file.path(source_tree, "fixtures", "blob.bin"), "0640"
+  )
+  runtime_matrix_test_tree_chmod_exact(
+    file.path(source_tree, "read-only-support"), "0555"
+  )
+
+  discovered <- runtime_matrix_test_tree_discover(source_tree)
+  stopifnot(
+    identical(discovered$tests, c("test-a.R", "test_b.r")),
+    "_problems/test-nested.R" %in% discovered$support,
+    "empty-file" %in% discovered$support,
+    "fixtures/blob.bin" %in% discovered$support,
+    "read-only-support/member.txt" %in% discovered$support,
+    "empty-support" %in% discovered$directories
+  )
+  previous_umask <- Sys.umask("0777")
+  on.exit(Sys.umask(previous_umask), add = TRUE)
+  runtime_matrix_test_tree_create_private_directory(scope)
+  runtime_matrix_test_tree_create_private_directory(staged)
+  staged_result <- runtime_matrix_test_tree_stage(
+    source_tree, staged, "test-a.R"
+  )
+  Sys.umask(previous_umask)
+  stopifnot(
+    !file.exists(file.path(staged, "test_b.r")),
+    file.exists(file.path(staged, "_problems", "test-nested.R")),
+    file.exists(file.path(staged, "empty-file")),
+    file.exists(file.path(staged, "fixtures", "blob.bin")),
+    file.exists(file.path(staged, "read-only-support", "member.txt")),
+    dir.exists(file.path(staged, "empty-support")),
+    identical(
+      readBin(
+        file.path(staged, "fixtures", "blob.bin"),
+        what = "raw",
+        n = 4L
+      ),
+      as.raw(c(0L, 1L, 127L, 255L))
+    ),
+    runtime_matrix_test_tree_mode(file.path(staged, "fixtures")) ==
+      runtime_matrix_test_tree_mode(file.path(source_tree, "fixtures")),
+    runtime_matrix_test_tree_mode(
+      file.path(staged, "read-only-support")
+    ) == runtime_matrix_test_tree_mode(
+      file.path(source_tree, "read-only-support")
+    ),
+    runtime_matrix_test_tree_mode(
+      file.path(staged, "fixtures", "blob.bin")
+    ) == runtime_matrix_test_tree_mode(
+      file.path(source_tree, "fixtures", "blob.bin")
+    ),
+    length(staged_result$staged_files) ==
+      length(staged_result$support_files) + 1L
+  )
+  receipt <- file.path(scope, "testthat-tree.manifest.tsv")
+  runtime_matrix_test_tree_receipt(
+    receipt_helper, "create", staged, receipt
+  )
+  runtime_matrix_test_tree_receipt(
+    receipt_helper, "verify", staged, receipt
+  )
+  writeLines(
+    "tampered",
+    file.path(staged, "fixtures", "shared.txt"),
+    useBytes = TRUE
+  )
+  expect_error(runtime_matrix_test_tree_receipt(
+    receipt_helper, "verify", staged, receipt
+  ))
+
+  nonempty <- file.path(temporary_root, "nonempty")
+  stopifnot(dir.create(nonempty, mode = "0700"))
+  writeLines("occupied", file.path(nonempty, "member"), useBytes = TRUE)
+  expect_error(runtime_matrix_test_tree_stage(
+    source_tree, nonempty, "test-a.R"
+  ))
+
+  overlap_source <- file.path(temporary_root, "overlap-source")
+  overlap_staged <- file.path(overlap_source, "staged")
+  stopifnot(
+    dir.create(overlap_source, mode = "0700"),
+    dir.create(overlap_staged, mode = "0700")
+  )
+  writeLines(
+    "selected",
+    file.path(overlap_source, "test-overlap.R"),
+    useBytes = TRUE
+  )
+  expect_error(runtime_matrix_test_tree_stage(
+    overlap_source, overlap_staged, "test-overlap.R"
+  ))
+
+  special <- file.path(temporary_root, "special")
+  stopifnot(dir.create(special, mode = "0700"))
+  writeLines("plain", file.path(special, "plain"), useBytes = TRUE)
+  stopifnot(file.symlink("plain", file.path(special, "file-link")))
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(file.path(special, "file-link"))
+  external_directory <- file.path(temporary_root, "external-directory")
+  stopifnot(dir.create(external_directory, mode = "0700"))
+  stopifnot(file.symlink(
+    normalizePath(external_directory, mustWork = TRUE),
+    file.path(special, "directory-link")
+  ))
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(file.path(special, "directory-link"))
+  stopifnot(file.symlink(
+    "absent-target",
+    file.path(special, "dangling-link")
+  ))
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(file.path(special, "dangling-link"))
+
+  control_path <- file.path(
+    special, paste0("control", intToUtf8(9L), "name")
+  )
+  writeLines("control", control_path, useBytes = TRUE)
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(control_path)
+  mkfifo <- Sys.which("mkfifo")
+  if (length(mkfifo) == 1L && nzchar(mkfifo)) {
+    fifo <- file.path(special, "fifo")
+    stopifnot(system2(mkfifo, shQuote(fifo)) == 0L)
+    expect_error(runtime_matrix_test_tree_discover(special))
+    unlink(fifo)
+  }
+})
+
+real_tree <- runtime_matrix_test_tree_discover(
+  file.path(root, "tests", "testthat")
+)
+ordinary_tests <- dir(
+  file.path(root, "tests", "testthat"),
+  pattern = "^test.*\\.[rR]$",
+  full.names = FALSE
+)
+stopifnot(
+  identical(
+    real_tree$tests,
+    runtime_matrix_test_tree_byte_sort(ordinary_tests)
+  ),
+  "fixtures/README.md" %in% real_tree$support,
+  "_problems/test_ParamSet-80.R" %in% real_tree$support,
+  length(real_tree$files) ==
+    length(real_tree$tests) + length(real_tree$support)
+)
+cat("runtime_matrix_test_support_self_test=passed\n")
+RSCRIPT
   Rscript --vanilla - "$ROOT" <<'RSCRIPT'
 root <- commandArgs(trailingOnly = TRUE)[[1L]]
 whole_policy <- read.delim(

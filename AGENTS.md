@@ -19,7 +19,52 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The most recent frozen package-facing ref is the rejected diagnostic candidate
+The active package-facing candidate is
+`refs/paradox-release/candidate-20260801T000111Z`, commit
+`de1752fe2085dc021b2e6936bcd3d5c0c809d9d4`, tree
+`b91022dfcae1f1daeb886533620a234228f08803`. Its exact
+`release-candidate-de1752f` `release-core` run passed the four harness rows,
+all 33 differential cases, the complete API-header matrix, explicit C23
+installation under GCC 15.2 and Clang 22, and the full native-release lane.
+The native lane completed strict GCC/Clang builds, both analyzers, exhaustive
+cppcheck, symbol policy, full tests, a clean `R CMD check --as-cran`, ASan, and
+UBSan. The supported-runtime task alone failed. Completion, JSON-summary, and
+TSV-summary SHA-256 values are respectively
+`69634511a79c0d8ab2b6b8dd92aa3b35012f58d420e1333cc4c1ba821cbc44e9`,
+`6e6fa7f39e63a74890ecb9b2e062822b9add56a99b24ddc89986c057192a431c`,
+and
+`76d60a19e82fc0249e5f4bf8b3f8b81ff240181c04a8eec9f6e34676f1306e94`.
+This is not complete candidate acceptance.
+
+The runtime failure was a harness staging defect, not a package or supported-R
+failure. Every R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 stage
+successfully built, installed, loaded, probed, and symbol-audited Paradox
+before the common runner rejected the tracked `tests/testthat/_problems` and
+`tests/testthat/fixtures` directories as if every top-level support entry had
+to be a regular file. No stage reached testthat; the old-R stress, final R-3.6
+check, and closing receipts therefore did not run. Package-facing source
+remains frozen. Only package-facing-source-identical validation tooling and
+release documentation are reopened for the recursive support-tree repair.
+
+The repaired contract keeps testthat's actual discovery boundary: only
+top-level `test*.R`/`test*.r` files are executable tests. Every other
+authenticated regular leaf, including nested test-shaped diagnostic fragments,
+is support and is copied without flattening at its exact relative path. One
+shared R-3.6-compatible projector rejects symlinks, special members, ambiguous
+paths, mode drift, byte drift, and destination overlap. A deterministic
+SHA-256 tree receipt is created before testthat and verified after it; the
+coordinator and independent evidence verifier replay the receipt and
+independently reconstruct the recursive source projection. The old-R stress
+runner uses the same projector and differs only by its separately regenerated
+top-level filter. Focused self-tests cover a `0777` umask, empty files, empty
+and nested directories, a nonempty read-only directory, duplicate basenames,
+nested test-shaped support, file/directory/dangling symlinks, FIFO,
+control-character paths, non-empty or overlapping destinations, and receipt
+tampering. The runtime contract remains all minor series: the exact
+runtime matrix owns R 3.6 through 4.5, and the complete native lane owns current
+R 4.6.1; do not add a duplicate current-R runtime stage.
+
+The preceding frozen package-facing ref is the rejected diagnostic candidate
 `refs/paradox-release/candidate-20260731T225009Z`, commit
 `1720d60c3bb8eefbc02d9b0455a9ee537b95a97a`, tree
 `044a7fe8c58098f6739e5cef6e715c4bf30981d6`. Its exact
@@ -501,7 +546,7 @@ native lane owns the current R 4.6.1 execution, so no second 4.6 runtime row
 duplicates that expensive suite. The header matrix includes the 3.6.0 minimum
 plus the 4.0.0 and 4.2.0 API transition releases before the existing later
 axes. Historical candidate evidence that started at R 4.3 remains historical
-and cannot prove this reopened source.
+and cannot prove the active package-facing source.
 The R 3.6 stage has two separate dependency proofs: its complete-test closure
 and a cached, sealed six-package closure at the exact five direct
 `DESCRIPTION` floors plus `digest` 0.6.39. The latter installs the same

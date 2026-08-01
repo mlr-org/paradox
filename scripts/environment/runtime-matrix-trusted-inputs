@@ -42,6 +42,7 @@ inputs=(
   scripts/environment/runtime-matrix-probe.R
   scripts/environment/runtime-matrix-old-r-stress-policy.R
   scripts/environment/runtime-matrix-skip-policy.R
+  scripts/environment/runtime-matrix-test-support.R
   scripts/environment/runtime-matrix-testthat-audit.R
   scripts/environment/run-runtime-matrix-old-r-stress.R
   scripts/environment/run-runtime-matrix-tests.R

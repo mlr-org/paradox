@@ -2,19 +2,52 @@
 
 ## Status
 
-**Candidate `1720d60c3bb8eefbc02d9b0455a9ee537b95a97a` is rejected by
-its diagnostic `release-core` run. All seven foundation tasks passed.
-`native-release` passed strict full tests, a clean `R CMD check --as-cran`, and
-the GCC analyzer, then stopped on two Clang-analyzer false positives in
-built-in Condition admission; `runtime-supported` was correctly blocked.
-Source is reopened only for the allocation-free sentinel-test ordering repair
-at all three admission consumers and removal of the three dead Domain metadata
-initializers it unmasked. The bounded static/focused replacement preflight is
-green. Freeze a replacement, then run C17/C23, the complete real R 3.6, 4.0,
-4.1, 4.2, 4.3, 4.4, 4.5, and current 4.6 runtime matrix, memory,
-compatibility, and all remaining release gates below.**
+**The active package-facing candidate is
+`de1752fe2085dc021b2e6936bcd3d5c0c809d9d4`. Its diagnostic
+`release-core` run passed every foundation, C23, API-header, differential, and
+native-release task. `runtime-supported` failed solely because the runner
+mistook newly tracked test-support directories for invalid regular-file
+inputs, before any runtime reached testthat. Package-facing source remains
+frozen; only package-facing-source-identical harness/documentation changes are
+open. The recursive staging repair is focused-green. Freeze that repair under
+a replacement immutable, package-facing-source-identical ref (the old ref
+cannot contain the new trusted helper), then replay the complete
+supported-runtime task and the remaining final release, memory, compatibility,
+and hosted gates below. The seven exact runtime stages cover every minor line
+from R 3.6 through R 4.5; the complete native lane owns current R 4.6.1.**
 
-The rejected ref is
+The active ref is `refs/paradox-release/candidate-20260801T000111Z`, commit
+`de1752fe2085dc021b2e6936bcd3d5c0c809d9d4`, tree
+`b91022dfcae1f1daeb886533620a234228f08803`. In
+`.local/verify/runs/release-candidate-de1752f`, the four harness tasks, C23
+under GCC 15.2 and Clang 22, the complete API-header matrix, all 33
+differential cases, and the complete native-release lane passed.
+`runtime-supported` failed with the same pre-test staging diagnostic on all
+seven runtimes. Every stage had already built, installed, loaded, focused-
+probed, and symbol-audited Paradox; no stage reached testthat, and the old-R
+stress, final R-3.6 check, and closing receipts did not run. Completion,
+JSON-summary, and TSV-summary SHA-256 values are
+`69634511a79c0d8ab2b6b8dd92aa3b35012f58d420e1333cc4c1ba821cbc44e9`,
+`6e6fa7f39e63a74890ecb9b2e062822b9add56a99b24ddc89986c057192a431c`,
+and
+`76d60a19e82fc0249e5f4bf8b3f8b81ff240181c04a8eec9f6e34676f1306e94`.
+This run transfers the successful bounded task evidence but is not complete
+candidate acceptance.
+
+The repaired staging model executes only top-level `test*.R`/`test*.r`, as
+every pinned testthat version does, and recursively stages every other
+ordinary source member as support without flattening. The shared R-3.6-
+compatible projector preserves bytes, modes, relative paths, empty
+directories, and nested duplicate names while rejecting symbolic/special or
+ambiguous members. A SHA-256 tree receipt brackets testthat execution. The
+coordinator and independent verifier replay that receipt and separately
+reconstruct the exact recursive projection; the old-R stress slice uses the
+same mechanism plus its source-derived filter. Interactive structural,
+adversarial, restrictive-umask, current-R, and exact-R-3.6 preflights pass;
+they are repair diagnostics, while only the immutable ref-bound replay may own
+release acceptance.
+
+The preceding rejected ref is
 `refs/paradox-release/candidate-20260731T225009Z`, commit
 `1720d60c3bb8eefbc02d9b0455a9ee537b95a97a`, tree
 `044a7fe8c58098f6739e5cef6e715c4bf30981d6`. In
@@ -792,11 +825,13 @@ release-ready and do not transfer an earlier candidate's green gates.
 - [x] close the final independent focused adversarial review at the exact r9
   snapshot, including post-`Length` Condition admission, deterministic Domain
   special-name receipts, and the ordinary structural-name boundary;
-- [ ] finish, review, and commit the final package-facing and harness changes,
-  including the C17 ceiling, dual-compiler C23 gate, seven supported-runtime
-  stages, and focused admission corrections;
-- [ ] freeze one new clean immutable candidate ref and repoint every active
-  candidate/compatibility identity to its exact commit and tree;
+- [x] freeze package-facing source at `de1752f`, including the C17 ceiling,
+  dual-compiler C23 gate, seven supported-runtime stages, and focused admission
+  corrections; its diagnostic release run passed every row except the common
+  pre-test recursive-support staging failure;
+- [ ] commit the package-facing-source-identical recursive staging repair under
+  one replacement immutable ref and repoint every active validation and
+  compatibility identity to the exact package or tooling identity it denotes;
 - [x] close the Domain receipt-compaction three-way timing obligation with the
   corrected eight-gate `a153fae` r5 evidence; its exact package fingerprints
   and semantic keys passed, and the bounded plan explicitly forbids rerunning
@@ -1589,14 +1624,17 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending`. Package-facing source is reopened, so there
-is no current frozen candidate and none of the `dbbdcc1` release-core,
-source-proof, rchk, or combined-memory conclusions accepts the current source.
-After final source and harness convergence, freeze one new clean immutable ref
-and complete the unchecked acceptance list above against its exact bytes. The
-fresh downstream overlay and compatibility DAG, sealed benchmark, hosted
-Windows x86-64/macOS ARM64 gates, and user publication of prepared downstream
-branches/PRs, the release tag, and workflow all remain mandatory.
+The release decision is `pending`. Package-facing source is frozen at
+`de1752f`; its diagnostic `release-core` run passed every task except the
+common pre-test runtime staging failure recorded above. The recursive staging
+repair changes only package-excluded harness and documentation paths, but its
+new trusted helper requires a replacement immutable source ref before the
+seven-runtime replay. Complete the unchecked acceptance list against that
+exact ref and explicitly prove its package-facing-source identity with
+`de1752f`. The fresh downstream overlay and compatibility DAG, sealed
+benchmark, hosted Windows x86-64/macOS ARM64 gates, and user publication of
+prepared downstream branches/PRs, the release tag, and workflow all remain
+mandatory.
 
 ## Historical rejected or superseded refs
 
