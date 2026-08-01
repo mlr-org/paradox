@@ -1870,10 +1870,11 @@ cp "$dso" "$OUTPUT/analyzed-paradox.so"
 cp "$package_bc" "$OUTPUT/analyzed-paradox.so.bc"
 {
   printf 'key\tvalue\n'
-  printf 'schema\t1\n'
+  printf 'schema\t2\n'
   printf 'bounded_bcheck_sha256\t%s\n' \
     "$(sha256sum "$BOUNDED_BCHECK" | awk '{ print $1 }')"
-  printf 'bcheck_max_states\t800000\n'
+  printf 'bcheck_max_states\t3000000\n'
+  printf 'callocators_max_states\t3000000\n'
   printf 'image_bcheck_sha256\t%s\n' \
     "$(sha256sum "$RCHK/src/bcheck" | awk '{ print $1 }')"
   printf 'maacheck_sha256\t%s\n' \
@@ -2136,7 +2137,8 @@ EOF
       'container_pull=never' \
       'source=verified snapshot copied to a writable run-local tree' \
       'tools=source-pinned bounded bcheck,image-pinned maacheck,image-pinned fficheck' \
-      'bcheck_state_budget=800000' \
+      'bcheck_state_budget=3000000' \
+      'callocators_state_budget=3000000' \
       'analyzer_address_space_limit_bytes=21474836480' \
       'resource_admission=serial rchk profile with 20480 MiB analyzer budget and at least 16384 MiB reserve' \
       'fatal_diagnostics=all package ERROR: and every report change outside the source-bound reviewed bcheck policy' \

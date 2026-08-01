@@ -14,8 +14,8 @@ image_architecture	amd64
 compiler_path	/usr/bin/clang++
 llvm_prefix	/usr/lib/llvm-14
 make_path	/usr/bin/make
-bcheck_max_states	800000
-callocators_max_states	1000000
+bcheck_max_states	3000000
+callocators_max_states	3000000
 make_jobs	1
 compiler_version_sha256	a09097b784a9df985ba9b033c4c4650d3052545a7f9fc4e6fa8ce304521383d5
 llvm_config_identity_sha256	a427ac29dcbb5b1da97835e948860c7acbd8b4fa0e5bd6872d88b5f7a54bbbf0

@@ -166,6 +166,13 @@ Use the authenticated bounded bcheck build/container and candidate source
 directly. Retain complete bcheck, maacheck, and fficheck output. The verifier
 requires the current registered routine count and reviewed bounded-state policy;
 historical routine counts or block exceptions are invalid after this rewrite.
+The bcheck executable has independently authenticated finite per-function caps
+of 3,000,000 states for its main and allocator-discovery analyses, both exposed
+in analyzer identity and scope evidence. The 20-GiB address-space limit,
+serial execution, and protected host reserve remain unchanged. Any
+package-local state exhaustion is fatal; it is never admitted as a reviewed
+diagnostic, and recurrence requires source simplification rather than an
+automatic cap increase.
 
 ### Sanitizers and adversarial execution
 

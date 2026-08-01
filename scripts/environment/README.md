@@ -486,8 +486,13 @@ The bounded analyzer executable is a separate cached prerequisite.
 `56b621a4e7112246d7b640bee6219ee9c6eb4bf8` and tree
 `d08d5b88ab6c469ac1b6d9c4beeece322e223ac5`; after the pinned rchk image is
 local, `scripts/prepare-bounded-rchk-bcheck` compiles only `bcheck` inside that image
-with explicit Clang 14, LLVM 14, 800,000 bcheck states, and 1,000,000 allocator
-states. It never runs package analysis. The atomically published
+with explicit Clang 14 and LLVM 14 and finite 3,000,000-state limits for both
+the main bcheck and allocator-discovery analyses. The active candidate's
+native Domain-table admission exhausted both former 800,000 main and
+1,000,000 allocator ceilings. Package-local state exhaustion remains fatal; if
+the reviewed larger bounds do not converge, the source must be simplified
+instead of admitting the error. Analyzer identity and scope evidence expose
+both caps. The build step never runs package analysis. The atomically published
 `.local/rchk-bounded-bcheck/<input-key>` entry retains the immutable source and
 complete receipt, image and tool identities, exact command/environment and
 macros, full build log, binary hash/mode, payload receipt, and seal. A cache hit

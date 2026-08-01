@@ -2678,9 +2678,10 @@ printf '%s\n' \
   'rchk completed' > "$RCHK_LOG"
 printf '%s\n' \
   $'key\tvalue' \
-  $'schema\t1' \
+  $'schema\t2' \
   $'bounded_bcheck_sha256\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
-  $'bcheck_max_states\t800000' \
+  $'bcheck_max_states\t3000000' \
+  $'callocators_max_states\t3000000' \
   $'image_bcheck_sha256\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
   $'maacheck_sha256\tcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' \
   $'fficheck_sha256\tdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' \
@@ -2710,6 +2711,16 @@ printf '%s\n' \
   "$RCHK_BASE/catalog.tsv" "$RCHK_POLICY" >/dev/null
 "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
   "$RCHK_ARTIFACTS" "$RCHK_POLICY" >/dev/null
+[[ "$(wc -l < "$RCHK_ARTIFACTS/rchk-policy-evidence.tsv")" -eq 9 ]] ||
+  fail "rchk policy evidence has an unexpected field inventory"
+grep -qx $'schema\t2' "$RCHK_ARTIFACTS/rchk-policy-evidence.tsv" ||
+  fail "rchk policy evidence retained the wrong schema"
+grep -qx $'bcheck_max_states\t3000000' \
+  "$RCHK_ARTIFACTS/rchk-policy-evidence.tsv" ||
+  fail "rchk policy evidence retained the wrong main-analysis cap"
+grep -qx $'callocators_max_states\t3000000' \
+  "$RCHK_ARTIFACTS/rchk-policy-evidence.tsv" ||
+  fail "rchk policy evidence retained the wrong allocator-discovery cap"
 grep -qx $'function_blocks\t2' "$RCHK_POLICY/policy.tsv" ||
   fail "rchk policy generator retained the wrong Function-block count"
 grep -qx $'up_diagnostics\t3' "$RCHK_POLICY/policy.tsv" ||
@@ -2939,7 +2950,12 @@ sed -i 's/^image_bcheck_sha256.*/image_bcheck_sha256\teeeeeeeeeeeeeeeeeeeeeeeeee
 expect_rchk_case_failure
 
 prepare_rchk_case identity-state-cap
-sed -i 's/bcheck_max_states\t800000/bcheck_max_states\t799999/' \
+sed -i 's/bcheck_max_states\t3000000/bcheck_max_states\t2999999/' \
+  "$RCHK_CASE/reports/analyzer-identity.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case identity-allocator-state-cap
+sed -i 's/callocators_max_states\t3000000/callocators_max_states\t2999999/' \
   "$RCHK_CASE/reports/analyzer-identity.tsv"
 expect_rchk_case_failure
 

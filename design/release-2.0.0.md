@@ -57,8 +57,35 @@ memory-validator, and verification-economy self-tests pass, and an exact
 instrumented-R/Valgrind probe with the switch reports zero possible loss and
 zero errors. The checked-in rchk policy still names the earlier `dbbdcc1`
 native source and cannot accept the materially changed active source without
-a new discovery and block-by-block review. After committing that exact policy,
-create a fresh static/focused source donor and run combined-memory attempt
+a new discovery and block-by-block review.
+
+Discovery `release-candidate-bf0b68f-rchk-discovery-r1` completed bcheck,
+maacheck, and fficheck, but is analyzer-capacity evidence only. Its bcheck
+report has two package-local state-exhaustion errors for
+`admit_public_domain_table_impl`, emitted separately by the former 800,000-
+state main cap and 1,000,000-state allocator-discovery cap. The verifier
+therefore stopped before semantic extraction and old-policy comparison. The
+run analyzed 1,284 functions and reported 861,641 main-analysis states. Raw
+bcheck, byte-empty maacheck, fficheck, and analyzer-identity SHA-256 values are
+respectively
+`acde59bc41dbc2c0d952d1bad55493de9720dce80075d5f94a9c8fa993a51483`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+and
+`356e2e277a3ef8441fbf464c3c927a9f9f088db839f60b5b16231f30d2889028`.
+No accepted semantic report or policy was produced.
+
+The authenticated replacement cache key is
+`db2612c907965af58cc665d6c0aae88f8cf19a06290454769a3e02f50fccfb66`;
+its 3,000,000/3,000,000 bounded bcheck SHA-256 is
+`0fe55acf343107148a32f5679e27a936af7a21d66371295ad917e1c266108309`.
+The existing 20-GiB analyzer address-space limit and 16-GiB protected host
+reserve are unchanged. Any further package-local exhaustion requires source
+simplification rather than policy admission or another automatic limit
+increase. The analyzer-input change makes the old donor ineligible for the
+next discovery, despite package-facing-source identity: create a fresh
+post-cap static/focused donor, complete and review discovery, commit the exact
+policy, then create another fresh donor for combined-memory attempt
 `release-candidate-bf0b68f-memory-r3`.
 
 The preceding immutable candidate is rejected diagnostic ref
@@ -965,9 +992,13 @@ release-ready and do not transfer an earlier candidate's green gates.
   the full main source suite ran with `NOT_CRAN=true`, no
   `PARADOX_SKIP_CHARACTERIZATION_GCT` override, and no admitted `On CRAN`
   result; only exact source-derived runtime-capability skips remain;
-- [ ] discover and review the active source's rchk report, commit its exact
-  policy, create a fresh replayable static/focused source donor, and complete
-  combined memory analysis against `bf0b68f`;
+- [ ] use and verify the authenticated bounded analyzer with reviewed finite
+  3,000,000-state main and allocator-discovery caps; create a fresh post-cap
+  replayable static/focused donor, obtain and review a complete active-source
+  rchk report, commit its exact policy, create the required second fresh donor,
+  and complete combined memory analysis against `bf0b68f`; if either analyzer
+  still exhausts, simplify the package source rather than accepting the
+  incomplete report;
 - [ ] install one fresh candidate-owned
   `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
   reverse-dependency, repository, documentation, and benchmark gates;

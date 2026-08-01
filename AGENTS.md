@@ -73,11 +73,38 @@ possible-leak rejection. The complete validation-hardening, memory-validator,
 and verification-economy self-tests pass; an exact instrumented-R/Valgrind
 probe with the switch also reports zero possible loss and zero errors. The
 checked-in rchk policy still describes the earlier `dbbdcc1` source, however,
-while the active candidate has materially different native source. Run a
-fresh source-bound rchk discovery, review every changed block, commit its exact
-policy, create the required new static/focused source donor, and only then run
-fresh immutable combined-memory `r3`. Do not claim memory acceptance from
-`r1` or `r2`.
+while the active candidate has materially different native source.
+
+Isolated discovery
+`release-candidate-bf0b68f-rchk-discovery-r1` completed all three analyzer
+executables, but its bcheck report contains two package-local state-exhaustion
+errors for `admit_public_domain_table_impl`: one from the former 800,000-state
+main analysis cap and one from the independent 1,000,000-state allocator-
+discovery cap. Validation correctly stopped before semantic extraction and
+stale-policy comparison. The report is analyzer-capacity evidence only, not a
+reviewable package report. It analyzed 1,284 functions and traversed 861,641
+reported main-analysis states. Raw bcheck, byte-empty maacheck, fficheck, and
+analyzer-identity SHA-256 values are respectively
+`acde59bc41dbc2c0d952d1bad55493de9720dce80075d5f94a9c8fa993a51483`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+and
+`356e2e277a3ef8441fbf464c3c927a9f9f088db839f60b5b16231f30d2889028`.
+No accepted semantic report or policy was produced.
+
+The authenticated replacement cache
+`.local/rchk-bounded-bcheck/db2612c907965af58cc665d6c0aae88f8cf19a06290454769a3e02f50fccfb66`
+uses finite 3,000,000-state caps for both analyses; its bounded bcheck
+SHA-256 is
+`0fe55acf343107148a32f5679e27a936af7a21d66371295ad917e1c266108309`.
+The 20-GiB address-space limit and 16-GiB host reserve are unchanged. A
+further package-local exhaustion requires source simplification, not policy
+admission or another automatic limit increase. Because the source-run proof
+authenticates analyzer-build inputs as well as package-facing source, the old
+native donor cannot seed the new discovery: create a fresh post-cap
+static/focused donor first. After review and the exact policy commit, create
+another fresh donor for final combined-memory `r3`. Do not claim memory
+acceptance from `r1`, `r2`, or the incomplete discovery.
 
 The preceding immutable candidate is the rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit

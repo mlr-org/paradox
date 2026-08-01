@@ -158,8 +158,8 @@ done < "$CONFIG"
    "${config[compiler_path]}" == /usr/bin/clang++ &&
    "${config[llvm_prefix]}" == /usr/lib/llvm-14 &&
    "${config[make_path]}" == /usr/bin/make &&
-   "${config[bcheck_max_states]}" == 800000 &&
-   "${config[callocators_max_states]}" == 1000000 &&
+   "${config[bcheck_max_states]}" == 3000000 &&
+   "${config[callocators_max_states]}" == 3000000 &&
    "${config[make_jobs]}" == 1 ]] ||
   fail "bounded-bcheck configuration identity is unexpected"
 for digest_key in compiler_version_sha256 llvm_config_identity_sha256 \
@@ -366,9 +366,9 @@ verify_entry() {
      $'build.log\tf\ncontainer.log\tf' ]] ||
     fail "bounded-bcheck log inventory is incomplete or has additions"
   [[ -s "$payload/logs/build.log" ]] || fail "bounded-bcheck build log is empty"
-  grep -F -- '-DBCHECK_MAX_STATES=800000' "$payload/logs/build.log" >/dev/null ||
+  grep -F -- '-DBCHECK_MAX_STATES=3000000' "$payload/logs/build.log" >/dev/null ||
     fail "build log does not prove the pinned bcheck state macro"
-  grep -F -- '-DCALLOCATORS_MAX_STATES=1000000' "$payload/logs/build.log" >/dev/null ||
+  grep -F -- '-DCALLOCATORS_MAX_STATES=3000000' "$payload/logs/build.log" >/dev/null ||
     fail "build log does not prove the pinned callocators state macro"
   grep -F -- '/usr/bin/clang++' "$payload/logs/build.log" >/dev/null ||
     fail "build log does not prove the explicit compiler"

@@ -126,7 +126,7 @@ image_digest=$(value "$CONFIG" image_digest)
 } > "$PAYLOAD/identity/auxiliary-image.tsv"
 
 printf '%s\n' \
-  '/usr/bin/clang++ -DBCHECK_MAX_STATES=800000 -DCALLOCATORS_MAX_STATES=1000000 synthetic.cpp' \
+  '/usr/bin/clang++ -DBCHECK_MAX_STATES=3000000 -DCALLOCATORS_MAX_STATES=3000000 synthetic.cpp' \
   'synthetic fixture: compile and link completed' > "$PAYLOAD/logs/build.log"
 : > "$PAYLOAD/logs/container.log"
 cp -p /bin/true "$PAYLOAD/bin/bcheck"

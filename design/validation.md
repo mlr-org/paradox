@@ -60,6 +60,21 @@ replacement static/focused source donor, and fresh immutable
 `release-candidate-bf0b68f-memory-r3` remain pending; neither failed attempt
 supplies memory acceptance.
 
+The first isolated discovery,
+`release-candidate-bf0b68f-rchk-discovery-r1`, returned zero from all three
+analyzer executables but is not a complete analysis: the bcheck report contains
+two package-local state-exhaustion errors for
+`admit_public_domain_table_impl`, one from its former 800,000-state main cap
+and one from the independent 1,000,000-state allocator-discovery cap. Zero tool
+status never overrides an incomplete report. Validation stopped before
+semantic extraction and stale-policy comparison. The bounded replacement uses
+finite 3,000,000-state caps for both engines while retaining the 20-GiB
+address-space limit, serial execution, and 16-GiB host reserve. Another
+package-local exhaustion requires source simplification. The analyzer-input
+change is source-run authenticated, so the old native donor cannot seed the
+replacement discovery; use a fresh post-cap static/focused donor, and create
+another after the reviewed policy changes for final combined-memory evidence.
+
 The preceding immutable ref is rejected diagnostic candidate
 `refs/paradox-release/candidate-20260801T034415Z` (`fb2a37f`), commit
 `fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree

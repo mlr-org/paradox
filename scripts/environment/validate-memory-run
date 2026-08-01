@@ -832,7 +832,8 @@ if [[ "${run_fields[rchk]}" == true ]]; then
     'container_pull=never' \
     'source=verified snapshot copied to a writable run-local tree' \
     'tools=source-pinned bounded bcheck,image-pinned maacheck,image-pinned fficheck' \
-    'bcheck_state_budget=800000' \
+    'bcheck_state_budget=3000000' \
+    'callocators_state_budget=3000000' \
     'analyzer_address_space_limit_bytes=21474836480' \
     'resource_admission=serial rchk profile with 20480 MiB analyzer budget and at least 16384 MiB reserve' \
     'fatal_diagnostics=all package ERROR: and every report change outside the source-bound reviewed bcheck policy' \
