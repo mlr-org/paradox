@@ -3,6 +3,41 @@
 ## Status
 
 **The most recent immutable candidate is rejected diagnostic ref
+`refs/paradox-release/candidate-20260801T034415Z`, commit
+`fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree
+`86283a233c6de7d16c3d3bd20e682fa0ed5409c1`. Its `release-core` run passed
+every non-runtime gate and all eight corresponding rows. `runtime-supported`
+ran the full test suite with clean assertions on all seven exact minor-series
+runtimes. R 3.6.3, 4.0.5, 4.1.3, and 4.2.3 then failed only because result
+reconciliation found one list-ALTREP capability skip without its reviewed
+ledger row; R 4.3.3, 4.4.3, and 4.5.2 passed. The affected stages stopped
+before the old-R stress slice, final R-3.6 package check, and cross-version
+serialization handoff. Focused repairs now exist in reopened source; they
+have not been accepted by a frozen run. Do not promote `fb2a37f`, transfer its
+source-bound acceptance, or name a replacement before source converges. All
+applicable release, runtime, memory, compatibility, and hosted gates must run
+again. The seven runtime stages cover every minor line from R 3.6 through R
+4.5; the complete native lane owns current R 4.6.1.**
+
+In `.local/verify/runs/release-candidate-fb2a37f`, the four harness tasks, C23
+under GCC 15.2 and Clang 22, the complete API-header matrix, all 33
+differential cases, and the complete native-release lane passed.
+`runtime-supported` built, installed, and ran the complete suite on R 3.6.3,
+4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2; all assertions were clean.
+Completion, JSON-summary, and TSV-summary SHA-256 values are
+`9f84f7900b83671042f8ba7dc78016be1dd59f29c169e5abffb7a837a7cae8a8`,
+`9ceb023f9d572f1273b1b456951b50bb07d0c8b8782098d588ed53902bcd7d6f`,
+and
+`9aadf3a9227779e1d4b04b5099362205b46e4091fbc5a36fcd2edf7bed1a8697`.
+The missing derived result was `materialized and rejected inputs remain safe
+under forced collection`. Reopened source puts the reviewed capability guard
+at the start of that test and adds exactly four ledger rows, for R 3.6.3
+through 4.2.3. The hidden fixture helper now errors instead of dynamically
+skipping on an unsupported runtime, so reviewed leading guards are the sole
+version-capability skip authority. This run is rejected diagnostic evidence,
+package-facing source is reopened, and complete acceptance must be rerun.
+
+The preceding immutable candidate was rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T014150Z`, commit
 `6f28daed7596413d5c1227134b2bfa28a2ef7721`, tree
 `1b283f19be4534ed30b86017e75eaa9426ec31e2`. It is
@@ -11,12 +46,9 @@ test-support staging repair. Its `release-core` run passed every non-runtime
 gate and all eight corresponding rows. `runtime-supported` reached and ran all
 seven exact minor-series suites, and every recursive support-tree receipt
 passed, but the suites exposed one old-R diagnostic-encoding defect and three
-test-fixture/policy expectation families. Focused repairs now exist in
-reopened source; they have not been accepted by a frozen run. Do not promote
-`6f28dae`, transfer its source-bound acceptance, or name a replacement before
-source converges. All applicable release, runtime, memory, compatibility, and
-hosted gates must run again. The seven runtime stages cover every minor line
-from R 3.6 through R 4.5; the complete native lane owns current R 4.6.1.**
+test-fixture/policy expectation families. Its focused repairs were exercised
+by the later `fb2a37f` run, which is separately rejected for the reviewed
+skip-row omission above.
 
 In `.local/verify/runs/release-candidate-6f28dae`, the four harness tasks,
 C23 under GCC 15.2 and Clang 22, the complete API-header matrix, all 33
@@ -31,9 +63,9 @@ and
 The bounded failures were invalid-native-byte diagnostic rendering on old R,
 portable no-`DATAPTR` ALTREP fixture construction, version-dependent terminal
 callback counts, and the intended R 4.5 promise-inspection fail-closed policy.
-The production encoding fix and the three fixture/expectation repairs are
-focused development results only. This run is rejected diagnostic evidence,
-package-facing source is reopened, and complete acceptance must be rerun.
+The production encoding fix and the three fixture/expectation repairs were
+focused development results at that point. This run remains rejected
+diagnostic evidence and transfers no acceptance.
 
 The preceding frozen package-facing ref was
 `refs/paradox-release/candidate-20260801T000111Z`, commit
@@ -853,9 +885,13 @@ release-ready and do not transfer an earlier candidate's green gates.
   `6f28dae` and exercise every supported-minor suite plus its support-tree
   receipts; that diagnostic run exposed the four bounded failure families and
   is rejected rather than promoted;
-- [ ] converge the focused encoding and fixture/policy repairs, freeze a new
-  immutable candidate, and repoint every active validation and compatibility
-  identity to the exact package or tooling identity it denotes;
+- [x] converge the focused encoding and fixture/policy repairs, freeze
+  `fb2a37f`, and exercise every supported-minor suite with clean assertions;
+  reject that diagnostic candidate because one list-ALTREP capability skip
+  lacked its reviewed result-ledger row on the four pre-4.3 runtimes;
+- [ ] converge the reviewed leading-guard/four-row skip-policy repair, freeze
+  a new immutable candidate, and repoint every active validation and
+  compatibility identity to the exact package or tooling identity it denotes;
 - [x] close the Domain receipt-compaction three-way timing obligation with the
   corrected eight-gate `a153fae` r5 evidence; its exact package fingerprints
   and semantic keys passed, and the bounded plan explicitly forbids rerunning
@@ -1650,11 +1686,12 @@ cheatsheet, `mbo_config`, and target rows pass.
 ## Release decision
 
 The release decision is `pending`. Package-facing source is reopened after the
-rejected `6f28dae` diagnostic candidate ran every minor-series suite and
-exposed the bounded encoding and fixture/policy families recorded above.
-Focused repairs are not acceptance. Converge and freeze a new immutable
-candidate, then complete the unchecked acceptance list against that exact
-source; no source-bound conclusion from `6f28dae` transfers. The fresh
+rejected `fb2a37f` diagnostic candidate ran every minor-series suite with
+clean assertions but omitted one reviewed list-ALTREP skip row on each of the
+four pre-4.3 runtimes. The leading-guard/four-row repair is not acceptance.
+Converge and freeze a new immutable candidate, then complete the unchecked
+acceptance list against that exact source; no source-bound conclusion from
+`fb2a37f` transfers. The fresh
 downstream overlay and compatibility DAG, sealed benchmark, hosted Windows
 x86-64/macOS ARM64 gates, and user publication of prepared downstream
 branches/PRs, the release tag, and workflow all remain mandatory.

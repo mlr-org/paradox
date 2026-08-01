@@ -20,8 +20,9 @@ native_stateful_altrep = function(first, later,
   callback = NULL, callback_after = NA_integer_,
   duplicate_returns_self = FALSE) {
   if (is.list(first) && getRversion() < "4.3.0") {
-    testthat::skip(
-      "R < 4.3 cannot construct list ALTREP test fixtures"
+    stop(
+      "List ALTREP fixtures require the leading reviewed capability guard",
+      call. = FALSE
     )
   }
   if (!is.logical(duplicate_returns_self) ||

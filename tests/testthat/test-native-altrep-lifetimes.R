@@ -946,6 +946,7 @@ test_that("exotic ALTREP state is rejected before dispatch", {
 
 test_that("materialized and rejected inputs remain safe under forced collection", {
   skip_on_cran()
+  skip_if_no_list_altrep()
   altrep2_skip_without_helpers()
 
   callback = function() invisible(gc())

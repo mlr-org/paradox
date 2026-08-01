@@ -8,6 +8,33 @@ file/count matrix.
 ## Current validation status
 
 The most recent immutable ref is rejected diagnostic candidate
+`refs/paradox-release/candidate-20260801T034415Z` (`fb2a37f`), commit
+`fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree
+`86283a233c6de7d16c3d3bd20e682fa0ed5409c1`. Its exact
+`release-candidate-fb2a37f` run passed all eight non-runtime rows, including
+all harness, differential, API-header, dual-compiler C23, and native-release
+gates. `runtime-supported` ran the full suite on all seven minor-series
+runtimes with clean assertions. R 3.6.3 through 4.2.3 then failed result
+reconciliation because one list-ALTREP capability skip lacked its reviewed
+ledger row; R 4.3.3 through 4.5.2 passed the stage. The
+completion/JSON-summary/TSV-summary SHA-256 values are
+`9f84f7900b83671042f8ba7dc78016be1dd59f29c169e5abffb7a837a7cae8a8`,
+`9ceb023f9d572f1273b1b456951b50bb07d0c8b8782098d588ed53902bcd7d6f`,
+and
+`9aadf3a9227779e1d4b04b5099362205b46e4091fbc5a36fcd2edf7bed1a8697`.
+
+The omitted derived result was `materialized and rejected inputs remain safe
+under forced collection`. The four affected stages stopped before the old-R
+stress slice, final R-3.6 package check, and cross-version serialization
+handoff. Reopened source adds a leading reviewed capability guard and exactly
+four derived ledger rows, one for each R 3.6.3--4.2.3 runtime. The hidden
+fixture helper now errors instead of dynamically skipping on an unsupported
+runtime, leaving reviewed leading guards as the sole version-capability skip
+authority. These repairs are not accepted results. Reject `fb2a37f`, name no
+replacement until source converges, and rerun every applicable source-bound
+gate.
+
+The preceding immutable ref is rejected diagnostic candidate
 `refs/paradox-release/candidate-20260801T014150Z` (`6f28dae`), tree
 `1b283f19be4534ed30b86017e75eaa9426ec31e2`. It is
 package-facing-source identical to `de1752f`; its only change was the reviewed
@@ -27,8 +54,9 @@ old R and three test-fixture/policy families: portable no-`DATAPTR` ALTREP
 construction, version-dependent terminal callback counting, and the intended
 R 4.5 promise-inspection fail-closed boundary. Focused repairs exist for all
 four families, including one package-facing C change, so source is reopened.
-They are not accepted results. Reject `6f28dae`, freeze no replacement until
-source converges, and rerun every applicable source-bound gate.
+They were not accepted results. Reject `6f28dae`; the later `fb2a37f` run
+exercised those repairs but is separately rejected for the reviewed skip-row
+omission above.
 
 The preceding diagnostic ref
 `refs/paradox-release/candidate-20260801T000111Z` (`de1752f`) passed every
@@ -51,8 +79,9 @@ trusted helper was absent from `de1752f`, `6f28dae` carried and successfully
 exercised it. The full native lane executes current R 4.6.1; the runtime matrix
 executes 3.6.3 and one terminal release from every R 4.0--4.5 minor, so the
 combined release gate covers every minor series from R 3.6 through current
-without a duplicate R 4.6 suite. That complete combined gate remains pending
-for the next converged immutable source.
+without a duplicate R 4.6 suite. The `fb2a37f` run reached all seven suites
+but did not complete their post-suite phases; the complete combined gate
+remains pending for the next converged immutable source.
 
 The rejected diagnostic ref
 `refs/paradox-release/candidate-20260731T150816Z` (`a153fae`) passed its

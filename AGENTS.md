@@ -20,6 +20,37 @@ package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
 The most recent immutable candidate is the rejected diagnostic ref
+`refs/paradox-release/candidate-20260801T034415Z`, commit
+`fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree
+`86283a233c6de7d16c3d3bd20e682fa0ed5409c1`. Its exact
+`release-candidate-fb2a37f` `release-core` run passed every one of the eight
+non-runtime rows: the four harness rows, all 33 differential cases, the
+complete API-header matrix, explicit C23 installations under GCC 15.2 and
+Clang 22, and the complete native-release lane. `runtime-supported` built,
+installed, and ran the full test suite on all seven supported-minor runtimes.
+All test assertions were clean; R 3.6.3, 4.0.5, 4.1.3, and 4.2.3 failed only
+when result reconciliation found one list-ALTREP capability skip without its
+reviewed ledger row. R 4.3.3, 4.4.3, and 4.5.2 passed that stage. Completion,
+JSON-summary, and TSV-summary SHA-256 values are respectively
+`9f84f7900b83671042f8ba7dc78016be1dd59f29c169e5abffb7a837a7cae8a8`,
+`9ceb023f9d572f1273b1b456951b50bb07d0c8b8782098d588ed53902bcd7d6f`,
+and
+`9aadf3a9227779e1d4b04b5099362205b46e4091fbc5a36fcd2edf7bed1a8697`.
+
+The missing row was the derived result for `materialized and rejected inputs
+remain safe under forced collection`. Reconciliation stops the affected stage
+before its post-suite phases, so the old-R stress slice, final R-3.6 package
+check, and cross-version serialization handoff did not run. Reopened source
+puts the reviewed list-ALTREP capability guard at the start of that test and
+adds exactly the four derived rows for R 3.6.3 through 4.2.3. The hidden
+fixture helper now errors if called on an unsupported runtime instead of
+dynamically skipping; reviewed leading guards are the sole authority for
+version-capability skips. This repair is development state, not acceptance.
+Candidate `fb2a37f` is rejected, package-facing source is reopened, no
+replacement candidate has been named, and every applicable source-bound gate
+must run again after convergence.
+
+The preceding immutable candidate is the rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T014150Z`, commit
 `6f28daed7596413d5c1227134b2bfa28a2ef7721`, tree
 `1b283f19be4534ed30b86017e75eaa9426ec31e2`. It is
@@ -42,9 +73,10 @@ diagnostic-encoding difference, plus portable no-`DATAPTR` ALTREP fixture
 construction, versioned terminal-callback counting, and the documented R 4.5
 promise-inspection fail-closed expectation. The encoding path and all three
 test-fixture/policy families have focused repairs in the reopened source, but
-those repairs are development state, not accepted evidence. Candidate
-`6f28dae` is rejected, no replacement candidate has yet been frozen, and every
-applicable source-bound acceptance gate must run again after convergence.
+those repairs were development state at that point, not accepted evidence.
+Candidate `6f28dae` is rejected; the later `fb2a37f` run exercised those
+repairs but is separately rejected for the reviewed-skip-ledger omission
+above.
 
 The preceding frozen package-facing candidate was
 `refs/paradox-release/candidate-20260801T000111Z`, commit
