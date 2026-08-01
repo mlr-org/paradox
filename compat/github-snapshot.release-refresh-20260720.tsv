@@ -24,7 +24,7 @@ xplainfi	https://github.com/mlr-org/xplainfi.git	1	05a992094190ae19e981a59462057
 mlr3proba	https://github.com/mlr-org/mlr3proba.git	1	327d0503b40b9373caa24d0326c1f8b2a5356415	2026-06-05T15:56:47+02:00	main
 mlr3extralearners	https://github.com/mlr-org/mlr3extralearners.git	1	f596c7313cdf280075f033de90f42cf4f310c098	2026-07-03T10:12:09+02:00	main
 mlr3automl	https://github.com/mlr-org/mlr3automl.git	1	2175e5a775d1e7cf69672052a05bd1cbe0a2a0af	2026-07-02T11:41:17+02:00	main
-mlr3forecast	https://github.com/mlr-org/mlr3forecast.git	1	8e352550f2334e42c8c81ee80d3e237b807abebe	2026-07-12T22:12:15+02:00	main
+mlr3forecast	https://github.com/mlr-org/mlr3forecast.git	1	35e4bdc914a913508450866e629309f8364077ec	2026-08-01T23:34:47+02:00	paradox2-snapshots-20260801
 mlr3cmprsk	https://github.com/mlr-org/mlr3cmprsk.git	1	de51006a1e417469a34d365763b201110e2966cf	2026-04-11T16:04:27+03:00	main
 mlr3resampling	https://github.com/tdhock/mlr3resampling.git	1	3da4ef08f8b98ba3b28478a68d0ad73d4114a186	2026-06-26T23:48:33-04:00	main
 mlr3batchmark	https://github.com/mlr-org/mlr3batchmark.git	1	11dff80ca06c1f4e01bc78c4dd49c12e78208282	2026-07-02T11:49:54+02:00	main

@@ -512,7 +512,7 @@ class ManifestTests(unittest.TestCase):
         repository_option = focused.command.index("--repositories")
         self.assertEqual(
             focused.command[repository_option + 1],
-            "bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda",
+            "bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda,mlr3forecast",
         )
         self.assertEqual(focused.resources.memory_mib, 8192)
         self.assertEqual(focused.resources.minimum_memory_mib, 4096)

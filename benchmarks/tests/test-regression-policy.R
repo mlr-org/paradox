@@ -189,8 +189,8 @@ collection_tier <- integrity_spec[
   integrity_spec$tier == "integrity-collection-read", , drop = FALSE
 ]
 if (nrow(shadow_tier) != 1L || nrow(collection_tier) != 1L ||
-    !identical(shadow_tier$median_ratio_limit, 3.25) ||
-    !identical(shadow_tier$q75_ratio_limit, 3.50) ||
+    !identical(shadow_tier$median_ratio_limit, 5.50) ||
+    !identical(shadow_tier$q75_ratio_limit, 6.00) ||
     !identical(shadow_tier$slower_probability_limit, 0.80) ||
     !identical(shadow_tier$allocation_ratio_limit, 1.25) ||
     !identical(shadow_tier$allocation_min_delta_bytes, 16384) ||

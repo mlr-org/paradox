@@ -54,10 +54,11 @@ heads selected by the snapshot.
 The frozen release candidate also has one downstream-only refresh profile,
 `release-refresh-20260720`, declared in
 [`downstream-evidence-profiles.tsv`](downstream-evidence-profiles.tsv). Its
-separate snapshot/provenance files bind all nine exact reviewed overlay heads.
+separate snapshot/provenance files bind all ten exact reviewed overlay heads.
 The repository stage runs the complete priority-zero/one corpus once; the
-additional exact source-package checks select all seven changed PR heads:
-bbotk, mlr3tuning, miesmuschel, mlr3pipelines, mlr3mbo, celecx, and mlr3fda.
+additional exact source-package checks select all eight changed PR heads:
+bbotk, mlr3tuning, miesmuschel, mlr3pipelines, mlr3mbo, celecx, mlr3fda, and
+mlr3forecast.
 The reviewed mlr3 and mlr3fselect heads remain authenticated support packages
 in the ordered install overlay and are covered by the broad repository stage.
 Named profiles select a separate
@@ -65,7 +66,7 @@ authenticated primary-checkout namespace. Their dependency receipt is
 profile-specific, axis-neutral, and run-local because it prepares only the
 unchanged external dependency closure; refreshed mlr3mbo is supplied by the
 ordered bridge overlay. The refresh dependency manifest is deliberately
-limited to the nine overlay packages plus the exact rush transitive provider
+limited to the ten overlay packages plus the exact rush transitive provider
 rather than replaying unrelated consumers. The `paradox2`/`paradox1` axis
 registry pins exact candidate
 ref/commit/tree/version tuples and creates distinct overlay, lock,
@@ -361,7 +362,8 @@ development command may install into it while a gate or benchmark is running.
 The downstream bridge overlay follows the same rule. It is built once in the
 candidate run by `compat/install-downstream-bridges`, in the fixed dependency
 order bbotk, mlr3, mlr3tuning, miesmuschel, mlr3pipelines, mlr3fselect,
-mlr3mbo, celecx, and mlr3fda. Its read-only verifier reauthenticates the
+mlr3mbo, celecx, mlr3fda, and mlr3forecast. Its read-only verifier
+reauthenticates the
 dependency receipts, priority-one dependency preparation, reviewed Git
 objects, sealed package ledger, complete installed-library fingerprint,
 evidence verifier, and resource-scheduler bytes without loading a bridge
@@ -401,12 +403,12 @@ Rscript compat/test-repositories.R "$PARADOX_ROOT" 1 \
   --paradox-axis "$axis" --jobs 1
 compat/check-downstream-profile --candidate-source "$candidate_source" \
   --evidence-profile "$profile" --paradox-axis "$axis" \
-  --resume --repositories bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda
+  --resume --repositories bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda,mlr3forecast
 ```
 
 Use a distinct run/library/overlay with `axis=paradox1` for the released
 Paradox-1 compatibility axis. On that axis, add
-`--repositories bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda`
+`--repositories bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda,mlr3forecast`
 to the `test-repositories.R` command and retain the same seven-package
 `check-downstream-profile` selection. Do not repeat the complete consumer
 corpus, reverse-dependency, documentation, differential, or benchmark gates on

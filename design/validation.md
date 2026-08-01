@@ -1097,15 +1097,16 @@ candidate ref/commit/tree/version tuple, and `paradox1` uses a separate
 run-local candidate receipt for released Paradox 1.0.1, so P1 observations
 cannot be presented as Paradox-2 candidate evidence.
 
-The `release-refresh-20260720` profile installs its complete nine-package
+The `release-refresh-20260720` profile installs its complete ten-package
 dependency order. Its final broad repository stage executes the complete
 priority-zero/one corpus once with `jobs = 2`; the active retained execution
 used 14 admitted waves and completed 20 of 28 exact repositories, with eight
 reviewed non-Paradox/environmental exclusions. The additional exact
-source-package check stage selects all seven changed PR heads: bbotk,
-mlr3tuning, miesmuschel, mlr3pipelines, mlr3mbo, celecx, and mlr3fda. The last
-retained exact stage predates this expansion and remains historical evidence
-for its five green rows; it does not satisfy the seven-head release gate. The
+source-package check stage selects all eight changed PR heads: bbotk,
+mlr3tuning, miesmuschel, mlr3pipelines, mlr3mbo, celecx, mlr3fda, and
+mlr3forecast. The b650735 exact stages remain immutable evidence for their
+seven green prepared heads on each axis, but predate the forecast bridge and
+therefore do not satisfy the eight-head release gate. The
 overlay still authenticates the exact reviewed mlr3 and mlr3fselect support
 heads, and their behavior is covered by the broad repository stage. Both axes
 retain profile/axis registries and
@@ -1255,7 +1256,12 @@ performance source freezes rerun the final memory/portability evidence once.
 
 The upstream-v1 comparison distinguishes ordinary hot paths from integrity work
 introduced by the 2.0.0 contract. Exactly seven rows use the wider integrity
-tiers. `shadow_values_live` uses `integrity-shadow-read` (median 3.25/q75 3.50).
+tiers. `shadow_values_live` uses `integrity-shadow-read` (median 5.50/q75 6.00).
+The former 3.25/3.50 ceiling predated the final exact every-entry mutable
+Shadow-signature authentication and typed public-value detachment. The revised
+one-row ceiling retains a marginal decision across the measured
+order-sensitive 4.256--5.069 median and 3.686--5.062 q75 range, while still
+rejecting the retained early 16.95/17.80 implementation.
 The three synthetic `collection_values_{plain,rich,nested}` rows and the three
 real `$values` rows for `mies_mutator_maybe`, `mies_optimizer`, and
 `mlr3pipelines_graph` use `integrity-collection-read` (2.75/3.00). They validate

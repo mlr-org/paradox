@@ -265,10 +265,16 @@ therefore remains strict on that compatibility axis. Its Paradox-2 bridge uses
 the official `paradox::ParamSetShadow`, which inherits dormant storage and the
 single native activity contract without another downstream implementation.
 
-The six CRAN reverse-dependency adaptations—bbotk, mlr3tuning, miesmuschel,
-mlr3mbo, mlr3pipelines, and mlr3fda—must be merged and released before Paradox
-2 is submitted, so CRAN and ordinary installations select dual-compatible
-versions. The GitHub-only celecx bridge follows the compatible mlr3mbo release.
+mlr3forecast version-gates only the three affected validation-call snapshot
+headers: Paradox 1 retains its exact existing snapshots, while Paradox 2
+records the native `.__paradox2_ParamSet__values()` gateway with unchanged
+diagnostic bodies.
+
+The seven CRAN reverse-dependency adaptations—bbotk, mlr3tuning, miesmuschel,
+mlr3mbo, mlr3pipelines, mlr3fda, and mlr3forecast—must be merged and released
+before Paradox 2 is submitted, so CRAN and ordinary installations select
+dual-compatible versions. The GitHub-only celecx bridge follows the compatible
+mlr3mbo release.
 Agents prepare and locally test branches, but repository policy requires the
 user to push them and open PRs manually.
 

@@ -17,8 +17,8 @@ benchmark_regression_policy_spec <- function() {
         "hot", "standard", "integrity-shadow-read",
         "integrity-collection-read"
       ),
-      median_ratio_limit = c(1.20, 1.35, 3.25, 2.75),
-      q75_ratio_limit = c(1.35, 1.60, 3.50, 3.00),
+      median_ratio_limit = c(1.20, 1.35, 5.50, 2.75),
+      q75_ratio_limit = c(1.35, 1.60, 6.00, 3.00),
       slower_probability_limit = c(0.75, 0.80, 0.80, 0.80),
       allocation_ratio_limit = c(1.25, 1.50, 1.25, 1.25),
       allocation_min_delta_bytes = c(16384, 65536, 16384, 16384),

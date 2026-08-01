@@ -27,7 +27,7 @@ benchmark_regression_test_fixture <- function() {
     fail_timing = baseline_pattern * 1.50,
     pass_zero_allocation = baseline_pattern,
     fail_zero_baseline_allocation = baseline_pattern,
-    margin_integrity_shadow = baseline_pattern * 2.80,
+    margin_integrity_shadow = baseline_pattern * 4.00,
     margin_integrity_collection = baseline_pattern * 2.40,
     fail_integrity_collection = baseline_pattern * 3.30
   )

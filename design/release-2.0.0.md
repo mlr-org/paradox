@@ -1101,9 +1101,10 @@ green gates.
 - [x] refresh the reviewed CRAN direct-consumer set to the exact 37-package
   `release-refresh-20260801-r2` proposal, authenticate every archive offline,
   and pin the exact Rush provider required by the current downstream heads;
-- [ ] install one fresh candidate-owned
-  `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
-  reverse-dependency, repository, documentation, and benchmark gates;
+- [ ] install fresh candidate-owned
+  `release-refresh-20260720` bridge overlays for both axes with the final
+  ten-package profile, run all eight exact prepared-head source checks, and
+  seal the recalibrated benchmark;
 - [ ] run and retain the complete applicable gate matrix against that exact
   candidate, including the remaining downstream, documentation, benchmark, and
   hosted portability stages.
@@ -1228,11 +1229,13 @@ green gates.
   historical target is changed, and its dormant-value bridge regression passes
   both Paradox majors;
 - [x] mlr3tuning `0ec4f40`, mlr3mbo `85dd8a5`, celecx `5a094a3`,
-  mlr3pipelines `a795406`, and mlr3fda `0df56f5` are prepared on their
-  recorded branches; bbotk, tuning, mbo, and fda are rebased on their current
+  mlr3pipelines `a795406`, mlr3fda `0df56f5`, and mlr3forecast `35e4bdc` are
+  prepared on their recorded branches; bbotk, tuning, mbo, fda, and forecast
+  are rebased on their current
   target heads, and celecx requires the exact bridge development floor before
   the intended mlr3mbo >= 1.2.2 release. Complete mlr3tuning suites and focused
-  mlr3pipelines contracts pass against both Paradox majors; the mlr3
+  mlr3pipelines contracts and forecast snapshot files pass against both
+  Paradox majors; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
   closure without replacement;
 - [x] the superseded pre-dormant profile heads were authenticated against their
@@ -1240,9 +1243,9 @@ green gates.
   corpus and five-package source-check conclusions remain historical evidence
   only;
 - [ ] authenticate the refreshed snapshot/provenance manifests and exact
-  `3c4bf94`/`a795406` bridge heads in a fresh candidate-owned nine-package
-  overlay, build and check all seven changed PR heads including mlr3tuning
-  `0ec4f40`, then rerun the prepared compatibility DAG;
+  `3c4bf94`/`a795406`/`35e4bdc` bridge heads in fresh candidate-owned
+  ten-package overlays, then build and check all eight changed PR heads on
+  both Paradox axes;
 - [x] diagnostic-only downstream changes remain pruned and the current
   committed bbotk/miesmuschel owner bridges pass focused tests plus authentic
   default/opt-in migration fixtures against the then-reopened Paradox-2
@@ -1254,9 +1257,9 @@ green gates.
   passed; those counts are not active-candidate evidence;
 - [ ] user has manually pushed branches and opened the required PRs (agents
   have no remote-write authorization).
-- [ ] bbotk, mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines, and mlr3fda have
-  released their dual-compatible revisions before Paradox 2; the GitHub-only
-  celecx bridge follows mlr3mbo >= 1.2.2.
+- [ ] bbotk, mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines, mlr3fda, and
+  mlr3forecast have released their dual-compatible revisions before Paradox 2;
+  the GitHub-only celecx bridge follows mlr3mbo >= 1.2.2.
 
 ### Performance and correctness
 
@@ -1468,7 +1471,11 @@ benchmark evidence:
 - the paired release policy now records the unavoidable major-version integrity
   cost rather than treating it as an ordinary hot-path regression. Exactly
   seven rows use integrity tiers. `shadow_values_live` receives the finite
-  `integrity-shadow-read` median/q75 ceilings 3.25/3.50. The three synthetic
+  `integrity-shadow-read` median/q75 ceilings 5.50/6.00. The former
+  3.25/3.50 limit was calibrated before final exact same-pointer Shadow
+  signature authentication and typed public-value detachment; the replacement
+  limits retain a marginal decision for the measured final contract while
+  still rejecting the retained early 16.95/17.80 stage. The three synthetic
   `collection_values_{plain,rich,nested}` rows and the three real consumer
   `$values` rows for `mies_mutator_maybe`, `mies_optimizer`, and
   `mlr3pipelines_graph` receive `integrity-collection-read` ceilings 2.75/3.00.

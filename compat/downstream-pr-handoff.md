@@ -1,13 +1,13 @@
 # Downstream Paradox 2 pull-request handoff
 
 Agentic processes must not push these branches, update remote pull requests, or
-close them. Seven repository-local branches remain useful migrations. The mlr3
+close them. Eight repository-local branches remain useful migrations. The mlr3
 and mlr3fselect diagnostic-only PRs are now wholly redundant and should be
 closed without replacement.
 
 ## Current handoff heads and manual state
 
-No remote write was made while preparing or refreshing this handoff. The seven
+No remote write was made while preparing or refreshing this handoff. The eight
 exact local heads below remain clean and include the reviewed dormant-value
 adaptations. They remain local until the user performs the listed manual
 actions:
@@ -21,6 +21,7 @@ actions:
 | celecx | `5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1` | migration branch is absent remotely | push after the mlr3mbo release, then create and merge the PR |
 | mlr3pipelines | `a7954067061f20a45dd9e6c03129dca0ba0f1753` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
 | mlr3fda | `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| mlr3forecast | `35e4bdc914a913508450866e629309f8364077ec` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
 
@@ -31,19 +32,19 @@ Package-facing source is frozen at
 `4e549f3a8994f513cee1d88d71e037c733a51531`, tree
 `4f17819b92f7dfb255c8aafe501ff3e684027d67`. The checked-in
 `release-refresh-20260720`/`paradox2` compatibility axis now binds that exact
-immutable identity. The seven clean branch heads above are the current
+immutable identity. The eight clean branch heads above are the current
 reviewed migration inputs and remain unpublished; the prepared compatibility
 gates must bind these exact heads before the user publishes them.
 
-## Historical retained evidence to refresh
+## Retained evidence and final bounded refresh
 
-The dormant-value/default-aware dependency change reopened package-facing
-Paradox source after candidate `8797f11`. The exact runs below remain useful
-baselines for the recorded downstream heads, but they are not release evidence
-for the active candidate. After the package-facing-source-identical harness
-repair is frozen, build a fresh Paradox-2 bridge overlay, rerun the affected
-dependency/value rows, and then run the normal broad downstream wave. Do not
-relabel the historical hashes or pass counts.
+The active candidate's b650735 compatibility execution authenticated the first
+seven prepared heads on both Paradox axes, the broad corpus, reverse
+dependencies, and documentation. Those exact results remain immutable. The
+later mlr3forecast bridge is deliberately not relabeled into them: the final
+profile adds its tenth overlay package and requires fresh exact eight-head
+source checks on both axes. The older evidence below remains useful history but
+must not be presented as active-candidate proof.
 
 ### Exact Paradox 1 owner conclusion
 
@@ -190,9 +191,9 @@ evidence transfers to candidate `8797f11`.
   activity implementation. Head `3c4bf94` now carries that exact regression
   together with exact, dual-major diagnostic expectations.
 
-Publish and merge all retained PRs first. Release the six CRAN reverse-
+Publish and merge all retained PRs first. Release the seven CRAN reverse-
 dependency adaptations—bbotk, mlr3tuning, miesmuschel, mlr3mbo,
-mlr3pipelines, and mlr3fda—before Paradox 2, so CRAN and ordinary dependency
+mlr3pipelines, mlr3fda, and mlr3forecast—before Paradox 2, so CRAN and ordinary dependency
 resolution select compatible versions. Release mlr3mbo as at least 1.2.2, then
 publish the GitHub-only celecx bridge. The prepared celecx branch requires the
 exact bridge development line `mlr3mbo >= 1.2.1.9000`, which admits that
@@ -459,4 +460,29 @@ Publish it manually with:
 ```sh
 git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3fda push --set-upstream origin paradox2-snapshots
 gh pr create --web --repo mlr-org/mlr3fda --base main --head paradox2-snapshots --title 'Support Paradox 2 diagnostics in FDA snapshots'
+```
+
+## mlr3forecast
+
+- base: `8e352550f2334e42c8c81ee80d3e237b807abebe`
+- head: `35e4bdc914a913508450866e629309f8364077ec`
+- tree: `195e95a01bdc79e3027a8cd6685e5e3b18a4733a`
+- branch: `paradox2-snapshots-20260801`
+- target branch: `main`
+- proposed title: `Support Paradox 2 diagnostics in forecasting snapshots`
+
+Proposed body:
+
+> Keep the existing Paradox 1 forecasting snapshots byte-for-byte unchanged
+> and select Paradox-2 variants for the three affected validation-call
+> headers. The diagnostic bodies and production behavior are unchanged;
+> Paradox 2 only reports its native
+> `.__paradox2_ParamSet__values()` gateway where Paradox 1 reports
+> `self$assert()`.
+
+Publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3forecast push --set-upstream origin paradox2-snapshots-20260801
+gh pr create --web --repo mlr-org/mlr3forecast --base main --head paradox2-snapshots-20260801 --title 'Support Paradox 2 diagnostics in forecasting snapshots'
 ```

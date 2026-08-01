@@ -1397,7 +1397,7 @@
     },
     {
       "id": "downstream-focused",
-      "description": "Exact source-package checks for all seven maintained adaptation/serialization heads.",
+      "description": "Exact source-package checks for all eight maintained adaptation/serialization heads.",
       "command": [
         "compat/check-downstream-profile",
         "--candidate-source",
@@ -1408,7 +1408,7 @@
         "{paradox_axis}",
         "--resume",
         "--repositories",
-        "bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda"
+        "bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda,mlr3forecast"
       ],
       "dependencies": [
         "downstream-overlay",

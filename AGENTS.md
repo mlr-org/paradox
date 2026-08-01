@@ -154,9 +154,14 @@ are respectively
 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
 and
 `26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
-Combined-memory acceptance is complete. The remaining gates are the fresh
-compatibility/downstream, documentation, release-benchmark, hosted
-portability, and user-performed publication work.
+Combined-memory acceptance is complete. Final compatibility and documentation
+evidence was first executed under tooling `b650735`; its seven prepared heads
+remain immutable evidence, while the subsequently prepared mlr3forecast
+snapshot bridge is now the eighth maintained adaptation and requires one fresh
+ten-package overlay plus exact eight-head source checks on both Paradox axes.
+The release benchmark also requires one fresh sealed execution under the
+recalibrated Shadow integrity policy described below. Hosted portability and
+all publication work remain manual user actions.
 
 The final compatibility refresh must use the reviewed CRAN proposal
 `.local/compat/cran-refresh/release-refresh-20260801-r2`; the earlier `r1`
@@ -2981,15 +2986,19 @@ so each command uses `push --set-upstream`:
 - mlr3fda `paradox2-snapshots` at `0df56f5`: the Paradox-1 snapshot stays
   byte-identical while the four Paradox-2 headers name the current versioned
   `.__paradox2_ParamSet__values()` gateway; diagnostic bodies are unchanged;
+- mlr3forecast `paradox2-snapshots-20260801` at `35e4bdc`: the Paradox-1
+  snapshots stay byte-identical while the three Paradox-2 headers in the Lags
+  and Rolling tests name the same native versioned gateway; diagnostic bodies
+  and production code are unchanged;
 - mlr3 `codex/paradox2-diagnostics` at `35e30a9` and mlr3fselect
   `codex/paradox2-diagnostics` at `ae8e1d1` are wholly redundant. Close those
   PRs without replacement; there is no cleanup commit to publish.
 
-Merge and release the six CRAN reverse-dependency adaptations—bbotk,
-mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines, and mlr3fda—before Paradox 2,
+Merge and release the seven CRAN reverse-dependency adaptations—bbotk,
+mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines, mlr3fda, and mlr3forecast—before Paradox 2,
 so CRAN and ordinary installations select compatible revisions. Release
 mlr3mbo as at least 1.2.2 before publishing the GitHub-only celecx bridge. The
-final exact source-package gate covers all seven retained PR heads; the broad
+final exact source-package gate covers all eight retained PR heads; the broad
 repository suite is not a substitute for those package build/check rows.
 
 The historical exact Paradox-2 source-package check was
@@ -3346,7 +3355,14 @@ tests after every optimization. Freeze performance changes before the final
 memory/portability matrix.
 
 The Paradox-1 comparison has exactly seven narrowly ledgered integrity-read
-rows. `shadow_values_live` uses `integrity-shadow-read` (3.25 median/3.50 q75).
+rows. `shadow_values_live` uses `integrity-shadow-read` (5.50 median/6.00 q75).
+Its former 3.25/3.50 ceiling predated the final I7 exact every-entry
+same-pointer Shadow-signature authentication and O2 typed public-value
+detachment contract. Forward/reverse 1,000-sample diagnostics span
+4.256--5.069 at the median and 3.686--5.062 at q75, with 100-sample block
+maxima 5.231/5.351. The revised finite ceiling keeps the final row marginal
+with order-sensitive headroom while still rejecting the retained early
+16.95/17.80 implementation; probability and allocation limits are unchanged.
 The three synthetic `collection_values_{plain,rich,nested}` rows and the real
 `$values` rows for `mies_mutator_maybe`, `mies_optimizer`, and
 `mlr3pipelines_graph` use `integrity-collection-read` (2.75/3.00). They perform

@@ -43,7 +43,7 @@ value() {
    $(value "$profile_output" dependency_checkout_namespace) == github ]] ||
   fail "profile/axis identities do not produce distinct exact suffixes"
 [[ $(value "$profile_output" install_order) == \
-   bbotk,mlr3,mlr3tuning,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx,mlr3fda ]] ||
+   bbotk,mlr3,mlr3tuning,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx,mlr3fda,mlr3forecast ]] ||
   fail "refreshed install order is incomplete"
 [[ $(value "$profile_output" snapshot_sha256) == \
    $(sha256sum "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv" | awk '{print $1}') &&
@@ -100,7 +100,8 @@ for binding in \
     $'mlr3fselect\tcd12d7717f31701edc6ebcf7f2cbe1168cae1ecb' \
     $'mlr3mbo\t85dd8a5ada86aacafe93637711e3b1f2e91ba219' \
     $'celecx\t5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1' \
-    $'mlr3fda\t0df56f51b5d7fd751e16575fbd897b1c7f449c5e'; do
+    $'mlr3fda\t0df56f51b5d7fd751e16575fbd897b1c7f449c5e' \
+    $'mlr3forecast\t35e4bdc914a913508450866e629309f8364077ec'; do
   repository=${binding%%$'\t'*}
   commit=${binding#*$'\t'}
   [[ $(awk -F '\t' -v repository="$repository" \

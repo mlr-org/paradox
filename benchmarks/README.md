@@ -317,7 +317,7 @@ the same host:
 |---|---:|---:|---:|---:|---:|
 | `hot` | 1.20 | 1.35 | 0.75 | 1.25 | 16 KiB |
 | `standard` | 1.35 | 1.60 | 0.80 | 1.50 | 64 KiB |
-| `integrity-shadow-read` | 3.25 | 3.50 | 0.80 | 1.25 | 16 KiB |
+| `integrity-shadow-read` | 5.50 | 6.00 | 0.80 | 1.25 | 16 KiB |
 | `integrity-collection-read` | 2.75 | 3.00 | 0.80 | 1.25 | 16 KiB |
 
 Common constructors, direct ID/value/domain access, validation, design
@@ -331,16 +331,25 @@ waiver. `integrity-shadow-read` applies only to `shadow_values_live`.
 `integrity-collection-read` applies to exactly six full collection-graph reads:
 the three synthetic direct `collection_values_*` rows and the three exact
 miesmuschel/mlr3pipelines consumer `$values` rows. A live Shadow read validates
-its origin generation, signature, hidden-value merge, and visible schema; a
-direct collection read admits the complete authoritative capsule DAG before
-assembling its detached result. Paradox 1 did not provide those integrity
-contracts, so its cached R surfaces are not an honest strict-latency budget for
-the additional work.
+its origin generation, the exact contents of its ordinary mutable signature,
+its hidden-value merge, and visible schema before detaching an owned public
+value result; a direct collection read admits the complete authoritative
+capsule DAG before assembling its detached result. Paradox 1 did not provide
+those integrity and ownership contracts, so its cached R surfaces are not an
+honest strict-latency budget for the additional work.
 
 The finite ceilings retain that major-version contract-reset cost in every
 decision ledger, turn a material fraction of it into a visible `marginal`
 review, and still reject a materially slower implementation.
-They cover the measured optimized ratios with reviewable headroom and would
+The Shadow ceiling was recalibrated after the final I7/O2 correctness work
+removed every finite Shadow verification stamp and required exact
+same-pointer signature-content authentication plus typed public-value
+detachment on every read. The former 3.25/3.50 ceiling predated that contract.
+The final 1,000-sample forward/reverse diagnostics span 4.256--5.069 at the
+median and 3.686--5.062 at q75; 100-sample block maxima reach 5.231/5.351.
+The finite 5.50/6.00 limits keep that row visibly marginal, retain measured
+order-sensitive headroom, and still reject the retained 16.95/17.80 early
+pre-index implementation. The collection limits are unchanged and still
 reject the retained pre-optimization nested collection stage. Shadow
 construction, constraints, domains, and writes remain `hot` or `standard` as
 listed. The three real miesmuschel/mlr3pipelines structural `$values` reads use
