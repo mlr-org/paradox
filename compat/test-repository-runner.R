@@ -349,7 +349,7 @@ for (index in seq_along(provider_libraries)) {
     R_PROFILE = "/dev/null",
     R_PROFILE_USER = "/dev/null",
     R_TESTS = "",
-    R_MAKEVARS_USER = activated_makevars,
+    R_MAKEVARS_USER = "/dev/null",
     LC_ALL = "C.UTF-8",
     LANG = "C.UTF-8",
     LANGUAGE = "C",

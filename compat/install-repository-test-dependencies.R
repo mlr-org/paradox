@@ -956,19 +956,6 @@ local({
       invisible(NULL)
     }
     assert_provider_install_state_empty("before dependency preparation")
-    expected_makevars <- repository_runner_require_file(
-      file.path(root, "environment", "Makevars"),
-      "repository-local installation Makevars"
-    )
-    observed_makevars <- normalizePath(
-      Sys.getenv("R_MAKEVARS_USER", unset = ""),
-      winslash = "/",
-      mustWork = TRUE
-    )
-    if (!identical(observed_makevars, expected_makevars)) {
-      stop("activated installation Makevars is not repository-local",
-        call. = FALSE)
-    }
     toolchain_bin <- normalizePath(
       file.path(root, ".local", "toolchain", "bin"),
       winslash = "/",
@@ -1002,7 +989,7 @@ local({
       R_HISTFILE = "/dev/null",
       R_TESTS = "",
       R_MAKEVARS_SITE = "/dev/null",
-      R_MAKEVARS_USER = expected_makevars,
+      R_MAKEVARS_USER = "/dev/null",
       MAKEFLAGS = "-j1",
       LC_ALL = "C.UTF-8",
       LANG = "C.UTF-8",
