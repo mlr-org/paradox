@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <float.h>
 #include <limits.h>
 #include <math.h>
@@ -5,6 +6,7 @@
 #include <string.h>
 
 #include "paradox.h"
+#include <R_ext/Riconv.h>
 #include <R_ext/Utils.h>
 
 #include "r_api_compat.h"
@@ -845,6 +847,58 @@ static int valid_utf8_fragment(const char *text, size_t size) {
   return TRUE;
 }
 
+/* R <= 4.2 makes an invalid native byte look deceptively safe by replacing it
+ * with printable `<hh>` text inside Rf_translateCharUTF8().  Later R does the
+ * same outside a UTF-8 locale.  Validate the native byte stream through R's
+ * public, platform-independent iconv interface before accepting that lossy
+ * translation.  A small fixed output window is enough because only validity
+ * matters; E2BIG resumes with the converter state and input position intact. */
+static int native_fragment_translates_to_utf8(const char *text, size_t size) {
+  void *converter = Riconv_open("UTF-8", "");
+  if (converter == (void *) -1) {
+    Rf_error("Unable to validate native diagnostic text");
+  }
+
+  const char *input = text;
+  size_t input_size = size;
+  int valid = TRUE;
+  while (input_size != 0) {
+    char output[64];
+    char *output_cursor = output;
+    size_t output_size = sizeof(output);
+    const size_t previous_input_size = input_size;
+    errno = 0;
+    const size_t status = Riconv(
+      converter,
+      &input,
+      &input_size,
+      &output_cursor,
+      &output_size
+    );
+    if (status != (size_t) -1) {
+      if (status != 0 || input_size == previous_input_size) {
+        valid = FALSE;
+        break;
+      }
+      continue;
+    }
+    if (errno == E2BIG && input_size < previous_input_size) {
+      continue;
+    }
+    if (errno == EILSEQ || errno == EINVAL) {
+      valid = FALSE;
+      break;
+    }
+    (void) Riconv_close(converter);
+    Rf_error("Unable to validate native diagnostic text");
+  }
+
+  if (Riconv_close(converter) != 0) {
+    Rf_error("Unable to finish validating native diagnostic text");
+  }
+  return valid;
+}
+
 static size_t translated_piece_size(SEXP string) {
   const char *text = Rf_translateCharUTF8(string);
   const size_t size = strlen(text);
@@ -963,10 +1017,15 @@ SEXP paradox_diagnostic_charsxp(SEXP string) {
     Rf_error("Internal error: invalid diagnostic string fragment");
   }
   PROTECT(string);
-  const int bytes = Rf_getCharCE(string) == CE_BYTES;
+  const cetype_t encoding = Rf_getCharCE(string);
+  const char *stored = CHAR(string);
+  const size_t stored_size = strlen(stored);
+  const int bytes = encoding == CE_BYTES ||
+    (encoding == CE_NATIVE &&
+     !native_fragment_translates_to_utf8(stored, stored_size));
   size_t source_size;
   if (bytes) {
-    source_size = strlen(CHAR(string));
+    source_size = stored_size;
   } else {
     /* A string whose UTF-8 translation is not valid UTF-8 -- a native or
      * mismarked identifier carrying foreign bytes -- cannot enter the UTF-8
@@ -998,7 +1057,7 @@ SEXP paradox_diagnostic_charsxp(SEXP string) {
    * size before consuming the bytes. */
   const unsigned char *source;
   if (bytes) {
-    source = (const unsigned char *) CHAR(string);
+    source = (const unsigned char *) stored;
   } else {
     const char *translated = Rf_translateCharUTF8(string);
     if (strlen(translated) != source_size) {

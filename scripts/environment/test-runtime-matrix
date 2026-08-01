@@ -1124,6 +1124,10 @@ local({
     'test_that("fixture old binding-existence path skip", {',
     '  skip_if_no_old_r_binding_existence_path()',
     '  expect_true(TRUE)',
+    '})',
+    'test_that("fixture locale skip", {',
+    '  skip_if(is.na(latin1_fixture))',
+    '  expect_true(TRUE)',
     '})'
   )
   fixture_source_path <- file.path(
@@ -1229,6 +1233,45 @@ local({
   invisible(
     policy_environment$runtime_matrix_validate_result_skip_policy(fixture)
   )
+  raw_version_skip_variants <- list(
+    c(
+      'test_that("fixture raw version skip", {',
+      '  skip_if(getRversion() < "4.6.0")',
+      '  expect_true(TRUE)',
+      '})'
+    ),
+    c(
+      'test_that("fixture namespaced raw version skip", {',
+      '  testthat::skip_if(',
+      '    message = "old R",',
+      '    condition = base::getRversion() < "4.6.0"',
+      '  )',
+      '  expect_true(TRUE)',
+      '})'
+    ),
+    c(
+      'test_that("fixture conditional raw version skip", {',
+      '  if (R.version$major < "4") testthat::skip("old R")',
+      '  expect_true(TRUE)',
+      '})'
+    )
+  )
+  for (variant in raw_version_skip_variants) {
+    writeLines(c(fixture_source_lines, variant), fixture_source_path)
+    raw_version_error <- tryCatch(
+      policy_environment$runtime_matrix_validate_result_skip_policy(fixture),
+      error = identity
+    )
+    stopifnot(
+      inherits(raw_version_error, "error"),
+      grepl(
+        "raw version-conditioned skips must use a reviewed capability helper",
+        conditionMessage(raw_version_error),
+        fixed = TRUE
+      )
+    )
+  }
+  writeLines(fixture_source_lines, fixture_source_path)
   preflight <- capture.output(
     policy_environment$runtime_matrix_skip_policy_main(fixture)
   )

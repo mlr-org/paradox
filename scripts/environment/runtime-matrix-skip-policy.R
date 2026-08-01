@@ -29,6 +29,96 @@ runtime_matrix_contains_named_call <- function(value, target) {
   ))
 }
 
+runtime_matrix_skip_policy_call_name <- function(value) {
+  if (!is.call(value)) return(character())
+  head <- value[[1L]]
+  if (is.name(head)) return(as.character(head))
+  if (!is.call(head) || length(head) != 3L || !is.name(head[[1L]]) ||
+      !as.character(head[[1L]]) %in% c("::", ":::")) {
+    return(character())
+  }
+  target <- head[[3L]]
+  if (is.name(target)) return(as.character(target))
+  if (is.character(target) && length(target) == 1L && !is.na(target)) {
+    return(target)
+  }
+  character()
+}
+
+runtime_matrix_contains_runtime_version_query <- function(value) {
+  if (is.name(value) &&
+      as.character(value) %in% c("R.version", "R.version.string")) {
+    return(TRUE)
+  }
+  if (!is.call(value) && !is.expression(value)) return(FALSE)
+  if (is.call(value)) {
+    name <- runtime_matrix_skip_policy_call_name(value)
+    if (length(name) == 1L && name %in% c("getRversion", "R.Version")) {
+      return(TRUE)
+    }
+  }
+  any(vapply(
+    runtime_matrix_skip_policy_children(value),
+    runtime_matrix_contains_runtime_version_query,
+    logical(1L)
+  ))
+}
+
+runtime_matrix_contains_generic_skip_call <- function(value) {
+  if (!is.call(value) && !is.expression(value)) return(FALSE)
+  if (is.call(value)) {
+    name <- runtime_matrix_skip_policy_call_name(value)
+    if (length(name) == 1L && grepl("^skip($|_)", name)) return(TRUE)
+  }
+  any(vapply(
+    runtime_matrix_skip_policy_children(value),
+    runtime_matrix_contains_generic_skip_call,
+    logical(1L)
+  ))
+}
+
+runtime_matrix_skip_policy_condition <- function(value) {
+  if (!is.call(value) || length(value) < 2L) return(NULL)
+  arguments <- as.list(value)[-1L]
+  labels <- names(arguments)
+  if (is.null(labels)) labels <- rep("", length(arguments))
+  named <- match(c("condition", ".condition"), labels, nomatch = 0L)
+  named <- named[named != 0L]
+  if (length(named)) return(arguments[[named[[1L]]]])
+  unnamed <- which(is.na(labels) | !nzchar(labels))
+  if (length(unnamed)) return(arguments[[unnamed[[1L]]]])
+  NULL
+}
+
+runtime_matrix_contains_raw_version_skip <- function(value) {
+  if (!is.call(value) && !is.expression(value)) return(FALSE)
+  if (is.call(value)) {
+    name <- runtime_matrix_skip_policy_call_name(value)
+    if (length(name) == 1L && name %in% c("skip_if", "skip_if_not")) {
+      condition <- runtime_matrix_skip_policy_condition(value)
+      if (!is.null(condition) &&
+          runtime_matrix_contains_runtime_version_query(condition)) {
+        return(TRUE)
+      }
+    }
+    if (length(name) == 1L && identical(name, "if") &&
+        length(value) >= 3L &&
+        runtime_matrix_contains_runtime_version_query(value[[2L]]) &&
+        any(vapply(
+          runtime_matrix_skip_policy_children(value)[-(1:2)],
+          runtime_matrix_contains_generic_skip_call,
+          logical(1L)
+        ))) {
+      return(TRUE)
+    }
+  }
+  any(vapply(
+    runtime_matrix_skip_policy_children(value),
+    runtime_matrix_contains_raw_version_skip,
+    logical(1L)
+  ))
+}
+
 runtime_matrix_named_call_sequence <- function(value) {
   sequence <- character()
   walk <- function(node) {
@@ -319,6 +409,16 @@ runtime_matrix_validate_result_skip_policy <- function(
   }
   source_blocks <- setNames(lapply(test_paths, runtime_matrix_literal_test_blocks),
     test_files)
+  for (file in names(source_blocks)) {
+    for (block in source_blocks[[file]]) {
+      if (runtime_matrix_contains_raw_version_skip(block$call)) {
+        stop(
+          "raw version-conditioned skips must use a reviewed capability helper",
+          call. = FALSE
+        )
+      }
+    }
+  }
   reviewed_triggers <- c(
     "skip_on_cran", "skip_if_no_active_binding_inspection",
     "skip_if_no_list_altrep", "skip_if_no_old_r_binding_existence_path"

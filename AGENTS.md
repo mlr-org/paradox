@@ -19,7 +19,34 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The active package-facing candidate is
+The most recent immutable candidate is the rejected diagnostic ref
+`refs/paradox-release/candidate-20260801T014150Z`, commit
+`6f28daed7596413d5c1227134b2bfa28a2ef7721`, tree
+`1b283f19be4534ed30b86017e75eaa9426ec31e2`. It is
+package-facing-source identical to `de1752f` and adds only the reviewed
+recursive runtime-test staging repair and release documentation. Its exact
+`release-candidate-6f28dae` `release-core` run passed eight rows: the four
+harness rows, all 33 differential cases, the complete API-header matrix,
+explicit C23 installation under GCC 15.2 and Clang 22, and the full
+native-release lane. `runtime-supported` alone failed, this time after all
+seven supported-minor suites actually ran and every recursive support-tree
+receipt passed. Completion, JSON-summary, and TSV-summary SHA-256 values are
+respectively
+`9c1b797ae67324bf448f5c07227ee1a2264f406b61bc040dd783e54e5df3be5a`,
+`521bf58a476b816920132b3e8432b4b8dfb79a080429bd567281baeb26a0cfe6`,
+and
+`e25224aeca5225f28c5277bb9d00f2be2674f5be43ecfa2b0dff6563d61d97da`.
+
+The seven runtime failures are bounded to four families: one real old-R
+diagnostic-encoding difference, plus portable no-`DATAPTR` ALTREP fixture
+construction, versioned terminal-callback counting, and the documented R 4.5
+promise-inspection fail-closed expectation. The encoding path and all three
+test-fixture/policy families have focused repairs in the reopened source, but
+those repairs are development state, not accepted evidence. Candidate
+`6f28dae` is rejected, no replacement candidate has yet been frozen, and every
+applicable source-bound acceptance gate must run again after convergence.
+
+The preceding frozen package-facing candidate was
 `refs/paradox-release/candidate-20260801T000111Z`, commit
 `de1752fe2085dc021b2e6936bcd3d5c0c809d9d4`, tree
 `b91022dfcae1f1daeb886533620a234228f08803`. Its exact
@@ -34,7 +61,8 @@ TSV-summary SHA-256 values are respectively
 `6e6fa7f39e63a74890ecb9b2e062822b9add56a99b24ddc89986c057192a431c`,
 and
 `76d60a19e82fc0249e5f4bf8b3f8b81ff240181c04a8eec9f6e34676f1306e94`.
-This is not complete candidate acceptance.
+This is not complete candidate acceptance and is now historical diagnostic
+evidence.
 
 The runtime failure was a harness staging defect, not a package or supported-R
 failure. Every R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 stage
@@ -42,9 +70,11 @@ successfully built, installed, loaded, probed, and symbol-audited Paradox
 before the common runner rejected the tracked `tests/testthat/_problems` and
 `tests/testthat/fixtures` directories as if every top-level support entry had
 to be a regular file. No stage reached testthat; the old-R stress, final R-3.6
-check, and closing receipts therefore did not run. Package-facing source
-remains frozen. Only package-facing-source-identical validation tooling and
-release documentation are reopened for the recursive support-tree repair.
+check, and closing receipts therefore did not run. At that point only
+package-facing-source-identical validation tooling and release documentation
+were reopened for the recursive support-tree repair. The later `6f28dae` run
+proved that repair and exposed the bounded runtime failures above; the
+subsequent production diagnostic repair reopened package-facing source.
 
 The repaired contract keeps testthat's actual discovery boundary: only
 top-level `test*.R`/`test*.r` files are executable tests. Every other

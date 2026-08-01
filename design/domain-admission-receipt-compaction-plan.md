@@ -908,12 +908,16 @@ both compiled without warnings.  On each runtime,
 `test-native-domain-nested-admission.R`, and
 `test-native-paramset-construction.R` passed.  Current R had one ordinary
 CRAN skip.  R 3.6 had that skip plus the three expected list-ALTREP capability
-skips.  R 3.6's public `row.names<-`/`Rf_setAttrib()` cannot install the
-test suite's deliberately no-DATAPTR integer ALTREP as a row-name value; that
-runtime therefore uses its representable compact-integer ALTREP for the
-structural rejection regression, while R 4.0 and later retain the full
-callback/non-observation proof.  This is a fixture representability boundary,
-not a package support exception.
+skips. The original focused run established that R 3.6's public
+`row.names<-`/`Rf_setAttrib()` cannot install the test suite's deliberately
+no-DATAPTR integer ALTREP as a row-name value, so that run used a compact-
+integer fallback. The later complete every-minor release replay showed that
+the same base-R construction detail persists through R 4.5. The final
+regression therefore uses a no-DATAPTR ALTSTRING row-name fixture, which is
+representable on every supported runtime and preserves the full callback/non-
+observation proof without a version branch. This is a fixture
+representability boundary, not a package support exception; the historical
+R-3.6 fallback evidence must not be generalized to R 4.0--4.5.
 
 The focused run also caught two integration regressions before they could be
 mistaken for Domain failures: named value assignment selected the source after

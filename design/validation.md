@@ -7,30 +7,52 @@ file/count matrix.
 
 ## Current validation status
 
-Package-facing source is frozen at
-`refs/paradox-release/candidate-20260801T000111Z` (`de1752f`). Its
-`release-candidate-de1752f` run passed every `release-core` task except
-`runtime-supported`: all seven runtime stages built, installed, loaded,
-probed, and symbol-audited the exact package before one common harness defect
-rejected the tracked recursive test-support directories, so none reached
-testthat. The completion/JSON-summary/TSV-summary SHA-256 values are
+The most recent immutable ref is rejected diagnostic candidate
+`refs/paradox-release/candidate-20260801T014150Z` (`6f28dae`), tree
+`1b283f19be4534ed30b86017e75eaa9426ec31e2`. It is
+package-facing-source identical to `de1752f`; its only change was the reviewed
+recursive test-support staging repair and package-excluded documentation. Its
+`release-candidate-6f28dae` run passed all eight non-runtime rows, including
+all harness, differential, API-header, dual-compiler C23, and native-release
+gates. `runtime-supported` then ran all seven minor-series suites and verified
+every recursive support-tree receipt before failing on bounded suite results.
+The completion/JSON-summary/TSV-summary SHA-256 values are
+`9c1b797ae67324bf448f5c07227ee1a2264f406b61bc040dd783e54e5df3be5a`,
+`521bf58a476b816920132b3e8432b4b8dfb79a080429bd567281baeb26a0cfe6`,
+and
+`e25224aeca5225f28c5277bb9d00f2be2674f5be43ecfa2b0dff6563d61d97da`.
+
+The runtime results are bounded to invalid-native-byte diagnostic rendering on
+old R and three test-fixture/policy families: portable no-`DATAPTR` ALTREP
+construction, version-dependent terminal callback counting, and the intended
+R 4.5 promise-inspection fail-closed boundary. Focused repairs exist for all
+four families, including one package-facing C change, so source is reopened.
+They are not accepted results. Reject `6f28dae`, freeze no replacement until
+source converges, and rerun every applicable source-bound gate.
+
+The preceding diagnostic ref
+`refs/paradox-release/candidate-20260801T000111Z` (`de1752f`) passed every
+`release-core` task except `runtime-supported`: all seven runtime stages built,
+installed, loaded, probed, and symbol-audited the exact package before one
+common harness defect rejected the tracked recursive test-support directories,
+so none reached testthat. Its completion/JSON-summary/TSV-summary SHA-256
+values are
 `69634511a79c0d8ab2b6b8dd92aa3b35012f58d420e1333cc4c1ba821cbc44e9`,
 `6e6fa7f39e63a74890ecb9b2e062822b9add56a99b24ddc89986c057192a431c`,
 and
 `76d60a19e82fc0249e5f4bf8b3f8b81ff240181c04a8eec9f6e34676f1306e94`.
 This is diagnostic evidence, not complete acceptance.
 
-Only package-facing-source-identical validation tooling and release
-documentation are reopened. The repair recursively stages every ordinary
-support leaf while preserving testthat's top-level `test*.R`/`test*.r`
+The repair recursively stages every ordinary support leaf while preserving
+testthat's top-level `test*.R`/`test*.r`
 discovery boundary, brackets execution with a deterministic tree receipt, and
 is independently reconstructed during evidence validation. Because that new
-trusted helper is absent from the old ref, commit the repair under one
-replacement immutable ref and run the complete seven-runtime matrix from that
-exact ref. The full native lane already executes current R 4.6.1; the runtime
-matrix executes 3.6.3 and one terminal release from every R 4.0--4.5 minor, so
-the combined release gate covers every minor series from R 3.6 through current
-without a duplicate R 4.6 suite.
+trusted helper was absent from `de1752f`, `6f28dae` carried and successfully
+exercised it. The full native lane executes current R 4.6.1; the runtime matrix
+executes 3.6.3 and one terminal release from every R 4.0--4.5 minor, so the
+combined release gate covers every minor series from R 3.6 through current
+without a duplicate R 4.6 suite. That complete combined gate remains pending
+for the next converged immutable source.
 
 The rejected diagnostic ref
 `refs/paradox-release/candidate-20260731T150816Z` (`a153fae`) passed its

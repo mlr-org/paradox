@@ -26,7 +26,11 @@ test_that("declared encodings still take their documented path", {
   Encoding(bytes) = "bytes"
 
   set = ps(alpha = p_dbl(0, 1), beta = p_dbl(0, 1))
-  expect_match(set$check(set_names(list(1), latin1)), "not available")
+  expect_match(
+    set$check(set_names(list(1), latin1)),
+    paste0("Parameter '", enc2utf8(latin1), "' not available"),
+    fixed = TRUE
+  )
   expect_identical(
     set$check(set_names(list(1), bytes)),
     "Parameter '\\xe9' not available"
@@ -35,6 +39,10 @@ test_that("declared encodings still take their documented path", {
   expect_error(set$get_domain(bytes), "Unknown bytes-encoded parameter ID")
 
   expect_identical(set$check(list(zzz = 1)), "Parameter 'zzz' not available")
+  expect_identical(
+    set$check(set_names(list(1), "<e9>")),
+    "Parameter '<e9>' not available"
+  )
 })
 
 test_that("mismarked diagnostics survive transient allocation under collection", {

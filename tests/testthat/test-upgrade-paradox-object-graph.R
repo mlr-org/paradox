@@ -824,6 +824,12 @@ test_that("closure discovery shallow-snapshots deep and cyclic structure", {
     expression = call("identity", expression)
   }
   closure = function() NULL
+  # Keep this fixture's enclosing graph explicit. The ambient testthat/R6
+  # ancestry contains factory-frame promises, which are deliberately a
+  # fail-closed migration boundary on R 4.5 and are covered separately below.
+  # This test owns the independent deep-body and cyclic-attribute snapshot
+  # contract, so those unrelated promises must not mask it.
+  environment(closure) = new.env(parent = emptyenv())
   body(closure) = expression
   cyclic_metadata = new.env(parent = emptyenv())
   cyclic_metadata$self = cyclic_metadata
@@ -1209,7 +1215,7 @@ test_that("recursive graph upgrade is an identity-preserving no-op for current g
   expect_identical(host$parameter_set$ids(), "x")
 })
 
-test_that("additive current graphs fail closed only without active inspection", {
+test_that("additive current graphs honor exact old-R inspection boundaries", {
   AdditiveSet = R6::R6Class(
     "GraphAdditiveSet",
     inherit = ParamSet
@@ -1225,14 +1231,23 @@ test_that("additive current graphs fail closed only without active inspection", 
       "cannot inspect an active binding on R 3.6",
       fixed = TRUE
     )
-    expect_identical(parameter_set$.__enclos_env__, before_enclosure)
-    expect_identical(serialize(private$.core, NULL), before_core)
+  } else if (getRversion() >= "4.5.0" && getRversion() < "4.6.0") {
+    # An additive R6 factory carries a Constructor promise in its generated
+    # ancestry. R 4.5 has no policy-compliant non-forcing promise accessor, so
+    # the recursive upgrader must reject this graph without changing it.
+    expect_error(
+      upgrade_paradox_object_graph(parameter_set),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
   } else {
     expect_identical(
       upgrade_paradox_object_graph(parameter_set),
       parameter_set
     )
   }
+  expect_identical(parameter_set$.__enclos_env__, before_enclosure)
+  expect_identical(serialize(private$.core, NULL), before_core)
 })
 
 test_that("authentic Paradox 1 shells upgrade everywhere by identity", {
@@ -1827,8 +1842,6 @@ test_that("legacy table snapshots keep names, columns, and attributes together",
 
 test_that("legacy table snapshots cannot splice post-receipt column writes", {
   skip_on_cran()
-  skip_if(getRversion() < "4.6.0",
-    "deterministic pending-finalizer scheduling requires current R")
 
   state = new.env(parent = emptyenv())
   state$fired = FALSE
@@ -1837,36 +1850,26 @@ test_that("legacy table snapshots cannot splice post-receipt column writes", {
   state$leaf = structure(1L, generation = state$old_leaf)
   state$old_repr = new.env(parent = emptyenv())
   state$new_repr = new.env(parent = emptyenv())
-  callback = function() {
-    trigger = new.env(parent = emptyenv())
-    reg.finalizer(trigger, function(unused) {
-      state$fired = TRUE
-      # These writes are one source generation. The callback is armed by the
-      # final native ALTREP Length receipt, so the finalizer can run only
-      # after the native result is complete. A shallow list-column snapshot
-      # used to expose its atomic leaf to the allocating R migration layer,
-      # producing new-leaf/old-repr output that never existed in the source.
-      data.table::setnames(state$table, "tag", "changed")
-      data.table::set(
-        state$table,
-        i = 1L,
-        j = 2L,
-        value = "new"
-      )
-      data.table::setattr(state$leaf, "generation", state$new_leaf)
-      data.table::setattr(state$table, "repr", state$new_repr)
-    })
-    invisible(NULL)
+  mutate_source = function() {
+    state$fired = TRUE
+    # These writes are one source generation. The test-only hook runs after
+    # the terminal native receipt and before R consumes the returned snapshot.
+    # A shallow list-column snapshot used to expose its atomic leaf to the
+    # allocating R migration layer, producing new-leaf/old-repr output that
+    # never existed in the source.
+    data.table::setnames(state$table, "tag", "changed")
+    data.table::set(
+      state$table,
+      i = 1L,
+      j = 2L,
+      value = "new"
+    )
+    data.table::setattr(state$leaf, "generation", state$new_leaf)
+    data.table::setattr(state$table, "repr", state$new_repr)
   }
-  ids = native_stateful_altrep(
-    c("a", "b"),
-    c("a", "b"),
-    callback = callback,
-    callback_after = c(NA_integer_, 2L)
-  )
   state$table = structure(
     list(
-      id = ids,
+      id = c("a", "b"),
       tag = c("old", "old"),
       payload = list(state$leaf, state$leaf)
     ),
@@ -1879,16 +1882,9 @@ test_that("legacy table snapshots cannot splice post-receipt column writes", {
     c("id", "tag", "payload"),
     "adversarial table",
     extra_attributes = "repr",
-    .after_snapshot = function() {
-      for (iteration in seq_len(4L)) {
-        if (state$fired) break
-        gc(full = TRUE)
-      }
-      if (!state$fired) {
-        stop("pending post-snapshot finalizer did not run")
-      }
-    }
+    .after_snapshot = mutate_source
   )
+  expect_true(state$fired)
   expect_identical(names(result), c("id", "tag", "payload"))
   expect_identical(result$tag, c("old", "old"))
   expect_true(all(vapply(
@@ -2019,14 +2015,25 @@ test_that("legacy table snapshots admit only coherent historical row metadata", 
         nested_receipt$new_generation
       )
     },
-    # Three internal Length observations close the leaf's own payload and
-    # metadata snapshot; the fourth is the table-wide terminal barrier.
-    callback_after = c(NA_integer_, 3L)
+    callback_after = NA_integer_
   )
   data.table::setattr(
     nested_receipt$leaf,
     "generation",
     nested_receipt$old_generation
+  )
+  # Arm only after the fixture's own attribute installation. The exact native
+  # compatibility paths have different bounded observation counts: R 3.6--4.4
+  # reach the table-wide terminal barrier on the second Length call, whereas
+  # R >= 4.5 reaches it on the fourth. In both cases the callback therefore
+  # mutates after the leaf snapshot is complete and the terminal receipt must
+  # reject the mixed generation.
+  native_stateful_altrep_rearm(
+    nested_receipt$leaf,
+    c(
+      NA_integer_,
+      if (getRversion() < "4.5.0") 1L else 3L
+    )
   )
   nested_receipt$table = structure(
     list(payload = list(nested_receipt$leaf)),

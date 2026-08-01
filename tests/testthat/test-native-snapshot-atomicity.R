@@ -122,18 +122,17 @@ test_that("ALTREP table row-name reentry cannot precede spine capture", {
   state$frame = structure(
     list(a = c(1L, 2L), b = c(10L, 20L)),
     names = c("a", "b"),
-    row.names = row_names,
+    row.names = c(1L, 2L),
     class = "data.frame"
   )
   state$outer = native_stateful_altrep(state$frame, state$frame)
-  # The fixture constructor deliberately deep-owns copied attributes.  R may
-  # therefore materialize the copied row-name ALTREP while constructing the
-  # outer list ALTREP. Reinstall the exact row-name fixture by reference
-  # before rearming it; the test is about the consumer's capture order, not
-  # the constructor's attribute-duplication policy. `data.table::setattr()`
-  # cannot do this: it materializes a referenced replacement value, so the
-  # fixture would arrive as an ordinary copy. The package's finalizer-armed
-  # attribute mutator installs the exact object instead.
+  # R 4.3--4.5's deep attribute duplicator asks a no-DATAPTR ALTREP row-name
+  # value for its data pointer. Give that constructor ordinary source row
+  # names, then install the exact callback-capable fixture by reference before
+  # rearming it. The outer ALTREP still serves elements from `state$frame`, so
+  # the callback retains the same spine-reordering hazard. `setattr()` cannot
+  # install the fixture here because it duplicates a referenced replacement
+  # on some runtimes.
   installer = .Call(
     get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
     state$outer,

@@ -427,24 +427,19 @@ test_that("$params rejects noncanonical stored row-name carriers unobserved", {
   private = core_private(set)
   state = unserialize(serialize(core_state(set), NULL))
   callbacks = 0L
-  if (getRversion() < "4.0.0") {
-    # R 3.6's public row.names<- path requires DATAPTR from its value, so it
-    # cannot install our deliberately no-DATAPTR stateful ALTREP fixture.
-    # Its compact integer sequence is still an exact structural ALTREP
-    # regression; newer runtimes additionally prove non-observation with the
-    # callback-capable fixture below.
-    wrong_length = seq_len(2L)
-  } else {
-    wrong_length = native_stateful_altrep(
-      c(1L, 2L),
-      c(1L, 2L),
-      callback = function() {
-        callbacks <<- callbacks + 1L
-        stop("row-name ALTREP was observed", call. = FALSE)
-      },
-      callback_after = 0L
-    )
-  }
+  # R <= 4.5's public row.names<- path obtains DATAPTR from integer row-name
+  # values while checking their compact spelling. Character row names avoid
+  # that base-R construction detail, so the same deliberately no-DATAPTR
+  # fixture proves non-observation on every supported runtime.
+  wrong_length = native_stateful_altrep(
+    c("first", "second"),
+    c("first", "second"),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      stop("row-name ALTREP was observed", call. = FALSE)
+    },
+    callback_after = 0L
+  )
   # Base attr<- installs the fixture without touching its data pointer;
   # data.table::setattr() materializes a referenced value and would replace
   # the fixture with an ordinary copy before the capsule ever sees it.
@@ -507,22 +502,14 @@ test_that("strict capsule tables reject first-column ALTREP without observation"
   calls = 0L
   set = ps(x = p_int(), y = p_int())
   state = unserialize(serialize(core_state(set), NULL))
-  row_names = c(1L, 2L)
-  hostile = if (getRversion() < "4.0.0") {
-    # See the R 3.6 representability boundary in the sibling row-name test.
-    # The compact sequence retains structural ALTREP coverage on that runtime.
-    seq_len(length(row_names))
-  } else {
-    native_stateful_altrep(
-      row_names,
-      rev(row_names),
-      callback = function() calls <<- calls + 1L
-    )
-  }
+  row_names = c("one", "two")
+  hostile = native_stateful_altrep(
+    row_names,
+    rev(row_names),
+    callback = function() calls <<- calls + 1L
+  )
   attr(state$.params, "row.names") = hostile
-  if (getRversion() >= "4.0.0") {
-    native_stateful_altrep_rearm(hostile, c(NA_integer_, 0L))
-  }
+  native_stateful_altrep_rearm(hostile, c(NA_integer_, 0L))
   calls = 0L
   assign(
     ".core",
