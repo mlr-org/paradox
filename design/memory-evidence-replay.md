@@ -95,9 +95,47 @@ failure, but an internally false receipt cannot own release acceptance.
 `scripts/memory-check` now omits the brittle count and explicitly binds source
 and count to the trusted ledger; the independent validator requires that exact
 corrected line. This package-excluded harness change invalidates current-
-harness replay of r1 by design. Freeze it, create a fresh post-correction
-static/focused donor, and run one fresh all-mode gate before claiming active
-memory acceptance.
+harness replay of r1 by design. R1 remains semantically clean diagnostic
+evidence, but cannot own release acceptance.
+
+The correction is frozen at package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260801T124036Z`, commit
+`3902d5bf0bedcef5a39f266978f371a8cc5640b7`, tree
+`ce0b22d8276a8524efe47451d7d76a824d30031e`. Fresh donor
+`release-candidate-4e549f3-native-policy-r2` passed all six static/focused
+modes and the independent source-run validator. Its source-manifest,
+source-tree, modes-tree, completion, and result SHA-256 values are
+`adccc238e79a04ff83d3e1394fbb4fdce9e3817b270839dc1bb0a87a79bb8698`,
+`f5b0f7cf3a1230938b0dd59a8910e893f2d506a6b5f0177692ab97850c0970d5`,
+`c10d5aa4a68a35365175836949dab466fbe9ceb4ddf5602d5b0a05bbb102b0ea`,
+`a4c812fddffc1dbd66f26ba37241b2d7d994daad10359454e10796b605a3a747`,
+and
+`40d934a672ac66bb221db3fca43e45889972a9e5e964774c31ed3753baaf9bb4`.
+
+Corrected combined run `release-candidate-4e549f3-memory-r2` passed GCT,
+Valgrind, bounded rchk, and independent validation. Its completion, result,
+memory-source-tree, modes-tree, independent-validator, and source-archive
+SHA-256 values are
+`5bdeda5338c840d73301a6b08f142692517c933476a5f1e77edab877bda7bb62`,
+`508dadf355230d03ce8678c0e666b61cc2022b4892c503c0b7815beace6c0cda`,
+`964d6133d7e0ac2595d8df60693bfd0062b3706d384128a174b5f49f3436a228`,
+`754665b8f1383fab02b7c38ae3b357d0799ed6576e5f7cf69205ac8dbcc63c70`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`1c137df1ccc07e83b7b11a71b6e564baf2d53d9f3907a72f74fc6b08e704387d`.
+GCT covers all 110 registered routines and four reviewed hazards. Valgrind's
+baseline, probes, and analyzer have zero errors, losses, or suppressions; the
+trusted ledger binds eight files and 128 blocks to 862 expectations, comprising
+852 passes and ten exact skips. Rchk analyzed 1,288 functions and 202,140
+states and matched all 115 blocks with 396 UP and 30 PB diagnostics. Raw
+bcheck, semantic, byte-empty maacheck, and fficheck SHA-256 values are
+`d0e55ca0b0b46a53e5f551ebe1d84786a235d74199cbd1c4093709d7bb79aac1`,
+`2c1493d88d28866e56c52c7640fad9af791cacbe893ea57b23b72f87be110aa8`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
+This corrected combined run, not discovery or r1, owns active memory
+acceptance.
 
 ### 2026-07-27 provenance incident
 

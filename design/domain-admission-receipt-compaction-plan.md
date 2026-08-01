@@ -1507,5 +1507,40 @@ passes, and ten reviewed CRAN skips. A later audit found that the separate
 scope receipt incorrectly described those ten scopes as eight. The package
 result is unaffected, but the false receipt makes r1 diagnostic. The
 package-excluded harness and validator now bind the count to the trusted
-ledger; one fresh corrected-harness donor/run remains before the refactor's
-memory obligation is complete.
+ledger. R1 remains semantically clean diagnostic evidence.
+
+The correction is frozen at package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260801T124036Z`, commit
+`3902d5bf0bedcef5a39f266978f371a8cc5640b7`, tree
+`ce0b22d8276a8524efe47451d7d76a824d30031e`. Fresh donor
+`release-candidate-4e549f3-native-policy-r2` passed all six modes and
+independent validation. Its source-manifest/source-tree/modes-tree/completion/
+result SHA-256 values are
+`adccc238e79a04ff83d3e1394fbb4fdce9e3817b270839dc1bb0a87a79bb8698`,
+`f5b0f7cf3a1230938b0dd59a8910e893f2d506a6b5f0177692ab97850c0970d5`,
+`c10d5aa4a68a35365175836949dab466fbe9ceb4ddf5602d5b0a05bbb102b0ea`,
+`a4c812fddffc1dbd66f26ba37241b2d7d994daad10359454e10796b605a3a747`,
+and
+`40d934a672ac66bb221db3fca43e45889972a9e5e964774c31ed3753baaf9bb4`.
+Corrected combined run `release-candidate-4e549f3-memory-r2` passed GCT,
+Valgrind, exact rchk, and independent validation. Completion/result/
+memory-source-tree/modes-tree/validator/archive SHA-256 values are
+`5bdeda5338c840d73301a6b08f142692517c933476a5f1e77edab877bda7bb62`,
+`508dadf355230d03ce8678c0e666b61cc2022b4892c503c0b7815beace6c0cda`,
+`964d6133d7e0ac2595d8df60693bfd0062b3706d384128a174b5f49f3436a228`,
+`754665b8f1383fab02b7c38ae3b357d0799ed6576e5f7cf69205ac8dbcc63c70`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`1c137df1ccc07e83b7b11a71b6e564baf2d53d9f3907a72f74fc6b08e704387d`.
+GCT covers 110 routines plus four hazards. Valgrind has zero errors, losses,
+or suppressions across eight files, 128 blocks, and 862 expectations
+(852 pass and ten exact skips). Rchk reproduces 1,288 functions, 202,140
+states, and the 115-block/396-UP/30-PB policy; raw/semantic/maacheck/fficheck
+SHA-256 values are
+`d0e55ca0b0b46a53e5f551ebe1d84786a235d74199cbd1c4093709d7bb79aac1`,
+`2c1493d88d28866e56c52c7640fad9af791cacbe893ea57b23b72f87be110aa8`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
+This completes the refactor's memory obligation. Compatibility, downstream,
+documentation, benchmark, hosted-portability, and publication gates remain.
