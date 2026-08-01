@@ -310,6 +310,40 @@ test_that("Domain admission rejects finalizer changes after all-row capture", {
     expect_identical(target[[1L]], replacement)
   }
 
+  # Both phase seams use the same production orchestrator. A collection at
+  # the first seam must leave every indexed root live for the ownership phase;
+  # a later source mutation must still be rejected by the terminal receipt.
+  phase_state = new.env(parent = emptyenv())
+  phase_state$seen = character()
+  domain = native_domain_bind(list(
+    p_fct(c("a", "b")),
+    p_fct(c("a", "b"))
+  ))
+  levels_column = domain$levels
+  replacement_row = c("c", "d")
+  expect_error(
+    .Call(
+      admission_reentry,
+      domain,
+      param_fct_kind,
+      interpret_all,
+      list(
+        function() {
+          phase_state$seen = c(phase_state$seen, "capture")
+          invisible(gc(full = TRUE))
+        },
+        function() {
+          phase_state$seen = c(phase_state$seen, "ownership")
+          mutate_at_barrier(levels_column, 1L, replacement_row)
+        }
+      )
+    ),
+    "Domain changed during admission",
+    fixed = TRUE
+  )
+  expect_identical(phase_state$seen, c("capture", "ownership"))
+  expect_identical(levels_column[[1L]], replacement_row)
+
   # Empty special-value shells are intentionally not copied, but optional
   # names presence is still exact generation state. Because the live source
   # and admitted shell alias at length zero, an explicit scalar receipt must

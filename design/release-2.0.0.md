@@ -2,10 +2,12 @@
 
 ## Status
 
-**The active immutable package-facing candidate is
+**The last immutable package-facing candidate was
 `refs/paradox-release/candidate-20260801T051235Z`, commit
 `bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
-`79873126ae3034962edaaad30745914115240be5`. Its exact
+`79873126ae3034962edaaad30745914115240be5`. It is rejected diagnostic
+evidence because bounded rchk required the package-facing Domain-admission
+phase extraction described below. Its exact
 `release-candidate-bf0b68f` run passed all nine `release-core` tasks. The four
 harness rows, C23 under GCC 15.2 and Clang 22, the complete API-header matrix,
 all 33 differential cases, and the complete native-release lane on R 4.6.1
@@ -82,11 +84,40 @@ its 3,000,000/3,000,000 bounded bcheck SHA-256 is
 The existing 20-GiB analyzer address-space limit and 16-GiB protected host
 reserve are unchanged. Any further package-local exhaustion requires source
 simplification rather than policy admission or another automatic limit
-increase. The analyzer-input change makes the old donor ineligible for the
-next discovery, despite package-facing-source identity: create a fresh
-post-cap static/focused donor, complete and review discovery, commit the exact
-policy, then create another fresh donor for combined-memory attempt
-`release-candidate-bf0b68f-memory-r3`.
+increase. Fresh post-cap donor
+`release-candidate-bf0b68f-native-rchk-cap-r1` passed the complete
+static/focused lane and independent source-run validation. Its source
+manifest, source-tree, modes-tree, and completion SHA-256 values are
+`69cf07c2002256a0ee6fb6c41ba8e11db450933ead4bc07a2da03b1b6d7bc22e`,
+`70b199594601bd126f823cae2a0a67d68b31b05f5ff127aac19be080f7bac705`,
+`dc445085c9d1975beab9ea9f7e7b55ba9347208439920f3d61e00e108dbfcf10`,
+and
+`7081fe26ff9bf8448fdf881373e53f1cec2fc8518a23a50769ee7e62a57110f8`.
+
+Replacement discovery
+`release-candidate-bf0b68f-rchk-discovery-r2` nevertheless exhausted both
+exact 3,000,000-state analyses in `admit_public_domain_table_impl`. It
+analyzed 1,284 functions and reported 3,061,641 main-analysis states. Its raw
+bcheck, byte-empty maacheck, fficheck, and analyzer-identity SHA-256 values
+are
+`138a4bd282019744cbf13a63f5139fcc929a06d3e65c1c283be01ada58d84948`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+and
+`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
+It is analyzer-capacity evidence only.
+
+Source is reopened and no replacement candidate is active. The one Domain
+adapter now has four standard-C `static inline` analyzer phases beneath the
+same sole 25-root owner. At `-O0`, the resulting functions contain 26, 27,
+101, 91, and 95 CFG blocks rather than one 330-block function; GCC and Clang
+inline every phase in optimized builds. Independent semantic and lifetime
+reviews are clean. Strict Clang, the Clang analyzer, registered probes, actual
+R 3.6, and the exact-source balanced performance gate pass, as recorded in
+section 12 of the Domain plan. The replacement freeze is now the immediate
+gate. After it, rerun all nine release-core tasks, create a new donor, complete
+and review bounded rchk, commit its exact policy, create a post-policy donor,
+and run combined memory.
 
 The preceding immutable candidate is rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit

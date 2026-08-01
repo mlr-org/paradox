@@ -19,10 +19,12 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The active immutable package-facing candidate is
+The last immutable package-facing candidate was
 `refs/paradox-release/candidate-20260801T051235Z`, commit
 `bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
-`79873126ae3034962edaaad30745914115240be5`. Its exact
+`79873126ae3034962edaaad30745914115240be5`. It is now a rejected
+diagnostic candidate because the bounded rchk discoveries below required a
+package-facing Domain-admission refactor. Its exact
 `release-candidate-bf0b68f` `release-core` run passed all nine tasks. This
 includes the four harness rows, all 33 differential cases, the complete API-
 header matrix, explicit C23 installations and native probes under GCC 15.2 and
@@ -50,7 +52,7 @@ SHA-256 values are respectively
 and
 `7c0bd80e9b439fe6ee531fda3fa060e3f5776c58042912c2db5e9eaf4be3d963`.
 
-The active candidate has not yet passed combined memory acceptance. Attempt
+That candidate did not pass combined memory acceptance. Attempt
 `release-candidate-bf0b68f-memory-r1` completed its GCT probe and then failed
 closed in Valgrind prerequisite preflight because the live
 `.local/toolchain/lib` directory mode had drifted from the sealed `0775` to
@@ -100,11 +102,43 @@ SHA-256 is
 The 20-GiB address-space limit and 16-GiB host reserve are unchanged. A
 further package-local exhaustion requires source simplification, not policy
 admission or another automatic limit increase. Because the source-run proof
-authenticates analyzer-build inputs as well as package-facing source, the old
-native donor cannot seed the new discovery: create a fresh post-cap
-static/focused donor first. After review and the exact policy commit, create
-another fresh donor for final combined-memory `r3`. Do not claim memory
-acceptance from `r1`, `r2`, or the incomplete discovery.
+authenticates analyzer-build inputs as well as package-facing source, post-cap
+donor `release-candidate-bf0b68f-native-rchk-cap-r1` was created and
+independently validated. Its source manifest, copied source tree, copied modes
+tree, and completion SHA-256 values are respectively
+`69cf07c2002256a0ee6fb6c41ba8e11db450933ead4bc07a2da03b1b6d7bc22e`,
+`70b199594601bd126f823cae2a0a67d68b31b05f5ff127aac19be080f7bac705`,
+`dc445085c9d1975beab9ea9f7e7b55ba9347208439920f3d61e00e108dbfcf10`,
+and
+`7081fe26ff9bf8448fdf881373e53f1cec2fc8518a23a50769ee7e62a57110f8`.
+
+Replacement discovery
+`release-candidate-bf0b68f-rchk-discovery-r2` then exhausted both exact
+3,000,000-state analyses in the same
+`admit_public_domain_table_impl` function. It analyzed 1,284 functions and
+reported 3,061,641 main-analysis states. Its raw bcheck, byte-empty maacheck,
+fficheck, and analyzer-identity SHA-256 values are respectively
+`138a4bd282019744cbf13a63f5139fcc929a06d3e65c1c283be01ada58d84948`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+and
+`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
+Do not use either discovery as a semantic policy.
+
+The package-facing source is therefore reopened and no immutable replacement
+candidate is active yet. The one semantic Domain adapter is split into four
+standard-C `static inline` phases beneath one indexed-root owner. At analyzer
+`-O0`, the orchestrator and four phases contain 26, 27, 101, 91, and 95 CFG
+blocks instead of one 330-block function; GCC and Clang inline every phase in
+optimized builds. The split preserves the exact allocation, callback,
+ownership, terminal-receipt, error, and publication order and adds no fallback
+engine. Focused strict-Clang, Clang-analyzer, registered-probe, current-R, and
+R-3.6 evidence plus a balanced performance comparison pass, as recorded in
+section 12 of the Domain receipt-compaction plan. Freeze the replacement next.
+Then create a fresh source donor, complete bounded rchk discovery and review,
+commit the exact policy, create another donor, and run combined memory
+acceptance. Do not claim memory acceptance from either memory attempt or
+either incomplete discovery.
 
 The preceding immutable candidate is the rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit

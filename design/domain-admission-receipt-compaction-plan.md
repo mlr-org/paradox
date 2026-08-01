@@ -1287,3 +1287,170 @@ performance obligation. The later rejection of `a153fae` by unrelated C23
 harness and formal-S4/legacy-migration correctness findings does not reopen
 these slices; final whole-product benchmarking remains a separate release
 gate.
+
+## 12. Bounded-rchk phase extraction before the final freeze
+
+### 12.1 Blocking evidence and decision
+
+The exact `bf0b68f` release-core candidate later reached the bounded rchk gate.
+Discovery `release-candidate-bf0b68f-rchk-discovery-r1` exhausted both the
+former 800,000-state main analysis and the independent 1,000,000-state
+allocator-discovery analysis in `admit_public_domain_table_impl`. Raising both
+finite caps to 3,000,000 retained the 20-GiB analyzer address-space limit,
+serial execution, and 16-GiB protected-host reserve. A fresh authenticated
+source donor was required because the source proof also binds the analyzer
+inputs.
+
+The resulting
+`release-candidate-bf0b68f-rchk-discovery-r2` again exhausted both exact
+3,000,000-state analyses in the same function. Its 3,061,641 reported
+main-analysis states differ from the earlier 861,641 by exactly the
+2,200,000-state cap increase. The invariant 61,641-state remainder and the
+same exhausted function show that another cap increase would only postpone
+the failure. The old function compiled to 330 rchk CFG blocks, with 310
+branches, 350 calls, and 141 stack allocations. Under the release rule that a
+second package-local exhaustion requires source simplification, a further cap
+increase, whitelist, partial report, or policy exception is forbidden.
+
+The change is deliberately representational. It may expose phases to an
+unoptimized analyzer, but it must not create another Domain semantic owner,
+change any R-visible behavior, add a runtime fallback, weaken a receipt, or
+add production helper-call overhead.
+
+### 12.2 Locked implementation
+
+Keep `admit_public_domain_table_impl()` as the sole owner of:
+
+- the complete 25-slot indexed protection block and the `rows` carrier;
+- conditional native workspaces and the one balanced final `UNPROTECT`;
+- both test-hook calls and their exact relative order;
+- terminal status-to-error selection;
+- admitted-table publication.
+
+Extract exactly four standard-C `static inline` phases:
+
+1. select and root the complete public Domain shell before the one
+   callback-capable row-name observation;
+2. capture the exact post-callback generation, including allocation/restart
+   for the rare-grouping receipt;
+3. own every selected nested row and call the one canonical row-admission
+   owner;
+4. perform the allocation- and callback-free simultaneous-generation
+   receipt.
+
+One operation-local context record carries only borrowed aliases and scalar
+receipts. Every `SEXP` retained in it remains owned by an indexed root or by
+`rows`; the record is never a GC root. The terminal helper returns one of
+`current`, `changed`, or `grouping changed`; only the outer owner emits the
+existing exact errors. A single cached `has_rare_grouping` fact governs both
+raw-pointer initialization and its dereference, encoding their relationship
+for Clang's analyzer without a runtime defensive branch.
+
+At analyzer `-O0`, the orchestrator, shell selection, generation capture, row
+ownership, and terminal receipt contain respectively 26, 27, 101, 91, and 95
+CFG blocks. No replacement approaches the old 330-block path space. In
+optimized GCC 14 and Clang 22 builds, all four phases must inline completely:
+no helper symbol or call may remain, and the optimized external-call inventory
+must remain identical. The implementation stays portable C99 and must compile
+against the R 3.6 headers.
+
+### 12.3 Focused proof before replacement freeze
+
+The source adds two permanent regressions:
+
+- both phase hooks run in order in one call; the first forces a full
+  collection, the second mutates an already selected levels entry, and the
+  terminal receipt rejects that generation;
+- all 64 interpretation masks execute for all five closed built-in Domain
+  kinds with the exact inert two-hook carrier.
+
+The existing nested mutation, finalizer, reentry, ALTREP, malformed-shell,
+stack-balance, and registered native-probe suites remain binding. Independent
+reviews must separately cover protection/lifetime/order and semantic/error
+equivalence. Focused validation must include strict GCC and Clang, both
+ordinary static analyzers, registered probes, current R, actual R 3.6.3, and a
+GCT probe before or as part of the new source donor.
+
+The exact converged pre-freeze source/test SHA-256 values are:
+
+- `src/domain_row_admission.c`:
+  `e754b67e4a29c6f106cc4c25ebd4234a5cbb0595ff598a549d63093f846f9aae`;
+- `tests/testthat/test-native-domain-kernels.R`:
+  `aedc2210d674ed4325c5cd2128cfde7dccc5da5b8be88679a1ec94c499383538`;
+  and
+- `tests/testthat/test-native-domain-nested-admission.R`:
+  `2cd2fca4a075e1cf57011db515f327b6ed8cdfe13a93826d084db6d345c9b01f`.
+
+The exact strict-Clang plus Clang-analyzer/probe run is retained at
+`.local/checks/domain-admission-refactor-clang-r1`. Its completion,
+source-manifest, source-tree, and modes-tree SHA-256 values are respectively
+`0ae07d3232f815c6cd06dcc579eea9fe57e6f89140d8a63ed25b3c104ad47330`,
+`2c624af29e67a557ded40f4f8d20052f0427fe1f029639a79f0e4a2db5e1c782`,
+`9f230d475f12fc584b3e41a90c1fa7b409d9f96bd69a47f6b4c455708926db87`,
+and
+`a9abbe99f8431e843ebb05bf8755ba80aa2ffd1c860d6aac36c51adca3fd7668`.
+The run predates only comment restoration, whose optimized package bytes are
+unchanged. Independent lifetime and semantic reviews found no defect; the
+former relational Clang false positive is closed by the cached Boolean above.
+
+Before freezing, run a short exact-source balanced comparison against the
+strict-GCC `bf0b68f` library on one pinned CPU with single-thread controls.
+Semantic results and allocations must be exact. Public Domain operations must
+not be stably slower by more than two percent in both AB and BA order; a
+test-only direct seam may be reviewed against instruction counts but cannot
+override a public regression. Then freeze a replacement package-facing
+candidate, rerun complete release-core across every R minor from 3.6 through
+current, create a fresh donor, and rerun bounded discovery at the unchanged
+3,000,000/3,000,000 caps. Only a complete report receives block-by-block
+review and a new exact policy; a fresh post-policy donor is required for final
+combined memory acceptance.
+
+### 12.4 Focused freeze gates completed
+
+Actual R 3.6.3 validation of the exact converged package files passed under
+`.local/checks/r36-domain-admission-focused-20260801T085833Z-r3`. A clean
+source build and install produced DSO SHA-256
+`b0d6eafc56f55964d9a775da46edf1a01f5f411dd4e32d4aee1b08083947a6a6`.
+The Domain-kernel, nested-admission, and ALTREP-lifetime files passed 1,140
+assertions with zero failures, errors, or warnings and the exact 12 reviewed
+pre-R-4.3 list-ALTREP capability skips. The official runtime probe passed all
+39 cases; the old-R undefined-symbol policy passed; and a direct native smoke
+exercised the interpretation closure plus both phase seams, including full GC
+and terminal finalizer mutation, with all three cases passing. The 615-file
+frozen source manifest, source tarball, and final artifact hash-list SHA-256
+values are respectively
+`5d526d95129f1c52331fd0d8f0d5865bfdbcde5d974c9393f0ec7d9e6bc4b4b1`,
+`807ba60af1436343a7bd256dc4c86cd5eae8869a26766501b03668760c991a59`,
+and
+`49d5d7c4edf5c23419ab56956ce629b758a46257a85ddb0f599dd314d13d0ac1`.
+The generic current-R native-probe runner is deliberately not old-R evidence:
+it uses `tools::sha256sum`, which R 3.6 does not export. The official runtime
+probe, exact symbol audit, focused files, and direct registered smoke cover
+the relevant old-R paths without changing that current-R harness contract.
+
+The source-exact balanced benchmark also passes. The exact strict-GCC
+candidate is
+`.local/checks/domain-admission-refactor-perf-final-r1`; its source manifest
+and DSO SHA-256 values are
+`79e87e052ab3d0ae16da9e7d77e7dc2f03d3d5cd2a3efa17c4c964f7cc8712d8`
+and
+`527b4efd8ddfe8011bfae9bb5de881888cfb82ada6ba2bd8a79fe56043b91fac`.
+The exact `bf0b68f` comparison DSO SHA-256 is
+`60559bb2a36ac679e24ece3a85067e83cd94aa8b5f95cb26a00f1757e7e8f874`.
+Four pinned-CPU, single-thread AB/BA pairs used preheating, rotated workloads,
+400 batched samples, and independent allocation profiling. Outputs, opaque
+identity, and allocations agree exactly. No workload is more than two percent
+slower in both order strata. Median public-operation ratios range from about
+0.98x to 1.01x; the direct full-mask scalar seam is faster in both strata.
+Deterministic 100-call Callgrind total-instruction ratios are 1.00135x to
+1.00287x. The inlined admission body itself costs 2.8--3.4% more for scalar
+calls and 0.6--1.6% for bulk calls, but is only about 0.13--0.29% of the
+complete public operations. The factor-quantile wall profile is process-hash
+noisy; its stable package-self instruction ratio is 1.00544x. This bounded
+proof overhead is accepted: it creates no material public hot-path regression
+and no allocation, result, or identity change.
+
+The package-facing refactor has therefore met its focused freeze gates. These
+results do not replace the complete release-core, bounded-rchk,
+combined-memory, portability, compatibility, downstream, documentation, or
+release benchmark gates against the forthcoming immutable candidate.

@@ -504,6 +504,36 @@ test_that("interpretation closures are pinned and cover the rule set", {
   expect_identical(closure(all), all)
 })
 
+test_that("public Domain admission executes every interpretation mask", {
+  admission = get(
+    "C_test_domain_admission_reentry",
+    envir = asNamespace("paradox")
+  )
+  cases = list(
+    list(domain = p_dbl(0, 1), kind = 1L),
+    list(domain = p_int(0, 10), kind = 2L),
+    list(domain = p_fct(c("a", "b")), kind = 3L),
+    list(domain = p_lgl(), kind = 4L),
+    list(domain = p_uty(), kind = 5L)
+  )
+  no_hooks = list(NULL, NULL)
+
+  for (case in cases) {
+    for (mask in 0:63) {
+      expect_null(
+        .Call(
+          admission,
+          case$domain,
+          case$kind,
+          as.integer(mask),
+          no_hooks
+        ),
+        info = sprintf("kind %d, mask %d", case$kind, mask)
+      )
+    }
+  }
+})
+
 test_that("nested admission preserves every canonical Domain operation", {
   # Zero-level ParamFct stays a canonical, typed-empty Domain.
   empty_levels = p_fct(character())

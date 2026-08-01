@@ -7,10 +7,12 @@ file/count matrix.
 
 ## Current validation status
 
-The active immutable package-facing ref is
+The last immutable package-facing ref was
 `refs/paradox-release/candidate-20260801T051235Z` (`bf0b68f`), commit
 `bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
-`79873126ae3034962edaaad30745914115240be5`. Its exact
+`79873126ae3034962edaaad30745914115240be5`. It is now rejected diagnostic
+evidence because bounded rchk required the package-facing Domain-admission
+phase extraction below. Its exact
 `release-candidate-bf0b68f` run passed all nine `release-core` rows: all four
 harness gates, differential, API headers, dual-compiler C23, native release on
 R 4.6.1, and `runtime-supported`. The latter ran the complete suite at R
@@ -70,10 +72,32 @@ status never overrides an incomplete report. Validation stopped before
 semantic extraction and stale-policy comparison. The bounded replacement uses
 finite 3,000,000-state caps for both engines while retaining the 20-GiB
 address-space limit, serial execution, and 16-GiB host reserve. Another
-package-local exhaustion requires source simplification. The analyzer-input
-change is source-run authenticated, so the old native donor cannot seed the
-replacement discovery; use a fresh post-cap static/focused donor, and create
-another after the reviewed policy changes for final combined-memory evidence.
+package-local exhaustion requires source simplification. Fresh authenticated
+donor `release-candidate-bf0b68f-native-rchk-cap-r1` passed the complete
+static/focused lane. Replacement discovery
+`release-candidate-bf0b68f-rchk-discovery-r2` then exhausted both exact
+3,000,000-state analyses in `admit_public_domain_table_impl`, with 1,284
+analyzed functions and 3,061,641 reported main-analysis states. Raw bcheck,
+byte-empty maacheck, fficheck, and analyzer-identity SHA-256 values are
+`138a4bd282019744cbf13a63f5139fcc929a06d3e65c1c283be01ada58d84948`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+and
+`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
+The exact cap delta proves that further escalation would only defer the same
+failure.
+
+Package-facing source is reopened and no replacement ref is active. The one
+Domain adapter is split into four standard-C `static inline` phases beneath
+the same indexed-root owner. At analyzer `-O0` the orchestrator and phases
+contain 26, 27, 101, 91, and 95 CFG blocks, versus the old monolith's 330;
+both production compilers inline every phase. Exact ordering and one semantic
+owner remain unchanged. The focused strict/analyzer, current-R, actual-R-3.6,
+registered-probe, and balanced performance evidence in
+`design/domain-admission-receipt-compaction-plan.md` passes. Freeze the
+replacement next, then rerun complete release-core, create a fresh source
+donor, run a complete bounded discovery, review every changed block, commit
+the exact policy, create another donor, and run combined memory.
 
 The preceding immutable ref is rejected diagnostic candidate
 `refs/paradox-release/candidate-20260801T034415Z` (`fb2a37f`), commit

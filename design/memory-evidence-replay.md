@@ -35,6 +35,37 @@ verify copied modes and source stability. A passed functional native run whose
 manifest disagrees with its copied-tree receipt is not a replayable source
 donor and cannot be repaired in place.
 
+### 2026-08-01 bounded-state discovery
+
+The last release-core candidate, `bf0b68f`, is no longer active. Its first
+bounded discovery exhausted the former 800,000-state main and 1,000,000-state
+allocator analyses in `admit_public_domain_table_impl`. After independently
+authenticating finite 3,000,000-state caps for both engines, fresh donor
+`release-candidate-bf0b68f-native-rchk-cap-r1` passed the complete
+static/focused source lane and independent replay validation. Replacement
+discovery `release-candidate-bf0b68f-rchk-discovery-r2` nevertheless exhausted
+both larger caps in the same function. It analyzed 1,284 functions and
+reported 3,061,641 main-analysis states. Raw bcheck, byte-empty maacheck,
+fficheck, and analyzer-identity SHA-256 values are
+`138a4bd282019744cbf13a63f5139fcc929a06d3e65c1c283be01ada58d84948`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+and
+`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
+Neither exhausted report may seed policy.
+
+The exact cap delta proves that escalation would postpone rather than solve
+the path explosion. Package-facing source is reopened and the one Domain
+adapter is split into four standard-C `static inline` phases under the same
+indexed-root owner. At analyzer `-O0` no resulting function exceeds 101 CFG
+blocks; optimized GCC and Clang inline all four phases. This is analyzer
+structure, not a second semantic engine or runtime fallback. Freeze only after
+the focused lifetime, semantic, compiler/analyzer, current-R, R-3.6, probe,
+GCT, and performance gates in the Domain plan. Then create a fresh donor and
+run discovery at the unchanged 3,000,000/3,000,000 caps. A complete report
+still requires block-by-block review and an exact policy commit; combined
+memory then requires a new post-policy donor.
+
 ### 2026-07-27 provenance incident
 
 `release-candidate-dbbdcc1-native-release-a001` completed its package work, but
