@@ -12,8 +12,9 @@ native-release lane on R 4.6.1 passed. `runtime-supported` passed the complete
 suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 with 67,109
 passing assertions and all 145 skips matching exact reviewed capability rows.
 Together those lanes exercise every minor series from R 3.6 through current.
-Combined memory acceptance remains pending only until a fresh post-policy
-source donor and the all-mode run complete.**
+The first post-policy donor and combined run have clean executable results but
+one false retained scope description; a corrected-harness rerun remains
+required before combined-memory acceptance.**
 
 The exact coordinator is
 `.local/verify/runs/release-candidate-4e549f3-r1`. Its completion,
@@ -52,10 +53,34 @@ validation produced exact policy/block/rationale SHA-256 values
 `88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
-That exact source-bound policy is now the checked-in policy. Because committing
-it changes the source-run snapshot, combined memory must use a fresh
-post-policy donor; the successful discovery donor cannot be relabeled as that
-proof.
+That exact source-bound policy is now the checked-in policy. It and the pre-run
+release ledger that supplied the first donor snapshot were frozen in the
+package-facing-source-identical validation-tooling ref
+`refs/paradox-release/validation-tooling-20260801T112017Z`, commit
+`0507daff5cbd208781172b0f35ad405975c342f9`, tree
+`d36e26e5881ba443e09de79c5990f0fcb6c34f84`. Fresh post-policy donor
+`release-candidate-4e549f3-native-policy-r1` passed all six static/focused
+modes and independent source-run validation. Its completion, source-manifest,
+copied-source-tree, copied-modes-tree, and result SHA-256 values are
+`19bffadbcff762dedea96d4468a7f1481dd07b3be512d4a1fa1b24dfb81c56d4`,
+`3fdf8708a0dc94e5835238611ec179e1e6dc6b7e9d9c7329043250ca321c2f02`,
+`02ba4e8d2c0732d6a6e4413ea855c4257efeb6d11ed88f0acca471e3b34724ae`,
+`9baec8705159a41d00e7224b379822553f6709bf64efaa9711eb7d45621b06fc`,
+and
+`5c116f81689bf905b4ceafbe0cbda1c1d41c4b64488f5f00e3dbea1ed5c3192e`.
+
+Combined-memory run `.local/checks/release-candidate-4e549f3-memory-r1`
+executed GCT, Valgrind, and bounded rchk successfully. Valgrind's baseline,
+probes, and analyzer have zero errors, lost blocks, or suppressions; its
+focused ledger records eight selected files, 852 passes, and ten reviewed
+`skip_on_cran()` scopes. Rchk matches the exact 115-block, 396-UP, 30-PB
+policy. An independent evidence audit then found that the Valgrind scope
+receipt incorrectly called those ten scopes “eight,” confusing the selected
+file count with the scope count. The trusted ledger and executable evidence
+are correct, but the false receipt makes r1 diagnostic rather than release
+acceptance. The package-excluded harness and independent validator now bind
+the scope count to that ledger instead of hard-coding it. A fresh donor and
+all-mode run are required for the corrected harness.
 
 The preceding immutable candidate is rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit
@@ -968,8 +993,9 @@ green gates.
   active-source report, cover all 115 blocks through three disjoint independent
   source-review partitions, and commit its exact 396-UP/30-PB policy with no C
   defect found;
-- [ ] create the required fresh post-policy replayable donor and complete
-  combined memory analysis against `4e549f3`;
+- [ ] freeze the corrected Valgrind scope-receipt wording, create its fresh
+  replayable donor, and complete combined GCT, Valgrind, bounded-rchk, and
+  independent memory validation against `4e549f3`;
 - [ ] install one fresh candidate-owned
   `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
   reverse-dependency, repository, documentation, and benchmark gates;
@@ -1751,11 +1777,12 @@ cheatsheet, `mbo_config`, and target rows pass.
 The release decision is `pending`. Package-facing candidate `4e549f3` is
 frozen and its nine-task `release-core`, including every supported R minor,
 passes. Three disjoint independent source-review partitions cover its complete
-bounded-rchk report, and the exact generated policy is current. Combined memory now needs
-only a fresh post-policy source donor and one sealed all-mode run. The fresh
-downstream overlay and compatibility DAG, sealed benchmark, hosted Windows
-x86-64/macOS ARM64 gates, and user publication of prepared downstream
-branches/PRs, the release tag, and workflow all remain mandatory.
+bounded-rchk report and the exact generated policy is current. Combined memory
+still needs one corrected-harness donor/run because r1's scope receipt
+confused eight selected files with ten reviewed skip scopes. The fresh
+downstream overlay and compatibility DAG, documentation and sealed benchmark,
+hosted Windows x86-64/macOS ARM64 gates, and user publication of prepared
+downstream branches/PRs, the release tag, and workflow all remain mandatory.
 
 ## Historical rejected or superseded refs
 

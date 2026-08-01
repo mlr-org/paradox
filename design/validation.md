@@ -54,8 +54,34 @@ unchanged rationale catalog are now checked in. Their SHA-256 values are
 `88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
-Combined memory is not yet accepted: committing this source-bound policy
-requires one fresh post-policy native donor before the final all-mode run.
+They and the pre-run ledger used by the first memory attempt are frozen in the
+package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260801T112017Z`, commit
+`0507daff5cbd208781172b0f35ad405975c342f9`, tree
+`d36e26e5881ba443e09de79c5990f0fcb6c34f84`. Post-policy donor
+`release-candidate-4e549f3-native-policy-r1` passed all six static/focused
+modes and independent source-run validation. Its completion, source-manifest,
+source-tree, modes-tree, and result SHA-256 values are
+`19bffadbcff762dedea96d4468a7f1481dd07b3be512d4a1fa1b24dfb81c56d4`,
+`3fdf8708a0dc94e5835238611ec179e1e6dc6b7e9d9c7329043250ca321c2f02`,
+`02ba4e8d2c0732d6a6e4413ea855c4257efeb6d11ed88f0acca471e3b34724ae`,
+`9baec8705159a41d00e7224b379822553f6709bf64efaa9711eb7d45621b06fc`,
+and
+`5c116f81689bf905b4ceafbe0cbda1c1d41c4b64488f5f00e3dbea1ed5c3192e`.
+
+All-mode run `.local/checks/release-candidate-4e549f3-memory-r1` executed
+GCT, Valgrind, and bounded rchk successfully and initially passed independent
+replay. Valgrind reports zero errors, lost blocks, and suppressions; its
+analyzer ledger records eight files, 852 passes, and ten reviewed CRAN skips.
+Rchk matches all 115 reviewed blocks and the exact 396-UP/30-PB policy.
+
+An independent audit then found that the separate scope receipt incorrectly
+said “eight ... scopes,” confusing those eight selected files with the ten
+ledger-bound scopes. The execution and ledger are correct, but the false
+receipt makes r1 diagnostic evidence. The package-excluded correction removes
+the hard-coded count and changes the independent validator's exact expected
+line. Freeze the corrected harness, create a fresh donor, and rerun all three
+memory modes before claiming acceptance.
 
 The preceding immutable ref is rejected diagnostic candidate
 `refs/paradox-release/candidate-20260801T034415Z` (`fb2a37f`), commit
@@ -1072,8 +1098,13 @@ an argument, the suffixed bridge library and evidence path.
 Ordinarily one final validation-tooling commit is frozen before constructing a
 fresh named overlay, and documentation, full checks, and the benchmark reuse it
 read-only. The checked-in `paradox2` axis now pins the exact active `4e549f3`
-candidate; its fresh overlay and prepared gates remain to be constructed after
-this policy/ledger tooling commit is frozen. Tooling
+candidate. Validation tooling is frozen at
+`refs/paradox-release/validation-tooling-20260801T112017Z`, commit
+`0507daff5cbd208781172b0f35ad405975c342f9`, tree
+`d36e26e5881ba443e09de79c5990f0fcb6c34f84`; its diff from the candidate is
+package-facing-source identical. The corrected scope-receipt harness still
+needs its own frozen tooling commit before the fresh overlay and prepared gates
+are constructed. Historical tooling
 `fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
 `05cc4e5213c5ee73d0bc764c3d102c15e4c57141`, belongs to the historical
 `8797f11` documentation, broad-corpus, source-check, and benchmark stages. The

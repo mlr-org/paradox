@@ -91,12 +91,29 @@ SHA-256 values are respectively
 `88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
-Discovery alone is not memory acceptance. Once this source-bound policy and
-its package-facing-source-identical release ledger are committed, create a
-fresh static/focused native donor from that converged tooling commit and run
-the complete GCT/Valgrind/rchk memory gate. Combined memory acceptance remains
-pending; neither the release-core donor nor the isolated discovery may be
-relabeled as that result.
+Discovery alone is not memory acceptance. The policy and pre-run release
+ledger were frozen in package-facing-source-identical validation-tooling ref
+`refs/paradox-release/validation-tooling-20260801T112017Z`, commit
+`0507daff5cbd208781172b0f35ad405975c342f9`, tree
+`d36e26e5881ba443e09de79c5990f0fcb6c34f84`. Its donor
+`release-candidate-4e549f3-native-policy-r1` passed all six static/focused
+modes and independent source-run validation. Combined run
+`release-candidate-4e549f3-memory-r1` then executed GCT, Valgrind, and rchk
+successfully: Valgrind's baseline, probes, and analyzer contain zero errors,
+lost blocks, or suppressions, the focused analyzer has 852 passes and ten
+reviewed `skip_on_cran()` scopes, and rchk matches the exact 115-block,
+396-UP, 30-PB policy.
+
+An independent post-run audit found one retained-evidence wording error:
+`modes/valgrind/artifacts/scope.txt` called those ten scopes “eight”; eight is
+the number of selected test files. The trusted ledger and execution were
+correct, but an internally false receipt is not release evidence. The one-line
+package-excluded repair removes the brittle count and binds it to the trusted
+ledger; the independent validator's exact expected line changes with it.
+Therefore the r1 donor/run are semantically clean diagnostic evidence only.
+Freeze the corrected harness, create a fresh static/focused donor, and rerun
+the combined gate before claiming memory acceptance. Neither the release-core
+donor nor isolated discovery may be relabeled as that result.
 
 The preceding immutable package-facing candidate was
 `refs/paradox-release/candidate-20260801T051235Z`, commit

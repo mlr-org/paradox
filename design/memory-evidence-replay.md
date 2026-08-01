@@ -76,9 +76,28 @@ unchanged-rationale-catalog SHA-256 values
 `88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
-That exact policy is now checked in. Combined memory still requires a fresh
-post-policy donor because the donor snapshot must contain the selected policy;
-the successful discovery donor cannot seed the final all-mode run.
+That exact policy was checked in at package-facing-source-identical
+validation-tooling ref
+`refs/paradox-release/validation-tooling-20260801T112017Z`, commit
+`0507daff5cbd208781172b0f35ad405975c342f9`, tree
+`d36e26e5881ba443e09de79c5990f0fcb6c34f84`. Donor
+`release-candidate-4e549f3-native-policy-r1` passed all six static/focused
+modes and the independent source-run validator. Combined run
+`release-candidate-4e549f3-memory-r1` executed GCT, Valgrind, and bounded rchk
+successfully; its independently replayed executable evidence is clean.
+
+A separate evidence audit nevertheless found a false literal in its Valgrind
+scope receipt. The selected analyzer corpus contains eight test files but ten
+reviewed `skip_on_cran()` scopes. The trusted ledger correctly records
+`files=8`, `passed=852`, and `not_cran_scopes=10`; the scope receipt incorrectly
+said “eight ... scopes.” This does not indicate a package, memory, or analyzer
+failure, but an internally false receipt cannot own release acceptance.
+`scripts/memory-check` now omits the brittle count and explicitly binds source
+and count to the trusted ledger; the independent validator requires that exact
+corrected line. This package-excluded harness change invalidates current-
+harness replay of r1 by design. Freeze it, create a fresh post-correction
+static/focused donor, and run one fresh all-mode gate before claiming active
+memory acceptance.
 
 ### 2026-07-27 provenance incident
 

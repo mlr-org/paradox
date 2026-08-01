@@ -1486,6 +1486,26 @@ policy/block/rationale SHA-256 values are
 `88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
-The exact policy is now checked in. Combined memory awaits the mandatory fresh
-post-policy donor; this result does not replace the remaining portability,
-compatibility, downstream, documentation, or release-benchmark gates.
+The exact policy was checked in under package-facing-source-identical
+validation tooling
+`refs/paradox-release/validation-tooling-20260801T112017Z`, commit
+`0507daff5cbd208781172b0f35ad405975c342f9`, tree
+`d36e26e5881ba443e09de79c5990f0fcb6c34f84`. Mandatory fresh donor
+`release-candidate-4e549f3-native-policy-r1` passed all six static/focused
+modes and independent validation. Its completion/source-manifest/source-tree/
+modes-tree/result SHA-256 values are
+`19bffadbcff762dedea96d4468a7f1481dd07b3be512d4a1fa1b24dfb81c56d4`,
+`3fdf8708a0dc94e5835238611ec179e1e6dc6b7e9d9c7329043250ca321c2f02`,
+`02ba4e8d2c0732d6a6e4413ea855c4257efeb6d11ed88f0acca471e3b34724ae`,
+`9baec8705159a41d00e7224b379822553f6709bf64efaa9711eb7d45621b06fc`,
+and
+`5c116f81689bf905b4ceafbe0cbda1c1d41c4b64488f5f00e3dbea1ed5c3192e`.
+Combined run `.local/checks/release-candidate-4e549f3-memory-r1` executed GCT,
+Valgrind, and the exact 115-block/396-UP/30-PB rchk policy successfully.
+Valgrind is clean and its trusted ledger records eight selected files, 852
+passes, and ten reviewed CRAN skips. A later audit found that the separate
+scope receipt incorrectly described those ten scopes as eight. The package
+result is unaffected, but the false receipt makes r1 diagnostic. The
+package-excluded harness and validator now bind the count to the trusted
+ledger; one fresh corrected-harness donor/run remains before the refactor's
+memory obligation is complete.
