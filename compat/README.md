@@ -792,16 +792,36 @@ relation is `ExactDependency` are likewise not consumer-test or documentation
 targets, but are installed first from their authenticated checkout when their
 priority is selected. An exact provider must have `action = clone`; a skipped
 provider is rejected instead of silently falling back to pre-existing library
-state. The installer creates and independently validates a deterministic Git
-archive and retained extraction, installs from that extraction, and records
-the pak local-source identity plus package-content hashes immediately after
-installation and after all consumer dependency solves. The checkout verifier
-reauthenticates the commit and tree, reproduces the archive, revalidates the
-extraction, and checks that the installed package still has the same exact
-identity and content. This retains exact `rush` development APIs required by
-the prepared bbotk and mlr3tuning heads, while retaining `fastshap` only as a
-priority-two fallback for `mlr3summary` because CRAN archived it after the
-consumer snapshot was reviewed.
+state. Schema 5 serializes both shared-library and canonical-source writers
+with one private owner-authenticated lock below `.local/compat/`. Acquisition
+is deliberately nonblocking and never reaps an existing lock: an interrupted
+producer leaves evidence that a maintainer must authenticate and remove
+manually before retrying. The installer creates and validates each run's
+deterministic Git archive and retained extraction, then maps that exact tree to
+the stable plain source
+`.local/compat/exact-provider-sources-v1/<repository>-<commit>/source`. A later
+run revalidates and reuses that canonical source; it does not install from its
+run-local evidence path.
+
+Exact providers are currently restricted to pure-R packages without build or
+cleanup scripts. They are installed directly with `R CMD INSTALL`, without
+kept source references, and with the pinned commit instant supplied as the
+`Built` timestamp. The schema-5 ledgers bind the method, commit, tree, archive,
+timestamp, canonical `install_source`, and full installed-tree hashes before
+and after all consumer solves. Installed bytes may not retain an absolute
+run-directory, evidence-stage, or run-local source path. The canonical path is
+intentionally stable and explicitly recorded rather than treated as forbidden
+run-local provenance. The checkout verifier independently reauthenticates both
+extractions, reproduces the archive, validates the fixed `Built` metadata, and
+checks the installed endpoint unchanged. The P1/P2 equality check at the same
+shared library endpoint is the cross-run proof; this does not claim that R can
+produce reproducible lazy-load databases for every arbitrary package. Schema
+4 remains a read-only compatibility format for previously sealed evidence and
+retains its old pak-local fields; new dependency runs emit schema 5. This
+retains exact `rush` development APIs required by the prepared bbotk and
+mlr3tuning heads, while retaining `fastshap` only as a priority-two fallback
+for `mlr3summary` because CRAN archived it after the consumer snapshot was
+reviewed.
 The dependency installer also requires `--run-id ID`; its ledger and retained
 inputs are written to
 `.local/compat/runs/<run-id>/repository-dependencies-priority-<N>/` before the

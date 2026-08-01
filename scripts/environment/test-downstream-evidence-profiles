@@ -395,6 +395,18 @@ for binding in \
     fail "full-check immutability verifier omits: $binding"
 done
 
+dependency_producer=$ROOT/compat/install-repository-test-dependencies.R
+dependency_replay=$ROOT/compat/test-repositories-resumable.R
+dependency_bridge=$ROOT/compat/install-downstream-bridges
+
+# Schema 5 removes run-local pak provenance from newly produced exact-provider
+# installations.  Keep these bindings static and narrow: the real two-install
+# proof lives in test-repository-runner.R below this gate, while this section
+# catches accidental schema or orchestration drift without running a dependency
+# solve. Installed-byte checks bind absolute run/stage/source paths, not a bare
+# run-ID substring that could occur innocently in binary data.
+[[ $(grep -Fc '"5", "repository_dependencies"' "$dependency_producer") == 2 ]] ||
+  fail "dependency producer does not bind schema 5 in run and completion ledgers"
 for binding in \
     repository_runner_assert_git_environment \
     repository_runner_authenticate_consumer \
@@ -402,27 +414,77 @@ for binding in \
     repository_runner_validate_extraction \
     exact_provider_sources_sha256 \
     exact-provider-installs.tsv \
-    RemotePkgRef \
+    'exact_provider_sources$install_source' \
+    exact-provider-sources-v1 \
+    'install_method = "r_cmd_install_built_timestamp"' \
+    'install_source = install_source' \
+    '--built-timestamp=' \
+    '--without-keep.source' \
+    canonical_snapshot_timestamp \
+    'second > 59L' \
+    'offset_seconds <- hour * 3600 + minute * 60' \
+    acquire_dependency_writer_lock \
+    'compat_root, library, run_id, started_utc' \
+    .repository-dependency-writer-lock \
+    'writer_lock$release(strict = TRUE)' \
     initial_content_sha256 \
     final_content_sha256; do
-  grep -Fq "$binding" \
-    "$ROOT/compat/install-repository-test-dependencies.R" ||
-  fail "exact dependency provider authentication omits: $binding"
+  grep -Fq -- "$binding" "$dependency_producer" ||
+    fail "schema-5 exact-provider producer omits: $binding"
 done
 
+lock_acquire_line=$(grep -Fn 'writer_lock <- acquire_dependency_writer_lock' \
+  "$dependency_producer" | cut -d: -f1)
+provider_install_line=$(grep -Fn \
+  'install_exact_dependency_provider(repository, checkout)' \
+  "$dependency_producer" | cut -d: -f1)
+lock_release_line=$(grep -Fn 'writer_lock$release(strict = TRUE)' \
+  "$dependency_producer" | cut -d: -f1)
+[[ $lock_acquire_line =~ ^[0-9]+$ && $provider_install_line =~ ^[0-9]+$ &&
+   $lock_release_line =~ ^[0-9]+$ &&
+   $lock_acquire_line -lt $provider_install_line &&
+   $provider_install_line -lt $lock_release_line ]] ||
+  fail "dependency writer lock does not cover exact-provider installation"
+
 for binding in \
-    'if (!legacy_dependency)' \
-    'allow_empty = TRUE' \
+    'dependency_schema %in% c("4", "5")' \
+    'deterministic_provider_dependency <- identical(dependency_schema, "5")' \
+    'install_method !=' \
+    '"r_cmd_install_built_timestamp"' \
+    'exact_provider_sources$install_source' \
+    exact-provider-sources-v1 \
+    expected_install_source \
+    installed_tree_contains \
+    deterministic_built_timestamp \
+    'second > 59L' \
+    'offset_seconds <- offset_hour * 3600 + offset_minute * 60' \
     repository_runner_authenticate_consumer \
     repository_runner_validate_extraction \
     reproduced_archive_sha256 \
     exact-provider-installs.tsv \
-    RemotePkgRef \
     initial_content_sha256 \
     final_content_sha256; do
-  grep -Fq "$binding" \
-    "$ROOT/compat/test-repositories-resumable.R" ||
-  fail "dependency evidence replay omits: $binding"
+  grep -Fq -- "$binding" "$dependency_replay" ||
+    fail "schema-5 dependency evidence replay omits: $binding"
 done
+if grep -Fq '%z' "$dependency_producer" ||
+    grep -Fq '%z' "$dependency_replay"; then
+  fail "schema-5 timestamp conversion delegates UTC offsets to platform parsing"
+fi
+
+# Retained schema-4 evidence remains readable and keeps its old pak-local
+# columns.  New production is schema 5, but old sealed runs must not become
+# uninterpretable while the release ledger still cites them.
+for binding in \
+    '"remote_type", "remote_pkg_ref"' \
+    RemoteType RemotePkgRef \
+    'if (!legacy_dependency)' \
+    'allow_empty = TRUE'; do
+  grep -Fq -- "$binding" "$dependency_replay" ||
+    fail "schema-4 dependency evidence compatibility omits: $binding"
+done
+grep -Fq 'DEPENDENCY_SCHEMA == 4 || $DEPENDENCY_SCHEMA == 5' \
+  "$dependency_bridge" ||
+  fail "bridge installer does not accept both profile schemas 4 and 5"
 
 printf '%s\n' 'downstream evidence profile fixtures: PASS'

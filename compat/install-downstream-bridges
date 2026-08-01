@@ -402,7 +402,7 @@ DEPENDENCY_SCHEMA=$(awk -F '\t' '$1 == "schema" { if (seen++) exit 2; print $2 }
   "$DEPENDENCY_COMPLETION")
 if [[ $DEPENDENCY_SCHEMA == 3 && $EVIDENCE_PROFILE == default ]]; then
   DEPENDENCY_COMPLETION_KEYS=$'schema\nstage_kind\nrun_id\nmax_priority\nfinished_utc\nstatus\nresult_rows\nfailed_rows\nresult_sha256\ncheckout_postflight_sha256\nfallback_checkout_postflight_sha256\ndependency_library_content_after'
-elif [[ $DEPENDENCY_SCHEMA == 4 ]]; then
+elif [[ $DEPENDENCY_SCHEMA == 4 || $DEPENDENCY_SCHEMA == 5 ]]; then
   DEPENDENCY_COMPLETION_KEYS=$'schema\nstage_kind\nrun_id\nevidence_profile\nmax_priority\nfinished_utc\nstatus\nresult_rows\nfailed_rows\nresult_sha256\ncheckout_postflight_sha256\nfallback_checkout_postflight_sha256\ndependency_library_content_after'
 else
   fail "priority-one dependency preparation has an unsupported profile schema"

@@ -475,7 +475,9 @@ if (is.na(dependency_schema_index)) {
 dependency_schema <- dependency_probe$value[[dependency_schema_index]]
 legacy_dependency <- identical(dependency_schema, "3") &&
   identical(evidence_profile, "default")
-if (!legacy_dependency && !identical(dependency_schema, "4")) {
+deterministic_provider_dependency <- identical(dependency_schema, "5")
+if (!legacy_dependency &&
+    !(dependency_schema %in% c("4", "5"))) {
   stop("dependency evidence uses an unsupported profile schema", call. = FALSE)
 }
 if (legacy_dependency) {
@@ -653,7 +655,8 @@ if (!legacy_dependency) {
     exact_provider_sources_path,
     c(
       "repository", "package", "commit", "tree", "archive_sha256",
-      "tree_manifest_sha256", "source"
+      "tree_manifest_sha256", "source",
+      if (deterministic_provider_dependency) "install_source"
     ),
     allow_empty = TRUE,
     label = "exact dependency provider source ledger"
@@ -662,46 +665,192 @@ if (!legacy_dependency) {
     file.path(dependency_metadata, "exact-provider-installs.tsv"),
     "exact dependency provider installation ledger"
   )
-  exact_provider_installs <- repository_runner_read_tsv(
-    exact_provider_installs_path,
-    c(
-      "repository", "package", "version", "remote_type", "remote_pkg_ref",
-      "initial_content_sha256", "final_content_sha256"
-    ),
-    allow_empty = TRUE,
-    label = "exact dependency provider installation ledger"
-  )
-  if (!identical(
-      exact_provider_sources$repository,
-      dependency_selected$repository[provider_rows]
-    ) ||
-      !identical(
-        exact_provider_sources$package,
-        dependency_fallback_preflight$package[provider_preflight_index]
+  if (deterministic_provider_dependency) {
+    exact_provider_installs <- repository_runner_read_tsv(
+      exact_provider_installs_path,
+      c(
+        "repository", "package", "version", "install_method", "commit",
+        "tree", "archive_sha256", "built_timestamp",
+        "install_source", "initial_content_sha256", "final_content_sha256"
+      ),
+      allow_empty = TRUE,
+      label = "deterministic exact dependency provider installation ledger"
+    )
+    if (!identical(
+        exact_provider_sources$repository,
+        dependency_selected$repository[provider_rows]
       ) ||
-      !identical(
-        exact_provider_sources$commit,
-        dependency_snapshot$commit[provider_rows]
+        !identical(
+          exact_provider_sources$package,
+          dependency_fallback_preflight$package[provider_preflight_index]
+        ) ||
+        !identical(
+          exact_provider_sources$commit,
+          dependency_snapshot$commit[provider_rows]
+        ) ||
+        any(!grepl("^([0-9a-f]{40}|[0-9a-f]{64})$",
+          exact_provider_sources$tree)) ||
+        any(!grepl("^[0-9a-f]{64}$", c(
+          exact_provider_sources$archive_sha256,
+          exact_provider_sources$tree_manifest_sha256
+        ))) ||
+        !identical(exact_provider_installs$repository,
+          exact_provider_sources$repository) ||
+        !identical(exact_provider_installs$package,
+          exact_provider_sources$package) ||
+        any(exact_provider_installs$install_method !=
+          "r_cmd_install_built_timestamp") ||
+        !identical(exact_provider_installs$commit,
+          exact_provider_sources$commit) ||
+        !identical(exact_provider_installs$tree,
+          exact_provider_sources$tree) ||
+        !identical(exact_provider_installs$archive_sha256,
+          exact_provider_sources$archive_sha256) ||
+        !identical(exact_provider_installs$install_source,
+          exact_provider_sources$install_source) ||
+        any(!grepl("^[0-9a-f]{64}$", c(
+          exact_provider_installs$initial_content_sha256,
+          exact_provider_installs$final_content_sha256
+        ))) ||
+        !identical(exact_provider_installs$initial_content_sha256,
+          exact_provider_installs$final_content_sha256)) {
+      stop("deterministic exact dependency provider evidence is incomplete or malformed",
+        call. = FALSE)
+    }
+  } else {
+    exact_provider_installs <- repository_runner_read_tsv(
+      exact_provider_installs_path,
+      c(
+        "repository", "package", "version", "remote_type", "remote_pkg_ref",
+        "initial_content_sha256", "final_content_sha256"
+      ),
+      allow_empty = TRUE,
+      label = "exact dependency provider installation ledger"
+    )
+    if (!identical(
+        exact_provider_sources$repository,
+        dependency_selected$repository[provider_rows]
       ) ||
-      any(!grepl("^([0-9a-f]{40}|[0-9a-f]{64})$",
-        exact_provider_sources$tree)) ||
-      any(!grepl("^[0-9a-f]{64}$", c(
-        exact_provider_sources$archive_sha256,
-        exact_provider_sources$tree_manifest_sha256
-      ))) ||
-      !identical(exact_provider_installs$repository,
-        exact_provider_sources$repository) ||
-      !identical(exact_provider_installs$package,
-        exact_provider_sources$package) ||
-      any(exact_provider_installs$remote_type != "local") ||
-      any(!grepl("^[0-9a-f]{64}$", c(
-        exact_provider_installs$initial_content_sha256,
-        exact_provider_installs$final_content_sha256
-      ))) ||
-      !identical(exact_provider_installs$initial_content_sha256,
-        exact_provider_installs$final_content_sha256)) {
-    stop("exact dependency provider evidence is incomplete or malformed",
-      call. = FALSE)
+        !identical(
+          exact_provider_sources$package,
+          dependency_fallback_preflight$package[provider_preflight_index]
+        ) ||
+        !identical(
+          exact_provider_sources$commit,
+          dependency_snapshot$commit[provider_rows]
+        ) ||
+        any(!grepl("^([0-9a-f]{40}|[0-9a-f]{64})$",
+          exact_provider_sources$tree)) ||
+        any(!grepl("^[0-9a-f]{64}$", c(
+          exact_provider_sources$archive_sha256,
+          exact_provider_sources$tree_manifest_sha256
+        ))) ||
+        !identical(exact_provider_installs$repository,
+          exact_provider_sources$repository) ||
+        !identical(exact_provider_installs$package,
+          exact_provider_sources$package) ||
+        any(exact_provider_installs$remote_type != "local") ||
+        any(!grepl("^[0-9a-f]{64}$", c(
+          exact_provider_installs$initial_content_sha256,
+          exact_provider_installs$final_content_sha256
+        ))) ||
+        !identical(exact_provider_installs$initial_content_sha256,
+          exact_provider_installs$final_content_sha256)) {
+      stop("exact dependency provider evidence is incomplete or malformed",
+        call. = FALSE)
+    }
+  }
+
+  deterministic_built_timestamp <- function(value) {
+    if (length(value) != 1L || is.na(value) ||
+        !grepl(
+          "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$",
+          value
+        )) {
+      stop("exact dependency provider commit date is not canonical",
+        call. = FALSE)
+    }
+    local_text <- substr(value, 1L, 19L)
+    local_time <- strptime(
+      local_text,
+      format = "%Y-%m-%dT%H:%M:%S",
+      tz = "UTC"
+    )
+    second <- suppressWarnings(as.integer(substr(local_text, 18L, 19L)))
+    if (is.na(second) || second > 59L || is.na(local_time) || !identical(
+        format(local_time, "%Y-%m-%dT%H:%M:%S", tz = "UTC"),
+        local_text)) {
+      stop("exact dependency provider commit date is not a real calendar time",
+        call. = FALSE)
+    }
+    offset_seconds <- 0
+    offset_sign <- "+"
+    if (!endsWith(value, "Z")) {
+      size <- nchar(value)
+      offset_sign <- substr(value, 20L, 20L)
+      offset_hour <- suppressWarnings(
+        as.integer(substr(value, size - 4L, size - 3L))
+      )
+      offset_minute <- suppressWarnings(
+        as.integer(substr(value, size - 1L, size))
+      )
+      if (is.na(offset_hour) || is.na(offset_minute) ||
+          offset_hour > 23L || offset_minute > 59L) {
+        stop("exact dependency provider commit date has an invalid offset",
+          call. = FALSE)
+      }
+      offset_seconds <- offset_hour * 3600 + offset_minute * 60
+    }
+    instant <- as.POSIXct(local_time, tz = "UTC")
+    if (identical(offset_sign, "+")) {
+      instant <- instant - offset_seconds
+    } else {
+      instant <- instant + offset_seconds
+    }
+    if (length(instant) != 1L || is.na(instant)) {
+      stop("exact dependency provider commit date cannot be parsed",
+        call. = FALSE)
+    }
+    format(instant, "%Y-%m-%d %H:%M:%S UTC", tz = "UTC")
+  }
+
+  installed_tree_contains <- function(path, needles) {
+    needles <- unique(needles[nzchar(needles)])
+    if (!length(needles)) return(FALSE)
+    patterns <- lapply(enc2utf8(needles), charToRaw)
+    overlap <- max(vapply(patterns, length, integer(1L))) - 1L
+    entries <- repository_runner_entries(
+      path,
+      "installed exact dependency provider",
+      allow_symlinks = FALSE
+    )
+    files <- entries$absolute[entries$type == "file"]
+    if (!length(files)) return(FALSE)
+    for (file in files) {
+      connection <- file(file, open = "rb")
+      on.exit(close(connection), add = TRUE)
+      carry <- raw()
+      repeat {
+        chunk <- readBin(connection, what = "raw", n = 1024L * 1024L)
+        if (!length(chunk)) break
+        bytes <- c(carry, chunk)
+        if (any(vapply(patterns, function(pattern) {
+          length(grepRaw(pattern, bytes, fixed = TRUE)) != 0L
+        }, logical(1L)))) {
+          close(connection)
+          on.exit(NULL, add = FALSE)
+          return(TRUE)
+        }
+        carry <- if (overlap > 0L && length(bytes) > overlap) {
+          tail(bytes, overlap)
+        } else {
+          bytes
+        }
+      }
+      close(connection)
+      on.exit(NULL, add = FALSE)
+    }
+    FALSE
   }
   provider_directory <- repository_runner_require_directory(
     file.path(dependency_stage, "exact-provider-sources"),
@@ -742,6 +891,78 @@ if (!legacy_dependency) {
       authentication,
       expected_source
     )
+    expected_install_source <- NULL
+    installed_source_tree <- NULL
+    if (deterministic_provider_dependency) {
+      canonical_provider_root_path <- file.path(
+        root, ".local", "compat", "exact-provider-sources-v1"
+      )
+      canonical_provider_root <- repository_runner_require_directory(
+        canonical_provider_root_path,
+        "canonical exact dependency provider source root"
+      )
+      if (!identical(canonical_provider_root, canonical_provider_root_path)) {
+        stop("canonical exact dependency provider source root is indirect",
+          call. = FALSE)
+      }
+      canonical_generation_path <- file.path(
+        canonical_provider_root,
+        paste0(repository, "-", dependency_snapshot$commit[[selection_index]])
+      )
+      canonical_generation <- repository_runner_require_directory(
+        canonical_generation_path,
+        "canonical exact dependency provider generation"
+      )
+      if (!identical(canonical_generation, canonical_generation_path)) {
+        stop("canonical exact dependency provider generation is indirect",
+          call. = FALSE)
+      }
+      expected_install_source_path <- file.path(canonical_generation, "source")
+      expected_install_source <- repository_runner_require_directory(
+        expected_install_source_path,
+        "canonical exact dependency provider installation source"
+      )
+      if (!identical(expected_install_source, expected_install_source_path)) {
+        stop("canonical exact dependency provider installation source is indirect",
+          call. = FALSE)
+      }
+      canonical_inventory <- list.files(
+        canonical_generation,
+        all.files = TRUE,
+        full.names = FALSE,
+        recursive = FALSE,
+        no.. = TRUE
+      )
+      canonical_entries <- repository_runner_entries(
+        canonical_generation,
+        "canonical exact dependency provider generation",
+        allow_symlinks = TRUE
+      )
+      nonsymbolic <- canonical_entries$type != "symlink"
+      canonical_modes <- c(
+        as.integer(file.info(
+          canonical_generation,
+          extra_cols = FALSE
+        )$mode),
+        strtoi(canonical_entries$mode[nonsymbolic], base = 8L)
+      )
+      regular_entries <- canonical_entries$type == "file"
+      if (!identical(canonical_inventory, "source") ||
+          anyNA(canonical_modes) ||
+          any(bitwAnd(canonical_modes, 146L) != 0L) ||
+          anyNA(canonical_entries$hard_links[regular_entries]) ||
+          any(canonical_entries$hard_links[regular_entries] != 1)) {
+        stop(
+          "canonical exact dependency provider generation is writable, ",
+          "aliased, or has an unexpected inventory",
+          call. = FALSE
+        )
+      }
+      installed_source_tree <- repository_runner_validate_extraction(
+        authentication,
+        expected_install_source
+      )
+    }
     reproduced_archive_sha256 <- local({
       path <- repository_runner_tempfile(
         "exact-provider-replay-", fileext = ".tar"
@@ -754,48 +975,136 @@ if (!legacy_dependency) {
         file.path(expected_source, "DESCRIPTION"),
         "exact dependency provider source DESCRIPTION"
       ),
-      fields = c("Package", "Version")
+      fields = c("Package", "Version", "NeedsCompilation")
     )
+    source_needs_compilation <- unname(
+      source_description[[1L, "NeedsCompilation"]]
+    )
+    source_for_build_contract <- if (deterministic_provider_dependency) {
+      expected_install_source
+    } else {
+      expected_source
+    }
+    source_src <- file.path(source_for_build_contract, "src")
+    source_scripts <- file.path(
+      source_for_build_contract,
+      c("configure", "configure.win", "cleanup", "cleanup.win")
+    )
+    if (deterministic_provider_dependency &&
+        ((!is.na(source_needs_compilation) &&
+          !identical(tolower(source_needs_compilation), "no")) ||
+        file.exists(source_src) || dir.exists(source_src) ||
+        repository_runner_is_symbolic(source_src) ||
+        any(file.exists(source_scripts)) ||
+        any(dir.exists(source_scripts)) ||
+        any(vapply(
+          source_scripts,
+          repository_runner_is_symbolic,
+          logical(1L)
+        )))) {
+      stop(
+        "deterministic exact dependency provider is not a pure-R package",
+        call. = FALSE
+      )
+    }
     installed_path <- repository_runner_require_directory(
       file.path(dependency_library,
         exact_provider_installs$package[[provider_index]]),
       "installed exact dependency provider"
     )
-    installed_description <- read.dcf(
-      repository_runner_require_file(
-        file.path(installed_path, "DESCRIPTION"),
-        "installed exact dependency provider DESCRIPTION"
-      ),
-      fields = c("Package", "Version", "RemoteType", "RemotePkgRef")
+    installed_description_path <- repository_runner_require_file(
+      file.path(installed_path, "DESCRIPTION"),
+      "installed exact dependency provider DESCRIPTION"
     )
-    expected_installed_description <- c(
-      Package = unname(source_description[[1L, "Package"]]),
-      Version = unname(source_description[[1L, "Version"]]),
-      RemoteType = "local",
-      RemotePkgRef = paste0("local::", expected_source)
-    )
-    if (!identical(exact_provider_sources$source[[provider_index]],
-          expected_source) ||
-        !identical(repository_runner_sha256(archive),
-          exact_provider_sources$archive_sha256[[provider_index]]) ||
-        !identical(reproduced_archive_sha256,
-          exact_provider_sources$archive_sha256[[provider_index]]) ||
-        !identical(repository_runner_sha256(tree_manifest),
-          exact_provider_sources$tree_manifest_sha256[[provider_index]]) ||
-        !identical(retained_tree, observed_tree) ||
-        !identical(exact_provider_installs$package[[provider_index]],
-          expected_installed_description[["Package"]]) ||
-        !identical(exact_provider_installs$version[[provider_index]],
-          expected_installed_description[["Version"]]) ||
-        !identical(exact_provider_installs$remote_pkg_ref[[provider_index]],
-          expected_installed_description[["RemotePkgRef"]]) ||
-        !identical(unname(installed_description[1L,
-          names(expected_installed_description)]),
-          unname(expected_installed_description)) ||
-        !identical(compat_tree_content_sha256(installed_path),
-          exact_provider_installs$final_content_sha256[[provider_index]])) {
-      stop("retained exact dependency provider evidence disagrees",
-        call. = FALSE)
+    if (deterministic_provider_dependency) {
+      installed_description <- read.dcf(installed_description_path)
+      expected_built_timestamp <- deterministic_built_timestamp(
+        dependency_snapshot$commit_date[[selection_index]]
+      )
+      expected_installed_description <- c(
+        Package = unname(source_description[[1L, "Package"]]),
+        Version = unname(source_description[[1L, "Version"]]),
+        Built = paste0(
+          "R ", as.character(getRversion()), "; ; ",
+          expected_built_timestamp, "; ", .Platform$OS.type
+        )
+      )
+      forbidden_fields <- c("RemoteType", "RemotePkgRef", "Packaged")
+      if (any(forbidden_fields %in% colnames(installed_description)) ||
+          !all(names(expected_installed_description) %in%
+            colnames(installed_description)) ||
+          !identical(exact_provider_sources$source[[provider_index]],
+            expected_source) ||
+          !identical(exact_provider_sources$install_source[[provider_index]],
+            expected_install_source) ||
+          !identical(repository_runner_sha256(archive),
+            exact_provider_sources$archive_sha256[[provider_index]]) ||
+          !identical(reproduced_archive_sha256,
+            exact_provider_sources$archive_sha256[[provider_index]]) ||
+          !identical(repository_runner_sha256(tree_manifest),
+            exact_provider_sources$tree_manifest_sha256[[provider_index]]) ||
+          !identical(retained_tree, observed_tree) ||
+          !identical(installed_source_tree, observed_tree) ||
+          !identical(exact_provider_installs$package[[provider_index]],
+            expected_installed_description[["Package"]]) ||
+          !identical(exact_provider_installs$version[[provider_index]],
+            expected_installed_description[["Version"]]) ||
+          !identical(exact_provider_installs$commit[[provider_index]],
+            exact_provider_sources$commit[[provider_index]]) ||
+          !identical(exact_provider_installs$tree[[provider_index]],
+            exact_provider_sources$tree[[provider_index]]) ||
+          !identical(exact_provider_installs$archive_sha256[[provider_index]],
+            exact_provider_sources$archive_sha256[[provider_index]]) ||
+          !identical(exact_provider_installs$install_source[[provider_index]],
+            expected_install_source) ||
+          !identical(exact_provider_installs$built_timestamp[[provider_index]],
+            expected_built_timestamp) ||
+          !identical(unname(installed_description[1L,
+            names(expected_installed_description)]),
+            unname(expected_installed_description)) ||
+          installed_tree_contains(
+            installed_path,
+            c(dirname(dependency_stage), dependency_stage, expected_source)
+          ) ||
+          !identical(compat_tree_content_sha256(installed_path),
+            exact_provider_installs$final_content_sha256[[provider_index]])) {
+        stop("retained deterministic exact dependency provider evidence disagrees",
+          call. = FALSE)
+      }
+    } else {
+      installed_description <- read.dcf(
+        installed_description_path,
+        fields = c("Package", "Version", "RemoteType", "RemotePkgRef")
+      )
+      expected_installed_description <- c(
+        Package = unname(source_description[[1L, "Package"]]),
+        Version = unname(source_description[[1L, "Version"]]),
+        RemoteType = "local",
+        RemotePkgRef = paste0("local::", expected_source)
+      )
+      if (!identical(exact_provider_sources$source[[provider_index]],
+            expected_source) ||
+          !identical(repository_runner_sha256(archive),
+            exact_provider_sources$archive_sha256[[provider_index]]) ||
+          !identical(reproduced_archive_sha256,
+            exact_provider_sources$archive_sha256[[provider_index]]) ||
+          !identical(repository_runner_sha256(tree_manifest),
+            exact_provider_sources$tree_manifest_sha256[[provider_index]]) ||
+          !identical(retained_tree, observed_tree) ||
+          !identical(exact_provider_installs$package[[provider_index]],
+            expected_installed_description[["Package"]]) ||
+          !identical(exact_provider_installs$version[[provider_index]],
+            expected_installed_description[["Version"]]) ||
+          !identical(exact_provider_installs$remote_pkg_ref[[provider_index]],
+            expected_installed_description[["RemotePkgRef"]]) ||
+          !identical(unname(installed_description[1L,
+            names(expected_installed_description)]),
+            unname(expected_installed_description)) ||
+          !identical(compat_tree_content_sha256(installed_path),
+            exact_provider_installs$final_content_sha256[[provider_index]])) {
+        stop("retained exact dependency provider evidence disagrees",
+          call. = FALSE)
+      }
     }
   }
   exact_provider_hashes_match <- identical(

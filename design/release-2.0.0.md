@@ -10,8 +10,10 @@
 22, the complete API-header matrix, all 33 differential cases, and the full
 native-release lane on R 4.6.1 passed. `runtime-supported` passed the complete
 suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 with 67,109
-passing assertions and all 145 skips matching exact reviewed capability rows.
-Together those lanes exercise every minor series from R 3.6 through current.
+passing assertions and 145 exact reviewed skips: 131 capability-result skips
+plus 14 guarded whole-file skips for the two ConfigSpace files across seven
+runtimes. Together those lanes exercise every minor series from R 3.6 through
+current.
 The corrected-harness donor and combined GCT/Valgrind/rchk run also pass, so
 combined-memory acceptance is complete.**
 
@@ -143,10 +145,41 @@ The refreshed dependency profile also pins Rush commit
 `939886b43d5e48afacf2f0e1b06a45ab3c006e19`, tree
 `ca34e7a22145816437161e79a84b7b7a0eb1a0f4`, as an exact transitive provider
 for the prepared bbotk/mlr3tuning heads. It is not a Paradox consumer. The
-schema-4 dependency producer and verifier prove the exact Git archive,
-extraction, pak local-source identity, and unchanged installed-package content;
-this is necessary because multiple Rush commits share version
-`1.2.1.9000`. Legacy schema-3 evidence retains its old selection contract.
+schema-5 producer and independent verifier authenticate each run's Git archive
+and extraction, map those exact bytes to one commit-keyed read-only canonical
+source, and admit only pure-R exact providers without configure or cleanup
+scripts. One nonblocking owner-authenticated lock below `.local/compat/`
+serializes both the canonical registry and shared dependency library; an
+interrupted retained lock is never reaped automatically. Direct
+`R CMD INSTALL --without-keep.source` uses the commit instant as a fixed
+`Built` timestamp. Retained evidence binds both source trees, method, metadata,
+absence of run-local absolute paths, and unchanged full installed-package
+content. The final P1/P2 boundary must also reproduce one exact full shared-
+library endpoint hash. This is necessary because multiple Rush commits share
+version `1.2.1.9000`. Schema 4 remains readable only for sealed historical
+evidence; new runs emit schema 5. Legacy schema-3 evidence retains its old
+selection contract.
+
+The schema-4 diagnostic preparations
+`release-candidate-4e549f3-final-p1-55e8403-r1` and
+`release-candidate-4e549f3-final-p2-55e8403-r1` both completed, but cannot seed
+candidate installation. Their shared-library boundary was
+`6b8682ac796c7c1d24bad544fa210db7eb031ba05558fd69a4e861a98942ba7d`
+to
+`fb8a332efb981da38181db83c1ed05a4b574be8df31e625953980267c6bd955a`
+to
+`1ec7d01daa2cd4be985c7157cbc86580651488571edb362e97b5a85d93e4bd55`:
+Pak embedded run-local Rush provenance and build times, making the P1 proof
+stale before P2 completed. They are harness diagnostic evidence only.
+
+The active direct-child portability companion is
+`refs/paradox-release/portability-harness-7b4440b`, commit
+`7b4440b1b2e9fb75606da6f4bc8eb3cbf939bf6c`, tree
+`850d8165877f4206294886fe046b995ae414bae0`. Its sole changed path is
+`.github/workflows/r-cmd-check.yml`, SHA-256
+`334699d5fbbaed85962ab079568d1cefb3772bbd468038772508ee66bdae0070`.
+It is package-facing-source identical to candidate `4e549f3`; hosted dispatch
+and publication are manual user actions.
 
 The preceding immutable candidate is rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit

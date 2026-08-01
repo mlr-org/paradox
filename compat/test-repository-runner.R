@@ -1,8 +1,9 @@
 #!/usr/bin/env Rscript
 
-# Synthetic-only regression gate for the reusable repository row engine.  It
-# deliberately uses three tiny local repositories and tiny fake libraries; it
-# never fingerprints or runs a real consumer/candidate installation.
+# Focused regression gate for the reusable repository row engine.  It uses
+# tiny local repositories and fake libraries except for one bounded repeated
+# installation of the pinned exact provider; it never runs a real consumer or
+# candidate.
 
 if (!identical(Sys.getenv("PARADOX_ACTIVE_ROOT", unset = ""),
     normalizePath(getwd(), winslash = "/", mustWork = TRUE))) {
@@ -175,6 +176,247 @@ if (!identical(auth_result$status, 0L) || !identical(trimws(auth_result$stdout),
     "candidate_git_authentication=passed")) {
   stop("five-argument detached candidate authentication failed: ",
     auth_result$stderr, call. = FALSE)
+}
+
+# Reproduce the exact-provider property that matters across independent
+# dependency runs.  Two run-local evidence paths authenticate the same pinned
+# Git tree.  Both must resolve to one repository/commit-keyed installation
+# source, and the commit timestamp fixes the only intentional time-bearing
+# Installed DESCRIPTION field.  Differing HOME, TMPDIR, and run-local source
+# paths must therefore still produce byte-identical installs at the same
+# shared-library endpoint.
+# Use the release profile's real, pure-R exact provider.  Generic R lazy-load
+# databases are not promised to be reproducible for arbitrary packages, while
+# this is the exact tree whose repeatability the P1/P2 dependency boundary
+# requires and whose source restrictions the producer checks.
+provider_consumer_root <- normalizePath(
+  file.path(root, ".local", "compat", "github"),
+  winslash = "/",
+  mustWork = TRUE
+)
+provider_repository <- "rush"
+provider_checkout <- file.path(provider_consumer_root, provider_repository)
+provider_origin <- "https://github.com/mlr-org/rush.git"
+provider_commit <- "939886b43d5e48afacf2f0e1b06a45ab3c006e19"
+provider_tree <- "ca34e7a22145816437161e79a84b7b7a0eb1a0f4"
+provider_commit_date <- "2026-07-28T11:15:25+02:00"
+observed_commit_date <- git_run(provider_checkout,
+  c("show", "-s", "--format=%cI", provider_commit))
+if (!identical(observed_commit_date, provider_commit_date)) {
+  stop("exact-provider fixture commit timestamp is not fixed: ",
+    observed_commit_date, call. = FALSE)
+}
+provider_authentication <- repository_runner_authenticate_consumer(
+  list(git = git, consumer_root = provider_consumer_root),
+  data.frame(
+    repository = provider_repository,
+    origin = provider_origin,
+    commit = provider_commit,
+    tree = provider_tree,
+    stringsAsFactors = FALSE
+  )
+)
+
+provider_runs <- file.path(scratch, c("provider-run-a", "provider-run-b"))
+if (!all(vapply(provider_runs, dir.create, logical(1L)))) {
+  stop("could not create exact-provider run fixtures", call. = FALSE)
+}
+provider_archives <- file.path(provider_runs, "provider.tar")
+archive_receipts <- lapply(provider_archives, function(path) {
+  repository_runner_create_archive(provider_authentication, path)
+})
+if (!identical(
+    vapply(archive_receipts, `[[`, character(1L), "sha256"),
+    rep(archive_receipts[[1L]]$sha256, 2L)
+  )) {
+  stop("equivalent exact-provider checkouts produced different archives",
+    call. = FALSE)
+}
+provider_extractions <- Map(function(receipt, parent) {
+  repository_runner_extract_archive(receipt$path, parent, "retained")$source
+}, archive_receipts, provider_runs)
+provider_run_trees <- lapply(provider_extractions, function(source) {
+  repository_runner_validate_extraction(provider_authentication, source)
+})
+if (identical(provider_extractions[[1L]], provider_extractions[[2L]]) ||
+    !identical(provider_run_trees[[1L]], provider_run_trees[[2L]])) {
+  stop("run-local exact-provider sources are not distinct authenticated equivalents",
+    call. = FALSE)
+}
+
+canonical_provider_parent <- file.path(
+  scratch, "exact-provider-sources-v1"
+)
+dir.create(canonical_provider_parent)
+canonical_provider_key <- paste0(provider_repository, "-", provider_commit)
+canonical_provider_directory <- file.path(
+  canonical_provider_parent, canonical_provider_key
+)
+canonicalize_provider <- function(archive, run_tree) {
+  if (!dir.exists(canonical_provider_directory)) {
+    source <- repository_runner_extract_archive(
+      archive, canonical_provider_parent, canonical_provider_key
+    )$source
+  } else {
+    source <- repository_runner_require_directory(
+      file.path(canonical_provider_directory, "source"),
+      "synthetic canonical exact-provider source"
+    )
+  }
+  canonical_tree <- repository_runner_validate_extraction(
+    provider_authentication, source
+  )
+  if (!identical(canonical_tree, run_tree)) {
+    stop("canonical exact-provider source differs from run-local evidence",
+      call. = FALSE)
+  }
+  source
+}
+provider_install_sources <- Map(
+  canonicalize_provider,
+  provider_archives,
+  provider_run_trees
+)
+canonical_provider_source <- normalizePath(
+  file.path(canonical_provider_directory, "source"),
+  winslash = "/",
+  mustWork = TRUE
+)
+canonical_chain <- c(
+  canonical_provider_parent,
+  canonical_provider_directory,
+  canonical_provider_source
+)
+if (!identical(
+      unname(unlist(provider_install_sources, use.names = FALSE)),
+      rep(canonical_provider_source, 2L)
+    ) ||
+    any(canonical_provider_source %in% provider_extractions) ||
+    !identical(basename(dirname(canonical_provider_source)),
+      canonical_provider_key) ||
+    any(vapply(canonical_chain, repository_runner_is_symbolic, logical(1L)))) {
+  stop("exact-provider installation source is not one plain canonical path",
+    call. = FALSE)
+}
+
+r_command <- file.path(root, ".local", "toolchain", "bin", "R")
+repository_runner_require_file(r_command, "repository-local R executable")
+provider_library <- file.path(scratch, "provider-library")
+provider_libraries <- rep(provider_library, 2L)
+provider_homes <- file.path(scratch, c("provider-home-a", "provider-home-b"))
+provider_temps <- file.path(scratch, c("provider-tmp-a", "provider-tmp-b"))
+for (path in unique(c(provider_libraries, provider_homes, provider_temps))) {
+  dir.create(path)
+}
+provider_dependency_library <- normalizePath(
+  file.path(root, ".local", "compat", "R", "library-dependencies"),
+  winslash = "/",
+  mustWork = TRUE
+)
+provider_built_timestamp <- "2026-07-28 09:15:25 UTC"
+provider_install_logs <- file.path(provider_runs, "install.log")
+provider_hashes <- character(length(provider_libraries))
+provider_run_path_leaks <- logical(length(provider_libraries))
+provider_built_fields <- character(length(provider_libraries))
+installed_tree_contains <- function(path, needle) {
+  pattern <- charToRaw(enc2utf8(needle))
+  files <- list.files(path, all.files = TRUE, full.names = TRUE,
+    recursive = TRUE, include.dirs = FALSE, no.. = TRUE)
+  any(vapply(files, function(file) {
+    size <- file.info(file, extra_cols = FALSE)$size
+    connection <- file(file, open = "rb")
+    on.exit(close(connection), add = TRUE)
+    bytes <- readBin(connection, what = "raw", n = size)
+    length(grepRaw(pattern, bytes, fixed = TRUE)) != 0L
+  }, logical(1L)))
+}
+for (index in seq_along(provider_libraries)) {
+  library <- normalizePath(provider_libraries[[index]], winslash = "/",
+    mustWork = TRUE)
+  library_path <- paste(c(library, provider_dependency_library),
+    collapse = .Platform$path.sep)
+  install_environment <- c(
+    HOME = provider_homes[[index]],
+    USER = "paradox",
+    LOGNAME = "paradox",
+    PATH = restricted_child_path,
+    TMPDIR = provider_temps[[index]],
+    R_LIBS = library_path,
+    R_LIBS_USER = library_path,
+    R_LIBS_SITE = "",
+    R_ENVIRON = "/dev/null",
+    R_ENVIRON_USER = "/dev/null",
+    R_PROFILE = "/dev/null",
+    R_PROFILE_USER = "/dev/null",
+    R_TESTS = "",
+    R_MAKEVARS_USER = activated_makevars,
+    LC_ALL = "C.UTF-8",
+    LANG = "C.UTF-8",
+    LANGUAGE = "C",
+    TZ = "UTC"
+  )
+  install <- processx::run(
+    r_command,
+    c(
+      "CMD", "INSTALL", "--preclean", "--clean", "--no-multiarch",
+      "--use-vanilla", "--without-keep.source",
+      paste0("--built-timestamp=", provider_built_timestamp),
+      paste0("--library=", library),
+      provider_install_sources[[index]]
+    ),
+    wd = provider_runs[[index]],
+    env = install_environment,
+    stdout = provider_install_logs[[index]],
+    stderr = "2>&1",
+    error_on_status = FALSE,
+    cleanup_tree = TRUE
+  )
+  if (!identical(install$status, 0L)) {
+    stop("canonical exact-provider installation failed: ",
+      paste(readLines(provider_install_logs[[index]], warn = FALSE),
+        collapse = "\n"),
+      call. = FALSE)
+  }
+  installed_provider <- repository_runner_require_directory(
+    file.path(library, provider_repository),
+    "installed exact provider reproducibility target"
+  )
+  provider_hashes[[index]] <- compat_tree_content_sha256(installed_provider)
+  provider_run_path_leaks[[index]] <- any(vapply(
+    provider_extractions,
+    function(run_source) installed_tree_contains(installed_provider, run_source),
+    logical(1L)
+  ))
+  installed_description <- read.dcf(repository_runner_require_file(
+    file.path(installed_provider, "DESCRIPTION"),
+    "installed exact-provider DESCRIPTION"
+  ))
+  provider_built_fields[[index]] <- if (
+      "Built" %in% colnames(installed_description)) {
+    installed_description[[1L, "Built"]]
+  } else {
+    ""
+  }
+  if (any(c("RemoteType", "RemotePkgRef", "Packaged") %in%
+      colnames(installed_description))) {
+    stop("exact-provider install has unstable provenance metadata",
+      call. = FALSE)
+  }
+}
+expected_provider_built <- paste0(
+  "R ", as.character(getRversion()), "; ; ",
+  provider_built_timestamp, "; ", .Platform$OS.type
+)
+if (!identical(provider_built_fields, rep(expected_provider_built, 2L)) ||
+    !identical(provider_hashes, rep(provider_hashes[[1L]], 2L)) ||
+    any(provider_run_path_leaks)) {
+  stop(
+    "exact-provider installed trees are path-dependent or retain run-local paths: ",
+    paste(provider_hashes, collapse = ","), "; leaks=",
+    paste(provider_run_path_leaks, collapse = ","), "; Built=",
+    paste(provider_built_fields, collapse = "|"),
+    call. = FALSE
+  )
 }
 
 candidate_primary <- file.path(scratch, "candidate-primary")
@@ -691,6 +933,7 @@ cat("repository_runner_selftest=passed\n",
   "protected_paths=", length(call_counts), "\n",
   "full_hash_boundaries_per_path=2\n",
   "detached_candidate_authentication=passed\n",
+  "exact_provider_reproducibility=passed\n",
   "cache_isolation=passed\n",
   "semantic_counts=passed\n",
   "child_multi_failure_counts=passed\n",

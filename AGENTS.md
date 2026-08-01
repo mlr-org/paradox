@@ -34,11 +34,13 @@ passes, exhaustive cppcheck, the symbol audit, full tests, a clean
 
 The same run's `runtime-supported` lane passed the full suite at R 3.6.3,
 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2. It recorded 67,109 passed
-expectations and exactly 145 reviewed capability skips. Together with the
-native R 4.6.1 lane, those executions cover every minor series from R 3.6
-through current. The old-R stress slices contributed another 244 passed
-expectations; the exact R-3.6 declared-floor smoke and package check and the
-R-4.0.5-to-R-3.6.3 serialization handoff also passed. The coordinator
+expectations and exactly 145 reviewed skips: 131 exact capability-result skips
+plus 14 guarded whole-file skips for the two ConfigSpace files across the seven
+runtimes. Together with the native R 4.6.1 lane, those executions cover every
+minor series from R 3.6 through current. The old-R stress slices contributed
+another 244 passed expectations; the exact R-3.6 declared-floor smoke and
+package check and the R-4.0.5-to-R-3.6.3 serialization handoff also passed. The
+coordinator
 completion, JSON-summary, and TSV-summary SHA-256 values are respectively
 `c492eeb65a578cbcc868e09d7c222788a524f6795328c6d0a600e84730c16406`,
 `c1e5bb86dfbfb9f56d7ce64667f47d65dbd03cf72a2a33d3c27652bae68c030c`,
@@ -178,14 +180,44 @@ preparation therefore treats Rush commit
 `939886b43d5e48afacf2f0e1b06a45ab3c006e19`, tree
 `ca34e7a22145816437161e79a84b7b7a0eb1a0f4`, as an
 `ExactDependency`, not a consumer and not an opportunistic fallback. Exact
-providers must be cloned. The producer authenticates and archives the pinned
-Git tree, installs only from its retained extraction, records pak's exact local
-source identity, and proves the installed package content unchanged after all
-dependency solves. The consumer verifier independently reproduces the archive
-and extraction and reauthenticates the live installed content. Package/version
-alone is insufficient: several Rush commits share version `1.2.1.9000`.
-Schema-3 retained evidence keeps its old consumer-only semantics, and schema-4
-profiles with no exact provider remain valid.
+providers must be cloned. New schema-5 preparation authenticates and archives
+each run's pinned Git tree, maps the exact bytes to one commit-keyed read-only
+canonical source, and restricts this deterministic path to pure-R packages
+without configure or cleanup scripts. A single nonblocking, owner-authenticated
+lock below `.local/compat/` serializes both the canonical registry and shared
+dependency library; a retained lock is never reaped automatically and requires
+manual authentication after interruption. Rush is installed directly with
+`R CMD INSTALL --without-keep.source` and a commit-derived fixed `Built`
+timestamp. The producer and independent verifier bind the archive, both source
+trees, installation method, canonical source, installed metadata, absence of
+run-local absolute paths, and identical initial/final full package hashes.
+Package/version alone is insufficient: several Rush commits share version
+`1.2.1.9000`. The final Paradox-1/Paradox-2 preparation must additionally prove
+the same full dependency-library hash before and after the second install.
+Schema-3 retains its old consumer-only semantics; schema-4 is read-only
+compatibility for sealed historical evidence and new runs never emit it.
+
+Diagnostic schema-4 runs
+`release-candidate-4e549f3-final-p1-55e8403-r1` and
+`release-candidate-4e549f3-final-p2-55e8403-r1` individually passed, but are not
+candidate preparation evidence. The first changed the shared library from
+`6b8682ac796c7c1d24bad544fa210db7eb031ba05558fd69a4e861a98942ba7d`
+to
+`fb8a332efb981da38181db83c1ed05a4b574be8df31e625953980267c6bd955a`;
+the second began at that exact hash and changed it again to
+`1ec7d01daa2cd4be985c7157cbc86580651488571edb362e97b5a85d93e4bd55`.
+Pak had injected run-local Rush provenance and build times, so the P1 endpoint
+was already stale before P2 completed. Do not reuse either run.
+
+The active candidate's direct-child portability companion is
+`refs/paradox-release/portability-harness-7b4440b`, commit
+`7b4440b1b2e9fb75606da6f4bc8eb3cbf939bf6c`, tree
+`850d8165877f4206294886fe046b995ae414bae0`. It changes only
+`.github/workflows/r-cmd-check.yml`, whose SHA-256 is
+`334699d5fbbaed85962ab079568d1cefb3772bbd468038772508ee66bdae0070`,
+and is package-facing-source identical to candidate `4e549f3`. Hosted
+Windows/macOS execution remains a manual user action; agents must not push or
+dispatch it.
 
 The preceding immutable package-facing candidate was
 `refs/paradox-release/candidate-20260801T051235Z`, commit
