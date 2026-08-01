@@ -1,7 +1,13 @@
 # Domain admission receipt-compaction plan
 
-Status (2026-07-31): **indexed-root receipt compaction, exact r9 focused
-review, and the corrected immutable source-bound comparison are complete**.
+Status (2026-08-01): **indexed-root receipt compaction, exact r9 focused
+review, the corrected immutable source-bound comparison, the bounded-rchk
+phase extraction, and its frozen-candidate proof are complete**. The active
+candidate is `refs/paradox-release/candidate-20260801T092108Z`, commit
+`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
+`4f17819b92f7dfb255c8aafe501ff3e684027d67`; section 12.5 records its passing
+release-core and reviewed complete bounded-rchk result.
+
 The implementation passed focused current-R and actual R 3.6 tests plus the
 recorded strict GCC and Clang development builds.  Its first balanced A/B
 recovered the intended bulk allocation cost but did not recover enough elapsed
@@ -1450,7 +1456,36 @@ noisy; its stable package-self instruction ratio is 1.00544x. This bounded
 proof overhead is accepted: it creates no material public hot-path regression
 and no allocation, result, or identity change.
 
-The package-facing refactor has therefore met its focused freeze gates. These
-results do not replace the complete release-core, bounded-rchk,
-combined-memory, portability, compatibility, downstream, documentation, or
-release benchmark gates against the forthcoming immutable candidate.
+The package-facing refactor therefore met its focused freeze gates.
+
+### 12.5 Frozen-candidate and bounded-rchk result
+
+The replacement is frozen at
+`refs/paradox-release/candidate-20260801T092108Z`, commit
+`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
+`4f17819b92f7dfb255c8aafe501ff3e684027d67`. Its exact
+`.local/verify/runs/release-candidate-4e549f3-r1` coordinator passed all nine
+`release-core` tasks, including every minor series from R 3.6 through current.
+Completion/JSON-summary/TSV-summary SHA-256 values are
+`c492eeb65a578cbcc868e09d7c222788a524f6795328c6d0a600e84730c16406`,
+`c1e5bb86dfbfb9f56d7ce64667f47d65dbd03cf72a2a33d3c27652bae68c030c`,
+and
+`59d95159bf1f6bdbb50f07cf1087ed0c2f0dc604d1102a81c53c5364f845f855`.
+
+The refactor achieved its analyzer objective without another cap change.
+`release-candidate-4e549f3-rchk-discovery-r1` completed at 1,288 functions
+and 202,140 states. Its 115 blocks contain 396 UP and 30 PB diagnostics;
+fficheck reports 110 routines. Raw bcheck and semantic SHA-256 values are
+`cda7598e591bcfa7b3866acdc09530d24dc1643de17fff144056b46cde76e78f`
+and
+`2c1493d88d28866e56c52c7640fad9af791cacbe893ea57b23b72f87be110aa8`.
+Three disjoint, independently performed source-review partitions covered every
+observed block and found no C defect. The generated exact
+policy/block/rationale SHA-256 values are
+`e2e7ccc9cc225240986bcb99fc6bd64f8b828924d4aaf0d5765a8a847c346087`,
+`88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+The exact policy is now checked in. Combined memory awaits the mandatory fresh
+post-policy donor; this result does not replace the remaining portability,
+compatibility, downstream, documentation, or release-benchmark gates.

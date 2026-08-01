@@ -37,34 +37,48 @@ donor and cannot be repaired in place.
 
 ### 2026-08-01 bounded-state discovery
 
-The last release-core candidate, `bf0b68f`, is no longer active. Its first
-bounded discovery exhausted the former 800,000-state main and 1,000,000-state
-allocator analyses in `admit_public_domain_table_impl`. After independently
-authenticating finite 3,000,000-state caps for both engines, fresh donor
-`release-candidate-bf0b68f-native-rchk-cap-r1` passed the complete
-static/focused source lane and independent replay validation. Replacement
-discovery `release-candidate-bf0b68f-rchk-discovery-r2` nevertheless exhausted
-both larger caps in the same function. It analyzed 1,284 functions and
-reported 3,061,641 main-analysis states. Raw bcheck, byte-empty maacheck,
-fficheck, and analyzer-identity SHA-256 values are
-`138a4bd282019744cbf13a63f5139fcc929a06d3e65c1c283be01ada58d84948`,
-`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
-`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+The active immutable candidate is
+`refs/paradox-release/candidate-20260801T092108Z`, commit
+`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
+`4f17819b92f7dfb255c8aafe501ff3e684027d67`. Its replayable release-core
+native donor is `release-candidate-4e549f3-r1-native-release-a001`.
+Source-manifest, source-tree, modes-tree, and completion SHA-256 values are
+`2362acd1d5748792c1e7b02040c02b11da0309aef325c611c798fa62ff049e88`,
+`5eb7c1e4961bb46b632d227792414c533103648a98d6cf9cc3b20956dbf06352`,
+`18697cb2b06f0ebf43cebec847fc375c9833438d623951d1ad9eb7ac7c25a1a7`,
 and
-`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
-Neither exhausted report may seed policy.
+`8e9ad5dfa1c22d84629669833b6aa2c8cdacb71df22f30dcfe7e703412ee15b5`.
 
-The exact cap delta proves that escalation would postpone rather than solve
-the path explosion. Package-facing source is reopened and the one Domain
-adapter is split into four standard-C `static inline` phases under the same
-indexed-root owner. At analyzer `-O0` no resulting function exceeds 101 CFG
-blocks; optimized GCC and Clang inline all four phases. This is analyzer
-structure, not a second semantic engine or runtime fallback. Freeze only after
-the focused lifetime, semantic, compiler/analyzer, current-R, R-3.6, probe,
-GCT, and performance gates in the Domain plan. Then create a fresh donor and
-run discovery at the unchanged 3,000,000/3,000,000 caps. A complete report
-still requires block-by-block review and an exact policy commit; combined
-memory then requires a new post-policy donor.
+Discovery `release-candidate-4e549f3-rchk-discovery-r1` completed every
+analyzer and failed only at the intended comparison with the superseded
+policy. It analyzed 1,288 functions and 202,140 states. Its 115 blocks contain
+396 UP and 30 PB diagnostics; fficheck reports the exact 110 routines. Raw
+bcheck and ordering-insensitive semantic SHA-256 values are
+`cda7598e591bcfa7b3866acdc09530d24dc1643de17fff144056b46cde76e78f`
+and
+`2c1493d88d28866e56c52c7640fad9af791cacbe893ea57b23b72f87be110aa8`.
+Maacheck is byte-empty, SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+fficheck SHA-256 is
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
+
+Three disjoint, independently performed source-review partitions covered all
+115 observed blocks and found no C defect. Their TSV SHA-256 values are
+`aea265b2c31338d9b8a5fc7823238cc1b1bf5b3999b175f9d05b1f16f1bc83ae`,
+`12f7b37cb6628ac9095e12ba835d0832c03f8138693428442926b38e040edfa4`,
+and
+`dc2aa8c138f6cfec843d6b8eabae7b13160337858e500b26c72dc6007eab2a01`;
+the ordered rationale-assignment input SHA-256 is
+`e30d249f9484e9b5529ac6c74916fee85a46158ed8900b8195462ec643b358cd`.
+Independent generation and validation produced exact policy, block-table, and
+unchanged-rationale-catalog SHA-256 values
+`e2e7ccc9cc225240986bcb99fc6bd64f8b828924d4aaf0d5765a8a847c346087`,
+`88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+That exact policy is now checked in. Combined memory still requires a fresh
+post-policy donor because the donor snapshot must contain the selected policy;
+the successful discovery donor cannot seed the final all-mode run.
 
 ### 2026-07-27 provenance incident
 

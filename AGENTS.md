@@ -19,7 +19,86 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The last immutable package-facing candidate was
+The active immutable package-facing candidate is
+`refs/paradox-release/candidate-20260801T092108Z`, commit
+`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
+`4f17819b92f7dfb255c8aafe501ff3e684027d67`. It contains the bounded
+four-phase Domain-admission refactor described below. Its exact
+`.local/verify/runs/release-candidate-4e549f3-r1` `release-core` run passed all
+nine tasks in 5,026.8 seconds. The four harness rows, all 33 differential
+cases, the complete API-header matrix, explicit C23 installations and native
+probes under GCC 15.2 and Clang 22, and the complete native-release lane on
+R 4.6.1 all passed. The native lane includes strict compiler and analyzer
+passes, exhaustive cppcheck, the symbol audit, full tests, a clean
+`R CMD check --as-cran`, ASan, and UBSan.
+
+The same run's `runtime-supported` lane passed the full suite at R 3.6.3,
+4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2. It recorded 67,109 passed
+expectations and exactly 145 reviewed capability skips. Together with the
+native R 4.6.1 lane, those executions cover every minor series from R 3.6
+through current. The old-R stress slices contributed another 244 passed
+expectations; the exact R-3.6 declared-floor smoke and package check and the
+R-4.0.5-to-R-3.6.3 serialization handoff also passed. The coordinator
+completion, JSON-summary, and TSV-summary SHA-256 values are respectively
+`c492eeb65a578cbcc868e09d7c222788a524f6795328c6d0a600e84730c16406`,
+`c1e5bb86dfbfb9f56d7ce64667f47d65dbd03cf72a2a33d3c27652bae68c030c`,
+and
+`59d95159bf1f6bdbb50f07cf1087ed0c2f0dc604d1102a81c53c5364f845f855`.
+
+Native child `release-candidate-4e549f3-r1-native-release-a001` is a replayable
+source donor and passes independent source-run validation. Its source
+manifest, copied source tree, copied modes tree, completion-content, and result
+metadata SHA-256 values are respectively
+`2362acd1d5748792c1e7b02040c02b11da0309aef325c611c798fa62ff049e88`,
+`5eb7c1e4961bb46b632d227792414c533103648a98d6cf9cc3b20956dbf06352`,
+`18697cb2b06f0ebf43cebec847fc375c9833438d623951d1ad9eb7ac7c25a1a7`,
+`8e9ad5dfa1c22d84629669833b6aa2c8cdacb71df22f30dcfe7e703412ee15b5`,
+and
+`bf48b7b1703736bc66b8e760f29b913cb8b8de32415bdace6f39b5e98b58cd05`.
+
+Isolated bounded-rchk discovery
+`.local/checks/release-candidate-4e549f3-rchk-discovery-r1` ran all three
+analyzers successfully and stopped only at the intended stale-policy
+comparison. Bcheck analyzed 1,288 functions and 202,140 states without a
+package-local exhaustion. Its 115 Function blocks contain 396 UP and 30 PB
+diagnostics. Three disjoint, independently performed source-review partitions
+covered every block; no C defect was found. Their retained TSV SHA-256 values
+are
+`aea265b2c31338d9b8a5fc7823238cc1b1bf5b3999b175f9d05b1f16f1bc83ae`,
+`12f7b37cb6628ac9095e12ba835d0832c03f8138693428442926b38e040edfa4`,
+and
+`dc2aa8c138f6cfec843d6b8eabae7b13160337858e500b26c72dc6007eab2a01`.
+The exact ordered rationale-assignment input SHA-256 is
+`e30d249f9484e9b5529ac6c74916fee85a46158ed8900b8195462ec643b358cd`.
+The only abstraction-exhaustion lines are the reviewed non-package R functions `strptime_internal`,
+`bcEval_loop`, and `RunGenCollect`. Raw bcheck and ordering-insensitive
+semantic SHA-256 values are
+`cda7598e591bcfa7b3866acdc09530d24dc1643de17fff144056b46cde76e78f`
+and
+`2c1493d88d28866e56c52c7640fad9af791cacbe893ea57b23b72f87be110aa8`.
+Maacheck is byte-empty
+(`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`);
+fficheck records the exact current 110 registered functions and one
+registration call
+(`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`).
+The analyzer-identity SHA-256 is
+`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
+
+The source-reviewed policy was independently generated and validated from
+that discovery. The policy, exact block table, and unchanged rationale catalog
+SHA-256 values are respectively
+`e2e7ccc9cc225240986bcb99fc6bd64f8b828924d4aaf0d5765a8a847c346087`,
+`88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+Discovery alone is not memory acceptance. Once this source-bound policy and
+its package-facing-source-identical release ledger are committed, create a
+fresh static/focused native donor from that converged tooling commit and run
+the complete GCT/Valgrind/rchk memory gate. Combined memory acceptance remains
+pending; neither the release-core donor nor the isolated discovery may be
+relabeled as that result.
+
+The preceding immutable package-facing candidate was
 `refs/paradox-release/candidate-20260801T051235Z`, commit
 `bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
 `79873126ae3034962edaaad30745914115240be5`. It is now a rejected
@@ -73,9 +152,9 @@ narrow package-facing-source-identical harness repair sets cli's supported
 unchanged and retaining zero suppressions and exact definite, indirect, and
 possible-leak rejection. The complete validation-hardening, memory-validator,
 and verification-economy self-tests pass; an exact instrumented-R/Valgrind
-probe with the switch also reports zero possible loss and zero errors. The
-checked-in rchk policy still describes the earlier `dbbdcc1` source, however,
-while the active candidate has materially different native source.
+probe with the switch also reports zero possible loss and zero errors. At that
+point the checked-in rchk policy still described the earlier `dbbdcc1` source,
+while that candidate had materially different native source.
 
 Isolated discovery
 `release-candidate-bf0b68f-rchk-discovery-r1` completed all three analyzer
@@ -125,20 +204,18 @@ and
 `97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
 Do not use either discovery as a semantic policy.
 
-The package-facing source is therefore reopened and no immutable replacement
-candidate is active yet. The one semantic Domain adapter is split into four
-standard-C `static inline` phases beneath one indexed-root owner. At analyzer
-`-O0`, the orchestrator and four phases contain 26, 27, 101, 91, and 95 CFG
-blocks instead of one 330-block function; GCC and Clang inline every phase in
+The package-facing source was therefore reopened and no immutable replacement
+candidate was active at that point. The one semantic Domain adapter was split
+into four standard-C `static inline` phases beneath one indexed-root owner. At
+analyzer `-O0`, the orchestrator and four phases contain 26, 27, 101, 91, and
+95 CFG blocks instead of one 330-block function; GCC and Clang inline every phase in
 optimized builds. The split preserves the exact allocation, callback,
 ownership, terminal-receipt, error, and publication order and adds no fallback
 engine. Focused strict-Clang, Clang-analyzer, registered-probe, current-R, and
 R-3.6 evidence plus a balanced performance comparison pass, as recorded in
-section 12 of the Domain receipt-compaction plan. Freeze the replacement next.
-Then create a fresh source donor, complete bounded rchk discovery and review,
-commit the exact policy, create another donor, and run combined memory
-acceptance. Do not claim memory acceptance from either memory attempt or
-either incomplete discovery.
+section 12 of the Domain receipt-compaction plan, supported the active
+`4e549f3` freeze and the completed discovery recorded above. The two `bf0b68f`
+memory attempts and its two incomplete discoveries remain diagnostic only.
 
 The preceding immutable candidate is the rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit
@@ -3201,12 +3278,12 @@ metadata and vignette output. At that point the remaining applicable
 downstream, documentation, benchmark, and hosted portability gates kept the
 release pending.
 
-The checked-in active `paradox2` row in `compat/paradox-evidence-axes.tsv`
-still names this historical `dbbdcc1` ref/commit/tree. Its historical focused
-structural profile fixture passed, but the row must be repointed to the new
-immutable candidate before constructing a new candidate-run-owned
-`release-refresh-20260720` overlay. All retained overlays and consumer results
-owned by earlier Paradox-2 candidates remain historical.
+At that point the checked-in active `paradox2` row in
+`compat/paradox-evidence-axes.tsv` still named this historical `dbbdcc1`
+ref/commit/tree. It now names the exact active `4e549f3` ref/commit/tree.
+No fresh candidate-run-owned `release-refresh-20260720` overlay has yet been
+constructed. All retained overlays and consumer results owned by earlier
+Paradox-2 candidates remain historical.
 Post-freeze tooling admission explicitly includes the package-excluded
 `verification/` root so that reviewed coordinator scheduling changes can drive
 that overlay; package-facing paths remain forbidden, and the tooling checkout

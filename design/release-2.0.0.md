@@ -2,122 +2,60 @@
 
 ## Status
 
-**The last immutable package-facing candidate was
-`refs/paradox-release/candidate-20260801T051235Z`, commit
-`bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
-`79873126ae3034962edaaad30745914115240be5`. It is rejected diagnostic
-evidence because bounded rchk required the package-facing Domain-admission
-phase extraction described below. Its exact
-`release-candidate-bf0b68f` run passed all nine `release-core` tasks. The four
-harness rows, C23 under GCC 15.2 and Clang 22, the complete API-header matrix,
-all 33 differential cases, and the complete native-release lane on R 4.6.1
-passed. `runtime-supported` passed the complete suite on R 3.6.3, 4.0.5,
-4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, with 64,848 passing assertions and all
-145 skips matching their exact reviewed capability rows. Together those lanes
-cover all eight exact runtime versions from R 3.6 through current. The old-R
-stress slices, exact R-3.6 floor and package-check proofs, and cross-runtime
-serialization handoff passed. Combined memory acceptance is still pending:
-the first two attempts below are diagnostic only, and the narrow
-`CLI_NO_THREAD` harness repair plus a fresh `r3` run have not yet been
-accepted.**
+**The active immutable package-facing candidate is
+`refs/paradox-release/candidate-20260801T092108Z`, commit
+`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
+`4f17819b92f7dfb255c8aafe501ff3e684027d67`. Its exact nine-task
+`release-core` run passed. The four harness rows, C23 under GCC 15.2 and Clang
+22, the complete API-header matrix, all 33 differential cases, and the full
+native-release lane on R 4.6.1 passed. `runtime-supported` passed the complete
+suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 with 67,109
+passing assertions and all 145 skips matching exact reviewed capability rows.
+Together those lanes exercise every minor series from R 3.6 through current.
+Combined memory acceptance remains pending only until a fresh post-policy
+source donor and the all-mode run complete.**
 
-In `.local/verify/runs/release-candidate-bf0b68f`, all nine rows passed.
-Completion, JSON-summary, and TSV-summary SHA-256 values are
-`1f24c42c7fe7be59629e25bc6fd910916524b13aea371d5665a4e14c4b55a276`,
-`22a4bb223c413214b14b218797f3ad61cca51d691e20147a6ed232a0f37e9fdf`,
+The exact coordinator is
+`.local/verify/runs/release-candidate-4e549f3-r1`. Its completion,
+JSON-summary, and TSV-summary SHA-256 values are respectively
+`c492eeb65a578cbcc868e09d7c222788a524f6795328c6d0a600e84730c16406`,
+`c1e5bb86dfbfb9f56d7ce64667f47d65dbd03cf72a2a33d3c27652bae68c030c`,
 and
-`98e77c2c4f05d51b2728eb3aa410e636d4349cb63de8bd511963692bfd778558`.
-Replayable donor
-`release-candidate-bf0b68f-native-release-a001` passes independent source-run
-validation. Its source-manifest, copied-source-tree, copied-modes-tree, and
-completion-content SHA-256 values are respectively
-`12c9b6a07426d3036ebbad4e82f48d92a1fd8b154e1f0e8cfeeaff2fa7b30b65`,
-`b6973336386e691cd220d1d00ea557db3e1b425e383ae89070962af0bcca2ba0`,
-`0e6ab98dd3c8ba7e5a8c6036fd9064ac8fc4647f732a6681996778508bf9e951`,
+`59d95159bf1f6bdbb50f07cf1087ed0c2f0dc604d1102a81c53c5364f845f855`.
+Replayable native child
+`release-candidate-4e549f3-r1-native-release-a001` passes independent
+source-run validation. Its source-manifest, copied-source-tree,
+copied-modes-tree, and completion-content SHA-256 values are respectively
+`2362acd1d5748792c1e7b02040c02b11da0309aef325c611c798fa62ff049e88`,
+`5eb7c1e4961bb46b632d227792414c533103648a98d6cf9cc3b20956dbf06352`,
+`18697cb2b06f0ebf43cebec847fc375c9833438d623951d1ad9eb7ac7c25a1a7`,
 and
-`7c0bd80e9b439fe6ee531fda3fa060e3f5776c58042912c2db5e9eaf4be3d963`.
+`8e9ad5dfa1c22d84629669833b6aa2c8cdacb71df22f30dcfe7e703412ee15b5`.
 
-Combined-memory attempt `release-candidate-bf0b68f-memory-r1` completed GCT,
-then failed closed before Valgrind analysis because `.local/toolchain/lib` had
-drifted from sealed mode `0775` to `0777`; every other one of the 30,916
-receipt rows matched. After restoring the mode, a fresh complete toolchain
-receipt was byte-identical to the sealed receipt, SHA-256
-`c4ff86d8334edbda0bc91a6748817e78fe39e700910e353f5098c7fa9fd7876d`.
-Attempt `release-candidate-bf0b68f-memory-r2` passed GCT and the direct
-Valgrind probes, then the analyzer-only testthat process reported cli's
-detached timer-thread TLS allocation as 336 possibly-lost bytes in one block,
-through `cli__start_thread`; definitely and indirectly lost bytes and
-suppression counts were zero. rchk did not start. Neither attempt is package
-or memory acceptance.
-
-The current narrow package-facing-source-identical harness repair supplies
-cli's supported `CLI_NO_THREAD=1` only to the analyzer testthat process. It
-does not add a Valgrind suppression, does not alter the direct native-probe
-environment, and retains exact rejection of definite, indirect, and possible
-leaks from every thread that exists. The complete validation-hardening,
-memory-validator, and verification-economy self-tests pass, and an exact
-instrumented-R/Valgrind probe with the switch reports zero possible loss and
-zero errors. The checked-in rchk policy still names the earlier `dbbdcc1`
-native source and cannot accept the materially changed active source without
-a new discovery and block-by-block review.
-
-Discovery `release-candidate-bf0b68f-rchk-discovery-r1` completed bcheck,
-maacheck, and fficheck, but is analyzer-capacity evidence only. Its bcheck
-report has two package-local state-exhaustion errors for
-`admit_public_domain_table_impl`, emitted separately by the former 800,000-
-state main cap and 1,000,000-state allocator-discovery cap. The verifier
-therefore stopped before semantic extraction and old-policy comparison. The
-run analyzed 1,284 functions and reported 861,641 main-analysis states. Raw
-bcheck, byte-empty maacheck, fficheck, and analyzer-identity SHA-256 values are
-respectively
-`acde59bc41dbc2c0d952d1bad55493de9720dce80075d5f94a9c8fa993a51483`,
-`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
-`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+Isolated discovery `release-candidate-4e549f3-rchk-discovery-r1` completed all
+three analyzers and failed only at the intended stale-policy comparison. It
+analyzed 1,288 functions and 202,140 states. Its 115 function blocks contain
+396 UP and 30 PB diagnostics, and fficheck records the exact 110 registered
+routines. Raw bcheck and ordering-insensitive semantic SHA-256 values are
+`cda7598e591bcfa7b3866acdc09530d24dc1643de17fff144056b46cde76e78f`
 and
-`356e2e277a3ef8441fbf464c3c927a9f9f088db839f60b5b16231f30d2889028`.
-No accepted semantic report or policy was produced.
+`2c1493d88d28866e56c52c7640fad9af791cacbe893ea57b23b72f87be110aa8`.
+Maacheck is byte-empty, SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+fficheck SHA-256 is
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
 
-The authenticated replacement cache key is
-`db2612c907965af58cc665d6c0aae88f8cf19a06290454769a3e02f50fccfb66`;
-its 3,000,000/3,000,000 bounded bcheck SHA-256 is
-`0fe55acf343107148a32f5679e27a936af7a21d66371295ad917e1c266108309`.
-The existing 20-GiB analyzer address-space limit and 16-GiB protected host
-reserve are unchanged. Any further package-local exhaustion requires source
-simplification rather than policy admission or another automatic limit
-increase. Fresh post-cap donor
-`release-candidate-bf0b68f-native-rchk-cap-r1` passed the complete
-static/focused lane and independent source-run validation. Its source
-manifest, source-tree, modes-tree, and completion SHA-256 values are
-`69cf07c2002256a0ee6fb6c41ba8e11db450933ead4bc07a2da03b1b6d7bc22e`,
-`70b199594601bd126f823cae2a0a67d68b31b05f5ff127aac19be080f7bac705`,
-`dc445085c9d1975beab9ea9f7e7b55ba9347208439920f3d61e00e108dbfcf10`,
+Three disjoint, independently performed source-review partitions covered every
+observed block and found no C defect. Independent policy generation and
+validation produced exact policy/block/rationale SHA-256 values
+`e2e7ccc9cc225240986bcb99fc6bd64f8b828924d4aaf0d5765a8a847c346087`,
+`88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
 and
-`7081fe26ff9bf8448fdf881373e53f1cec2fc8518a23a50769ee7e62a57110f8`.
-
-Replacement discovery
-`release-candidate-bf0b68f-rchk-discovery-r2` nevertheless exhausted both
-exact 3,000,000-state analyses in `admit_public_domain_table_impl`. It
-analyzed 1,284 functions and reported 3,061,641 main-analysis states. Its raw
-bcheck, byte-empty maacheck, fficheck, and analyzer-identity SHA-256 values
-are
-`138a4bd282019744cbf13a63f5139fcc929a06d3e65c1c283be01ada58d84948`,
-`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
-`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
-and
-`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
-It is analyzer-capacity evidence only.
-
-Source is reopened and no replacement candidate is active. The one Domain
-adapter now has four standard-C `static inline` analyzer phases beneath the
-same sole 25-root owner. At `-O0`, the resulting functions contain 26, 27,
-101, 91, and 95 CFG blocks rather than one 330-block function; GCC and Clang
-inline every phase in optimized builds. Independent semantic and lifetime
-reviews are clean. Strict Clang, the Clang analyzer, registered probes, actual
-R 3.6, and the exact-source balanced performance gate pass, as recorded in
-section 12 of the Domain plan. The replacement freeze is now the immediate
-gate. After it, rerun all nine release-core tasks, create a new donor, complete
-and review bounded rchk, commit its exact policy, create a post-policy donor,
-and run combined memory.
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+That exact source-bound policy is now the checked-in policy. Because committing
+it changes the source-run snapshot, combined memory must use a fresh
+post-policy donor; the successful discovery donor cannot be relabeled as that
+proof.
 
 The preceding immutable candidate is rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit
@@ -129,12 +67,9 @@ runtimes. R 3.6.3, 4.0.5, 4.1.3, and 4.2.3 then failed only because result
 reconciliation found one list-ALTREP capability skip without its reviewed
 ledger row; R 4.3.3, 4.4.3, and 4.5.2 passed. The affected stages stopped
 before the old-R stress slice, final R-3.6 package check, and cross-version
-serialization handoff. Focused repairs now exist in reopened source; they
-have not been accepted by a frozen run. Do not promote `fb2a37f`, transfer its
-source-bound acceptance, or name a replacement before source converges. All
-applicable release, runtime, memory, compatibility, and hosted gates must run
-again. The seven runtime stages cover every minor line from R 3.6 through R
-4.5; the complete native lane owns current R 4.6.1.**
+serialization handoff. Those repairs were not accepted by this frozen run;
+the later active `4e549f3` run supplies the complete every-minor acceptance
+recorded above. Do not promote or transfer acceptance from `fb2a37f`.
 
 In `.local/verify/runs/release-candidate-fb2a37f`, the four harness tasks, C23
 under GCC 15.2 and Clang 22, the complete API-header matrix, all 33
@@ -951,11 +886,12 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 Changing one of these requires an explicit contract/design/NEWS/test update,
 not a local compatibility workaround.
 
-## Implementation convergence and reopened-source acceptance
+## Implementation convergence and active-candidate acceptance
 
 Checked entries below record implemented architectural components or
-historical exact-payload conclusions. They do not make the reopened worktree
-release-ready and do not transfer an earlier candidate's green gates.
+historical exact-payload conclusions. They do not by themselves make the
+active candidate release-ready and do not transfer an earlier candidate's
+green gates.
 
 ### Historical implementation and candidate milestones
 
@@ -989,7 +925,7 @@ release-ready and do not transfer an earlier candidate's green gates.
 - [x] use a fresh static/focused donor to complete that historical candidate's
   combined-memory gate;
 
-### Current reopened-source acceptance
+### Current candidate acceptance
 
 - [x] close the final independent focused adversarial review at the exact r9
   snapshot, including post-`Length` Condition admission, deterministic Domain
@@ -1007,14 +943,18 @@ release-ready and do not transfer an earlier candidate's green gates.
   reject that diagnostic candidate because one list-ALTREP capability skip
   lacked its reviewed result-ledger row on the four pre-4.3 runtimes;
 - [x] converge the reviewed leading-guard/four-row skip-policy repair and
-  freeze immutable candidate `bf0b68f`;
-- [ ] repoint every active compatibility identity to the exact `bf0b68f`
+  freeze diagnostic candidate `bf0b68f`; reject it when bounded rchk requires
+  the source-level Domain-admission phase extraction;
+- [x] converge the analyzer-only phase extraction without a production helper
+  call or public-performance regression and freeze immutable candidate
+  `4e549f3` at `refs/paradox-release/candidate-20260801T092108Z`;
+- [x] repoint every active compatibility identity to the exact `4e549f3`
   package identity and the final validation-tooling identity it denotes;
 - [x] close the Domain receipt-compaction three-way timing obligation with the
   corrected eight-gate `a153fae` r5 evidence; its exact package fingerprints
   and semantic keys passed, and the bounded plan explicitly forbids rerunning
   this completed slice during final cleanup;
-- [x] run the complete `release-core` profile for candidate `bf0b68f`:
+- [x] run the complete `release-core` profile for candidate `4e549f3`:
   current R 4.6.1
   full native/package acceptance, both explicit C23 compiler modes, all seven
   supported runtimes—exactly one complete stage for every minor line at R
@@ -1023,13 +963,13 @@ release-ready and do not transfer an earlier candidate's green gates.
   the full main source suite ran with `NOT_CRAN=true`, no
   `PARADOX_SKIP_CHARACTERIZATION_GCT` override, and no admitted `On CRAN`
   result; only exact source-derived runtime-capability skips remain;
-- [ ] use and verify the authenticated bounded analyzer with reviewed finite
-  3,000,000-state main and allocator-discovery caps; create a fresh post-cap
-  replayable static/focused donor, obtain and review a complete active-source
-  rchk report, commit its exact policy, create the required second fresh donor,
-  and complete combined memory analysis against `bf0b68f`; if either analyzer
-  still exhausts, simplify the package source rather than accepting the
-  incomplete report;
+- [x] use the authenticated bounded analyzer with the reviewed finite
+  3,000,000-state main and allocator-discovery caps; obtain a complete
+  active-source report, cover all 115 blocks through three disjoint independent
+  source-review partitions, and commit its exact 396-UP/30-PB policy with no C
+  defect found;
+- [ ] create the required fresh post-policy replayable donor and complete
+  combined memory analysis against `4e549f3`;
 - [ ] install one fresh candidate-owned
   `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
   reverse-dependency, repository, documentation, and benchmark gates;
@@ -1808,15 +1748,14 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending`. Package-facing candidate `bf0b68f` is
+The release decision is `pending`. Package-facing candidate `4e549f3` is
 frozen and its nine-task `release-core`, including every supported R minor,
-passes. Combined memory still requires a fresh rchk discovery and reviewed
-policy for this materially changed native source, a replacement source donor,
-and one sealed all-mode run; the two failed memory attempts above are
-diagnostic only. The fresh downstream overlay and compatibility DAG, sealed
-benchmark, hosted Windows x86-64/macOS ARM64 gates, and user publication of
-prepared downstream branches/PRs, the release tag, and workflow all remain
-mandatory.
+passes. Three disjoint independent source-review partitions cover its complete
+bounded-rchk report, and the exact generated policy is current. Combined memory now needs
+only a fresh post-policy source donor and one sealed all-mode run. The fresh
+downstream overlay and compatibility DAG, sealed benchmark, hosted Windows
+x86-64/macOS ARM64 gates, and user publication of prepared downstream
+branches/PRs, the release tag, and workflow all remain mandatory.
 
 ## Historical rejected or superseded refs
 

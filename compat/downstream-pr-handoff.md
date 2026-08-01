@@ -7,9 +7,10 @@ closed without replacement.
 
 ## Current handoff heads and manual state
 
-No remote write was made while preparing this handoff. The exact local heads
-below include the reviewed dormant-value adaptations. They remain local until
-the user performs the listed manual actions:
+No remote write was made while preparing or refreshing this handoff. The seven
+exact local heads below remain clean and include the reviewed dormant-value
+adaptations. They remain local until the user performs the listed manual
+actions:
 
 | Repository | Exact head | Current remote state | Remaining manual action |
 |---|---|---|---|
@@ -23,25 +24,16 @@ the user performs the listed manual actions:
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
 
-## Current source and next candidate
+## Current source and candidate
 
 Package-facing source is frozen at
-`refs/paradox-release/candidate-20260801T000111Z`, commit
-`de1752fe2085dc021b2e6936bcd3d5c0c809d9d4`, tree
-`b91022dfcae1f1daeb886533620a234228f08803`. Its diagnostic release run passed
-the C23, API, differential, and full native tasks; the supported-runtime task
-failed before testthat because of one common harness-only recursive-support
-staging defect. The repair changes only package-excluded validation and
-documentation paths and must be frozen under a replacement immutable ref
-because the old ref does not contain its new trusted helper.
-
-The checked-in `paradox2` compatibility axis still pins the historical
-`dbbdcc1` placeholder and is not authority for the active package-facing
-source. The branch heads above are the current reviewed migration inputs.
-After the repair commit is frozen, repoint the
-`release-refresh-20260720`/`paradox2` axis to that exact ref, record its
-package-facing-source identity with `de1752f`, and make the prepared
-compatibility gates bind these exact heads before the user publishes them.
+`refs/paradox-release/candidate-20260801T092108Z`, commit
+`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
+`4f17819b92f7dfb255c8aafe501ff3e684027d67`. The checked-in
+`release-refresh-20260720`/`paradox2` compatibility axis now binds that exact
+immutable identity. The seven clean branch heads above are the current
+reviewed migration inputs and remain unpublished; the prepared compatibility
+gates must bind these exact heads before the user publishes them.
 
 ## Historical retained evidence to refresh
 

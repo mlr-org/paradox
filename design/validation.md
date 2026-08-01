@@ -7,97 +7,55 @@ file/count matrix.
 
 ## Current validation status
 
-The last immutable package-facing ref was
-`refs/paradox-release/candidate-20260801T051235Z` (`bf0b68f`), commit
-`bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
-`79873126ae3034962edaaad30745914115240be5`. It is now rejected diagnostic
-evidence because bounded rchk required the package-facing Domain-admission
-phase extraction below. Its exact
-`release-candidate-bf0b68f` run passed all nine `release-core` rows: all four
-harness gates, differential, API headers, dual-compiler C23, native release on
-R 4.6.1, and `runtime-supported`. The latter ran the complete suite at R
-3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2. It recorded 64,848
-passing assertions and 145 exact reviewed capability skips. Together, the
-native and runtime lanes cover those eight exact versions and every minor
-series from R 3.6 through current. The old-R stress, declared-floor, final
-R-3.6 package-check, and cross-version serialization phases passed. The
-completion/JSON-summary/TSV-summary SHA-256 values are
-`1f24c42c7fe7be59629e25bc6fd910916524b13aea371d5665a4e14c4b55a276`,
-`22a4bb223c413214b14b218797f3ad61cca51d691e20147a6ed232a0f37e9fdf`,
+The active immutable package-facing ref is
+`refs/paradox-release/candidate-20260801T092108Z`, commit
+`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
+`4f17819b92f7dfb255c8aafe501ff3e684027d67`. Its exact coordinator at
+`.local/verify/runs/release-candidate-4e549f3-r1` passed all nine
+`release-core` rows: all four harness gates, differential, API headers,
+dual-compiler C23, native release on R 4.6.1, and `runtime-supported`. The
+latter ran the complete suite at R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3,
+and 4.5.2 with 67,109 passing assertions and 145 exact reviewed capability
+skips. Together, these lanes exercise every minor series from R 3.6 through
+current. Completion/JSON-summary/TSV-summary SHA-256 values are
+`c492eeb65a578cbcc868e09d7c222788a524f6795328c6d0a600e84730c16406`,
+`c1e5bb86dfbfb9f56d7ce64667f47d65dbd03cf72a2a33d3c27652bae68c030c`,
 and
-`98e77c2c4f05d51b2728eb3aa410e636d4349cb63de8bd511963692bfd778558`.
+`59d95159bf1f6bdbb50f07cf1087ed0c2f0dc604d1102a81c53c5364f845f855`.
 
-Native child `release-candidate-bf0b68f-native-release-a001` is replayable
+Native child `release-candidate-4e549f3-r1-native-release-a001` is replayable
 and passes independent source-run validation. Its source-manifest,
 copied-source-tree, copied-modes-tree, and completion-content SHA-256 values
 are respectively
-`12c9b6a07426d3036ebbad4e82f48d92a1fd8b154e1f0e8cfeeaff2fa7b30b65`,
-`b6973336386e691cd220d1d00ea557db3e1b425e383ae89070962af0bcca2ba0`,
-`0e6ab98dd3c8ba7e5a8c6036fd9064ac8fc4647f732a6681996778508bf9e951`,
+`2362acd1d5748792c1e7b02040c02b11da0309aef325c611c798fa62ff049e88`,
+`5eb7c1e4961bb46b632d227792414c533103648a98d6cf9cc3b20956dbf06352`,
+`18697cb2b06f0ebf43cebec847fc375c9833438d623951d1ad9eb7ac7c25a1a7`,
 and
-`7c0bd80e9b439fe6ee531fda3fa060e3f5776c58042912c2db5e9eaf4be3d963`.
+`8e9ad5dfa1c22d84629669833b6aa2c8cdacb71df22f30dcfe7e703412ee15b5`.
 
-Combined-memory attempt `release-candidate-bf0b68f-memory-r1` completed GCT
-but stopped in Valgrind prerequisite preflight after the live
-`.local/toolchain/lib` directory mode drifted from sealed `0775` to `0777`;
-all other 30,916 rows matched. Restoring `0775` reproduced the sealed complete
-toolchain receipt byte-for-byte, SHA-256
-`c4ff86d8334edbda0bc91a6748817e78fe39e700910e353f5098c7fa9fd7876d`.
-This is environment-integrity diagnostic evidence. Fresh attempt
-`release-candidate-bf0b68f-memory-r2` passed GCT and direct Valgrind probes,
-then failed because cli's detached presentation timer left one 336-byte glibc
-TLS allocation classified as possibly lost when the analyzer-only testthat
-process exited. The trace enters through `cli__start_thread`; definitely and
-indirectly lost bytes and suppressions were zero. rchk did not run.
-
-The narrow package-facing-source-identical repair sets cli's supported
-`CLI_NO_THREAD=1` only in the analyzer testthat process. It adds no
-suppression, leaves the direct native-probe environment unchanged, and keeps
-definite, indirect, and possible leaks fail-closed. The validation-hardening,
-memory-validator, and verification-economy self-tests pass, and an exact
-instrumented-R/Valgrind probe with the switch reports zero possible loss and
-zero errors. The current rchk policy remains bound to earlier `dbbdcc1`
-native source. A new rchk discovery and block review, exact policy commit,
-replacement static/focused source donor, and fresh immutable
-`release-candidate-bf0b68f-memory-r3` remain pending; neither failed attempt
-supplies memory acceptance.
-
-The first isolated discovery,
-`release-candidate-bf0b68f-rchk-discovery-r1`, returned zero from all three
-analyzer executables but is not a complete analysis: the bcheck report contains
-two package-local state-exhaustion errors for
-`admit_public_domain_table_impl`, one from its former 800,000-state main cap
-and one from the independent 1,000,000-state allocator-discovery cap. Zero tool
-status never overrides an incomplete report. Validation stopped before
-semantic extraction and stale-policy comparison. The bounded replacement uses
-finite 3,000,000-state caps for both engines while retaining the 20-GiB
-address-space limit, serial execution, and 16-GiB host reserve. Another
-package-local exhaustion requires source simplification. Fresh authenticated
-donor `release-candidate-bf0b68f-native-rchk-cap-r1` passed the complete
-static/focused lane. Replacement discovery
-`release-candidate-bf0b68f-rchk-discovery-r2` then exhausted both exact
-3,000,000-state analyses in `admit_public_domain_table_impl`, with 1,284
-analyzed functions and 3,061,641 reported main-analysis states. Raw bcheck,
-byte-empty maacheck, fficheck, and analyzer-identity SHA-256 values are
-`138a4bd282019744cbf13a63f5139fcc929a06d3e65c1c283be01ada58d84948`,
-`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
-`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`,
+Discovery `release-candidate-4e549f3-rchk-discovery-r1` completed all three
+analyzers and failed only at the intended stale-policy comparison. It analyzed
+1,288 functions and 202,140 states; 115 function blocks contain 396 UP and 30
+PB diagnostics, and fficheck records 110 routines. Raw bcheck and semantic
+SHA-256 values are
+`cda7598e591bcfa7b3866acdc09530d24dc1643de17fff144056b46cde76e78f`
 and
-`97bff2f1e5e503967e5a4dad0a899828825d16af2c48a7fb9edd638327bf6020`.
-The exact cap delta proves that further escalation would only defer the same
-failure.
+`2c1493d88d28866e56c52c7640fad9af791cacbe893ea57b23b72f87be110aa8`.
+Maacheck is byte-empty, SHA-256
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`;
+fficheck SHA-256 is
+`26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
+Three disjoint, independently performed source-review partitions covered every
+observed block and found no C defect.
 
-Package-facing source is reopened and no replacement ref is active. The one
-Domain adapter is split into four standard-C `static inline` phases beneath
-the same indexed-root owner. At analyzer `-O0` the orchestrator and phases
-contain 26, 27, 101, 91, and 95 CFG blocks, versus the old monolith's 330;
-both production compilers inline every phase. Exact ordering and one semantic
-owner remain unchanged. The focused strict/analyzer, current-R, actual-R-3.6,
-registered-probe, and balanced performance evidence in
-`design/domain-admission-receipt-compaction-plan.md` passes. Freeze the
-replacement next, then rerun complete release-core, create a fresh source
-donor, run a complete bounded discovery, review every changed block, commit
-the exact policy, create another donor, and run combined memory.
+The independently generated and validated exact policy, block table, and
+unchanged rationale catalog are now checked in. Their SHA-256 values are
+`e2e7ccc9cc225240986bcb99fc6bd64f8b828924d4aaf0d5765a8a847c346087`,
+`88363b5a2c173b378ebcdf2f6e3f05f8b7234240b9f04fc63b343871b1d21067`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+Combined memory is not yet accepted: committing this source-bound policy
+requires one fresh post-policy native donor before the final all-mode run.
 
 The preceding immutable ref is rejected diagnostic candidate
 `refs/paradox-release/candidate-20260801T034415Z` (`fb2a37f`), commit
@@ -1113,9 +1071,9 @@ an argument, the suffixed bridge library and evidence path.
 
 Ordinarily one final validation-tooling commit is frozen before constructing a
 fresh named overlay, and documentation, full checks, and the benchmark reuse it
-read-only. The checked-in `paradox2` axis still pins the historical `dbbdcc1`
-candidate and must be repointed to the new immutable candidate before its fresh
-overlay and prepared gates are constructed. Tooling
+read-only. The checked-in `paradox2` axis now pins the exact active `4e549f3`
+candidate; its fresh overlay and prepared gates remain to be constructed after
+this policy/ledger tooling commit is frozen. Tooling
 `fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
 `05cc4e5213c5ee73d0bc764c3d102c15e4c57141`, belongs to the historical
 `8797f11` documentation, broad-corpus, source-check, and benchmark stages. The
