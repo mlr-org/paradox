@@ -62,17 +62,44 @@ rejected <- inherits(try(downstream_evidence_assert_candidate(profile,
   profile$candidate_ref, sub("^.", "0", profile$candidate_commit),
   profile$candidate_tree, profile$candidate_version), silent = TRUE), "try-error")
 if (!rejected) stop("candidate substitution was accepted", call. = FALSE)
+selection <- data.frame(
+  repository = c(
+    "consumer_a", "provider_a", "consumer_b", "provider_b", "fallback_a"
+  ),
+  relation = c(
+    "Imports", "ExactDependency", "Suggests", "ExactDependency", "Dependency"
+  ),
+  priority = c(0L, 0L, 0L, 0L, 0L),
+  action = rep("clone", 5L),
+  stringsAsFactors = FALSE
+)
+ordered <- downstream_evidence_dependency_selection(selection, 0L)
+if (!identical(
+    ordered$repository,
+    c("provider_a", "provider_b", "consumer_a", "consumer_b")
+)) {
+  stop("exact providers are not ordered first or fallback entered selection",
+    call. = FALSE)
+}
+invalid_exact <- selection
+invalid_exact$action[invalid_exact$relation == "ExactDependency"] <- "skip"
+if (!inherits(try(
+    downstream_evidence_dependency_selection(invalid_exact, 0L),
+    silent = TRUE
+  ), "try-error")) {
+  stop("an un-cloned exact provider was admitted", call. = FALSE)
+}
 RSCRIPT
 
 for binding in \
-    $'bbotk\tb9925122e444015b65c4d548150764300c9c0637' \
+    $'bbotk\t09dafa6c3048f9be5b6961739787d201f6600a6f' \
     $'mlr3tuning\t0ec4f40033a393d41c7842541c2d5f8173dfb6bd' \
     $'mlr3\tf70c001d526213d80059744b81fcbc420bb83017' \
-    $'miesmuschel\tecd7c69e22b5fd73670393155781bdcd638445fd' \
-    $'mlr3pipelines\t13610d39e06639ce96f0b76862f76acd794c0dc8' \
+    $'miesmuschel\t3c4bf94788b9259878b1fa067d216823d0771681' \
+    $'mlr3pipelines\ta7954067061f20a45dd9e6c03129dca0ba0f1753' \
     $'mlr3fselect\tcd12d7717f31701edc6ebcf7f2cbe1168cae1ecb' \
     $'mlr3mbo\t85dd8a5ada86aacafe93637711e3b1f2e91ba219' \
-    $'celecx\t3a8291a9e2058323f4af93452141f6f1e46b5295' \
+    $'celecx\t5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1' \
     $'mlr3fda\t0df56f51b5d7fd751e16575fbd897b1c7f449c5e'; do
   repository=${binding%%$'\t'*}
   commit=${binding#*$'\t'}
@@ -81,6 +108,24 @@ for binding in \
     "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv") == "$commit" ]] ||
     fail "refreshed snapshot does not bind reviewed $repository to $commit"
 done
+
+for snapshot in \
+    "$ROOT/compat/github-snapshot.tsv" \
+    "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv"; do
+  [[ $(awk -F '\t' '$1 == "rush" { print $4 }' "$snapshot") == \
+     939886b43d5e48afacf2f0e1b06a45ab3c006e19 ]] ||
+    fail "release profile does not bind the exact rush transitive provider"
+done
+[[ $(awk -F '\t' '$1 == "rush" { print $3 "\t" $4 "\t" $5 }' \
+    "$ROOT/compat/github-repositories.release-refresh-dependencies.tsv") == \
+    $'ExactDependency\t0\tclone' ]] ||
+  fail "release dependency manifest does not select rush as an exact provider"
+[[ $(awk -F '\t' '$1 == "rush" {
+      print $3 "\t" $4 "\t" $9 "\t" $10 "\t" $11 "\t" \
+        $12 "\t" $13 "\t" $14 "\t" $15 "\t" $16 "\t" $17
+    }' "$ROOT/compat/mlr-org-review.tsv") == \
+    $'939886b43d5e48afacf2f0e1b06a45ab3c006e19\tca34e7a22145816437161e79a84b7b7a0eb1a0f4\tconsumer-corpus\t50\t5e9bf41f5ac25cde3e991218e98252be01bd49a215bbe79576035819ab0876fa\t0\t5\t5\t8\tno-use\texclude-no-use' ]] ||
+  fail "mlr-org census does not authenticate the exact rush provider as reviewed non-use"
 
 fixture=$(mktemp -d "$ROOT/.local/tmp/downstream-profile.XXXXXX")
 cleanup() {
@@ -143,6 +188,24 @@ expect_reject "incomplete non-default dependency manifest" \
   resolve "$fixture" "$PROFILE" paradox2
 cp "$fixture/dependency-manifest.good" "$dependency_manifest"
 
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "rush" { $3="Imports" } { print }' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "dependency provider colliding with the consumer closure" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "rush" { $3="Documentation" } { print }' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "unsupported dependency relation" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "rush" { $5="skip" } { print }' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "un-cloned exact dependency provider" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
 cp "$fixture/compat/paradox-evidence-axes.tsv" "$fixture/axes.good"
 awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $5=sprintf("%040d", 0) } { print }' \
   "$fixture/axes.good" >"$fixture/compat/paradox-evidence-axes.tsv"
@@ -165,6 +228,9 @@ grep -Fq 'active evidence tooling is not one clean commit' \
 grep -Fq 'post-freeze tooling changes a package-facing path' \
   "$ROOT/compat/install-downstream-bridges" ||
   fail "Paradox-2 profile does not protect frozen package bytes"
+grep -Fq 'install_exact_dependency_provider' \
+  "$ROOT/compat/install-repository-test-dependencies.R" ||
+  fail "dependency preparation does not install exact selected providers"
 grep -Fq 'benchmarks/*' "$ROOT/compat/install-downstream-bridges" ||
   fail "Paradox-2 profile does not admit post-freeze benchmark tooling"
 grep -Fq 'verification/*' "$ROOT/compat/install-downstream-bridges" ||
@@ -327,6 +393,36 @@ for binding in \
     'CMD check --no-manual --no-build-vignettes "$package_tarball"'; do
   grep -Fq "$binding" "$ROOT/compat/check-downstream-profile" ||
     fail "full-check immutability verifier omits: $binding"
+done
+
+for binding in \
+    repository_runner_assert_git_environment \
+    repository_runner_authenticate_consumer \
+    repository_runner_create_archive \
+    repository_runner_validate_extraction \
+    exact_provider_sources_sha256 \
+    exact-provider-installs.tsv \
+    RemotePkgRef \
+    initial_content_sha256 \
+    final_content_sha256; do
+  grep -Fq "$binding" \
+    "$ROOT/compat/install-repository-test-dependencies.R" ||
+  fail "exact dependency provider authentication omits: $binding"
+done
+
+for binding in \
+    'if (!legacy_dependency)' \
+    'allow_empty = TRUE' \
+    repository_runner_authenticate_consumer \
+    repository_runner_validate_extraction \
+    reproduced_archive_sha256 \
+    exact-provider-installs.tsv \
+    RemotePkgRef \
+    initial_content_sha256 \
+    final_content_sha256; do
+  grep -Fq "$binding" \
+    "$ROOT/compat/test-repositories-resumable.R" ||
+  fail "dependency evidence replay omits: $binding"
 done
 
 printf '%s\n' 'downstream evidence profile fixtures: PASS'

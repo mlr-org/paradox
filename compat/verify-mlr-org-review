@@ -139,7 +139,7 @@ validate_snapshot() {
       rows += 1
       if ($2 ~ /^https:\/\/github\.com\/mlr-org\//) mlr_org += 1
     }
-    END { if (rows == 0 || mlr_org != 43) exit 1 }
+    END { if (rows == 0 || mlr_org != 44) exit 1 }
   ' "$SNAPSHOT" || fail "GitHub snapshot schema or mlr-org coverage is invalid"
 }
 
@@ -452,7 +452,7 @@ while IFS=$'\t' read -r repository origin commit tree commit_date archived \
   fi
 done <"$LEDGER"
 
-[[ $rows -eq 91 && $consumer_rows -eq 43 && $scan_rows -eq 48 &&
+[[ $rows -eq 91 && $consumer_rows -eq 44 && $scan_rows -eq 47 &&
    $bridge_rows -eq ${#bridge_repositories[@]} ]] ||
   fail "verified source partition or bridge coverage is incomplete"
-printf '%s\n' "verified 91 mlr-org repositories (43 consumer sources, including ${#bridge_repositories[@]} reviewed downstream heads; 48 census sources)"
+printf '%s\n' "verified 91 mlr-org repositories (44 executable-corpus sources, including one exact dependency provider and ${#bridge_repositories[@]} reviewed downstream heads; 47 census-only sources)"

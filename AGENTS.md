@@ -156,6 +156,37 @@ Combined-memory acceptance is complete. The remaining gates are the fresh
 compatibility/downstream, documentation, release-benchmark, hosted
 portability, and user-performed publication work.
 
+The final compatibility refresh must use the reviewed CRAN proposal
+`.local/compat/cran-refresh/release-refresh-20260801-r2`; the earlier `r1`
+attempt stopped in metadata preflight and is diagnostic only. The `r2` index
+SHA-256 is
+`ffd50ff8e4d3f0278a77c352585d74af2994f4e4b0c9375155e3a3d6549737c8`.
+It projects exactly 37 tested direct `Depends`/`Imports`/`Suggests` consumers,
+adds `mlr3forecast`, and advances eleven ordinary versions. Its completed
+inventory and snapshot SHA-256 values are
+`83f266f83d9e917c0f609d6f54e6d61c552ae4c76f63d3f91a2b6626682a9066`
+and
+`34c55d30282f1954e5b408110e478524ec624d971d74cee4934d05f3e546c991`;
+the completion SHA-256 is
+`afaddc43c615b76ac105d7a6da254e045d7746846bf822b56355582a8adeb574`.
+All 37 canonical archives pass offline authentication. The eleven superseded
+archives were retained, not deleted, below
+`.local/compat/cran-retired/release-refresh-20260801-r2`.
+
+Prepared bbotk now requires the exact development Rush API. Dependency
+preparation therefore treats Rush commit
+`939886b43d5e48afacf2f0e1b06a45ab3c006e19`, tree
+`ca34e7a22145816437161e79a84b7b7a0eb1a0f4`, as an
+`ExactDependency`, not a consumer and not an opportunistic fallback. Exact
+providers must be cloned. The producer authenticates and archives the pinned
+Git tree, installs only from its retained extraction, records pak's exact local
+source identity, and proves the installed package content unchanged after all
+dependency solves. The consumer verifier independently reproduces the archive
+and extraction and reauthenticates the live installed content. Package/version
+alone is insufficient: several Rush commits share version `1.2.1.9000`.
+Schema-3 retained evidence keeps its old consumer-only semantics, and schema-4
+profiles with no exact provider remain valid.
+
 The preceding immutable package-facing candidate was
 `refs/paradox-release/candidate-20260801T051235Z`, commit
 `bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
@@ -2867,16 +2898,19 @@ heads become release evidence. The user must perform every remote publication
 action; live remote inspection found every retained migration branch absent,
 so each command uses `push --set-upstream`:
 
-- bbotk `codex/public-paramsetcollection-sets` at `b992512`: public collection
+- bbotk `codex/public-paramsetcollection-sets` at `09dafa6`: public collection
   state and rooted detached native search-space snapshots remain, with the
   authenticated exact-class additive `Codomain` inspector/rebuilder
-  registration without restoring private ParamSet state access;
+  registration without restoring private ParamSet state access. The branch
+  declares `rush >= 1.2.1.9000`, the first development line exporting the
+  `assert_profiles` API that this head calls directly; release evidence pins
+  exact rush provider commit `939886b`;
 - mlr3tuning `codex/paradox2-dormant-values-current` at `0ec4f40`: removes an
   accidental test-helper default so strict store-blind checks remain useful,
   and version-gates only the TuneToken-child expectation. Complete suites pass
   on both Paradox majors: 189 tests and 4,764/4,761 expectations, with zero
   failures, errors, or warnings and the same 16 Redis-dependent skips;
-- miesmuschel `codex/paradox-paramsetshadow-bridge` at `ecd7c69`: extends the
+- miesmuschel `codex/paradox-paramsetshadow-bridge` at `3c4bf94`: extends the
   dual-version official `ParamSetShadow` bridge, public-state tests, and
   dual-major documentation link with the exact-class replacement
   inspector/rebuilder registration for serialized Paradox-1 Shadows and any
@@ -2888,19 +2922,23 @@ so each command uses `push --set-upstream`:
   Paradox-1 Shadow's explicit pre-write assert remains strict, while the
   official Paradox-2 Shadow must test dormant storage and filtered
   reactivation; that regression now passes focused/full tests and source
-  checks on both majors. The unavoidable load-time
+  checks on both majors. Its failure tests retain the historical Paradox-1
+  diagnostics and assert the corresponding exact native Paradox-2 messages.
+  The unavoidable load-time
   namespace rebinding is restricted to the exported generator and eleven
   historical package-owned leanification targets; relocking is registered
   before the first unlock, and this bridge exception is not a public API;
 - mlr3mbo `codex/paradox2-transformless-subset` at `85dd8a5`: public
   transformation-free subset construction on Paradox 2 plus current release
   notes; publish it as at least 1.2.2;
-- celecx `codex/paradox2-diagnostics` at `3a8291a`: only the independent
+- celecx `codex/paradox2-diagnostics` at `5a094a3`: only the independent
   cycle/dependency bridge and the exact `mlr3mbo >= 1.2.1.9000` bridge floor
-  remain;
-- mlr3pipelines `codex/paradox-diagnostic-compat-current` at `13610d3`: on
+  remain; obsolete NULL writes to removed active bindings are gone and the
+  affected tests assert the public prediction result;
+- mlr3pipelines `codex/paradox-diagnostic-compat-current` at `a795406`: on
   current upstream, only the GraphLearner deep-clone ownership fix,
-  mutation-isolation regression, and dual-version dormant spline test remain;
+  mutation-isolation regression, dual-version dormant spline test, and one
+  symmetric public-shell inflation in the dictionary comparison remain;
   those focused files and the related PICVPlus diagnostic contracts pass on
   both majors;
 - mlr3fda `paradox2-snapshots` at `0df56f5`: the Paradox-1 snapshot stays

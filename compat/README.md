@@ -12,12 +12,17 @@ side effects. The coordinator gives focused/corpus tasks a writable run-owned
 evidence parent but remounts the candidate source/library, dependency library,
 bridge library, and every extra consumer library read-only inside the worker.
 
-`reverse-dependencies.tsv` is the reviewed inventory from the CRAN package
-page plus current CRAN source metadata. The latter deliberately retains direct
-relationships from newly published `FoRecoML`, `interflex`, and `ggmlR` source
-packages that were not yet displayed on paradox's generated CRAN page when it
-was rechecked on 2026-07-14. It is not a claim that every listed package can
-run fully on this host.
+`reverse-dependencies.tsv` is the reviewed inventory of tested direct consumers
+from the CRAN package page plus current CRAN source metadata. Its CRAN relation
+contract is exactly `Depends`, `Imports`, and `Suggests`; it is neither the
+`tools::package_dependencies()` `strong` nor `most` shorthand and is not
+shorthand for every reverse relationship CRAN can display. `LinkingTo` and
+`Enhances` are deliberately outside this inventory and their use fails closed
+during a refresh rather than being silently omitted. The source-metadata
+projection deliberately retains direct relationships from newly published
+`FoRecoML`, `interflex`, and `ggmlR` source packages that were not yet displayed
+on paradox's generated CRAN page when it was rechecked on 2026-07-14. It is not
+a claim that every listed package can run fully on this host.
 Priority 0 and 1 packages form the release gate; priority 2 packages are broad
 compatibility probes; priority 3 packages are optional consumers whose relevant
 tests are retained when their full stacks are impractical.
@@ -60,8 +65,9 @@ authenticated primary-checkout namespace. Their dependency receipt is
 profile-specific, axis-neutral, and run-local because it prepares only the
 unchanged external dependency closure; refreshed mlr3mbo is supplied by the
 ordered bridge overlay. The refresh dependency manifest is deliberately
-limited to the nine overlay packages rather than replaying unrelated
-consumers. The `paradox2`/`paradox1` axis registry pins exact candidate
+limited to the nine overlay packages plus the exact rush transitive provider
+rather than replaying unrelated consumers. The `paradox2`/`paradox1` axis
+registry pins exact candidate
 ref/commit/tree/version tuples and creates distinct overlay, lock,
 repository-test, full-check, and completion paths. These paths never overwrite
 or relabel default full-corpus evidence. A non-default profile is post-freeze
@@ -166,7 +172,13 @@ stages complete proposed manifests and archives below
 unreviewed structural changes, retains the downloaded metadata and inputs, and
 never promotes its proposal automatically. Review and promote the proposal
 manually, then use `fetch-cran-sources.R --offline` to verify the promoted
-snapshot. The fail-closed planner tests are run with:
+snapshot. A CRAN index may repeat a recommended package once at the repository
+root and under one or more versioned `X.Y.Z/Recommended` paths. The refresh
+discards only those narrowly admitted alternate rows: every row in the group
+must have `Priority: recommended`, every alternate path within that package's
+group must be unique, and no alternate may declare `paradox` through any tested
+or excluded relation. Any other duplicate or path-bearing shape fails closed.
+The fail-closed planner tests are run with:
 
 ```sh
 Rscript --vanilla compat/test-refresh-cran-snapshot.R
@@ -775,10 +787,21 @@ installer records the checkout commit in `local_sources`, installs that
 package with hard dependencies only, and retries the consumer dependency
 solve. The package's own optional development dependencies remain the
 responsibility of its priority-level run. Rows whose relation is `Dependency`
-are eligible only for this pinned fallback map: they are not paradox consumer
-test or documentation targets. This currently retains `fastshap` for
-`mlr3summary`, because CRAN archived `fastshap` after the consumer snapshot was
-reviewed.
+are fallback-only and never enter direct dependency preparation. Rows whose
+relation is `ExactDependency` are likewise not consumer-test or documentation
+targets, but are installed first from their authenticated checkout when their
+priority is selected. An exact provider must have `action = clone`; a skipped
+provider is rejected instead of silently falling back to pre-existing library
+state. The installer creates and independently validates a deterministic Git
+archive and retained extraction, installs from that extraction, and records
+the pak local-source identity plus package-content hashes immediately after
+installation and after all consumer dependency solves. The checkout verifier
+reauthenticates the commit and tree, reproduces the archive, revalidates the
+extraction, and checks that the installed package still has the same exact
+identity and content. This retains exact `rush` development APIs required by
+the prepared bbotk and mlr3tuning heads, while retaining `fastshap` only as a
+priority-two fallback for `mlr3summary` because CRAN archived it after the
+consumer snapshot was reviewed.
 The dependency installer also requires `--run-id ID`; its ledger and retained
 inputs are written to
 `.local/compat/runs/<run-id>/repository-dependencies-priority-<N>/` before the

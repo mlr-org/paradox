@@ -17,8 +17,8 @@ cran_refresh_review_columns <- c(
 )
 cran_refresh_relations <- c("depends", "imports", "suggests")
 cran_refresh_metadata_fields <- c(
-  "Package", "Version", "MD5sum", "Depends", "Imports", "LinkingTo",
-  "Suggests", "Enhances"
+  "Package", "Version", "MD5sum", "Priority", "Path", "Depends", "Imports",
+  "LinkingTo", "Suggests", "Enhances"
 )
 cran_refresh_relation_fields <- c(
   depends = "Depends", imports = "Imports", suggests = "Suggests"
@@ -83,7 +83,7 @@ cran_refresh_dependency_names <- function(value) {
   entries
 }
 
-cran_refresh_direct_reverses <- function(metadata) {
+cran_refresh_canonicalize_metadata <- function(metadata) {
   cran_refresh_require_names(
     metadata, cran_refresh_metadata_fields, "CRAN PACKAGES metadata"
   )
@@ -91,10 +91,93 @@ cran_refresh_direct_reverses <- function(metadata) {
   cran_refresh_validate_text(metadata$Package, "CRAN package names")
   cran_refresh_validate_text(metadata$Version, "CRAN package versions")
   if (any(!grepl(cran_refresh_package_pattern, metadata$Package)) ||
-      any(!grepl(cran_refresh_version_pattern, metadata$Version)) ||
-      anyDuplicated(metadata$Package)) {
-    cran_refresh_stop("CRAN PACKAGES metadata has unsafe or duplicate identities")
+      any(!grepl(cran_refresh_version_pattern, metadata$Version))) {
+    cran_refresh_stop("CRAN PACKAGES metadata has unsafe identities")
   }
+
+  for (field in c("Priority", "Path")) {
+    present <- !is.na(metadata[[field]])
+    values <- metadata[[field]][present]
+    if (any(!nzchar(values) | grepl("[\t\r\n]", values))) {
+      cran_refresh_stop("CRAN PACKAGES metadata has unsafe ", field, " values")
+    }
+  }
+
+  duplicated_identity <- duplicated(metadata$Package) |
+    duplicated(metadata$Package, fromLast = TRUE)
+  path_row <- !is.na(metadata$Path)
+  if (any(path_row & !duplicated_identity)) {
+    cran_refresh_stop(
+      "CRAN PACKAGES metadata has a Path row without a canonical root row"
+    )
+  }
+
+  duplicate_packages <- unique(metadata$Package[duplicated_identity])
+  all_relation_fields <- c(
+    cran_refresh_relation_fields, cran_refresh_unsupported_relation_fields
+  )
+  for (package in duplicate_packages) {
+    rows <- which(metadata$Package == package)
+    canonical <- rows[is.na(metadata$Path[rows])]
+    alternates <- rows[!is.na(metadata$Path[rows])]
+    if (length(canonical) != 1L || !length(alternates)) {
+      cran_refresh_stop(
+        "duplicate CRAN package must have exactly one canonical root row and ",
+        "at least one versioned Recommended alternate: ", package
+      )
+    }
+    if (anyNA(metadata$Priority[rows]) ||
+        any(metadata$Priority[rows] != "recommended")) {
+      cran_refresh_stop(
+        "duplicate CRAN package is not uniformly Priority recommended: ",
+        package
+      )
+    }
+    alternate_paths <- metadata$Path[alternates]
+    if (any(!grepl(
+        "^[0-9]+[.][0-9]+[.][0-9]+/Recommended$", alternate_paths
+      )) || anyDuplicated(alternate_paths)) {
+      cran_refresh_stop(
+        "duplicate CRAN package has an unsafe or repeated Recommended Path: ",
+        package
+      )
+    }
+    duplicate_md5 <- metadata$MD5sum[rows]
+    if (anyNA(duplicate_md5) ||
+        any(!grepl("^[0-9A-Fa-f]{32}$", duplicate_md5))) {
+      cran_refresh_stop(
+        "duplicate CRAN package has malformed MD5 metadata: ", package
+      )
+    }
+    for (index in alternates) {
+      declarations <- names(all_relation_fields)[vapply(
+        all_relation_fields,
+        function(field) {
+          "paradox" %in% cran_refresh_dependency_names(
+            metadata[[field]][[index]]
+          )
+        },
+        logical(1L)
+      )]
+      if (length(declarations)) {
+        cran_refresh_stop(
+          "versioned Recommended alternate declares paradox through ",
+          paste(declarations, collapse = "/"), ": ", package
+        )
+      }
+    }
+  }
+
+  canonical <- metadata[!path_row, , drop = FALSE]
+  row.names(canonical) <- NULL
+  if (anyDuplicated(canonical$Package)) {
+    cran_refresh_stop("canonical CRAN PACKAGES metadata has duplicate identities")
+  }
+  canonical
+}
+
+cran_refresh_direct_reverses <- function(metadata) {
+  metadata <- cran_refresh_canonicalize_metadata(metadata)
 
   hits <- lapply(seq_len(nrow(metadata)), function(index) {
     unsupported <- names(cran_refresh_unsupported_relation_fields)[vapply(

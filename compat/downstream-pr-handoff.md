@@ -14,12 +14,12 @@ actions:
 
 | Repository | Exact head | Current remote state | Remaining manual action |
 |---|---|---|---|
-| bbotk | `b9925122e444015b65c4d548150764300c9c0637` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| bbotk | `09dafa6c3048f9be5b6961739787d201f6600a6f` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
 | mlr3tuning | `0ec4f40033a393d41c7842541c2d5f8173dfb6bd` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
-| miesmuschel | `ecd7c69e22b5fd73670393155781bdcd638445fd` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| miesmuschel | `3c4bf94788b9259878b1fa067d216823d0771681` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
 | mlr3mbo | `85dd8a5ada86aacafe93637711e3b1f2e91ba219` | migration branch is absent remotely | push, create and merge the PR, then release as at least 1.2.2 |
-| celecx | `3a8291a9e2058323f4af93452141f6f1e46b5295` | migration branch is absent remotely | push after the mlr3mbo release, then create and merge the PR |
-| mlr3pipelines | `13610d39e06639ce96f0b76862f76acd794c0dc8` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
+| celecx | `5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1` | migration branch is absent remotely | push after the mlr3mbo release, then create and merge the PR |
+| mlr3pipelines | `a7954067061f20a45dd9e6c03129dca0ba0f1753` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
 | mlr3fda | `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` | migration branch is absent remotely | push, create and merge the PR, then release before Paradox 2 |
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
@@ -178,7 +178,7 @@ evidence transfers to candidate `8797f11`.
 - A cross-child dependency owned by `ParamSetCollection` filters the
   collection-level read only. Direct child/PipeOp reads still apply the child's
   own dependency rows. This is the intended boundary for the planned
-  mlr3pipelines automatic branch dependencies. The `13610d3` test records the
+  mlr3pipelines automatic branch dependencies. The `a795406` tests record the
   simpler existing spline contract: Paradox 2 stores inactive `degree`, filters
   it from the default read, and reveals it when `type` becomes polynomial,
   while Paradox 1 retains its historical assignment error.
@@ -187,7 +187,8 @@ evidence transfers to candidate `8797f11`.
   `paradox::ParamSetShadow`, whose native assignment stores dormant values and
   whose filtered reads reactivate them. Dual-version tests should assert the
   version-appropriate assignment result rather than recreating a second Shadow
-  activity implementation. Head `ecd7c69` now carries that exact regression.
+  activity implementation. Head `3c4bf94` now carries that exact regression
+  together with exact, dual-major diagnostic expectations.
 
 Publish and merge all retained PRs first. Release the six CRAN reverse-
 dependency adaptations—bbotk, mlr3tuning, miesmuschel, mlr3mbo,
@@ -205,7 +206,7 @@ proposed body into the form when creating one.
 ## bbotk
 
 - base: `74515a792243a0f62a95f8ba3452be6290278c8c`
-- head: `b9925122e444015b65c4d548150764300c9c0637`
+- head: `09dafa6c3048f9be5b6961739787d201f6600a6f`
 - branch: `codex/public-paramsetcollection-sets`
 - target branch: `main`
 - proposed title: `Use Paradox 2 public ParamSet state safely`
@@ -229,6 +230,11 @@ Proposed body:
 > or migrate the shell in place and replay the requested operation when the
 > user explicitly enables first-use upgrading. Current objects bypass this
 > migration path.
+>
+> Declare `rush >= 1.2.1.9000`, the first development line that exports
+> `assert_profiles`, because the current compute-profile path calls that API
+> directly. This makes the provider requirement explicit instead of depending
+> on an ambient development checkout.
 
 Publish it manually with:
 
@@ -240,7 +246,7 @@ gh pr create --web --repo mlr-org/bbotk --base main --head codex/public-paramset
 ## miesmuschel
 
 - base: `7aaca22d2fc61d8d86291b681a8ecbde21f649c5`
-- head: `ecd7c69e22b5fd73670393155781bdcd638445fd`
+- head: `3c4bf94788b9259878b1fa067d216823d0771681`
 - branch: `codex/paradox-paramsetshadow-bridge`
 - target branch: `master`
 - proposed title: `Use Paradox's ParamSetShadow on Paradox 2`
@@ -278,6 +284,9 @@ Proposed body:
 > exceptional partial operation cannot leave those bindings mutable. Dynamic
 > lookup avoids a misleading static unsafe-call NOTE; it does not make the
 > rebinding mechanism part of the public API.
+>
+> Keep the dual-major failure tests precise: Paradox 1 retains its historical
+> diagnostics, while Paradox 2 asserts the corresponding native messages.
 
 Publish it manually with:
 
@@ -316,7 +325,7 @@ gh pr create --web --repo mlr-org/mlr3mbo --base main --head codex/paradox2-tran
 ## celecx
 
 - base: `8fc8a8dbaf15e72010b0e721a2167c5db9984810`
-- head: `3a8291a9e2058323f4af93452141f6f1e46b5295`
+- head: `5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1`
 - branch: `codex/paradox2-diagnostics`
 - target branch: `master`
 - proposed title: `Use the Paradox 2 mlr3mbo bridge`
@@ -331,6 +340,9 @@ Proposed body:
 > boundaries, so assert each package-owned cycle diagnostic instead of
 > requiring the two implementation messages to be identical. Ordinary value
 > diagnostics remain on their original precise assertions.
+>
+> Stop assigning `NULL` to obsolete active bindings in the test surrogate and
+> assert the public data.table prediction result instead.
 
 Publish it manually with:
 
@@ -393,7 +405,7 @@ Paradox contract.
 ## mlr3pipelines
 
 - base: `bef040ae5c886bf5b09863b956d341eb3cbd772c`
-- head: `13610d39e06639ce96f0b76862f76acd794c0dc8`
+- head: `a7954067061f20a45dd9e6c03129dca0ba0f1753`
 - branch: `codex/paradox-diagnostic-compat-current`
 - target branch: `master`
 - proposed title: `Fix GraphLearner cloning and test dormant spline values`
@@ -412,6 +424,10 @@ Proposed body:
 > keeps its historical inactive-assignment error, while Paradox 2 retains the
 > dormant degree in raw values, filters it for a natural spline, and reveals it
 > when the type becomes polynomial.
+>
+> Inflate the expected dictionary object as well as the observed object before
+> comparing them. This makes the assertion symmetric and valid with both the
+> Paradox 1 and Paradox 2 public shells.
 
 Publish it manually with:
 

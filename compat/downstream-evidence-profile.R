@@ -44,6 +44,45 @@ downstream_evidence_assert_candidate <- function(profile, ref, commit, tree,
   invisible(TRUE)
 }
 
+downstream_evidence_provider_first <- function(repositories) {
+  if (!is.data.frame(repositories) ||
+      !"relation" %in% names(repositories)) {
+    stop("dependency selection has no relation column", call. = FALSE)
+  }
+  repositories[
+    order(
+      repositories$relation != "ExactDependency",
+      seq_len(nrow(repositories))
+    ),
+    ,
+    drop = FALSE
+  ]
+}
+
+downstream_evidence_dependency_selection <- function(repositories,
+                                                     max_priority) {
+  if (!is.data.frame(repositories) ||
+      !all(c("relation", "priority", "action") %in% names(repositories)) ||
+      anyNA(repositories[c("relation", "priority", "action")]) ||
+      length(max_priority) != 1L || is.na(max_priority) ||
+      max_priority < 0L) {
+    stop("dependency selection input is malformed", call. = FALSE)
+  }
+  if (any(repositories$relation == "ExactDependency" &
+      repositories$action != "clone")) {
+    stop("an exact dependency provider must be cloned", call. = FALSE)
+  }
+  selected <- repositories[
+    repositories$action == "clone" &
+      repositories$priority <= max_priority &
+      repositories$relation %in%
+        c("Depends", "Imports", "Suggests", "ExactDependency"),
+    ,
+    drop = FALSE
+  ]
+  downstream_evidence_provider_first(selected)
+}
+
 downstream_evidence_profile <- function(root, profile = "default",
                                         axis = "paradox2") {
   root <- normalizePath(root, winslash = "/", mustWork = TRUE)
@@ -181,6 +220,12 @@ downstream_evidence_profile <- function(root, profile = "default",
     c("repository", "url", "priority", "commit", "commit_date", "branch"),
     "dependency repository snapshot"
   )
+  if (any(repositories$relation == "ExactDependency" &
+        repositories$action != "clone") ||
+      any(dependency_repositories$relation == "ExactDependency" &
+        dependency_repositories$action != "clone")) {
+    stop("an exact dependency provider must be cloned", call. = FALSE)
+  }
   safe_repository <- function(value) grepl(
     "^[A-Za-z0-9][A-Za-z0-9._-]*$", value)
   if (any(!safe_repository(repositories$repository)) ||
@@ -221,10 +266,31 @@ downstream_evidence_profile <- function(root, profile = "default",
   dependency_repositories <- dependency_repositories[
     dependency_repositories$action == "clone", , drop = FALSE
   ]
-  if (!identical(profile, "default") &&
-      !setequal(dependency_repositories$repository, install_order)) {
-    stop("non-default profile dependency manifest differs from its install order",
-      call. = FALSE)
+  if (!identical(profile, "default")) {
+    admitted_dependency_relations <- c(
+      "Depends", "Imports", "Suggests", "Dependency", "ExactDependency"
+    )
+    if (any(!dependency_repositories$relation %in%
+        admitted_dependency_relations)) {
+      stop("non-default profile has an unsupported dependency relation",
+        call. = FALSE)
+    }
+    dependency_consumers <- dependency_repositories[
+      dependency_repositories$relation %in%
+        c("Depends", "Imports", "Suggests"), , drop = FALSE
+    ]
+    dependency_providers <- dependency_repositories[
+      dependency_repositories$relation %in%
+        c("Dependency", "ExactDependency"), , drop = FALSE
+    ]
+    if (!setequal(dependency_consumers$repository, install_order) ||
+        any(dependency_providers$repository %in% install_order)) {
+      stop(
+        "non-default profile dependency consumers differ from its install ",
+        "order or collide with a dependency provider",
+        call. = FALSE
+      )
+    }
   }
   dependency_index <- match(dependency_repositories$repository,
     dependency_snapshots$repository)

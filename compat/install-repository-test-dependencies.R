@@ -194,12 +194,22 @@ harness_path <- file.path(root, "compat", "install-repository-test-dependencies.
 fingerprint_path <- file.path(root, "compat", "fingerprint.R")
 evidence_helper_path <- file.path(root, "compat", "repository-evidence.R")
 evidence_verifier_path <- file.path(root, "compat", "verify-repository-evidence.R")
+repository_runner_path <- file.path(root, "compat", "repository-runner.R")
 compat_system_evidence_path <- file.path(
   root, "compat", "compat-system-evidence.R"
 )
 sys.source(fingerprint_path, envir = environment())
 sys.source(evidence_helper_path, envir = environment())
+sys.source(repository_runner_path, envir = environment())
 sys.source(compat_system_evidence_path, envir = environment())
+expected_git <- file.path(root, ".local", "toolchain", "bin", "git")
+if (!file.exists(expected_git) || dir.exists(expected_git) ||
+    is_symbolic(expected_git) ||
+    !identical(unname(Sys.which("git")), expected_git)) {
+  stop("dependency preparation requires the activated repository-local Git",
+    call. = FALSE)
+}
+repository_runner_assert_git_environment()
 
 read_manifest <- function(path, expected_columns) {
   value <- utils::read.delim(
@@ -222,32 +232,18 @@ read_manifest <- function(path, expected_columns) {
 }
 
 git_output <- function(repository, arguments, label) {
-  error_file <- tempfile("paradox-dependency-git-")
-  on.exit(unlink(error_file), add = TRUE)
-  output <- suppressWarnings(system2(
-    "git",
-    c("-C", shQuote(repository), arguments),
-    stdout = TRUE,
-    stderr = error_file
-  ))
-  status <- attr(output, "status") %||% 0L
-  if (!identical(status, 0L)) {
-    detail <- if (file.exists(error_file)) {
-      paste(readLines(error_file, warn = FALSE), collapse = "\n")
-    } else {
-      ""
-    }
-    stop("git failed while ", label, ": ", detail, call. = FALSE)
-  }
-  output
+  output <- repository_runner_git_run(
+    expected_git,
+    repository,
+    arguments,
+    label
+  )$stdout
+  if (!nzchar(output)) character() else
+    strsplit(sub("\n$", "", output), "\n", fixed = TRUE)[[1L]]
 }
 
 single_git_value <- function(repository, arguments, label) {
-  output <- git_output(repository, arguments, label)
-  if (length(output) != 1L || !nzchar(output[[1L]])) {
-    stop("git returned an unexpected result while ", label, call. = FALSE)
-  }
-  output[[1L]]
+  repository_runner_git_value(expected_git, repository, arguments, label)
 }
 
 manifest <- read_manifest(
@@ -272,13 +268,7 @@ if (anyNA(manifest_priority) || anyNA(snapshot_priority) ||
 manifest$priority <- manifest_priority
 snapshot$priority <- snapshot_priority
 
-selected <- manifest[
-  manifest$action == "clone" &
-    manifest$priority <= max_priority &
-    manifest$relation %in% c("Depends", "Imports", "Suggests"),
-  ,
-  drop = FALSE
-]
+selected <- downstream_evidence_dependency_selection(manifest, max_priority)
 if (!nrow(selected)) stop("GitHub dependency selection is empty", call. = FALSE)
 snapshot_index <- match(selected$repository, snapshot$repository)
 if (anyNA(snapshot_index)) {
@@ -304,10 +294,20 @@ repository_checkout_state <- function(repository, expected_commit, expected_orig
     stop("Git checkout is symbolic for ", repository, call. = FALSE)
   }
   checkout <- normalizePath(checkout, winslash = "/", mustWork = TRUE)
-  head <- single_git_value(
+  expected_tree <- single_git_value(
     checkout,
-    c("rev-parse", "--verify", "HEAD^{commit}"),
-    paste0("reading ", repository, " HEAD")
+    c("rev-parse", "--verify", paste0(expected_commit, "^{tree}")),
+    paste0("reading ", repository, " tree")
+  )
+  authentication <- repository_runner_authenticate_consumer(
+    list(git = expected_git, consumer_root = consumer_root),
+    data.frame(
+      repository = repository,
+      origin = expected_origin,
+      commit = expected_commit,
+      tree = expected_tree,
+      stringsAsFactors = FALSE
+    )
   )
   status <- git_output(
     checkout,
@@ -323,12 +323,12 @@ repository_checkout_state <- function(repository, expected_commit, expected_orig
     repository = repository,
     checkout = checkout,
     expected_commit = expected_commit,
-    observed_commit = head,
+    observed_commit = authentication$commit,
     expected_origin = expected_origin,
     observed_origin = origin,
     clean = !length(status),
     status = gsub("[\r\n\t]+", " ", paste(status, collapse = " | ")),
-    valid = identical(head, expected_commit) &&
+    valid = identical(authentication$commit, expected_commit) &&
       !length(status) && identical(origin, expected_origin),
     stringsAsFactors = FALSE
   )
@@ -371,6 +371,7 @@ if (!identical(clone_manifest$repository, clone_snapshot$repository) ||
 
 fallback_provider_rows <- list()
 local_packages <- list()
+local_repository_packages <- character()
 for (index in seq_len(nrow(clone_manifest))) {
   repository <- clone_manifest$repository[[index]]
   checkout <- file.path(consumer_root, repository)
@@ -381,7 +382,8 @@ for (index in seq_len(nrow(clone_manifest))) {
   }
   fields <- read.dcf(description, fields = "Package")
   package <- unname(fields[[1L, "Package"]])
-  if (length(package) != 1L || is.na(package) || !nzchar(package)) {
+  if (length(package) != 1L || is.na(package) ||
+      !grepl("^[A-Za-z][A-Za-z0-9.]*$", package)) {
     stop("Fallback checkout has an invalid Package field: ", repository, call. = FALSE)
   }
   if (!is.null(local_packages[[package]])) {
@@ -397,6 +399,7 @@ for (index in seq_len(nrow(clone_manifest))) {
     state
   )
   local_packages[[package]] <- state$checkout[[1L]]
+  local_repository_packages[[repository]] <- package
 }
 if (!length(fallback_provider_rows)) {
   stop("No pinned local fallback package providers were found", call. = FALSE)
@@ -413,6 +416,94 @@ if (length(invalid_fallbacks)) {
   )
 }
 fallback_checkout_preflight$status[!nzchar(fallback_checkout_preflight$status)] <- "-"
+
+exact_provider_directory <- plain_child_directory(
+  stage_directory,
+  "exact-provider-sources",
+  "exact dependency provider source directory",
+  TRUE,
+  must_be_new = TRUE
+)
+provider_source_roots <- character()
+provider_source_rows <- list()
+exact_provider_indices <- which(selected$relation == "ExactDependency")
+for (index in exact_provider_indices) {
+  repository <- selected$repository[[index]]
+  package <- unname(local_repository_packages[[repository]])
+  checkout <- file.path(consumer_root, repository)
+  tree <- single_git_value(
+    checkout,
+    c("rev-parse", "--verify",
+      paste0(selected_snapshot$commit[[index]], "^{tree}")),
+    paste0("reading exact provider tree for ", repository)
+  )
+  authentication <- repository_runner_authenticate_consumer(
+    list(git = expected_git, consumer_root = consumer_root),
+    data.frame(
+      repository = repository,
+      origin = selected_snapshot$url[[index]],
+      commit = selected_snapshot$commit[[index]],
+      tree = tree,
+      stringsAsFactors = FALSE
+    )
+  )
+  archive <- repository_runner_create_archive(
+    authentication,
+    file.path(exact_provider_directory, paste0(repository, ".tar"))
+  )
+  extraction <- repository_runner_extract_archive(
+    archive$path,
+    exact_provider_directory,
+    repository
+  )
+  tree_manifest <- repository_runner_validate_extraction(
+    authentication,
+    extraction$source
+  )
+  tree_manifest_path <- file.path(
+    exact_provider_directory,
+    paste0(repository, "-tree.tsv")
+  )
+  write_tsv(tree_manifest, tree_manifest_path)
+  source_package <- unname(read.dcf(
+    file.path(extraction$source, "DESCRIPTION"),
+    fields = "Package"
+  )[[1L, "Package"]])
+  if (length(package) != 1L || is.na(package) || !nzchar(package) ||
+      !identical(source_package, package)) {
+    stop("exact provider package identity differs from its authenticated source",
+      call. = FALSE)
+  }
+  provider_source_roots[[repository]] <- extraction$source
+  provider_source_rows[[length(provider_source_rows) + 1L]] <- data.frame(
+    repository = repository,
+    package = package,
+    commit = authentication$commit,
+    tree = authentication$tree,
+    archive_sha256 = archive$sha256,
+    tree_manifest_sha256 = unname(tools::sha256sum(tree_manifest_path)),
+    source = extraction$source,
+    stringsAsFactors = FALSE
+  )
+}
+exact_provider_sources <- if (length(provider_source_rows)) {
+  do.call(rbind, provider_source_rows)
+} else {
+  data.frame(
+    repository = character(), package = character(), commit = character(),
+    tree = character(), archive_sha256 = character(),
+    tree_manifest_sha256 = character(), source = character(),
+    stringsAsFactors = FALSE
+  )
+}
+exact_provider_sources_path <- file.path(
+  metadata_directory,
+  "exact-provider-sources.tsv"
+)
+write_tsv(exact_provider_sources, exact_provider_sources_path)
+exact_provider_packages <- unname(local_repository_packages[
+  selected$repository[exact_provider_indices]
+])
 
 if (dir.exists(library)) {
   require_plain_directory(library, "dependency library")
@@ -455,7 +546,8 @@ copied <- file.copy(
     profile_registry_path, axis_registry_path, profile_helper_path, manifest_path,
     snapshot_path,
     harness_path, fingerprint_path,
-    evidence_helper_path, evidence_verifier_path, compat_system_evidence_path
+    evidence_helper_path, evidence_verifier_path, repository_runner_path,
+    compat_system_evidence_path
   ),
   metadata_directory,
   copy.mode = TRUE,
@@ -472,8 +564,9 @@ run_metadata <- data.frame(
     "profile_helper_sha256",
     "github_manifest_sha256", "github_snapshot_sha256",
     "harness_sha256", "fingerprint_sha256", "evidence_helper_sha256",
-    "evidence_verifier_sha256", "checkout_preflight_sha256",
-    "fallback_checkout_preflight_sha256", "result_ledger"
+    "evidence_verifier_sha256", "repository_runner_sha256",
+    "checkout_preflight_sha256", "fallback_checkout_preflight_sha256",
+    "exact_provider_sources_sha256", "result_ledger"
   ),
   value = c(
     "4", "repository_dependencies", run_id, evidence_profile, started_utc, root,
@@ -489,8 +582,10 @@ run_metadata <- data.frame(
     unname(tools::sha256sum(fingerprint_path)),
     unname(tools::sha256sum(evidence_helper_path)),
     unname(tools::sha256sum(evidence_verifier_path)),
+    unname(tools::sha256sum(repository_runner_path)),
     unname(tools::sha256sum(checkout_preflight_path)),
-    unname(tools::sha256sum(fallback_checkout_preflight_path)), result_path
+    unname(tools::sha256sum(fallback_checkout_preflight_path)),
+    unname(tools::sha256sum(exact_provider_sources_path)), result_path
   ),
   stringsAsFactors = FALSE
 )
@@ -546,7 +641,10 @@ install_development_dependencies <- function(checkout) {
     }
 
     missing <- setdiff(missing_package_names(conditionMessage(condition)), installed_local_sources)
-    available_locally <- missing[missing %in% names(local_packages)]
+    available_locally <- missing[
+      missing %in% names(local_packages) &
+        !missing %in% exact_provider_packages
+    ]
     if (!length(available_locally)) {
       return(list(error = conditionMessage(condition), local_sources = installed_local_sources))
     }
@@ -581,6 +679,101 @@ install_development_dependencies <- function(checkout) {
   }
 }
 
+validate_exact_dependency_provider_install <- function(
+    repository, expected_content_sha256 = NULL) {
+  package <- unname(local_repository_packages[[repository]])
+  source <- unname(provider_source_roots[[repository]])
+  if (length(package) != 1L || is.na(package) || !nzchar(package) ||
+      length(source) != 1L || is.na(source) || !nzchar(source)) {
+    stop("exact dependency provider is absent from its source map")
+  }
+  source_description_path <- repository_runner_require_file(
+    file.path(source, "DESCRIPTION"),
+    "exact dependency provider source DESCRIPTION"
+  )
+  source_description <- read.dcf(
+    source_description_path,
+    fields = c("Package", "Version")
+  )
+  installed <- file.path(library, package)
+  require_plain_directory(installed, "installed exact dependency provider")
+  installed_description <- file.path(installed, "DESCRIPTION")
+  if (!file.exists(installed_description) ||
+      dir.exists(installed_description) ||
+      is_symbolic(installed_description)) {
+    stop("installed provider DESCRIPTION is absent or not regular")
+  }
+  observed <- read.dcf(
+    installed_description,
+    fields = c("Package", "Version", "RemoteType", "RemotePkgRef")
+  )
+  expected <- c(
+    Package = unname(source_description[[1L, "Package"]]),
+    Version = unname(source_description[[1L, "Version"]]),
+    RemoteType = "local",
+    RemotePkgRef = paste0("local::", source)
+  )
+  if (!identical(unname(observed[1L, names(expected)]), unname(expected))) {
+    stop(
+      "installed provider identity or local-source provenance does not match ",
+      "its exact source"
+    )
+  }
+  content_sha256 <- compat_tree_content_sha256(installed)
+  if (!is.null(expected_content_sha256) &&
+      !identical(content_sha256, expected_content_sha256)) {
+    stop("installed exact dependency provider changed after installation")
+  }
+  data.frame(
+    repository = repository,
+    package = package,
+    version = expected[["Version"]],
+    remote_type = expected[["RemoteType"]],
+    remote_pkg_ref = expected[["RemotePkgRef"]],
+    content_sha256 = content_sha256,
+    stringsAsFactors = FALSE
+  )
+}
+
+install_exact_dependency_provider <- function(repository, checkout) {
+  package <- unname(local_repository_packages[[repository]])
+  source <- unname(provider_source_roots[[repository]])
+  if (length(package) != 1L || is.na(package) || !nzchar(package) ||
+      is.null(local_packages[[package]]) ||
+      !identical(local_packages[[package]], checkout) ||
+      length(source) != 1L || is.na(source) || !nzchar(source)) {
+    return(list(
+      error = paste0(
+        "Exact dependency provider is absent from the authenticated local ",
+        "package map: ", repository
+      ),
+      local_sources = character()
+    ))
+  }
+  receipt <- NULL
+  condition <- tryCatch({
+    pak::local_install(
+      root = source,
+      lib = library,
+      upgrade = FALSE,
+      ask = FALSE,
+      dependencies = NA
+    )
+    NULL
+  }, error = identity)
+  if (is.null(condition)) {
+    condition <- tryCatch({
+      receipt <- validate_exact_dependency_provider_install(repository)
+      NULL
+    }, error = identity)
+  }
+  list(
+    error = if (is.null(condition)) "" else conditionMessage(condition),
+    local_sources = package,
+    provider_receipt = receipt
+  )
+}
+
 empty_results <- function() {
   data.frame(
     run_id = character(),
@@ -596,6 +789,7 @@ empty_results <- function() {
 }
 
 results <- vector("list", nrow(selected))
+provider_install_receipts <- list()
 for (i in seq_len(nrow(selected))) {
   repository <- selected$repository[[i]]
   checkout <- file.path(consumer_root, repository)
@@ -606,7 +800,11 @@ for (i in seq_len(nrow(selected))) {
     if (!file.exists(file.path(checkout, "DESCRIPTION"))) {
       stop("Checkout or DESCRIPTION is missing: ", checkout)
     }
-    install_development_dependencies(checkout)
+    if (identical(selected$relation[[i]], "ExactDependency")) {
+      install_exact_dependency_provider(repository, checkout)
+    } else {
+      install_development_dependencies(checkout)
+    }
   }, error = function(condition) {
     list(error = conditionMessage(condition), local_sources = character())
   })
@@ -626,6 +824,11 @@ for (i in seq_len(nrow(selected))) {
     outcome$error <- paste(c(outcome$error[nzchar(outcome$error)], provenance_error),
       collapse = "\n")
   }
+  if (identical(selected$relation[[i]], "ExactDependency") &&
+      is.data.frame(outcome$provider_receipt) &&
+      nrow(outcome$provider_receipt) == 1L) {
+    provider_install_receipts[[repository]] <- outcome$provider_receipt
+  }
 
   results[[i]] <- data.frame(
     run_id = run_id,
@@ -643,6 +846,117 @@ for (i in seq_len(nrow(selected))) {
 }
 
 results <- if (length(results)) do.call(rbind, results) else empty_results()
+provider_terminal_rows <- list()
+for (index in exact_provider_indices) {
+  repository <- selected$repository[[index]]
+  provider_index <- match(repository, exact_provider_sources$repository)
+  condition <- tryCatch({
+    if (is.na(provider_index)) {
+      stop("exact dependency provider is absent from its source ledger")
+    }
+    initial_receipt <- provider_install_receipts[[repository]]
+    if (!is.data.frame(initial_receipt) || nrow(initial_receipt) != 1L) {
+      stop("exact dependency provider has no initial installation receipt")
+    }
+    source_row <- exact_provider_sources[provider_index, , drop = FALSE]
+    expected_source <- normalizePath(
+      file.path(exact_provider_directory, repository, "source"),
+      winslash = "/",
+      mustWork = TRUE
+    )
+    archive_path <- file.path(
+      exact_provider_directory,
+      paste0(repository, ".tar")
+    )
+    tree_manifest_path <- file.path(
+      exact_provider_directory,
+      paste0(repository, "-tree.tsv")
+    )
+    if (!identical(source_row$source[[1L]], expected_source) ||
+        !identical(
+          unname(tools::sha256sum(archive_path)),
+          source_row$archive_sha256[[1L]]
+        ) ||
+        !identical(
+          unname(tools::sha256sum(tree_manifest_path)),
+          source_row$tree_manifest_sha256[[1L]]
+        )) {
+      stop("retained exact dependency provider source changed")
+    }
+    authentication <- repository_runner_authenticate_consumer(
+      list(git = expected_git, consumer_root = consumer_root),
+      data.frame(
+        repository = repository,
+        origin = selected_snapshot$url[[index]],
+        commit = selected_snapshot$commit[[index]],
+        tree = source_row$tree[[1L]],
+        stringsAsFactors = FALSE
+      )
+    )
+    retained_tree <- read_manifest(
+      tree_manifest_path,
+      c("mode", "object", "path", "size", "sha256")
+    )
+    observed_tree <- repository_runner_validate_extraction(
+      authentication,
+      expected_source
+    )
+    if (!identical(retained_tree, observed_tree)) {
+      stop("exact dependency provider extraction changed after installation")
+    }
+    final_receipt <- validate_exact_dependency_provider_install(
+      repository,
+      initial_receipt$content_sha256[[1L]]
+    )
+    if (!identical(
+        initial_receipt[, c(
+          "repository", "package", "version", "remote_type", "remote_pkg_ref"
+        ), drop = FALSE],
+        final_receipt[, c(
+          "repository", "package", "version", "remote_type", "remote_pkg_ref"
+        ), drop = FALSE]
+      )) {
+      stop("exact dependency provider identity changed after installation")
+    }
+    provider_terminal_rows[[length(provider_terminal_rows) + 1L]] <- data.frame(
+      repository = repository,
+      package = initial_receipt$package[[1L]],
+      version = initial_receipt$version[[1L]],
+      remote_type = initial_receipt$remote_type[[1L]],
+      remote_pkg_ref = initial_receipt$remote_pkg_ref[[1L]],
+      initial_content_sha256 = initial_receipt$content_sha256[[1L]],
+      final_content_sha256 = final_receipt$content_sha256[[1L]],
+      stringsAsFactors = FALSE
+    )
+    NULL
+  }, error = identity)
+  if (!is.null(condition)) {
+    result_index <- match(repository, results$repository)
+    results$status[[result_index]] <- "failed"
+    results$error[[result_index]] <- compact_error(paste(
+      c(
+        results$error[[result_index]][nzchar(results$error[[result_index]])],
+        conditionMessage(condition)
+      ),
+      collapse = "\n"
+    ))
+  }
+}
+exact_provider_installs <- if (length(provider_terminal_rows)) {
+  do.call(rbind, provider_terminal_rows)
+} else {
+  data.frame(
+    repository = character(), package = character(), version = character(),
+    remote_type = character(), remote_pkg_ref = character(),
+    initial_content_sha256 = character(), final_content_sha256 = character(),
+    stringsAsFactors = FALSE
+  )
+}
+exact_provider_installs_path <- file.path(
+  metadata_directory,
+  "exact-provider-installs.tsv"
+)
+write_tsv(exact_provider_installs, exact_provider_installs_path)
 output <- results
 for (field in c("commit", "local_sources", "error")) {
   output[[field]][is.na(output[[field]]) | !nzchar(output[[field]])] <- "-"

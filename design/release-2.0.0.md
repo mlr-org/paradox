@@ -119,6 +119,35 @@ SHA-256 values are
 and
 `26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
 
+Compatibility inputs are now converged for the final candidate-owned run.
+Fail-closed staged CRAN refresh
+`.local/compat/cran-refresh/release-refresh-20260801-r2` projects exactly 37
+tested direct `Depends`/`Imports`/`Suggests` consumers from index SHA-256
+`ffd50ff8e4d3f0278a77c352585d74af2994f4e4b0c9375155e3a3d6549737c8`.
+It adds only reviewed `mlr3forecast`, advances eleven package versions, and
+produces exact inventory/snapshot SHA-256 values
+`83f266f83d9e917c0f609d6f54e6d61c552ae4c76f63d3f91a2b6626682a9066`
+and
+`34c55d30282f1954e5b408110e478524ec624d971d74cee4934d05f3e546c991`.
+All 37 canonical archives pass offline authentication; eleven superseded
+archives remain preserved outside the canonical directory. Completion and
+seal-file SHA-256 values are
+`afaddc43c615b76ac105d7a6da254e045d7746846bf822b56355582a8adeb574`
+and
+`e4883da9c04ec41d380b77848f462b3372d8fa9e8a5efe1678e8dfc1a98a1ee9`.
+The preceding `r1` stopped before projection because CRAN's new versioned
+Recommended rows exposed a deliberately fail-closed duplicate-shape rule; it
+is harness diagnostic evidence only.
+
+The refreshed dependency profile also pins Rush commit
+`939886b43d5e48afacf2f0e1b06a45ab3c006e19`, tree
+`ca34e7a22145816437161e79a84b7b7a0eb1a0f4`, as an exact transitive provider
+for the prepared bbotk/mlr3tuning heads. It is not a Paradox consumer. The
+schema-4 dependency producer and verifier prove the exact Git archive,
+extraction, pak local-source identity, and unchanged installed-package content;
+this is necessary because multiple Rush commits share version
+`1.2.1.9000`. Legacy schema-3 evidence retains its old selection contract.
+
 The preceding immutable candidate is rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit
 `fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree
@@ -1033,6 +1062,9 @@ green gates.
 - [x] freeze the corrected Valgrind scope-receipt wording, create its fresh
   replayable donor, and complete combined GCT, Valgrind, bounded-rchk, and
   independent memory validation against `4e549f3`;
+- [x] refresh the reviewed CRAN direct-consumer set to the exact 37-package
+  `release-refresh-20260801-r2` proposal, authenticate every archive offline,
+  and pin the exact Rush provider required by the current downstream heads;
 - [ ] install one fresh candidate-owned
   `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
   reverse-dependency, repository, documentation, and benchmark gates;
@@ -1152,13 +1184,15 @@ green gates.
   miesmuschel adds the exact legacy-Shadow replacement registration, retired
   `params_unid`/`set_id` behavior, and any required owner-local cold gateways;
   both receive focused explicit/first-use migration tests on both Paradox axes;
-- [x] the tested post-migration bridge trees are committed as bbotk `b992512`
-  and miesmuschel `ecd7c69`; the latter keeps its unavoidable dual-version
+- [x] the tested post-migration bridge trees are committed as bbotk `09dafa6`
+  and miesmuschel `3c4bf94`; the former declares the exact rush development
+  floor required by its direct `assert_profiles` call and the latter keeps its
+  unavoidable dual-version
   namespace rebinding allowlisted and registers relocking before the first
   historical target is changed, and its dormant-value bridge regression passes
   both Paradox majors;
-- [x] mlr3tuning `0ec4f40`, mlr3mbo `85dd8a5`, celecx `3a8291a`,
-  mlr3pipelines `13610d3`, and mlr3fda `0df56f5` are prepared on their
+- [x] mlr3tuning `0ec4f40`, mlr3mbo `85dd8a5`, celecx `5a094a3`,
+  mlr3pipelines `a795406`, and mlr3fda `0df56f5` are prepared on their
   recorded branches; bbotk, tuning, mbo, and fda are rebased on their current
   target heads, and celecx requires the exact bridge development floor before
   the intended mlr3mbo >= 1.2.2 release. Complete mlr3tuning suites and focused
@@ -1170,7 +1204,7 @@ green gates.
   corpus and five-package source-check conclusions remain historical evidence
   only;
 - [ ] authenticate the refreshed snapshot/provenance manifests and exact
-  `ecd7c69`/`13610d3` bridge heads in a fresh candidate-owned nine-package
+  `3c4bf94`/`a795406` bridge heads in a fresh candidate-owned nine-package
   overlay, build and check all seven changed PR heads including mlr3tuning
   `0ec4f40`, then rerun the prepared compatibility DAG;
 - [x] diagnostic-only downstream changes remain pruned and the current
@@ -1477,14 +1511,14 @@ only and must not be published as replacements.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
-| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `ecd7c69e22b5fd73670393155781bdcd638445fd` | Official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, dual-major Rd links, exact replacement registration, retired `params_unid`/`set_id` contract, bounded owner-local cold gateways, and a dual-version dormant raw/filter/reactivation regression. |
-| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | head `b9925122e444015b65c4d548150764300c9c0637` (base `74515a792243a0f62a95f8ba3452be6290278c8c`) | Public `.sets` migration, detached-snapshot rooting, and exact additive legacy-Codomain inspector/rebuilder registration without private state access. |
+| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `3c4bf94788b9259878b1fa067d216823d0771681` | Official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, dual-major Rd links and diagnostics, exact replacement registration, retired `params_unid`/`set_id` contract, bounded owner-local cold gateways, and a dual-version dormant raw/filter/reactivation regression. |
+| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | head `09dafa6c3048f9be5b6961739787d201f6600a6f` (base `74515a792243a0f62a95f8ba3452be6290278c8c`) | Public `.sets` migration, detached-snapshot rooting, exact additive legacy-Codomain inspector/rebuilder registration without private state access, and an explicit `rush >= 1.2.1.9000` floor for the directly used compute-profile API. |
 | mlr3tuning | `.local/compat/github-release-refresh-20260720/mlr3tuning` | `codex/paradox2-dormant-values-current` | head `0ec4f40033a393d41c7842541c2d5f8173dfb6bd` (base `5ac566dc53480e2fd3fa0497f70f2cb038412863`) | Test-only adaptation preserving strict NoDefault point checks and version-gating the changed TuneToken-child dormant contract. |
 | mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `85dd8a5ada86aacafe93637711e3b1f2e91ba219` (base `4471f6fc4a8aa217fffb6ce5a45d3e525e96dc44`, runtime change `185b2298216eef47b0f976667c4e8949c069dff4`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths, removing the obsolete set_id-era branch, and documenting the current release. |
-| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `3a8291a9e2058323f4af93452141f6f1e46b5295` | Retain only the independent cycle/dependency adaptation and require the exact compatible mlr3mbo development bridge (`>= 1.2.1.9000`) before its intended >= 1.2.2 release. |
+| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1` | Retain only the independent cycle/dependency adaptation, require the exact compatible mlr3mbo development bridge (`>= 1.2.1.9000`) before its intended >= 1.2.2 release, and remove obsolete NULL writes to retired active bindings. |
 | mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | obsolete head `35e30a9` | Close without replacement; removing its numeric-diagnostic gates leaves an empty effective diff. |
 | mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | obsolete head `ae8e1d1` | Close without replacement; removing its feature-fraction diagnostic gate leaves an empty effective diff. |
-| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat-current` | head `13610d39e06639ce96f0b76862f76acd794c0dc8` (base `bef040ae5c886bf5b09863b956d341eb3cbd772c`) | Retain only the GraphLearner deep-clone ownership fix, mutation-isolation regression, and dual-version dormant spline contract. |
+| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat-current` | head `a7954067061f20a45dd9e6c03129dca0ba0f1753` (base `bef040ae5c886bf5b09863b956d341eb3cbd772c`) | Retain only the GraphLearner deep-clone ownership fix, mutation-isolation regression, dual-version dormant spline contract, and symmetric inflation of the dictionary comparison shell. |
 | mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` (upstream base `8960c9292221e7065e5175762e12354c6eb08607`; previous bridge head `c1cdad5a78913c9a47fec1003de8d4309275c80c`) | Preserve byte-identical Paradox-1 messages; the four Paradox-2 headers name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
 
 A final read-only live-head audit does not add another mlr3fselect probe. Its
@@ -1505,7 +1539,7 @@ smaller paired support snapshot remains the intentional release subject.
 The last pre-dormant Paradox-2 source-package stage built and checked bbotk,
 miesmuschel, mlr3mbo, celecx, and mlr3fda from its then-exact Git archives;
 all five rows and retained statuses were green. It does not authenticate the
-current `ecd7c69` miesmuschel head. Its Paradox-1 source-package conclusion was
+current `3c4bf94` miesmuschel head. Its Paradox-1 source-package conclusion was
 an explicit composition. The r2 stage passed the exact then-final bbotk,
 mlr3mbo, and celecx heads plus mlr3fda base `8f5a3df`; final mlr3fda `c1cdad5`
 changes only four call headers in

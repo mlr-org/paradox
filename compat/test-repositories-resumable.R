@@ -388,11 +388,10 @@ if (anyDuplicated(dependency_manifest$repository) ||
 }
 dependency_manifest$priority <- dependency_priority
 dependency_snapshot_all$priority <- dependency_snapshot_priority
-dependency_selected <- dependency_manifest[
-  dependency_manifest$action == "clone" &
-    dependency_manifest$relation %in% c("Depends", "Imports", "Suggests") &
-    dependency_manifest$priority <= max_priority, , drop = FALSE
-]
+dependency_selected <- downstream_evidence_dependency_selection(
+  dependency_manifest,
+  max_priority
+)
 if (!is.null(options$repositories)) {
   requested <- strsplit(options$repositories, ",", fixed = TRUE)[[1L]]
   if (!length(requested) || any(!grepl(
@@ -421,19 +420,6 @@ if (!identical(selected$repository, selected_snapshot$repository) ||
   stop("GitHub snapshot disagrees with the reviewed consumer selection",
     call. = FALSE)
 }
-dependency_snapshot_index <- match(dependency_selected$repository,
-  dependency_snapshot_all$repository)
-if (anyNA(dependency_snapshot_index)) {
-  stop("dependency-scope repositories are absent from the pinned snapshot",
-    call. = FALSE)
-}
-dependency_snapshot <- dependency_snapshot_all[dependency_snapshot_index, , drop = FALSE]
-if (!identical(dependency_selected$repository, dependency_snapshot$repository) ||
-    !identical(dependency_selected$url, dependency_snapshot$url) ||
-    !identical(dependency_selected$priority, dependency_snapshot$priority)) {
-  stop("dependency scope disagrees with the reviewed snapshot", call. = FALSE)
-}
-
 # Positions are assigned after a heaviest-first sort so the longest checks
 # launch first and continuous refill packs the tail; the hint table is
 # scheduling data only and an unhinted repository keeps its reviewed
@@ -493,6 +479,29 @@ if (!legacy_dependency && !identical(dependency_schema, "4")) {
   stop("dependency evidence uses an unsupported profile schema", call. = FALSE)
 }
 if (legacy_dependency) {
+  dependency_selected <- dependency_manifest[
+    dependency_manifest$action == "clone" &
+      dependency_manifest$relation %in% c("Depends", "Imports", "Suggests") &
+      dependency_manifest$priority <= max_priority,
+    ,
+    drop = FALSE
+  ]
+}
+dependency_snapshot_index <- match(dependency_selected$repository,
+  dependency_snapshot_all$repository)
+if (anyNA(dependency_snapshot_index)) {
+  stop("dependency-scope repositories are absent from the pinned snapshot",
+    call. = FALSE)
+}
+dependency_snapshot <- dependency_snapshot_all[dependency_snapshot_index, , drop = FALSE]
+if (!identical(dependency_selected$repository, dependency_snapshot$repository) ||
+    !identical(dependency_selected$url, dependency_snapshot$url) ||
+    !identical(dependency_selected$priority, dependency_snapshot$priority) ||
+    any(!grepl("^([0-9a-f]{40}|[0-9a-f]{64})$",
+      dependency_snapshot$commit))) {
+  stop("dependency scope disagrees with the reviewed snapshot", call. = FALSE)
+}
+if (legacy_dependency) {
   dependency_run_fields <- c(
     "schema", "stage_kind", "run_id", "started_utc", "root", "max_priority",
     "dependency_library", "dependency_library_content_before", "r",
@@ -514,7 +523,8 @@ if (legacy_dependency) {
     "profile_registry_sha256", "axis_registry_sha256", "profile_helper_sha256",
     "github_manifest_sha256", "github_snapshot_sha256", "harness_sha256",
     "fingerprint_sha256", "evidence_helper_sha256", "evidence_verifier_sha256",
-    "checkout_preflight_sha256", "fallback_checkout_preflight_sha256",
+    "repository_runner_sha256", "checkout_preflight_sha256",
+    "fallback_checkout_preflight_sha256", "exact_provider_sources_sha256",
     "result_ledger"
   )
   dependency_completion_fields <- c(
@@ -566,6 +576,12 @@ if (!legacy_dependency) {
   )
   expected_dependency_run <- append(expected_dependency_run, profile_fields,
     after = match("r_version", names(expected_dependency_run)))
+  expected_dependency_run <- append(
+    expected_dependency_run,
+    c(repository_runner_sha256 =
+      repository_runner_sha256(source_paths[["runner"]])),
+    after = match("evidence_verifier_sha256", names(expected_dependency_run))
+  )
 }
 expected_dependency_completion <- c(
   schema = dependency_schema, stage_kind = "repository_dependencies", run_id = run_id,
@@ -603,6 +619,190 @@ names(dependency_checkout_files) <- c(
 dependency_checkout_hashes <- repository_runner_sha256(
   dependency_checkout_files)
 names(dependency_checkout_hashes) <- names(dependency_checkout_files)
+dependency_fallback_preflight <- repository_runner_read_tsv(
+  dependency_checkout_files[["fallback_checkout_preflight_sha256"]],
+  c(
+    "package", "repository", "checkout", "expected_commit", "observed_commit",
+    "expected_origin", "observed_origin", "clean", "status", "valid"
+  ),
+  label = "dependency fallback checkout preflight"
+)
+provider_rows <- integer()
+expected_provider_sources <- character()
+exact_provider_hashes_match <- TRUE
+if (!legacy_dependency) {
+  provider_rows <- which(dependency_selected$relation == "ExactDependency")
+  provider_preflight_index <- match(
+    dependency_selected$repository[provider_rows],
+    dependency_fallback_preflight$repository
+  )
+  if (anyNA(provider_preflight_index)) {
+    stop("exact dependency provider is absent from its retained preflight",
+      call. = FALSE)
+  }
+  expected_provider_sources <- paste0(
+    dependency_fallback_preflight$package[provider_preflight_index],
+    "@",
+    dependency_snapshot$commit[provider_rows]
+  )
+  exact_provider_sources_path <- repository_runner_require_file(
+    file.path(dependency_metadata, "exact-provider-sources.tsv"),
+    "exact dependency provider source ledger"
+  )
+  exact_provider_sources <- repository_runner_read_tsv(
+    exact_provider_sources_path,
+    c(
+      "repository", "package", "commit", "tree", "archive_sha256",
+      "tree_manifest_sha256", "source"
+    ),
+    allow_empty = TRUE,
+    label = "exact dependency provider source ledger"
+  )
+  exact_provider_installs_path <- repository_runner_require_file(
+    file.path(dependency_metadata, "exact-provider-installs.tsv"),
+    "exact dependency provider installation ledger"
+  )
+  exact_provider_installs <- repository_runner_read_tsv(
+    exact_provider_installs_path,
+    c(
+      "repository", "package", "version", "remote_type", "remote_pkg_ref",
+      "initial_content_sha256", "final_content_sha256"
+    ),
+    allow_empty = TRUE,
+    label = "exact dependency provider installation ledger"
+  )
+  if (!identical(
+      exact_provider_sources$repository,
+      dependency_selected$repository[provider_rows]
+    ) ||
+      !identical(
+        exact_provider_sources$package,
+        dependency_fallback_preflight$package[provider_preflight_index]
+      ) ||
+      !identical(
+        exact_provider_sources$commit,
+        dependency_snapshot$commit[provider_rows]
+      ) ||
+      any(!grepl("^([0-9a-f]{40}|[0-9a-f]{64})$",
+        exact_provider_sources$tree)) ||
+      any(!grepl("^[0-9a-f]{64}$", c(
+        exact_provider_sources$archive_sha256,
+        exact_provider_sources$tree_manifest_sha256
+      ))) ||
+      !identical(exact_provider_installs$repository,
+        exact_provider_sources$repository) ||
+      !identical(exact_provider_installs$package,
+        exact_provider_sources$package) ||
+      any(exact_provider_installs$remote_type != "local") ||
+      any(!grepl("^[0-9a-f]{64}$", c(
+        exact_provider_installs$initial_content_sha256,
+        exact_provider_installs$final_content_sha256
+      ))) ||
+      !identical(exact_provider_installs$initial_content_sha256,
+        exact_provider_installs$final_content_sha256)) {
+    stop("exact dependency provider evidence is incomplete or malformed",
+      call. = FALSE)
+  }
+  provider_directory <- repository_runner_require_directory(
+    file.path(dependency_stage, "exact-provider-sources"),
+    "exact dependency provider source directory"
+  )
+  for (provider_index in seq_len(nrow(exact_provider_sources))) {
+    repository <- exact_provider_sources$repository[[provider_index]]
+    selection_index <- provider_rows[[provider_index]]
+    expected_source <- repository_runner_require_directory(
+      file.path(provider_directory, repository, "source"),
+      "exact dependency provider source"
+    )
+    archive <- repository_runner_require_file(
+      file.path(provider_directory, paste0(repository, ".tar")),
+      "exact dependency provider archive"
+    )
+    tree_manifest <- repository_runner_require_file(
+      file.path(provider_directory, paste0(repository, "-tree.tsv")),
+      "exact dependency provider tree manifest"
+    )
+    retained_tree <- repository_runner_read_tsv(
+      tree_manifest,
+      c("mode", "object", "path", "size", "sha256"),
+      label = "exact dependency provider tree manifest"
+    )
+    authentication <- repository_runner_authenticate_consumer(
+      list(git = expected_git,
+        consumer_root = profile$dependency_consumer_root),
+      data.frame(
+        repository = repository,
+        origin = dependency_snapshot$url[[selection_index]],
+        commit = dependency_snapshot$commit[[selection_index]],
+        tree = exact_provider_sources$tree[[provider_index]],
+        stringsAsFactors = FALSE
+      )
+    )
+    observed_tree <- repository_runner_validate_extraction(
+      authentication,
+      expected_source
+    )
+    reproduced_archive_sha256 <- local({
+      path <- repository_runner_tempfile(
+        "exact-provider-replay-", fileext = ".tar"
+      )
+      on.exit(unlink(path), add = TRUE)
+      repository_runner_create_archive(authentication, path)$sha256
+    })
+    source_description <- read.dcf(
+      repository_runner_require_file(
+        file.path(expected_source, "DESCRIPTION"),
+        "exact dependency provider source DESCRIPTION"
+      ),
+      fields = c("Package", "Version")
+    )
+    installed_path <- repository_runner_require_directory(
+      file.path(dependency_library,
+        exact_provider_installs$package[[provider_index]]),
+      "installed exact dependency provider"
+    )
+    installed_description <- read.dcf(
+      repository_runner_require_file(
+        file.path(installed_path, "DESCRIPTION"),
+        "installed exact dependency provider DESCRIPTION"
+      ),
+      fields = c("Package", "Version", "RemoteType", "RemotePkgRef")
+    )
+    expected_installed_description <- c(
+      Package = unname(source_description[[1L, "Package"]]),
+      Version = unname(source_description[[1L, "Version"]]),
+      RemoteType = "local",
+      RemotePkgRef = paste0("local::", expected_source)
+    )
+    if (!identical(exact_provider_sources$source[[provider_index]],
+          expected_source) ||
+        !identical(repository_runner_sha256(archive),
+          exact_provider_sources$archive_sha256[[provider_index]]) ||
+        !identical(reproduced_archive_sha256,
+          exact_provider_sources$archive_sha256[[provider_index]]) ||
+        !identical(repository_runner_sha256(tree_manifest),
+          exact_provider_sources$tree_manifest_sha256[[provider_index]]) ||
+        !identical(retained_tree, observed_tree) ||
+        !identical(exact_provider_installs$package[[provider_index]],
+          expected_installed_description[["Package"]]) ||
+        !identical(exact_provider_installs$version[[provider_index]],
+          expected_installed_description[["Version"]]) ||
+        !identical(exact_provider_installs$remote_pkg_ref[[provider_index]],
+          expected_installed_description[["RemotePkgRef"]]) ||
+        !identical(unname(installed_description[1L,
+          names(expected_installed_description)]),
+          unname(expected_installed_description)) ||
+        !identical(compat_tree_content_sha256(installed_path),
+          exact_provider_installs$final_content_sha256[[provider_index]])) {
+      stop("retained exact dependency provider evidence disagrees",
+        call. = FALSE)
+    }
+  }
+  exact_provider_hashes_match <- identical(
+    dependency_run[["exact_provider_sources_sha256"]],
+    repository_runner_sha256(exact_provider_sources_path)
+  )
+}
 dependency_copied_inputs <- if (legacy_dependency) {
   c(dependency_manifest_path, dependency_snapshot_path, dependency_harness,
     source_paths[["fingerprint"]], source_paths[["evidence"]], evidence_verifier)
@@ -610,7 +810,7 @@ dependency_copied_inputs <- if (legacy_dependency) {
   c(profile_registry_path, profile$axis_registry, source_paths[["profile"]],
     dependency_manifest_path, dependency_snapshot_path,
     dependency_harness, source_paths[["fingerprint"]], source_paths[["evidence"]],
-    evidence_verifier)
+    evidence_verifier, source_paths[["runner"]])
 }
 names(dependency_copied_inputs) <- basename(dependency_copied_inputs)
 if (anyDuplicated(names(dependency_copied_inputs))) {
@@ -628,6 +828,7 @@ if (!identical(unname(dependency_run[names(expected_dependency_run)]),
       unname(expected_dependency_completion)) ||
     !grepl("^[0-9a-f]{64}$",
       dependency_run[["dependency_library_content_before"]]) ||
+    !exact_provider_hashes_match ||
     !identical(dependency_result$run_id,
       rep(run_id, nrow(dependency_selected))) ||
     !identical(dependency_result$repository, dependency_selected$repository) ||
@@ -635,6 +836,10 @@ if (!identical(unname(dependency_run[names(expected_dependency_run)]),
     !identical(dependency_result$priority,
       as.character(dependency_selected$priority)) ||
     any(dependency_result$status != "passed") ||
+    !identical(
+      dependency_result$local_sources[provider_rows],
+      expected_provider_sources
+    ) ||
     !identical(unname(dependency_run[names(dependency_checkout_hashes)[1:2]]),
       unname(dependency_checkout_hashes[1:2])) ||
     !identical(unname(dependency_completion[

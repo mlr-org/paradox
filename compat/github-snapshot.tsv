@@ -1,7 +1,7 @@
 repository	url	priority	commit	commit_date	branch
 bbotk	https://github.com/mlr-org/bbotk.git	0	6cae9559cfa2133b02b19e9762211aa49ec4c1c7	2026-07-19T13:50:35+02:00	codex/public-paramsetcollection-sets
 mlr3tuning	https://github.com/mlr-org/mlr3tuning.git	0	b34b50947d45c2fa1d70a3eb1c7c520190a7b26e	2026-07-02T17:45:16+02:00	main
-miesmuschel	https://github.com/mlr-org/miesmuschel.git	0	d9d5c01ab069839abf4f82521826ac61e31191de	2026-07-19T05:45:39+02:00	codex/paradox-paramsetshadow-bridge
+miesmuschel	https://github.com/mlr-org/miesmuschel.git	0	6255050a4d1d1a3555ca70707e4f1588c86006be	2026-07-19T23:24:07+02:00	codex/paradox-paramsetshadow-bridge
 celecx	https://github.com/mlr-org/celecx.git	1	cef7a4f4532393d725012e1a566d5cd4157b82cd	2026-07-19T14:11:35+02:00	codex/paradox2-diagnostics
 smashy	https://github.com/mlr-org/smashy.git	3	fab093584d647ff203f98fa5c9d41f540f65bb8b	2024-06-24T19:50:46+02:00	master
 mlr3	https://github.com/mlr-org/mlr3.git	0	35e30a91e305936e57328b65e15b60f3ab00eef3	2026-07-19T14:11:36+02:00	codex/paradox2-diagnostics
@@ -36,6 +36,7 @@ mlr3viz	https://github.com/mlr-org/mlr3viz.git	2	64980aefc5cd9ee95a2139c0963d2f2
 mcboost	https://github.com/mlr-org/mcboost.git	2	651e24d9578538f695c572a96d4f6593be670860	2025-07-24T10:20:17+02:00	main
 mlr3summary	https://github.com/mlr-org/mlr3summary.git	2	b032464e124fa3a048f1a4c54d847086087867da	2026-02-18T09:34:29+01:00	main
 fastshap	https://github.com/bgreenwell/fastshap.git	2	e17704e905f0c9cb9b18d1ee29983ea86973256f	2026-07-05T23:38:36-04:00	devel
+rush	https://github.com/mlr-org/rush.git	0	939886b43d5e48afacf2f0e1b06a45ab3c006e19	2026-07-28T11:15:25+02:00	main
 mlr3book	https://github.com/mlr-org/mlr3book.git	0	6fa2a0abafbe2da3fff635787437d126e41279b9	2026-07-03T10:24:22+02:00	main
 mlr3website	https://github.com/mlr-org/mlr3website.git	0	eec927734a7adc28f0e0070eed46d995a1ee64f4	2026-06-25T12:24:25+02:00	main
 mlr3cheatsheets	https://github.com/mlr-org/mlr3cheatsheets.git	2	a751195e7cb7aa22c7c844379e1037c962e94d20	2026-03-24T15:28:06+01:00	main

@@ -41,6 +41,7 @@ mlr3viz	https://github.com/mlr-org/mlr3viz.git	Suggests	2	clone	Current visualiz
 mcboost	https://github.com/mlr-org/mcboost.git	Suggests	2	clone	Optional consumer.
 mlr3summary	https://github.com/mlr-org/mlr3summary.git	Suggests	2	clone	Maintained de facto consumer that reads learner and resampling ParamSet values.
 fastshap	https://github.com/bgreenwell/fastshap.git	Dependency	2	clone	Pinned external fallback for mlr3summary after fastshap was archived on CRAN; not a paradox consumer gate.
+rush	https://github.com/mlr-org/rush.git	ExactDependency	0	clone	Exact transitive provider required by the prepared bbotk and mlr3tuning release heads; not a paradox consumer gate.
 mlr3book	https://github.com/mlr-org/mlr3book.git	Documentation	0	clone	Active advanced paradox chapter and broad implicit UI specification.
 mlr3website	https://github.com/mlr-org/mlr3website.git	Documentation	0	clone	Current gallery successor and paradox benchmark suite.
 mlr3cheatsheets	https://github.com/mlr-org/mlr3cheatsheets.git	Documentation	2	clone	Current user-facing tuning and pipeline UI reference rendered by the documentation gate.

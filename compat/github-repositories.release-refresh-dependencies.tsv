@@ -8,3 +8,4 @@ mlr3fselect	https://github.com/mlr-org/mlr3fselect.git	Imports	0	clone	Unchanged
 mlr3mbo	https://github.com/mlr-org/mlr3mbo.git	Imports	0	clone	Unchanged pre-refresh head supplies external test dependencies only.
 celecx	https://github.com/mlr-org/celecx.git	Depends	1	clone	Unchanged pre-refresh head avoids placing refreshed mlr3mbo in the shared library.
 mlr3fda	https://github.com/mlr-org/mlr3fda.git	Imports	1	clone	Unchanged pre-refresh head supplies external test dependencies only.
+rush	https://github.com/mlr-org/rush.git	ExactDependency	0	clone	Exact transitive provider for prepared heads that require rush development APIs.

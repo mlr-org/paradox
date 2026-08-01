@@ -71,6 +71,108 @@ expect_identical(
   "DCF projection changed CRAN MD5 values"
 )
 
+recommended_root <- metadata[metadata$Package == "unrelated", , drop = FALSE]
+recommended_root$Package <- "recpkg"
+recommended_root$Version <- "2.1.8.3"
+recommended_root$MD5sum <- strrep("e", 32L)
+recommended_root$Priority <- "recommended"
+recommended_root$Path <- NA_character_
+recommended_root$Depends <- "R (>= 3.6)"
+recommended_root$Imports <- NA_character_
+recommended_root$LinkingTo <- NA_character_
+recommended_root$Suggests <- NA_character_
+recommended_root$Enhances <- NA_character_
+recommended_alternate <- recommended_root
+recommended_alternate$Version <- "2.1.8.2"
+recommended_alternate$MD5sum <- strrep("f", 32L)
+recommended_alternate$Path <- "4.7.0/Recommended"
+recommended_metadata <- rbind(
+  metadata, recommended_root, recommended_alternate
+)
+expect_identical(
+  cran_refresh_direct_reverses(recommended_metadata), live_from_dcf,
+  "recognized versioned Recommended rows changed the direct reverse set"
+)
+second_recommended_alternate <- recommended_alternate
+second_recommended_alternate$Version <- "2.1.8.1"
+second_recommended_alternate$MD5sum <- strrep("1", 32L)
+second_recommended_alternate$Path <- "4.8.0/Recommended"
+expect_identical(
+  cran_refresh_direct_reverses(rbind(
+    recommended_metadata, second_recommended_alternate
+  )),
+  live_from_dcf,
+  "multiple distinct versioned Recommended rows changed the direct reverse set"
+)
+
+path_without_root <- rbind(metadata, recommended_alternate)
+expect_error(
+  cran_refresh_direct_reverses(path_without_root),
+  "Path row without a canonical root row"
+)
+two_roots <- rbind(metadata, recommended_root, recommended_root)
+expect_error(
+  cran_refresh_direct_reverses(two_roots),
+  "exactly one canonical root row"
+)
+no_root <- rbind(
+  metadata,
+  recommended_alternate,
+  transform(recommended_alternate, Path = "4.8.0/Recommended")
+)
+expect_error(
+  cran_refresh_direct_reverses(no_root),
+  "exactly one canonical root row"
+)
+nonrecommended <- recommended_metadata
+nonrecommended$Priority[nrow(nonrecommended)] <- "optional"
+expect_error(
+  cran_refresh_direct_reverses(nonrecommended),
+  "not uniformly Priority recommended"
+)
+unsafe_recommended_path <- recommended_metadata
+unsafe_recommended_path$Path[nrow(unsafe_recommended_path)] <-
+  "4.7/Recommended"
+expect_error(
+  cran_refresh_direct_reverses(unsafe_recommended_path),
+  "unsafe or repeated Recommended Path"
+)
+repeated_recommended_path <- rbind(
+  recommended_metadata, recommended_alternate
+)
+expect_error(
+  cran_refresh_direct_reverses(repeated_recommended_path),
+  "unsafe or repeated Recommended Path"
+)
+empty_recommended_path <- recommended_metadata
+empty_recommended_path$Path[nrow(empty_recommended_path)] <- ""
+expect_error(
+  cran_refresh_direct_reverses(empty_recommended_path),
+  "unsafe Path values"
+)
+bad_recommended_md5 <- recommended_metadata
+bad_recommended_md5$MD5sum[nrow(bad_recommended_md5)] <- "not-an-md5"
+expect_error(
+  cran_refresh_direct_reverses(bad_recommended_md5),
+  "malformed MD5 metadata"
+)
+for (field in c("Depends", "Imports", "LinkingTo", "Suggests", "Enhances")) {
+  hidden_reverse <- recommended_metadata
+  hidden_reverse[[field]][nrow(hidden_reverse)] <- "paradox"
+  expect_error(
+    cran_refresh_direct_reverses(hidden_reverse),
+    "versioned Recommended alternate declares paradox through"
+  )
+}
+malformed_recommended_dependency <- recommended_metadata
+malformed_recommended_dependency$Imports[
+  nrow(malformed_recommended_dependency)
+] <- "not a package (>= 1.0)"
+expect_error(
+  cran_refresh_direct_reverses(malformed_recommended_dependency),
+  "dependency metadata is malformed"
+)
+
 duplicate_relation <- metadata
 duplicate_relation$Imports[duplicate_relation$Package == "alpha"] <- "paradox"
 expect_error(
@@ -90,14 +192,16 @@ expect_error(
   cran_refresh_direct_reverses(malformed_dependency),
   "dependency metadata is malformed"
 )
-unsupported_relation <- metadata
-unsupported_relation$LinkingTo[
-  unsupported_relation$Package == "unrelated"
-] <- "paradox"
-expect_error(
-  cran_refresh_direct_reverses(unsupported_relation),
-  "unsupported relation (linkingto): unrelated"
-)
+for (field in c("LinkingTo", "Enhances")) {
+  unsupported_relation <- metadata
+  unsupported_relation[[field]][
+    unsupported_relation$Package == "unrelated"
+  ] <- "paradox"
+  expect_error(
+    cran_refresh_direct_reverses(unsupported_relation),
+    paste0("unsupported relation (", tolower(field), "): unrelated")
+  )
+}
 
 inventory <- data.frame(
   relation = c("depends", "imports", "suggests", "imports"),

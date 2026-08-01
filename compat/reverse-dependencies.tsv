@@ -20,6 +20,7 @@ imports	mlr3torch	CRAN	1	Current mlr-org deep-learning extension.
 imports	mlr3tuningspaces	CRAN	1	Parameter-space catalog and strong implicit-API consumer.
 imports	mlr3verse	CRAN	1	Meta-package; installation compatibility matters.
 imports	mlrintermbo	CRAN	1	Current mlr-org optimization package.
+imports	mlr3forecast	CRAN	1	Current mlr-org forecasting extension.
 imports	counterfactuals	CRAN	2	External direct importer.
 imports	FoRecoML	CRAN	2	External direct importer.
 imports	interflex	CRAN	2	External direct importer.

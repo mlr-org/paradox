@@ -7,16 +7,22 @@ repositories returned by the cached GitHub organization inventory collected on
 That JSON is retained below `.cache/` as collection evidence, while the tracked
 ledger freezes the source identities and decisions needed by later work.
 
-The 43 consumer repositories use the exact clean heads pinned by
-`github-snapshot.tsv`: unchanged consumers remain at their reviewed upstream
-heads, while every prepared Paradox-2 downstream branch sits at the exact local
-descendant recorded in `github-bridge-provenance.tsv`. The reviewed upstream
-census bases remain the rows in `mlr-org-review.tsv`; bridge provenance binds
-each base identity to its executable head and branch. The other 48 sources were
-downloaded separately below `.local/compat/github-org-scan/checkouts/`; the
-existing consumer
+The 44 executable-corpus repositories use the exact clean heads pinned by
+`github-snapshot.tsv`. Forty-three are Paradox consumers: unchanged consumers
+remain at their reviewed upstream heads, while every prepared Paradox-2
+downstream branch sits at the exact local descendant recorded in
+`github-bridge-provenance.tsv`. The remaining executable source is the exact
+`rush` transitive dependency provider required by the prepared bbotk and
+mlr3tuning heads; it is not a Paradox consumer or gate. Its complete
+five-commit refresh from the original organization-scan source was reviewed,
+introduces no Paradox use, and is authenticated directly by its active ledger
+row rather than being mislabeled as a local bridge. The reviewed upstream
+census bases for actual downstream bridges remain the rows in
+`mlr-org-review.tsv`; bridge provenance binds each base identity to its
+executable head and branch. The other 47 sources were downloaded separately
+below `.local/compat/github-org-scan/checkouts/`; the existing executable
 checkouts were not fetched, reset, cleaned, or otherwise changed. Ninety
-repositories have an exact census commit, tree, committer date, and
+repositories have an exact reviewed source commit, tree, committer date, and
 deterministic `git archive` SHA-256. `mlr-org/docker` is a real empty
 repository, so its absent commit, tree, and date are represented by `-`, its
 status is `empty-no-head`, and its content receipt is the SHA-256 of the empty
@@ -74,8 +80,9 @@ compat/verify-mlr-org-review --fetch
 `--fetch` creates only absent `org-scan` checkouts at their exact ledger
 commits. It refuses to alter an existing checkout and refuses to populate a
 missing `consumer-corpus` source. Until the user publishes the prepared
-downstream branches, the already authenticated local consumer checkouts are
-therefore required. Once all sources exist, the offline form is:
+downstream branches, the already authenticated local executable checkouts,
+including the exact `rush` provider, are therefore required. Once all sources
+exist, the offline form is:
 
 ```sh
 compat/verify-mlr-org-review
@@ -87,6 +94,7 @@ SHA-256, and all four match counts. For every provenance-ledgered downstream
 branch it additionally authenticates the executable snapshot
 head/tree/date/branch, the complete base identity, and base-to-head ancestry
 while calculating census receipts from the base commit. It also checks the
-fixed partition of 43 consumer sources and
-48 separately downloaded census sources. The ignored raw match files are
-convenient review artifacts, not an input to the verification.
+fixed partition of 44 executable-corpus sources (43 consumers and one exact
+dependency provider) and 47 separately downloaded census-only sources. The
+ignored raw match files are convenient review artifacts, not an input to the
+verification.
