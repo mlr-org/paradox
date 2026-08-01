@@ -138,6 +138,17 @@ that R, run the same DSO-bound probe inventory and analyzer-sensitive tests,
 and parse every retained log for errors, invalid reads/writes, uninitialized
 use, leaks, suppression counts, and terminal summaries.
 
+The analyzer-only testthat process sets cli's supported `CLI_NO_THREAD=1`
+switch. Loading testthat otherwise starts cli's detached presentation timer,
+whose asynchronous cancellation at process shutdown can nondeterministically
+leave glibc's 336-byte thread-local allocation classified as possibly lost.
+The timer is unrelated to test execution and Paradox, and disabling its
+creation is stronger than suppressing that report: default suppressions remain
+off, the suppression count must remain zero, and definite, indirect, and
+possible leaks from every thread that actually exists still fail the gate.
+The direct native-probe process does not load cli and retains its unchanged
+environment.
+
 Valgrind is a serial, memory-heavy stage. Before taking the shared Valgrind
 state lock or scanning its multi-gigabyte prerequisites, the resource helper
 must admit exactly one process with a 16-GiB conservative working-set allowance

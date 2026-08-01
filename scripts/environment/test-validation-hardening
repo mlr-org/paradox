@@ -3107,6 +3107,7 @@ for required_pattern in \
     'probes-verification-final.log' \
     'PYTHONDONTWRITEBYTECODE=1' \
     'PYTHONPYCACHEPREFIX=' \
+    'cli_timer_thread=disabled with cli-supported CLI_NO_THREAD=1 in the analyzer process' \
     'metadata-fingerprint' \
     'metadata-start.tsv' \
     'verify_ordinary_metadata_ledger' \
@@ -3128,6 +3129,9 @@ for required_pattern in \
   grep -Fq -- "$required_pattern" "$MEMORY_HARNESS" ||
     fail "memory harness lacks targeted evidence policy: $required_pattern"
 done
+[[ $(awk '$0 == "    \"CLI_NO_THREAD=1\" \\" { n++ }
+    END { print n + 0 }' "$MEMORY_HARNESS") -eq 1 ]] ||
+  fail "memory harness does not disable cli's detached timer thread exactly once"
 [[ $(grep -Fc \
   '"$RUN_DIRECTORY/metadata/create-offline-check-repository.R"' \
   "$MEMORY_HARNESS") -eq 2 ]] ||

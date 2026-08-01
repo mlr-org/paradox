@@ -714,6 +714,7 @@ if [[ "${run_fields[valgrind]}" == true ]]; then
     'examples_vignettes_manual=false (documentation and policy are separate gates)' \
     'configuration=stage wrapper passes exact CLI options with --command-line-only=yes' \
     'VALGRIND_OPTS=empty' \
+    'cli_timer_thread=disabled with cli-supported CLI_NO_THREAD=1 in the analyzer process' \
     'leak_detail=definite,indirect,possible; full summary retained' \
     'read_var_info=false (avoids non-actionable DWARF parser warnings)' \
     'child_silent_after_fork=true (rejects header-only fork-child logs)' \

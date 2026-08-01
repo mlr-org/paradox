@@ -7,7 +7,60 @@ file/count matrix.
 
 ## Current validation status
 
-The most recent immutable ref is rejected diagnostic candidate
+The active immutable package-facing ref is
+`refs/paradox-release/candidate-20260801T051235Z` (`bf0b68f`), commit
+`bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
+`79873126ae3034962edaaad30745914115240be5`. Its exact
+`release-candidate-bf0b68f` run passed all nine `release-core` rows: all four
+harness gates, differential, API headers, dual-compiler C23, native release on
+R 4.6.1, and `runtime-supported`. The latter ran the complete suite at R
+3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2. It recorded 64,848
+passing assertions and 145 exact reviewed capability skips. Together, the
+native and runtime lanes cover those eight exact versions and every minor
+series from R 3.6 through current. The old-R stress, declared-floor, final
+R-3.6 package-check, and cross-version serialization phases passed. The
+completion/JSON-summary/TSV-summary SHA-256 values are
+`1f24c42c7fe7be59629e25bc6fd910916524b13aea371d5665a4e14c4b55a276`,
+`22a4bb223c413214b14b218797f3ad61cca51d691e20147a6ed232a0f37e9fdf`,
+and
+`98e77c2c4f05d51b2728eb3aa410e636d4349cb63de8bd511963692bfd778558`.
+
+Native child `release-candidate-bf0b68f-native-release-a001` is replayable
+and passes independent source-run validation. Its source-manifest,
+copied-source-tree, copied-modes-tree, and completion-content SHA-256 values
+are respectively
+`12c9b6a07426d3036ebbad4e82f48d92a1fd8b154e1f0e8cfeeaff2fa7b30b65`,
+`b6973336386e691cd220d1d00ea557db3e1b425e383ae89070962af0bcca2ba0`,
+`0e6ab98dd3c8ba7e5a8c6036fd9064ac8fc4647f732a6681996778508bf9e951`,
+and
+`7c0bd80e9b439fe6ee531fda3fa060e3f5776c58042912c2db5e9eaf4be3d963`.
+
+Combined-memory attempt `release-candidate-bf0b68f-memory-r1` completed GCT
+but stopped in Valgrind prerequisite preflight after the live
+`.local/toolchain/lib` directory mode drifted from sealed `0775` to `0777`;
+all other 30,916 rows matched. Restoring `0775` reproduced the sealed complete
+toolchain receipt byte-for-byte, SHA-256
+`c4ff86d8334edbda0bc91a6748817e78fe39e700910e353f5098c7fa9fd7876d`.
+This is environment-integrity diagnostic evidence. Fresh attempt
+`release-candidate-bf0b68f-memory-r2` passed GCT and direct Valgrind probes,
+then failed because cli's detached presentation timer left one 336-byte glibc
+TLS allocation classified as possibly lost when the analyzer-only testthat
+process exited. The trace enters through `cli__start_thread`; definitely and
+indirectly lost bytes and suppressions were zero. rchk did not run.
+
+The narrow package-facing-source-identical repair sets cli's supported
+`CLI_NO_THREAD=1` only in the analyzer testthat process. It adds no
+suppression, leaves the direct native-probe environment unchanged, and keeps
+definite, indirect, and possible leaks fail-closed. The validation-hardening,
+memory-validator, and verification-economy self-tests pass, and an exact
+instrumented-R/Valgrind probe with the switch reports zero possible loss and
+zero errors. The current rchk policy remains bound to earlier `dbbdcc1`
+native source. A new rchk discovery and block review, exact policy commit,
+replacement static/focused source donor, and fresh immutable
+`release-candidate-bf0b68f-memory-r3` remain pending; neither failed attempt
+supplies memory acceptance.
+
+The preceding immutable ref is rejected diagnostic candidate
 `refs/paradox-release/candidate-20260801T034415Z` (`fb2a37f`), commit
 `fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree
 `86283a233c6de7d16c3d3bd20e682fa0ed5409c1`. Its exact

@@ -2,7 +2,66 @@
 
 ## Status
 
-**The most recent immutable candidate is rejected diagnostic ref
+**The active immutable package-facing candidate is
+`refs/paradox-release/candidate-20260801T051235Z`, commit
+`bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
+`79873126ae3034962edaaad30745914115240be5`. Its exact
+`release-candidate-bf0b68f` run passed all nine `release-core` tasks. The four
+harness rows, C23 under GCC 15.2 and Clang 22, the complete API-header matrix,
+all 33 differential cases, and the complete native-release lane on R 4.6.1
+passed. `runtime-supported` passed the complete suite on R 3.6.3, 4.0.5,
+4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, with 64,848 passing assertions and all
+145 skips matching their exact reviewed capability rows. Together those lanes
+cover all eight exact runtime versions from R 3.6 through current. The old-R
+stress slices, exact R-3.6 floor and package-check proofs, and cross-runtime
+serialization handoff passed. Combined memory acceptance is still pending:
+the first two attempts below are diagnostic only, and the narrow
+`CLI_NO_THREAD` harness repair plus a fresh `r3` run have not yet been
+accepted.**
+
+In `.local/verify/runs/release-candidate-bf0b68f`, all nine rows passed.
+Completion, JSON-summary, and TSV-summary SHA-256 values are
+`1f24c42c7fe7be59629e25bc6fd910916524b13aea371d5665a4e14c4b55a276`,
+`22a4bb223c413214b14b218797f3ad61cca51d691e20147a6ed232a0f37e9fdf`,
+and
+`98e77c2c4f05d51b2728eb3aa410e636d4349cb63de8bd511963692bfd778558`.
+Replayable donor
+`release-candidate-bf0b68f-native-release-a001` passes independent source-run
+validation. Its source-manifest, copied-source-tree, copied-modes-tree, and
+completion-content SHA-256 values are respectively
+`12c9b6a07426d3036ebbad4e82f48d92a1fd8b154e1f0e8cfeeaff2fa7b30b65`,
+`b6973336386e691cd220d1d00ea557db3e1b425e383ae89070962af0bcca2ba0`,
+`0e6ab98dd3c8ba7e5a8c6036fd9064ac8fc4647f732a6681996778508bf9e951`,
+and
+`7c0bd80e9b439fe6ee531fda3fa060e3f5776c58042912c2db5e9eaf4be3d963`.
+
+Combined-memory attempt `release-candidate-bf0b68f-memory-r1` completed GCT,
+then failed closed before Valgrind analysis because `.local/toolchain/lib` had
+drifted from sealed mode `0775` to `0777`; every other one of the 30,916
+receipt rows matched. After restoring the mode, a fresh complete toolchain
+receipt was byte-identical to the sealed receipt, SHA-256
+`c4ff86d8334edbda0bc91a6748817e78fe39e700910e353f5098c7fa9fd7876d`.
+Attempt `release-candidate-bf0b68f-memory-r2` passed GCT and the direct
+Valgrind probes, then the analyzer-only testthat process reported cli's
+detached timer-thread TLS allocation as 336 possibly-lost bytes in one block,
+through `cli__start_thread`; definitely and indirectly lost bytes and
+suppression counts were zero. rchk did not start. Neither attempt is package
+or memory acceptance.
+
+The current narrow package-facing-source-identical harness repair supplies
+cli's supported `CLI_NO_THREAD=1` only to the analyzer testthat process. It
+does not add a Valgrind suppression, does not alter the direct native-probe
+environment, and retains exact rejection of definite, indirect, and possible
+leaks from every thread that exists. The complete validation-hardening,
+memory-validator, and verification-economy self-tests pass, and an exact
+instrumented-R/Valgrind probe with the switch reports zero possible loss and
+zero errors. The checked-in rchk policy still names the earlier `dbbdcc1`
+native source and cannot accept the materially changed active source without
+a new discovery and block-by-block review. After committing that exact policy,
+create a fresh static/focused source donor and run combined-memory attempt
+`release-candidate-bf0b68f-memory-r3`.
+
+The preceding immutable candidate is rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit
 `fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree
 `86283a233c6de7d16c3d3bd20e682fa0ed5409c1`. Its `release-core` run passed
@@ -889,14 +948,15 @@ release-ready and do not transfer an earlier candidate's green gates.
   `fb2a37f`, and exercise every supported-minor suite with clean assertions;
   reject that diagnostic candidate because one list-ALTREP capability skip
   lacked its reviewed result-ledger row on the four pre-4.3 runtimes;
-- [ ] converge the reviewed leading-guard/four-row skip-policy repair, freeze
-  a new immutable candidate, and repoint every active validation and
-  compatibility identity to the exact package or tooling identity it denotes;
+- [x] converge the reviewed leading-guard/four-row skip-policy repair and
+  freeze immutable candidate `bf0b68f`;
+- [ ] repoint every active compatibility identity to the exact `bf0b68f`
+  package identity and the final validation-tooling identity it denotes;
 - [x] close the Domain receipt-compaction three-way timing obligation with the
   corrected eight-gate `a153fae` r5 evidence; its exact package fingerprints
   and semantic keys passed, and the bounded plan explicitly forbids rerunning
   this completed slice during final cleanup;
-- [ ] run the complete `release-core` profile for the replacement candidate:
+- [x] run the complete `release-core` profile for candidate `bf0b68f`:
   current R 4.6.1
   full native/package acceptance, both explicit C23 compiler modes, all seven
   supported runtimes—exactly one complete stage for every minor line at R
@@ -905,8 +965,9 @@ release-ready and do not transfer an earlier candidate's green gates.
   the full main source suite ran with `NOT_CRAN=true`, no
   `PARADOX_SKIP_CHARACTERIZATION_GCT` override, and no admitted `On CRAN`
   result; only exact source-derived runtime-capability skips remain;
-- [ ] create a fresh replayable source donor and complete combined memory
-  analysis against the new candidate;
+- [ ] discover and review the active source's rchk report, commit its exact
+  policy, create a fresh replayable static/focused source donor, and complete
+  combined memory analysis against `bf0b68f`;
 - [ ] install one fresh candidate-owned
   `release-refresh-20260720`/`paradox2` bridge overlay and run the prepared
   reverse-dependency, repository, documentation, and benchmark gates;
@@ -1685,16 +1746,15 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending`. Package-facing source is reopened after the
-rejected `fb2a37f` diagnostic candidate ran every minor-series suite with
-clean assertions but omitted one reviewed list-ALTREP skip row on each of the
-four pre-4.3 runtimes. The leading-guard/four-row repair is not acceptance.
-Converge and freeze a new immutable candidate, then complete the unchecked
-acceptance list against that exact source; no source-bound conclusion from
-`fb2a37f` transfers. The fresh
-downstream overlay and compatibility DAG, sealed benchmark, hosted Windows
-x86-64/macOS ARM64 gates, and user publication of prepared downstream
-branches/PRs, the release tag, and workflow all remain mandatory.
+The release decision is `pending`. Package-facing candidate `bf0b68f` is
+frozen and its nine-task `release-core`, including every supported R minor,
+passes. Combined memory still requires a fresh rchk discovery and reviewed
+policy for this materially changed native source, a replacement source donor,
+and one sealed all-mode run; the two failed memory attempts above are
+diagnostic only. The fresh downstream overlay and compatibility DAG, sealed
+benchmark, hosted Windows x86-64/macOS ARM64 gates, and user publication of
+prepared downstream branches/PRs, the release tag, and workflow all remain
+mandatory.
 
 ## Historical rejected or superseded refs
 

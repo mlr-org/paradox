@@ -19,7 +19,67 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The most recent immutable candidate is the rejected diagnostic ref
+The active immutable package-facing candidate is
+`refs/paradox-release/candidate-20260801T051235Z`, commit
+`bf0b68fa3bef496dcc09b31658c9e5453cba5276`, tree
+`79873126ae3034962edaaad30745914115240be5`. Its exact
+`release-candidate-bf0b68f` `release-core` run passed all nine tasks. This
+includes the four harness rows, all 33 differential cases, the complete API-
+header matrix, explicit C23 installations and native probes under GCC 15.2 and
+Clang 22, the complete native-release lane on R 4.6.1, and
+`runtime-supported`. The latter passed the full suite at R 3.6.3, 4.0.5,
+4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2: 64,848 assertions passed and all 145
+skips were exact reviewed capability results. Together, the runtime and native
+lanes exercise every minor series from R 3.6 through current at the eight
+versions just named. The old-R stress slices, exact R-3.6 declared-floor smoke
+and package check, and R-4.0.5-to-R-3.6.3 serialization handoff also passed.
+The coordinator completion, JSON-summary, and TSV-summary SHA-256 values are
+respectively
+`1f24c42c7fe7be59629e25bc6fd910916524b13aea371d5665a4e14c4b55a276`,
+`22a4bb223c413214b14b218797f3ad61cca51d691e20147a6ed232a0f37e9fdf`,
+and
+`98e77c2c4f05d51b2728eb3aa410e636d4349cb63de8bd511963692bfd778558`.
+
+Native child `release-candidate-bf0b68f-native-release-a001` is a replayable
+source donor and passes independent source-run validation. Its source
+manifest, copied source tree, copied modes tree, and completion-content
+SHA-256 values are respectively
+`12c9b6a07426d3036ebbad4e82f48d92a1fd8b154e1f0e8cfeeaff2fa7b30b65`,
+`b6973336386e691cd220d1d00ea557db3e1b425e383ae89070962af0bcca2ba0`,
+`0e6ab98dd3c8ba7e5a8c6036fd9064ac8fc4647f732a6681996778508bf9e951`,
+and
+`7c0bd80e9b439fe6ee531fda3fa060e3f5776c58042912c2db5e9eaf4be3d963`.
+
+The active candidate has not yet passed combined memory acceptance. Attempt
+`release-candidate-bf0b68f-memory-r1` completed its GCT probe and then failed
+closed in Valgrind prerequisite preflight because the live
+`.local/toolchain/lib` directory mode had drifted from the sealed `0775` to
+`0777`; the other 30,916 receipt rows matched. Restoring `0775` made a fresh
+complete toolchain receipt byte-identical to the sealed receipt, SHA-256
+`c4ff86d8334edbda0bc91a6748817e78fe39e700910e353f5098c7fa9fd7876d`.
+This is environment-integrity diagnostic evidence, not package or analyzer
+evidence.
+
+Fresh attempt `release-candidate-bf0b68f-memory-r2` passed GCT and the direct
+Valgrind probes, then failed the exact no-leak policy in the analyzer-only
+testthat process. Loading testthat started cli's detached timer thread; glibc
+reported its asynchronous-shutdown TLS allocation as 336 bytes in one
+possibly-lost block through `cli__start_thread`, with zero definitely or
+indirectly lost bytes and zero suppressions. rchk did not start. The current
+narrow package-facing-source-identical harness repair sets cli's supported
+`CLI_NO_THREAD=1` only for that analyzer process, leaving direct probes
+unchanged and retaining zero suppressions and exact definite, indirect, and
+possible-leak rejection. The complete validation-hardening, memory-validator,
+and verification-economy self-tests pass; an exact instrumented-R/Valgrind
+probe with the switch also reports zero possible loss and zero errors. The
+checked-in rchk policy still describes the earlier `dbbdcc1` source, however,
+while the active candidate has materially different native source. Run a
+fresh source-bound rchk discovery, review every changed block, commit its exact
+policy, create the required new static/focused source donor, and only then run
+fresh immutable combined-memory `r3`. Do not claim memory acceptance from
+`r1` or `r2`.
+
+The preceding immutable candidate is the rejected diagnostic ref
 `refs/paradox-release/candidate-20260801T034415Z`, commit
 `fb2a37fc7d9b29d1998a8639a01e18130eaa4919`, tree
 `86283a233c6de7d16c3d3bd20e682fa0ed5409c1`. Its exact

@@ -1547,6 +1547,7 @@ if [ "$MODE_VALGRIND" = true ]; then
       'examples_vignettes_manual=false (documentation and policy are separate gates)' \
       'configuration=stage wrapper passes exact CLI options with --command-line-only=yes' \
       'VALGRIND_OPTS=empty' \
+      'cli_timer_thread=disabled with cli-supported CLI_NO_THREAD=1 in the analyzer process' \
       'leak_detail=definite,indirect,possible; full summary retained' \
       'read_var_info=false (avoids non-actionable DWARF parser warnings)' \
       'child_silent_after_fork=true (rejects header-only fork-child logs)' \
@@ -1718,6 +1719,7 @@ if [ "$MODE_VALGRIND" = true ]; then
     "R_HISTFILE=/dev/null" \
     "R_TESTS=" \
     "NOT_CRAN=false" \
+    "CLI_NO_THREAD=1" \
     "TMPDIR=$MODE_WORK/tmp" \
     "XDG_CACHE_HOME=$MODE_WORK/cache" \
     "R_USER_CACHE_DIR=$MODE_WORK/cache/R" \
