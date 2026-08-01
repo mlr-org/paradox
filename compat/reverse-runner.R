@@ -2484,12 +2484,15 @@ rr_validate_reverse_wave_admission <- function(wave, pending, initial_jobs,
     as.integer(initial_jobs), as.integer(live_jobs), operator_limit,
     length(pending)
   ))
+  expected_members <- if (expected_width < 1L) integer() else {
+    utils::head(pending, rr_reverse_wave_capacity(expected_width))
+  }
   members <- as.integer(strsplit(
     wave$plan_indices[[1L]], ",", fixed = TRUE
   )[[1L]])
   if (expected_width < 1L ||
       !identical(as.integer(wave$worker_limit[[1L]]), expected_width) ||
-      !identical(members, utils::head(pending, expected_width))) {
+      !identical(members, expected_members)) {
     rr_fail("reverse wave does not use its exact retained admission width")
   }
   unsuccessful <- unlist(lapply(c(

@@ -876,6 +876,52 @@ if (any(!vapply(3:5, rr_reverse_wave_contains_position, logical(1L),
 invisible(rr_validate_reverse_unrecorded_wave_inventory(
   1:5, c(11L, 13L, 17L, 19L, 23L), 2L
 ))
+
+# Admission replay uses the same refill capacity as execution.  A four-worker
+# wave therefore owns the exact first twelve pending rows, while a final two-row
+# remainder narrows the worker width to two.  Neither a one-width truncation nor
+# an over-capacity batch is an authentic retained wave.
+admission_packages <- paste0("package", 1:14)
+admission_waves_path <- file.path(temporary, "refill-admission-waves.tsv")
+rr_write_tsv(rr_empty_reverse_waves(), admission_waves_path)
+rr_append_reverse_wave(
+  admission_waves_path, 1:12, admission_packages, 4L, "external", integer(),
+  integer(), integer(), 4L, NULL, "metadata/resource-refill-1.tsv",
+  strrep("8", 64L), strrep("9", 64L), strrep("9", 64L),
+  "2026-07-15T00:00:00Z", "2026-07-15T00:00:01Z"
+)
+admission_waves <- rr_validate_reverse_waves(
+  admission_waves_path, admission_packages
+)
+admission_pending <- rr_validate_reverse_wave_admission(
+  admission_waves[1L, , drop = FALSE], 1:14, 4L, 4L
+)
+if (!identical(admission_pending, 13:14)) {
+  rr_fail("refill admission replay did not consume its exact capacity batch")
+}
+rr_append_reverse_wave(
+  admission_waves_path, 13:14, admission_packages, 2L, "external", integer(),
+  integer(), integer(), 4L, NULL, "metadata/resource-refill-2.tsv",
+  strrep("8", 64L), strrep("9", 64L), strrep("9", 64L),
+  "2026-07-15T00:00:02Z", "2026-07-15T00:00:03Z"
+)
+admission_waves <- rr_validate_reverse_waves(
+  admission_waves_path, admission_packages
+)
+if (length(rr_validate_reverse_wave_admission(
+    admission_waves[2L, , drop = FALSE], admission_pending, 4L, 4L
+  ))) {
+  rr_fail("final refill admission replay retained a completed row")
+}
+for (invalid_members in list(1:4, 1:13)) {
+  invalid_wave <- admission_waves[1L, , drop = FALSE]
+  invalid_wave$plan_indices[[1L]] <- paste(invalid_members, collapse = ",")
+  expect_error(
+    rr_validate_reverse_wave_admission(invalid_wave, 1:14, 4L, 4L),
+    "exact retained admission width"
+  )
+}
+
 for (invalid_inventory in list(
     list(positions = 1L, indices = 11L),
     list(positions = c(1L, 3:5), indices = c(11L, 13L, 17L, 19L)),
