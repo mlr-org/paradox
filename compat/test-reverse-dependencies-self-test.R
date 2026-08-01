@@ -868,6 +868,27 @@ if (length(refill_wave$results) != 5L ||
 if (rr_reverse_wave_capacity(2L) != 6L) {
   rr_fail("reverse wave capacity is not three rows per admitted worker")
 }
+if (any(!vapply(3:5, rr_reverse_wave_contains_position, logical(1L),
+    worker_limit = 2L)) ||
+    rr_reverse_wave_contains_position(7L, 2L)) {
+  rr_fail("reverse worker receipt positions ignore refill-wave capacity")
+}
+invisible(rr_validate_reverse_unrecorded_wave_inventory(
+  1:5, c(11L, 13L, 17L, 19L, 23L), 2L
+))
+for (invalid_inventory in list(
+    list(positions = 1L, indices = 11L),
+    list(positions = c(1L, 3:5), indices = c(11L, 13L, 17L, 19L)),
+    list(positions = 1:5, indices = c(11L, 13L, 17L, 19L, 19L)),
+    list(positions = 1:7, indices = c(11L, 13L, 17L, 19L, 23L, 29L, 31L))
+  )) {
+  expect_error(
+    rr_validate_reverse_unrecorded_wave_inventory(
+      invalid_inventory$positions, invalid_inventory$indices, 2L
+    ),
+    "incomplete task inventory"
+  )
+}
 
 # The coordinator imposes an outer deadline even when the worker never reaches
 # its own bounded child calls.

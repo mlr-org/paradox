@@ -1943,6 +1943,30 @@ rr_reverse_wave_capacity <- function(worker_limit) {
   worker_limit * 3L
 }
 
+rr_reverse_wave_contains_position <- function(position, worker_limit) {
+  position <- as.integer(position)
+  if (length(position) != 1L || is.na(position) || position < 1L) {
+    rr_fail("reverse wave position requires one positive ordinal")
+  }
+  position <= rr_reverse_wave_capacity(worker_limit)
+}
+
+rr_validate_reverse_unrecorded_wave_inventory <- function(
+    positions, indices, worker_limit) {
+  positions <- as.integer(positions)
+  indices <- as.integer(indices)
+  worker_limit <- as.integer(worker_limit)
+  size <- length(positions)
+  if (length(worker_limit) != 1L || is.na(worker_limit) ||
+      worker_limit < 1L || length(indices) != size || anyNA(positions) ||
+      anyNA(indices) || any(positions < 1L) || any(indices < 1L) ||
+      size < worker_limit || size > rr_reverse_wave_capacity(worker_limit) ||
+      !identical(positions, seq_len(size)) || anyDuplicated(indices)) {
+    rr_fail("interrupted external wave has an incomplete task inventory")
+  }
+  invisible(TRUE)
+}
+
 rr_parallel_wave <- function(tasks, worker, jobs, rscript, worker_script,
                              worker_group, timeout_seconds,
                              inherited_environment = Sys.getenv()) {

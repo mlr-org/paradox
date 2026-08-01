@@ -2922,7 +2922,9 @@ reverse_read_worker_task <- function(index, package_directory) {
       worker_limit > scheduler_initial_jobs ||
       (!identical(operator_limit, "-") &&
         worker_limit > as.integer(operator_limit)) ||
-      as.integer(receipt$position[[1L]]) > worker_limit ||
+      !rr_reverse_wave_contains_position(
+        receipt$position[[1L]], worker_limit
+      ) ||
       !identical(receipt$protected_metadata_before[[1L]],
         protected_metadata_initial$combined) ||
       !identical(receipt$task_sha256[[1L]],
@@ -3218,9 +3220,10 @@ reverse_recover_external_workers <- function(protected_after) {
     same <- function(field) all(vapply(receipts, function(receipt) {
       identical(receipt[[field]][[1L]], first[[field]][[1L]])
     }, logical(1L)))
-    if (length(members) != worker_limit ||
-        !identical(positions, seq_len(worker_limit)) ||
-        anyDuplicated(indices) || any(!vapply(c(
+    invisible(rr_validate_reverse_unrecorded_wave_inventory(
+      positions, indices, worker_limit
+    ))
+    if (any(!vapply(c(
           "wave", "worker_limit", "automatic_ceiling", "operator_limit",
           "resource_report", "resource_report_sha256",
           "protected_metadata_before", "started_utc", "worker_script_sha256",
