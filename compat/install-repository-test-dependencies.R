@@ -1515,7 +1515,7 @@ install_exact_dependency_provider <- function(repository, checkout) {
       stdout = "|",
       stderr_to_stdout = TRUE,
       error_on_status = FALSE,
-      timeout = 3600000L,
+      timeout = 3600L,
       cleanup_tree = TRUE,
       wd = provider_install_work_directory,
       env = provider_install_environment

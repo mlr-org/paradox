@@ -420,6 +420,7 @@ for binding in \
     'install_source = install_source' \
     '--built-timestamp=' \
     '--without-keep.source' \
+    'timeout = 3600L' \
     assert_provider_install_state_empty \
     'before R CMD INSTALL' \
     'after R CMD INSTALL' \

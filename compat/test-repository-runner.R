@@ -366,6 +366,7 @@ for (index in seq_along(provider_libraries)) {
     ),
     wd = provider_runs[[index]],
     env = install_environment,
+    timeout = 3600L,
     stdout = provider_install_logs[[index]],
     stderr = "2>&1",
     error_on_status = FALSE,
