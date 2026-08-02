@@ -565,8 +565,8 @@ test_that("integer row-name ALTREP is length-snapshotted once", {
   )
   fixture_calls = public_table_native_symbol("test_stateful_altrep_calls")
   row_names = native_stateful_altrep(
-    1:3,
-    1:2,
+    c(1L, 2L, 3L),
+    c(1L, 2L),
     length_switch_after = 1L
   )
   expect_identical(
