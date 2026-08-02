@@ -2610,7 +2610,9 @@ typedef enum {
  * method must not run. Both observations are bracketed by the shape receipt,
  * so an Elt method that re-enters R cannot pair one generation's type or
  * length with another generation's elements. `destination` and `source` are
- * rooted by the caller and this routine allocates nothing.
+ * rooted by the caller; the routine performs no direct allocation, but an
+ * ALTREP Elt method may allocate inside its provider -- which is exactly why
+ * it must run here, ahead of the allocation-free terminal window.
  */
 static altrep_metadata_payload_status_t materialize_altrep_metadata_payload(
     SEXP destination, SEXP source, SEXPTYPE type, R_xlen_t size) {
