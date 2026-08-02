@@ -540,6 +540,7 @@ attribute_hidden SEXP paradox_test_stateful_altrep_row_names_rearm(
   SEXP table,
   SEXP callback_after
 );
+attribute_hidden SEXP paradox_test_stateful_altrep_calls(SEXP value);
 attribute_hidden SEXP paradox_test_public_row_names_count(SEXP row_names);
 attribute_hidden SEXP paradox_test_gc_column_mutator(
   SEXP table,

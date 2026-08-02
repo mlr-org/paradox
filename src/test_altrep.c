@@ -374,7 +374,9 @@ SEXP paradox_test_stateful_altrep(SEXP first, SEXP later,
   return wrapper;
 }
 
-static void rearm_stateful_altrep(SEXP value, SEXP callback_after) {
+/* One spelling of fixture recognition and of its configuration carrier, shared
+ * by every operation that reaches a fixture's counters. */
+static void require_stateful_altrep(SEXP value) {
   if (!ALTREP(value) ||
       (!R_altrep_inherits(value, test_string_class) &&
 #if R_VERSION >= R_Version(4, 3, 0)
@@ -385,6 +387,43 @@ static void rearm_stateful_altrep(SEXP value, SEXP callback_after) {
         !R_altrep_inherits(value, test_logical_class))) {
     Rf_error("`value` must be a stateful ALTREP test fixture");
   }
+}
+
+static SEXP stateful_altrep_config(SEXP value) {
+  SEXP config = R_altrep_data2(value);
+  if (TYPEOF(config) != INTSXP || ALTREP(config) ||
+      XLENGTH(config) != TEST_CONFIG_SIZE) {
+    Rf_error("Corrupt stateful ALTREP test fixture configuration");
+  }
+  return config;
+}
+
+/*
+ * Report the fixture's own observation counters. Both are zeroed once the
+ * completed object leaves the constructor, and both saturate at INT_MAX, so a
+ * test may assert an exact number of Elt and Length dispatches rather than
+ * infer at-least-once from a callback having fired. A list fixture's Length
+ * counter already includes the one observation the constructor's own list
+ * return performs.
+ */
+SEXP paradox_test_stateful_altrep_calls(SEXP value) {
+  require_stateful_altrep(value);
+  SEXP config = PROTECT(stateful_altrep_config(value));
+  const int elt_calls = INTEGER(config)[TEST_CONFIG_ELT_CALLS];
+  const int length_calls = INTEGER(config)[TEST_CONFIG_LENGTH_CALLS];
+  SEXP result = PROTECT(Rf_allocVector(INTSXP, 2));
+  INTEGER(result)[0] = elt_calls;
+  INTEGER(result)[1] = length_calls;
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, 2));
+  SET_STRING_ELT(names, 0, Rf_mkChar("elt"));
+  SET_STRING_ELT(names, 1, Rf_mkChar("length"));
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(3);
+  return result;
+}
+
+static void rearm_stateful_altrep(SEXP value, SEXP callback_after) {
+  require_stateful_altrep(value);
 
   int elt_after;
   int length_after;
@@ -394,12 +433,7 @@ static void rearm_stateful_altrep(SEXP value, SEXP callback_after) {
     &length_after,
     FALSE
   );
-  SEXP config = PROTECT(R_altrep_data2(value));
-  if (TYPEOF(config) != INTSXP || ALTREP(config) ||
-      XLENGTH(config) != TEST_CONFIG_SIZE) {
-    UNPROTECT(1);
-    Rf_error("Corrupt stateful ALTREP test fixture configuration");
-  }
+  SEXP config = PROTECT(stateful_altrep_config(value));
   int *values = INTEGER(config);
   values[TEST_CONFIG_ELT_CALLBACK_AFTER] = relative_callback_call(
     values[TEST_CONFIG_ELT_CALLS],

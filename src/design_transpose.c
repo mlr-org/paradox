@@ -376,6 +376,14 @@ static void install_design_scalar_attributes(SEXP target, SEXP column) {
        * The frozen column owns one flat, attribute-free character value.
        * Duplicate that value for every public scalar so rows cannot share a
        * mutable levels/class/tzone/units carrier.
+       *
+       * This is O(rows x carrier length) per attributed column and dominates
+       * transposition of wide-levelled factor or `POSIXct` designs. The cost
+       * is accepted: isolation here has to hold against `data.table::setattr()`
+       * and every other by-reference attribute write, which bypass R's
+       * copy-on-write barrier entirely, so marking one shared carrier
+       * immutable would not preserve it. Sharing would make one row's
+       * attribute write visible in its siblings.
        */
       SEXP owned = PROTECT(Rf_duplicate(value));
       Rf_setAttrib(target, design_attribute_symbol(attribute), owned);

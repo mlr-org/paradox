@@ -65,7 +65,12 @@ test_that("bulk qunif preserves requested order, storage, and endpoints", {
     c("row.names", "class", "names", ".internal.selfref")
   )
   expect_identical(.row_names_info(native, type = 0L), c(NA_integer_, -4L))
-  expect_identical(data.table:::selfrefok(native, verbose = FALSE), 1L)
+  # The native builder installs data.table's self-reference itself, so the
+  # result is a complete data.table rather than a plain list wearing its class.
+  expect_identical(
+    typeof(attr(native, ".internal.selfref", exact = TRUE)),
+    "externalptr"
+  )
   expect_identical(param_set$qunif(units), native)
 })
 
@@ -79,27 +84,36 @@ test_that("bulk qunif results are immediately safe for by-reference use", {
   input_names = colnames(units)
   result = param_set$qunif(units)
 
-  expect_identical(data.table:::selfrefok(result, verbose = FALSE), 1L)
+  # A healthy self-reference is observable as by-reference usability: the
+  # result accepts in-place modification without data.table first repairing or
+  # shallow-copying it, which it announces with a warning.
+  expect_identical(
+    typeof(attr(result, ".internal.selfref", exact = TRUE)),
+    "externalptr"
+  )
   expect_warning(
     data.table::set(result, j = "added", value = seq_len(nrow(result))),
     NA
   )
   expect_identical(result$added, seq_len(nrow(result)))
+  expect_warning(data.table::set(result, i = 1L, j = "double", value = 0), NA)
+  expect_identical(result$double[[1L]], 0)
   expect_identical(colnames(units), input_names)
 
+  # Serialization drops every data.table self-reference. The restored result
+  # must stay usable by reference rather than become a table data.table has to
+  # complain about.
   restored = unserialize(serialize(param_set$qunif(units), NULL))
-  expect_identical(data.table:::selfrefok(restored, verbose = FALSE), -1L)
   expect_warning(
     data.table::set(restored, i = 1L, j = "double", value = 0),
     NA
   )
-  expect_identical(data.table:::selfrefok(restored, verbose = FALSE), -1L)
+  expect_identical(restored$double[[1L]], 0)
   expect_warning(
     data.table::set(restored, j = "after_restore", value = seq_len(nrow(restored))),
     NA
   )
   expect_identical(restored$after_restore, seq_len(nrow(restored)))
-  expect_identical(data.table:::selfrefok(restored, verbose = FALSE), 1L)
 })
 
 test_that("bulk qunif agrees with each built-in Domain across rows", {
@@ -185,7 +199,14 @@ test_that("zero-level factor parameters retain typed zero-row quantiles", {
   expect_s3_class(result, "data.table")
   expect_identical(dim(result), c(0L, 1L))
   expect_identical(result$choice, character())
-  expect_identical(data.table:::selfrefok(result, verbose = FALSE), 1L)
+  expect_identical(
+    typeof(attr(result, ".internal.selfref", exact = TRUE)),
+    "externalptr"
+  )
+  expect_warning(
+    data.table::set(result, j = "added", value = character()),
+    NA
+  )
 
   expect_error(
     param_set$qunif(matrix(
@@ -610,4 +631,63 @@ test_that("frame column metadata remains unclassed through materialization", {
     "Columns of `x` changed while being snapshotted",
     fixed = TRUE
   )
+})
+
+test_that("quantile mapping rejects every non-canonical numeric capsule", {
+  # `$check` and `$qunif` read the same three stored scalars, so they decide
+  # canonicity with one predicate: a capsule one engine refuses cannot be
+  # silently mapped by the other.
+  corrupt = function(column, value, id) {
+    space = ps(i = p_int(0, 10), d = p_dbl(0, 1))
+    private = space$.__enclos_env__$private
+    state = paradox:::param_set_core_state(private)
+    state$.params[[column]][[match(id, state$.params$id)]] = value
+    private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
+    space
+  }
+  units = matrix(c(0.5, 0.5), ncol = 2L, dimnames = list(NULL, c("i", "d")))
+
+  rejected = list(
+    list(column = "tolerance", value = 0.6),
+    list(column = "lower", value = 0.5),
+    list(column = "upper", value = 10.5),
+    list(column = "tolerance", value = -1),
+    list(column = "lower", value = 11)
+  )
+  for (case in rejected) {
+    label = paste(case$column, case$value)
+    space = corrupt(case$column, case$value, "i")
+    expect_error(
+      space$check(list(i = 1L, d = 0.5)),
+      "Corrupt ParamSet state: invalid numeric bounds or tolerance",
+      fixed = TRUE,
+      info = label
+    )
+    expect_error(space$qunif(units), "Corrupt ParamSet", info = label)
+    expect_error(
+      generate_design_grid(space, resolution = 2L),
+      "Corrupt ParamSet",
+      info = label
+    )
+  }
+
+  # The rules are the integer kind's alone, and infinite integer bounds stay
+  # the admitted spelling of an unbounded integer Domain.
+  admitted = list(
+    list(column = "tolerance", value = 0.4, id = "i", maps = TRUE),
+    list(column = "lower", value = -Inf, id = "i", maps = FALSE),
+    list(column = "upper", value = Inf, id = "i", maps = FALSE),
+    list(column = "tolerance", value = 0.6, id = "d", maps = TRUE),
+    list(column = "lower", value = 0.5, id = "d", maps = TRUE)
+  )
+  for (case in admitted) {
+    label = paste(case$id, case$column, case$value)
+    space = corrupt(case$column, case$value, case$id)
+    expect_true(space$check(list(i = 1L, d = 0.75)), info = label)
+    # Infinite integer bounds are admitted but have no finite quantile to
+    # report, so only the finite capsules are mapped here.
+    if (case$maps) {
+      expect_s3_class(space$qunif(units), "data.table")
+    }
+  }
 })

@@ -20,7 +20,6 @@ typedef enum {
 } numeric_source_kind_t;
 
 static int plain_scalar_number_value(SEXP value, double *result);
-static int plain_integer_bound(double value);
 
 static int scalar_string(SEXP value) {
   return TYPEOF(value) == STRSXP && !ALTREP(value) &&
@@ -1222,12 +1221,12 @@ static int admit_builtin_domain_schema_core(
               &admitted_tolerance
             );
       if (!valid_source ||
-          admitted_lower > admitted_upper || !R_FINITE(admitted_tolerance) ||
-          admitted_tolerance < 0.0 ||
-          (resolved_kind == PARADOX_BUILTIN_DOMAIN_INT &&
-            (!plain_integer_bound(admitted_lower) ||
-              !plain_integer_bound(admitted_upper) ||
-              admitted_tolerance > 0.5))) {
+          !paradox_domain_numeric_capsule_is_canonical(
+            resolved_kind == PARADOX_BUILTIN_DOMAIN_INT,
+            admitted_lower,
+            admitted_upper,
+            admitted_tolerance
+          )) {
         REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_BOUNDS);
       }
     } else {
@@ -1967,7 +1966,7 @@ SEXP paradox_domain_construct(
 
     double lower_value;
     if (!plain_scalar_number_value(lower, &lower_value) ||
-        (integer && !plain_integer_bound(lower_value))) {
+        (integer && !paradox_domain_plain_integer_bound(lower_value))) {
       UNPROTECT(1);
       Rf_error(
         integer
@@ -1978,7 +1977,7 @@ SEXP paradox_domain_construct(
 
     double upper_value;
     if (!plain_scalar_number_value(upper, &upper_value) ||
-        (integer && !plain_integer_bound(upper_value))) {
+        (integer && !paradox_domain_plain_integer_bound(upper_value))) {
       UNPROTECT(1);
       Rf_error(
         integer
@@ -2185,16 +2184,6 @@ static int plain_scalar_number_value(SEXP value, double *result) {
     return TRUE;
   }
   return FALSE;
-}
-
-static int plain_integer_bound(double value) {
-  if (!R_FINITE(value)) {
-    return TRUE;
-  }
-  if (value < -(double) INT_MAX || value > (double) INT_MAX) {
-    return FALSE;
-  }
-  return value == (double) ((int) value);
 }
 
 SEXP paradox_domain_uty_check_result(SEXP result) {

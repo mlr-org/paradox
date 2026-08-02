@@ -1,6 +1,8 @@
 #ifndef PARADOX_PARAMSET_DOMAIN_COMMON_H
 #define PARADOX_PARAMSET_DOMAIN_COMMON_H
 
+#include <stdint.h>
+
 #include "paradox.h"
 
 enum paradox_domain_column {
@@ -50,6 +52,9 @@ typedef struct {
   SEXP row_names;
   SEXP selfref;
   SEXP repr;
+  /* The first unsupported metadata tag the mapper saw, or `R_NilValue`. It is
+   * a borrowed alias used only to name a rejection cause; no rule reads it. */
+  SEXP unsupported_tag;
   R_xlen_t count;
   int valid;
 } paradox_domain_outer_metadata_t;
@@ -57,6 +62,22 @@ typedef struct {
 attribute_hidden int paradox_domain_capture_outer_metadata(
   SEXP domain,
   paradox_domain_outer_metadata_t *metadata
+);
+
+/* Sole owner of the printable Domain `repr` carrier's shape rule. The carrier
+ * is a print-only payload whose content is opaque to every operation; only its
+ * representation is constrained, and the capture above enforces this for every
+ * caller that admits a public Domain table. */
+attribute_hidden int paradox_domain_repr_carrier_is_ordinary(SEXP repr);
+
+/* Fail-closed rejection of a public Domain whose outer metadata the capture
+ * above refused. Ordinary data.table use -- an `i` filter or a key -- installs
+ * a mutable cache attribute on the Domain by reference; naming that cause and
+ * its remedy keeps the rejection actionable without admitting the table. Never
+ * returns. */
+attribute_hidden void paradox_domain_reject_outer_metadata(
+  SEXP domain,
+  const paradox_domain_outer_metadata_t *metadata
 );
 
 /* The package-load-interned non-global metadata tag used by the separate
@@ -209,6 +230,59 @@ attribute_hidden int paradox_domain_string_is(
   const char *expected
 );
 attribute_hidden int paradox_domain_strings_equal(SEXP left, SEXP right);
+
+/* One open-addressed FNV-1a identifier index over an admitted `id` column,
+ * shared by every engine that resolves names to rows. The map borrows `ids`
+ * and its slots live in operation-local temporary storage, so the caller must
+ * keep both alive for the map's whole lifetime. Building it reports which
+ * canonical condition failed; each caller keeps its own diagnostics, because a
+ * duplicate identifier is corrupt state to one engine and an ordinary
+ * rejection to another. */
+typedef struct {
+  uint64_t hash;
+  R_xlen_t row_plus_one;
+} paradox_domain_id_slot_t;
+
+typedef struct {
+  paradox_domain_id_slot_t *slots;
+  R_xlen_t capacity;
+  SEXP ids;
+} paradox_domain_id_map_t;
+
+typedef enum {
+  PARADOX_DOMAIN_ID_MAP_OK = 0,
+  PARADOX_DOMAIN_ID_MAP_TOO_MANY,
+  PARADOX_DOMAIN_ID_MAP_CAPACITY,
+  PARADOX_DOMAIN_ID_MAP_DUPLICATE
+} paradox_domain_id_map_status_t;
+
+/* A canonical `ParamInt` bound is integer-valued or infinite; infinities are
+ * the admitted spelling of an unbounded integer Domain. */
+attribute_hidden int paradox_domain_plain_integer_bound(double value);
+
+/* Sole spelling of the numeric built-in Domain capsule's bounds/tolerance
+ * rule, over the three stored scalars every engine reads. Row admission,
+ * capsule schema validation, and quantile mapping decide canonicity with this
+ * one predicate: an engine omitting a clause would accept a capsule the
+ * constructor cannot produce and its peers reject. */
+attribute_hidden int paradox_domain_numeric_capsule_is_canonical(
+  int integer_kind,
+  double lower,
+  double upper,
+  double tolerance
+);
+
+attribute_hidden paradox_domain_id_map_status_t paradox_domain_id_map_init(
+  SEXP ids,
+  paradox_domain_id_map_t *map
+);
+
+attribute_hidden int paradox_domain_id_map_find(
+  const paradox_domain_id_map_t *map,
+  SEXP id,
+  R_xlen_t *row,
+  R_xlen_t *work_since_interrupt
+);
 /* Linear identifier search over an already admitted character vector, with
  * the pointer-identity fast path first. Returns the first matching index or
  * R_XLEN_T_MAX when absent. */

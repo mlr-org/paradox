@@ -184,12 +184,13 @@ static int exact_domain_outer_attributes(SEXP domain) {
       INTEGER_ELT(metadata.row_names, 0) == NA_INTEGER &&
       (INTEGER_ELT(metadata.row_names, 1) == 1 ||
         INTEGER_ELT(metadata.row_names, 1) == -1));
+  /* The `repr` carrier's shape rule has one owner in the shared Domain
+   * metadata layer; construction states no second spelling of it. */
   return exact_one_row &&
     (metadata.selfref == R_NilValue ||
       (TYPEOF(metadata.selfref) == EXTPTRSXP &&
         !Rf_isS4(metadata.selfref))) &&
-    (metadata.repr == R_NilValue ||
-      (!ALTREP(metadata.repr) && !Rf_isS4(metadata.repr)));
+    paradox_domain_repr_carrier_is_ordinary(metadata.repr);
 }
 
 static int exact_domain_column_names(SEXP domain) {

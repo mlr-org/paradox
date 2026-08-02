@@ -61,16 +61,7 @@ typedef struct {
 static SEXP validate_tune_token(const value_spec_t *spec, SEXP token,
   R_xlen_t *work_since_interrupt, SEXP *receipt_result);
 
-typedef struct {
-  uint64_t hash;
-  R_xlen_t row_plus_one;
-} id_slot_t;
-
-typedef struct {
-  id_slot_t *slots;
-  R_xlen_t capacity;
-  SEXP ids;
-} id_map_t;
+typedef paradox_domain_id_map_t id_map_t;
 
 enum node_root_slot {
   NODE_ROOT_SELF = 0,
@@ -388,88 +379,24 @@ static SEXP named_list_element(SEXP value, const char *target) {
   return matches == 1 ? result : R_UnboundValue;
 }
 
-static uint64_t hash_bytes(const unsigned char *text, uint64_t hash) {
-  while (*text != '\0') {
-    hash ^= (uint64_t) *text;
-    hash *= UINT64_C(1099511628211);
-    ++text;
-  }
-  return hash;
-}
-
-static uint64_t hash_string(SEXP string) {
-  uint64_t hash = UINT64_C(14695981039346656037);
-  if (Rf_getCharCE(string) == CE_BYTES) {
-    hash ^= UINT64_C(0xff);
-    hash *= UINT64_C(1099511628211);
-    return hash_bytes((const unsigned char *) CHAR(string), hash);
-  }
-  PROTECT(string);
-  const void *vmax = vmaxget();
-  const char *text = Rf_translateCharUTF8(string);
-  hash = hash_bytes((const unsigned char *) text, hash);
-  vmaxset(vmax);
-  UNPROTECT(1);
-  return hash;
-}
-
+/* A duplicate identifier reaching the check engine is corrupt capsule state;
+ * the shared index reports the condition and this engine keeps its wording. */
 static void initialize_id_map(SEXP ids, id_map_t *map) {
-  const R_xlen_t size = XLENGTH(ids);
-  if (size > R_XLEN_T_MAX / 2) {
+  switch (paradox_domain_id_map_init(ids, map)) {
+  case PARADOX_DOMAIN_ID_MAP_OK:
+    return;
+  case PARADOX_DOMAIN_ID_MAP_TOO_MANY:
     Rf_error("ParamSet contains too many parameters");
+  case PARADOX_DOMAIN_ID_MAP_CAPACITY:
+    Rf_error("ParamSet identifier index exceeds platform bounds");
+  case PARADOX_DOMAIN_ID_MAP_DUPLICATE:
+    Rf_error("Corrupt ParamSet state: duplicate parameter identifier");
   }
-  R_xlen_t capacity = 1;
-  const R_xlen_t needed = size == 0 ? 1 : size * 2;
-  while (capacity < needed) {
-    if (capacity > R_XLEN_T_MAX / 2) {
-      Rf_error("ParamSet identifier index exceeds platform bounds");
-    }
-    capacity *= 2;
-  }
-  id_slot_t *slots = paradox_temporary_alloc(capacity, sizeof(*slots));
-  memset(slots, 0, (size_t) capacity * sizeof(*slots));
-  const R_xlen_t mask = capacity - 1;
-  R_xlen_t work_since_interrupt = 0;
-  for (R_xlen_t row = 0; row < size; ++row) {
-    paradox_account_work(&work_since_interrupt);
-    SEXP id = STRING_ELT(ids, row);
-    const uint64_t hash = hash_string(id);
-    R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
-    while (slots[slot].row_plus_one != 0) {
-      const R_xlen_t present = slots[slot].row_plus_one - 1;
-      if (slots[slot].hash == hash && paradox_domain_strings_equal(
-          STRING_ELT(ids, present), id
-        )) {
-        Rf_error("Corrupt ParamSet state: duplicate parameter identifier");
-      }
-      slot = (slot + 1) & mask;
-    }
-    slots[slot].hash = hash;
-    slots[slot].row_plus_one = row + 1;
-  }
-  map->slots = slots;
-  map->capacity = capacity;
-  map->ids = ids;
 }
 
 static int find_id(const id_map_t *map, SEXP id, R_xlen_t *row,
     R_xlen_t *work_since_interrupt) {
-  if (id == NA_STRING) return FALSE;
-  const uint64_t hash = hash_string(id);
-  const R_xlen_t mask = map->capacity - 1;
-  R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
-  while (map->slots[slot].row_plus_one != 0) {
-    paradox_account_work(work_since_interrupt);
-    const R_xlen_t present = map->slots[slot].row_plus_one - 1;
-    if (map->slots[slot].hash == hash && paradox_domain_strings_equal(
-        STRING_ELT(map->ids, present), id
-      )) {
-      *row = present;
-      return TRUE;
-    }
-    slot = (slot + 1) & mask;
-  }
-  return FALSE;
+  return paradox_domain_id_map_find(map, id, row, work_since_interrupt);
 }
 
 static R_xlen_t local_param_row(const check_node_t *node, SEXP id,
@@ -842,13 +769,12 @@ static void validate_node_schema(check_node_t *node,
       STRING_ELT(classes, row), STRING_ELT(storage, row)
     );
     if (kind == VALUE_DBL || kind == VALUE_INT) {
-      const double row_lower = paradox_numeric_elt(lower, row);
-      const double row_upper = paradox_numeric_elt(upper, row);
-      const double row_tolerance = paradox_numeric_elt(tolerance, row);
-      if (ISNAN(row_lower) || ISNAN(row_upper) ||
-          ISNAN(row_tolerance) || row_lower > row_upper ||
-          !R_FINITE(row_tolerance) || row_tolerance < 0.0 ||
-          (kind == VALUE_INT && row_tolerance > 0.5)) {
+      if (!paradox_domain_numeric_capsule_is_canonical(
+          kind == VALUE_INT,
+          paradox_numeric_elt(lower, row),
+          paradox_numeric_elt(upper, row),
+          paradox_numeric_elt(tolerance, row)
+        )) {
         Rf_error("Corrupt ParamSet state: invalid numeric bounds or tolerance");
       }
     }

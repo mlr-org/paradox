@@ -55,16 +55,7 @@ typedef struct {
   SEXP storage_types;
 } param_columns_t;
 
-typedef struct {
-  uint64_t hash;
-  R_xlen_t row_plus_one;
-} id_slot_t;
-
-typedef struct {
-  id_slot_t *slots;
-  R_xlen_t capacity;
-  SEXP ids;
-} id_map_t;
+typedef paradox_domain_id_map_t id_map_t;
 
 typedef struct {
   qunif_kind_t kind;
@@ -148,98 +139,16 @@ static int load_param_columns(SEXP params, param_columns_t *columns,
   return TRUE;
 }
 
-static uint64_t hash_bytes(const unsigned char *text, uint64_t hash) {
-  while (*text != '\0') {
-    hash ^= (uint64_t) *text;
-    hash *= UINT64_C(1099511628211);
-    ++text;
-  }
-  return hash;
-}
-
-static uint64_t hash_string(SEXP string) {
-  uint64_t hash = UINT64_C(14695981039346656037);
-  if (Rf_getCharCE(string) == CE_BYTES) {
-    hash ^= UINT64_C(0xff);
-    hash *= UINT64_C(1099511628211);
-    return hash_bytes((const unsigned char *) CHAR(string), hash);
-  }
-
-  PROTECT(string);
-  const void *vmax = vmaxget();
-  const char *text = Rf_translateCharUTF8(string);
-  hash = hash_bytes((const unsigned char *) text, hash);
-  vmaxset(vmax);
-  UNPROTECT(1);
-  return hash;
-}
-
+/* Quantile mapping treats an unusable identifier index -- oversized or
+ * duplicated -- as an ordinary rejection its callers turn into the operation's
+ * own diagnostic, so every reported condition collapses to one answer here. */
 static int initialize_id_map(SEXP ids, id_map_t *map) {
-  const R_xlen_t size = XLENGTH(ids);
-  if (size > R_XLEN_T_MAX / 2) {
-    return FALSE;
-  }
-
-  R_xlen_t capacity = 1;
-  const R_xlen_t needed = size == 0 ? 1 : size * 2;
-  while (capacity < needed) {
-    if (capacity > R_XLEN_T_MAX / 2) {
-      return FALSE;
-    }
-    capacity *= 2;
-  }
-
-  id_slot_t *slots = paradox_temporary_alloc(capacity, sizeof(*slots));
-  R_xlen_t work_since_interrupt = 0;
-  for (R_xlen_t slot = 0; slot < capacity; ++slot) {
-    paradox_account_work(&work_since_interrupt);
-    slots[slot].hash = 0;
-    slots[slot].row_plus_one = 0;
-  }
-
-  const R_xlen_t mask = capacity - 1;
-  for (R_xlen_t row = 0; row < size; ++row) {
-    paradox_account_work(&work_since_interrupt);
-    SEXP id = PROTECT(STRING_ELT(ids, row));
-    const uint64_t hash = hash_string(id);
-    R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
-    while (slots[slot].row_plus_one != 0) {
-      paradox_account_work(&work_since_interrupt);
-      const R_xlen_t present = slots[slot].row_plus_one - 1;
-      if (slots[slot].hash == hash &&
-          paradox_domain_strings_equal(STRING_ELT(ids, present), id)) {
-        UNPROTECT(1);
-        return FALSE;
-      }
-      slot = (slot + 1) & mask;
-    }
-    slots[slot].hash = hash;
-    slots[slot].row_plus_one = row + 1;
-    UNPROTECT(1);
-  }
-
-  map->slots = slots;
-  map->capacity = capacity;
-  map->ids = ids;
-  return TRUE;
+  return paradox_domain_id_map_init(ids, map) == PARADOX_DOMAIN_ID_MAP_OK;
 }
 
 static int find_id(const id_map_t *map, SEXP id, R_xlen_t *row,
     R_xlen_t *work_since_interrupt) {
-  const uint64_t hash = hash_string(id);
-  const R_xlen_t mask = map->capacity - 1;
-  R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
-  while (map->slots[slot].row_plus_one != 0) {
-    paradox_account_work(work_since_interrupt);
-    const R_xlen_t present = map->slots[slot].row_plus_one - 1;
-    if (map->slots[slot].hash == hash &&
-        paradox_domain_strings_equal(STRING_ELT(map->ids, present), id)) {
-      *row = present;
-      return TRUE;
-    }
-    slot = (slot + 1) & mask;
-  }
-  return FALSE;
+  return paradox_domain_id_map_find(map, id, row, work_since_interrupt);
 }
 
 static void require_unit_interval(double unit) {
@@ -653,10 +562,10 @@ static int load_spec(const param_columns_t *columns, R_xlen_t row,
     UNPROTECT(2);
     return TRUE;
   } else if (paradox_domain_string_is(class_name, "ParamLgl") &&
-      paradox_domain_string_is(storage_type, "logical") &&
-      TYPEOF(source_levels) == LGLSXP && XLENGTH(source_levels) == 2 &&
-      LOGICAL_ELT(source_levels, 0) == TRUE &&
-      LOGICAL_ELT(source_levels, 1) == FALSE) {
+      paradox_domain_string_is(storage_type, "logical")) {
+    /* `paradox_domain_validate_params()` admitted every row of this capsule
+     * with `validate_all_rows`, so the canonical `c(TRUE, FALSE)` levels of
+     * this exact class/storage pairing are already proven. */
     spec->kind = QUNIF_KIND_LGL;
     UNPROTECT(1);
     return TRUE;
@@ -667,10 +576,12 @@ static int load_spec(const param_columns_t *columns, R_xlen_t row,
 
   spec->lower = paradox_numeric_elt(columns->lower, row);
   spec->upper = paradox_numeric_elt(columns->upper, row);
-  const double tolerance = paradox_numeric_elt(columns->tolerance, row);
-  const int valid = !ISNAN(spec->lower) && !ISNAN(spec->upper) &&
-    !ISNAN(tolerance) && R_FINITE(tolerance) && tolerance >= 0.0 &&
-    spec->lower <= spec->upper;
+  const int valid = paradox_domain_numeric_capsule_is_canonical(
+    spec->kind == QUNIF_KIND_INT,
+    spec->lower,
+    spec->upper,
+    paradox_numeric_elt(columns->tolerance, row)
+  );
   UNPROTECT(1);
   return valid;
 }

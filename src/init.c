@@ -184,6 +184,8 @@ static const R_CallMethodDef call_methods[] = {
     (DL_FUNC) &paradox_test_stateful_altrep_rearm, 2},
   {"test_stateful_altrep_row_names_rearm",
     (DL_FUNC) &paradox_test_stateful_altrep_row_names_rearm, 2},
+  {"test_stateful_altrep_calls",
+    (DL_FUNC) &paradox_test_stateful_altrep_calls, 1},
   {"test_public_row_names_count",
     (DL_FUNC) &paradox_test_public_row_names_count, 1},
   {"test_materialize_public_table_shell",

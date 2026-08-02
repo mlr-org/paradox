@@ -314,3 +314,174 @@ test_that("unified ParamSet checking rejects malformed calls without replay", {
   expect_false(is.null(scalar_result))
   expect_false(is.null(table_result))
 })
+
+# One helper for hand-built Domain column-name corruption: unclass, rewrite the
+# names cell, and reinstall the original attribute spine so the result still
+# presents to native code as the public Domain it claims to be.
+native_adversarial_rename = function(domain, from, to) {
+  spine = attributes(domain)
+  result = unclass(domain)
+  spine$names[match(from, spine$names)] = to
+  attributes(result) = spine
+  result
+}
+
+test_that("public Domain operations reject duplicate and missing columns", {
+  operations = list(
+    check = function(d) domain_check(d, list(0.5)),
+    qunif = function(d) domain_qunif(d, 0.5),
+    sanitize = function(d) domain_sanitize(d, list(0.5)),
+    nlevels = function(d) domain_nlevels(d)
+  )
+  # Spelling `lower` as `upper` leaves `lower` absent and `upper` duplicated;
+  # the selector reports in ascending canonical column order.
+  duplicated_name = native_adversarial_rename(p_dbl(0, 1), "lower", "upper")
+  missing_name = native_adversarial_rename(p_dbl(0, 1), "upper", "not_a_column")
+  for (name in names(operations)) {
+    expect_error(
+      operations[[name]](duplicated_name),
+      "Corrupt Domain storage: `Domain` has no `lower` column",
+      fixed = TRUE,
+      info = name
+    )
+    expect_error(
+      operations[[name]](missing_name),
+      "Corrupt Domain storage: `Domain` has no `upper` column",
+      fixed = TRUE,
+      info = name
+    )
+  }
+
+  # A seventeenth column duplicating a canonical name leaves every name
+  # present and is still rejected.
+  seventeen = unclass(p_dbl(0, 1))
+  spine = attributes(p_dbl(0, 1))
+  seventeen = c(seventeen, list(id = seventeen$id))
+  spine$names = c(spine$names, "id")
+  attributes(seventeen) = spine
+  expect_error(
+    domain_check(seventeen, list(0.5)),
+    "Corrupt Domain storage: `Domain` has more than one `id` column",
+    fixed = TRUE
+  )
+})
+
+test_that("canonical Domain column names are decided by their bytes", {
+  # R interns one CHARSXP per exact string, and re-marking the encoding of a
+  # pure-ASCII canonical name yields that same interned object: the selector's
+  # byte fallback therefore accepts every spelling whose bytes match a
+  # canonical name, and encoding marking never changes column identity.
+  for (encoding in c("UTF-8", "latin1", "bytes")) {
+    for (column in c("id", "cls", "lower", "levels")) {
+      domain = p_dbl(0, 1)
+      names_cell = names(domain)
+      spelling = names_cell[match(column, names_cell)]
+      Encoding(spelling) = encoding
+      names_cell[match(column, names_cell)] = spelling
+      data.table::setattr(domain, "names", names_cell)
+      expect_true(
+        domain_check(domain, list(0.5)),
+        info = paste(encoding, column)
+      )
+      expect_identical(
+        domain_qunif(domain, 0.5),
+        0.5,
+        info = paste(encoding, column)
+      )
+    }
+  }
+
+  # A name whose bytes differ is a different column, whatever it translates
+  # from: the missing canonical column is reported, never silently matched.
+  domain = p_dbl(0, 1)
+  names_cell = names(domain)
+  foreign = enc2utf8("löwer")
+  Encoding(foreign) = "UTF-8"
+  names_cell[match("lower", names_cell)] = foreign
+  data.table::setattr(domain, "names", names_cell)
+  expect_error(
+    domain_check(domain, list(0.5)),
+    "Corrupt Domain storage: `Domain` has no `lower` column",
+    fixed = TRUE
+  )
+})
+
+test_that("in-place column mutation from a phase hook fails admission", {
+  reentry = native_adversarial_symbol("test_domain_admission_reentry")
+  param_fct_kind = 3L
+  interpret_all = 63L
+  build = function() {
+    paradox:::recover_domain(data.table::rbindlist(
+      list(p_fct(c("a", "b")), p_fct(c("a", "b"))),
+      use.names = TRUE,
+      fill = TRUE
+    ))
+  }
+  # `data.table::set()` writes through the already selected column, so the
+  # outward table and column spine are unchanged and only the terminal
+  # byte/pointer receipt can observe the write.
+  for (phase in c("capture", "ownership")) {
+    domain = build()
+    mutate = function() {
+      data.table::set(domain, j = "cls", value = c("ParamFct", "ParamFct"))
+    }
+    hooks = if (identical(phase, "capture")) mutate else list(NULL, mutate)
+    expect_error(
+      .Call(reentry, domain, param_fct_kind, interpret_all, hooks),
+      "Domain changed during admission",
+      fixed = TRUE,
+      info = phase
+    )
+  }
+})
+
+test_that("data.table cache attributes name their cause and remedy", {
+  # An ordinary `i` filter installs data.table's auto-index on the Domain by
+  # reference and a key installs `sorted`. Both leave a table no operation may
+  # admit, so the rejection names the attribute and how to clear it.
+  indexed = p_dbl(0, 1)
+  invisible(indexed[cls == "ParamDbl"])
+  if (!is.null(attr(indexed, "index", exact = TRUE))) {
+    expect_error(
+      domain_check(indexed, list(0.5)),
+      paste0(
+        "Corrupt Domain storage: `Domain` carries the data.table `index` ",
+        "cache attribute; remove it with ",
+        "`data.table::setattr(x, \"index\", NULL)` or rebuild the Domain"
+      ),
+      fixed = TRUE
+    )
+    data.table::setattr(indexed, "index", NULL)
+    expect_true(domain_check(indexed, list(0.5)))
+  }
+
+  keyed = p_dbl(0, 1)
+  data.table::setattr(keyed, "sorted", "id")
+  for (operation in list(
+    function(d) domain_check(d, list(0.5)),
+    function(d) domain_qunif(d, 0.5),
+    function(d) domain_nlevels(d)
+  )) {
+    expect_error(
+      operation(keyed),
+      paste0(
+        "Corrupt Domain storage: `Domain` carries the data.table `sorted` ",
+        "cache attribute; remove it with ",
+        "`data.table::setattr(x, \"sorted\", NULL)` or rebuild the Domain"
+      ),
+      fixed = TRUE
+    )
+  }
+  data.table::setattr(keyed, "sorted", NULL)
+  expect_true(domain_check(keyed, list(0.5)))
+
+  # An unsupported attribute the package does not know keeps the general
+  # fail-closed rejection.
+  foreign = p_dbl(0, 1)
+  data.table::setattr(foreign, "unexpected", TRUE)
+  expect_error(
+    domain_check(foreign, list(0.5)),
+    "Corrupt Domain storage: outer metadata must be ordinary and bounded",
+    fixed = TRUE
+  )
+})
