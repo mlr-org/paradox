@@ -81,9 +81,11 @@ hazards that Paradox 2 is intended to remove.
   state-changing custom ALTREP observed earlier by R-side language or
   representation capture has no exact value/printed-representation
   compatibility guarantee; it is rejected
-  or consumed from the one native snapshot without replay. Typed Dbl/Int/Fct/
-  Lgl Domain special-value leaves are deliberately narrower and reject ALTREP
-  before observation. Interpreted outer general-list/internal-table/Domain/
+  or consumed from the one native snapshot without replay. A stable atomic,
+  non-S4 ALTREP special-value leaf for a typed Dbl/Int/Fct/Lgl Domain is
+  materialized once at construction; operation-time admission rejects any
+  ALTREP special leaf in a live Domain table without observing it. Interpreted
+  outer general-list/internal-table/Domain/
   Condition/token/capsule shells, ParamSet `params` lists, non-table
   transformation inputs and all transformation result shells, Domain cargo/
   interpreted cargo entries, rows, dimnames, class/name vectors, and other list

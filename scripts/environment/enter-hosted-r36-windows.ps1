@@ -271,11 +271,15 @@ if (@($ResetVariables | Select-Object -Unique).Count -ne
     throw "hosted R 3.6 reset-variable policy contains a duplicate"
 }
 foreach ($Variable in $ResetVariables) {
-    [Environment]::SetEnvironmentVariable(
-        $Variable,
-        $null,
-        [EnvironmentVariableTarget]::Process
-    )
+    # Passing `$null` through PowerShell's method binder to the .NET string
+    # overload can become `String.Empty`.  Starting with .NET 9 an empty
+    # process value is retained rather than deleted, which leaves hostile
+    # inputs such as R_HOME present on current hosted Windows runners.  The
+    # environment provider has an unambiguous delete operation; the audit
+    # immediately below still fails closed if any deletion does not take.
+    Remove-Item `
+        -LiteralPath "Env:\$Variable" `
+        -ErrorAction SilentlyContinue
 }
 
 $UserLibrary = if ($Phase -ceq "toolchain") {

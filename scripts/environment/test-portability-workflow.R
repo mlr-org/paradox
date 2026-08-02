@@ -468,6 +468,18 @@ expected_empty_files <- c(
 )
 if (!identical(observed_reset_variables, expected_reset_variables) ||
     anyDuplicated(observed_reset_variables) ||
+    count_fixed(
+      'Remove-Item `',
+      isolation_helper
+    ) != 1L ||
+    count_fixed(
+      '-LiteralPath "Env:\\$Variable" `',
+      isolation_helper
+    ) != 1L ||
+    count_fixed(
+      "[Environment]::SetEnvironmentVariable(",
+      isolation_helper
+    ) != 1L ||
     any(vapply(
       expected_empty_files,
       count_fixed,

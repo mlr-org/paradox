@@ -853,6 +853,9 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   `paradox_domain_interpretation_closure()` alone expands rule dependencies.
   `domain_check()` requests every rule. Irrelevant rules are skipped whole,
   not duplicated in operation-specific validators.
+- A typed zero-row `domain_qunif()` validates `x` before returning the kind's
+  mapped empty vector: numeric for Dbl, integer for Int, character for Fct, and
+  logical for Lgl. ParamUty retains its undefined-mapping error at zero rows.
 - Standalone `condition_test()` uses the registered closed comparator for
   `NULL` or plain logical/integer/double/character vectors with names only;
   stable ALTREP operands materialize once and classed/attributed operands do
@@ -1073,7 +1076,12 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 - Apart from the public-table and `set_values(.values=)` boundaries above,
   Domain/Condition/token/ParamSet and every other interpreted structural
   ALTREP/S4 shell is rejected. The outer `special_vals` list is ordinary
-  non-ALTREP/non-S4 for every Domain kind. Typed Domain special leaves reject ALTREP; an admitted
+  non-ALTREP/non-S4 for every Domain kind. At typed Dbl/Int/Fct/Lgl
+  construction ingress, a stable atomic, non-S4 ALTREP special leaf is
+  materialized once by the canonical semantic-leaf owner and stored as an
+  ordinary value. Operation-time masked admission rejects every typed ALTREP
+  special found in a live Domain table without observing an element. Leaves
+  retained by identity do not gain an ALTREP normalization path; an admitted
   typed S4 special, default, or init matches only by pointer identity. ParamUty
   leaves remain opaque, including S4, while Paradox-1 special membership alone
   uses base `identical()` without S3/S4 dispatch. Malformed exact-token/Domain

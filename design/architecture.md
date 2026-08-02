@@ -702,9 +702,13 @@ attribute.
 
 The shared owner rejects ALTREP or S4 structural Domain objects/metadata. For
 Dbl, Int, Fct, Lgl, and Uty the outer special-values list, names, and metadata
-must be ordinary non-ALTREP/non-S4. For Dbl, Int, Fct, and Lgl it rejects an
-ALTREP special-value leaf before observing it. An admitted typed S4 special is
-opaque and matches only by pointer identity;
+must be ordinary non-ALTREP/non-S4. At Dbl/Int/Fct/Lgl construction ingress it
+materializes a stable atomic, non-S4 ALTREP special-value leaf once through the
+canonical semantic-leaf path and stores the ordinary result. Operation-time
+masked admission rejects every typed ALTREP special found in a live Domain
+table structurally and without observing an element. Identity-preserved S4 and
+non-atomic leaves do not gain an ALTREP normalization path. An admitted typed
+S4 special is opaque and matches only by pointer identity;
 an S4 default/init passes only when it is that same special leaf. ParamUty
 leaves remain opaque, including S4 objects, but special membership preserves
 Paradox-1 base `identical()` semantics as the sole narrow observation and does
@@ -721,7 +725,10 @@ Quantile and grid operations admit the same canonical plain parameter table
 through the shared validator; they do not recognize an internal data.table
 shape or depend on R-4.6-only attribute APIs. Integer range warnings and typed
 zero-row and zero-dimensional grid results are produced by the native engine
-itself, never by an R retry.
+itself, never by an R retry. A zero-row `domain_qunif()` first validates `x`,
+then returns `numeric()`, `integer()`, `character()`, or `logical()` for a
+Dbl, Int, Fct, or Lgl Domain respectively. ParamUty has no mapped type and
+retains its undefined-mapping error at zero rows.
 A zero-level `ParamFct` is canonical. Zero-row quantile, grid, and uniform
 sampling results retain a `character(0)` column; a positive-row quantile or
 uniform-sampling request errors before level indexing or RNG entry.

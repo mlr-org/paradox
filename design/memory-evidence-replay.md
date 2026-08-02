@@ -287,7 +287,9 @@ leaves, exact TuneToken subclasses/extra/deep/cyclic metadata, malformed
 TuneToken Domains, bounded Object-token Domain admission with unbounded
 ParamUty rejection and opaque leaves exercised through a bounded typed Domain,
 structural ALTREP/S4 rejection (including every outer `special_vals` list),
-typed-special ALTREP rejection, typed S4 special
+construction-time materialization of stable atomic non-S4 typed-special ALTREP,
+operation-time rejection of typed ALTREP special leaves introduced into live
+Domain tables, typed S4 special
 pointer identity, opaque ParamUty S4 leaves and base-`identical()` special
 membership without dispatch in supported Domain/value operations, documented
 data.frame/data.table inputs with suffix-classified top-level ALTREP shells,

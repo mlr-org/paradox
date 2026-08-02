@@ -759,11 +759,13 @@ families.
   bounded value-producing built-in Domains, rejects unbounded `ParamUty` and
   zero-level `ParamFct` tuning ranges, and tests opaque-leaf identity through a
   bounded typed Domain. Structural ALTREP/S4 rejects include every outer
-  `special_vals` list; typed special leaves reject ALTREP, typed S4
-  special/default/init matching is pointer-only, and ParamUty opaque S4 leaves
-  retain identity with base-`identical()` special membership as the sole
-  no-dispatch observation. Genuine formal-S4 leaves are also proved non-token
-  through checked/unchecked graph stores, dependency activity, value-type
+  `special_vals` list. Typed-special coverage includes construction-time
+  materialization of a stable atomic non-S4 ALTREP leaf and operation-time
+  structural rejection after an ALTREP leaf is introduced into a live Domain
+  table; typed S4 special/default/init matching is pointer-only, and ParamUty
+  opaque S4 leaves retain identity with base-`identical()` special membership
+  as the sole no-dispatch observation. Genuine formal-S4 leaves are also proved
+  non-token through checked/unchecked graph stores, dependency activity, value-type
   filters, fixed designs, and both stored and explicit search-space
   extraction, while an S4-marked ordinary TuneToken remains a structural
   rejection;
@@ -831,6 +833,10 @@ families.
   advancing the RNG. Hierarchical construction owns one graph before reading
   arbitrary Sampler subclass parameter bindings, rejects duplicate sampler
   IDs, and cannot splice IDs from one source generation onto another;
+- zero-row typed Domain quantile mapping validates `x` before its exit and
+  returns numeric, integer, character, and logical empty vectors for Dbl, Int,
+  Fct, and Lgl respectively; ParamUty retains the same undefined-mapping error
+  as its nonempty form;
 - exact-TuneToken search-space conversion consumes one rooted native
   token/Domain snapshot, replaces live ParamSet candidates with sealed single-
   use BASE subset capabilities before callbacks, uses closed built-in switching,
@@ -884,8 +890,10 @@ families.
   across prior R-side representation capture may reject or yield its one native
   snapshot; Paradox must neither retry nor treat captured printed
   representation as semantic authority, and its own code must not crash or
-  corrupt memory; typed Domain ALTREP special leaves reject before observation,
-  typed S4 specials match only by pointer identity, and ParamUty opaque leaves
+  corrupt memory; stable atomic non-S4 typed Domain ALTREP special leaves
+  materialize once at construction, while operation-time admission rejects an
+  ALTREP special introduced into a live Domain table before observation; typed
+  S4 specials match only by pointer identity, and ParamUty opaque leaves
   are not materialized except for base-`identical()` special membership;
   structural configuration/search/trafo and ParamSet-`params` lists, internal
   table/row/Domain/Condition/token/capsule shells, Domain cargo/interpreted

@@ -554,6 +554,36 @@ test_that("row-name ALTREP is length-snapshotted once without label access", {
   expect_identical(state$callbacks, 1L)
 })
 
+test_that("integer row-name ALTREP is length-snapshotted once", {
+  skip_if_not(
+    exists(
+      "C_test_stateful_altrep",
+      envir = asNamespace("paradox"),
+      inherits = FALSE
+    ),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  fixture_calls = public_table_native_symbol("test_stateful_altrep_calls")
+  row_names = native_stateful_altrep(
+    1:3,
+    1:2,
+    length_switch_after = 1L
+  )
+  expect_identical(
+    .Call(fixture_calls, row_names),
+    c(elt = 0L, length = 0L)
+  )
+
+  expect_identical(.Call(
+    public_table_native_symbol("test_public_row_names_count"),
+    row_names
+  ), 3)
+  expect_identical(
+    .Call(fixture_calls, row_names),
+    c(elt = 0L, length = 1L)
+  )
+})
+
 test_that("table metadata is owned before row-name Length reentry", {
   skip_if_not(
     exists(

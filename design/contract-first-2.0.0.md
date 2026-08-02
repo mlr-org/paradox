@@ -422,9 +422,13 @@ detached Domain returned by an accessor does not mutate that ParamSet.
 Numeric short-form constructors perform bounds admission, materialization of
 admitted atomic ALTREP semantic inputs, logscale normalization, mapping-callback
 selection, and row construction in one registered native operation. Their
-structural shells and metadata are never materialized as ALTREP. Exact zero-row Domain and
-zero-dimensional grid behavior also belongs to the native engines; it is not
-an R-side special-case implementation.
+structural shells and metadata are never materialized as ALTREP. Exact zero-row
+Domain and zero-dimensional grid behavior also belongs to the native engines;
+it is not an R-side special-case implementation. `domain_qunif()` validates
+`x` before every typed zero-row exit and returns the kind's mapped empty vector:
+`numeric()` for `ParamDbl`, `integer()` for `ParamInt`, `character()` for
+`ParamFct`, and `logical()` for `ParamLgl`. A zero-row `ParamUty` retains the
+same undefined-mapping error as a nonempty one.
 A `ParamFct` with `character()` levels is canonical. Operations that request
 zero rows preserve a typed `character(0)` factor column; nonempty quantile or
 uniform-sampling requests error before indexing a level or entering the RNG.
@@ -498,10 +502,17 @@ All outward Domain shells, table/class/name structures, row containers, cargo
 containers, interpreted cargo entries, and other interpreted metadata are
 ordinary non-ALTREP and non-S4 objects. For `ParamDbl`, `ParamInt`, `ParamFct`,
 and `ParamLgl`, the outer `special_vals` list, its names, and list metadata are
-likewise structural ordinary non-ALTREP/non-S4 objects. Each typed special leaf
-is rejected if it is ALTREP, before an
-element is observed. An admitted S4 special leaf for one of these typed kinds
-is an opaque pointer-identity token: only that exact object can match it. An S4
+likewise structural ordinary non-ALTREP/non-S4 objects. At construction
+ingress, a stable atomic, non-S4 ALTREP typed special leaf is captured and
+materialized once by the canonical semantic-leaf owner. The Domain stores the
+ordinary result and is identical to one constructed from the materialized
+twin. Operation-time masked admission rejects every ALTREP typed special leaf
+in a live Domain table structurally and before element observation; package
+construction never leaves one there, so its presence denotes later
+by-reference mutation. A typed special leaf that the semantic owner preserves
+by identity, including an S4 or non-atomic leaf, does not gain an ALTREP
+normalization path. An admitted S4 special leaf for one of these typed kinds is
+an opaque pointer-identity token: only that exact object can match it. An S4
 `default` or `init` is therefore accepted only when pointer-identical to an
 already admitted special leaf; otherwise it is invalid. This preserves the
 explicit special-value identity exception without asking C to interpret or
@@ -1235,10 +1246,14 @@ documented callback or result unchanged. ParamUty special membership is the
 sole narrow observation: it uses base `identical()` against each admitted leaf,
 including S4, without S3/S4 dispatch. Materialize-once applies to each admitted
 atomic vector whose elements, length, names, or attributes Paradox itself must
-observe. Conversely, an ALTREP special leaf for ParamDbl/ParamInt/ParamFct/
-ParamLgl is rejected before observation; it is not normalized into a typed
-special. An admitted S4 special for those kinds matches only by pointer identity,
-and an S4 default/init is valid only when it is that same object. These narrow
+observe. That includes a stable atomic, non-S4 ALTREP special leaf for
+ParamDbl/ParamInt/ParamFct/ParamLgl at construction ingress: the canonical
+semantic-leaf owner stores its ordinary materialized value. Operation-time
+admission of a live Domain table instead rejects every typed ALTREP special
+leaf structurally and before observation. Leaves preserved by identity do not
+gain an ALTREP normalization path. An admitted S4 special for those kinds
+matches only by pointer identity, and an S4 default/init is valid only when it
+is that same object. These narrow
 leaf rules do not permit ALTREP or S4 Domain, Condition, TuneToken, ParamSet,
 internal/package-state table, class/name, dimnames, cargo, or other interpreted
 structure. The documented public-table shell exception remains exactly the one
@@ -1697,9 +1712,11 @@ The package suite must contain contract tests for:
   compact row-name forms, stable integer/character ALTREP row names with one
   Length and no Elt, missing/S4/attributed/mismatched row-name rejection,
   mutable shared-name reentry, and zero-column data.frame row counts;
-  typed special-leaf ALTREP rejection, pointer-only typed S4 special/
-  default/init matching, and opaque ParamUty S4 leaves with base-`identical()`
-  special membership and no dispatch;
+  construction-time materialization of stable atomic non-S4 typed special-leaf
+  ALTREP, operation-time rejection of a typed ALTREP special introduced into a
+  live Domain table, pointer-only typed S4 special/default/init matching, and
+  opaque ParamUty S4 leaves with base-`identical()` special membership and no
+  dispatch;
 - malformed exact-token/Domain structure raises a hard boundary error while an
   ordinary infeasible value retains the check-diagnostic protocol;
 - operation-entry forcing, snapshot, callback order, mutation visibility, and

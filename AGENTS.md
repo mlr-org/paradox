@@ -1326,6 +1326,10 @@ operator action.
   admission before later value-side callbacks deliberately retains that
   coherent selected snapshot; callbacks do not replace already captured table
   fields.
+  A typed zero-row `domain_qunif()` still validates `x`, then returns the
+  kind's mapped empty vector: `numeric()` for Dbl, `integer()` for Int,
+  `character()` for Fct, and `logical()` for Lgl. ParamUty retains its
+  undefined-mapping error at zero rows.
   A canonical `ParamFct` may have zero levels. Quantile/grid/uniform-sampling
   operations preserve its typed `character(0)` result when zero rows are
   requested; any positive-row quantile or sampling request errors before RNG
@@ -1859,11 +1863,17 @@ operator action.
   admitted value, but it must be rejected or handled without replay or Paradox
   itself causing a crash or memory corruption. Capsules never permanently
   store semantic ALTREP vectors; canonical compact data-frame row names are the
-  representation-only exception. This general support does not override the
-  typed-Domain rule above: an ALTREP special-value leaf for Dbl/Int/Fct/Lgl is
-  rejected rather than observed; an admitted S4 special matches only by pointer
-  identity. ParamUty opaque leaves are not materialized, except that special
-  membership uses base `identical()` without S3/S4 dispatch.
+  representation-only exception. At construction ingress, a stable atomic,
+  non-S4 ALTREP special-value leaf for Dbl/Int/Fct/Lgl is materialized once by
+  the canonical semantic-leaf owner and stored as an ordinary value. The
+  resulting Domain equals one constructed from the materialized twin. A live
+  Domain table must therefore never contain such a leaf: operation-time masked
+  admission rejects every typed ALTREP special structurally and without element
+  observation. Typed S4 and non-atomic special leaves retain their identity
+  boundary rather than acquiring an ALTREP normalization path; an admitted S4
+  special matches only by pointer identity. ParamUty opaque leaves are not
+  materialized, except that special membership uses base `identical()` without
+  S3/S4 dispatch.
 - data.table >= 1.18.4 is an outward interoperability dependency only. Do not
   restore the old `alloc.col()` capacity bridge or call data.table internals.
   The sole cold presentation exception is the identity lookup in
@@ -2896,9 +2906,11 @@ The package suite must directly cover, before downstream packages are used:
   standalone Condition comparison also covers names, stable ALTREP operands,
   separate snapshots under reentry, and fail-closed class/attribute/type/S4
   cases; Domain coverage includes ordinary non-ALTREP/non-S4 structural shells,
-  typed special-leaf ALTREP rejection, pointer-only typed S4 special/default/
-  init matching, and opaque ParamUty S4 leaves whose special membership uses
-  base `identical()` without dispatch;
+  construction-time materialization of stable atomic non-S4 typed special-leaf
+  ALTREP, operation-time rejection of a typed ALTREP special introduced into a
+  live table, pointer-only typed S4 special/default/init matching, and opaque
+  ParamUty S4 leaves whose special membership uses base `identical()` without
+  dispatch;
 - values, dependencies, transformations, constraints, TuneTokens, special
   values, presence modes, sanitization, required tags, named NULL, and errors;
   checked assignment stores Domain-valid dependency-inactive entries as dormant

@@ -244,6 +244,7 @@ int paradox_public_row_names_count(SEXP row_names, R_xlen_t *row_count) {
     return FALSE;
   }
 
+  const R_xlen_t size = XLENGTH(row_names);
   R_xlen_t rows;
   /*
    * R's compact `c(NA, +/-n)` row-name form encodes the row count in its
@@ -254,13 +255,13 @@ int paradox_public_row_names_count(SEXP row_names, R_xlen_t *row_count) {
    * strings, carries labels that are irrelevant to each admitted operation, so
    * they select one stable Length and no elements.
    */
-  if (type == INTSXP && XLENGTH(row_names) == 2 &&
+  if (type == INTSXP && size == 2 &&
       INTEGER_ELT(row_names, 0) == NA_INTEGER) {
     const int encoded = INTEGER_ELT(row_names, 1);
     if (encoded == NA_INTEGER) return FALSE;
     rows = encoded < 0 ? (R_xlen_t) -encoded : (R_xlen_t) encoded;
   } else {
-    rows = XLENGTH(row_names);
+    rows = size;
   }
   *row_count = rows;
   return TRUE;

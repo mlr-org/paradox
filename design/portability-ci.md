@@ -462,8 +462,10 @@ does not duplicate the complete old-R test suite.
 - current serialization, callbacks, stable/base ALTREP materialization, hostile
   custom-ALTREP safety (no replay or Paradox-caused crash/corruption),
   direct-assignment rejection versus the sole `set_values(.values=)` shell
-  snapshot, typed-special ALTREP/pointer-S4 and ParamUty base-`identical()`
-  boundaries, exact BASE Object-token receipts and sealed search capabilities,
+  snapshot, construction-time typed-special ALTREP materialization,
+  operation-time live-table ALTREP rejection, pointer-S4 and ParamUty
+  base-`identical()` boundaries, exact BASE Object-token receipts and sealed
+  search capabilities,
   ordinary non-ALTREP/non-S4 structural shell rejection, documented tables with
   one shared strict suffix classifier, no prefix-induced ordinary-shell copy,
   ALTREP-snapshot canonicalization without dispatch, malformed
