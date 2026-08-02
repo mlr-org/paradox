@@ -1009,9 +1009,37 @@ static paradox_builtin_value_spec_t admitted_value_spec(paradox_builtin_domain_k
   return result;
 }
 
+/*
+ * Exactly the leaves `paradox_snapshot_builtin_value_leaf()` materializes.
+ * The two sets must stay equal: a leaf admitted here that the owner returns
+ * unchanged would be stored live in the Domain, which is the state this gate
+ * exists to prevent. S4 leaves and every non-atomic type keep their identity
+ * there, so an ALTREP wearing either stays rejected here.
+ *
+ * `TYPEOF()` and `Rf_isS4()` are structural predicates, so this decides
+ * without observing an element.
+ */
+static int materializable_altrep_special_leaf(SEXP leaf) {
+  if (Rf_isS4(leaf)) {
+    return FALSE;
+  }
+  switch (TYPEOF(leaf)) {
+  case LGLSXP:
+  case INTSXP:
+  case REALSXP:
+  case CPLXSXP:
+  case STRSXP:
+  case RAWSXP:
+    return TRUE;
+  default:
+    return FALSE;
+  }
+}
+
 int paradox_prepare_builtin_special_values_kind(
     paradox_builtin_domain_kind_t kind,
-    SEXP special_values, paradox_special_values_receipt_t *receipt,
+    SEXP special_values, paradox_special_values_ingress_t ingress,
+    paradox_special_values_receipt_t *receipt,
     R_xlen_t *work_since_interrupt) {
   receipt->special_values = R_NilValue;
   receipt->typed = FALSE;
@@ -1033,9 +1061,20 @@ int paradox_prepare_builtin_special_values_kind(
       paradox_account_work(work_since_interrupt);
       /*
        * ALTREP() is a structural predicate.  In particular, do not call
-       * Length/Elt/DATAPTR or duplicate the leaf before rejecting it.
+       * Length/Elt/DATAPTR or duplicate the leaf before deciding.
+       *
+       * A typed special value is a semantic value, not an identity token, so a
+       * stable atomic ALTREP spelling of one is admitted at construction and
+       * materialized by the canonical value-leaf owner the caller invokes
+       * next; an unstable provider fails there, under a receipt, rather than
+       * here.  Operation-time admission may not observe a leaf at all, and a
+       * leaf the owner would not materialize would otherwise be stored live:
+       * both keep the structural rejection.
        */
-      if (ALTREP(VECTOR_ELT(special_values, index))) {
+      SEXP leaf = VECTOR_ELT(special_values, index);
+      if (ALTREP(leaf) &&
+          (ingress != PARADOX_SPECIAL_VALUES_INGRESS_CONSTRUCTION ||
+            !materializable_altrep_special_leaf(leaf))) {
         return FALSE;
       }
     }
@@ -1052,6 +1091,7 @@ int paradox_prepare_builtin_special_values(SEXP cls, SEXP storage,
   return paradox_prepare_builtin_special_values_kind(
     domain_kind(cls, storage),
     special_values,
+    PARADOX_SPECIAL_VALUES_INGRESS_CONSTRUCTION,
     receipt,
     work_since_interrupt
   );
@@ -1755,7 +1795,16 @@ SEXP paradox_domain_construct(
   }
   /* The outer shell was just snapshotted above.  Typed atomic specials are
    * semantic values rather than identity tokens, so detach them now; S4 and
-   * non-atomic typed specials, and all ParamUty specials, keep identity. */
+   * non-atomic typed specials, and all ParamUty specials, keep identity.
+   *
+   * This is also where a stable atomic ALTREP special is materialized, under
+   * the value-leaf owner's double-capture attribute receipt. It is the sole
+   * observation of such a leaf in this constructor, and it happens after the
+   * class, storage, and special-values shells above are privately owned, so a
+   * reentrant Elt method cannot redirect the kind selection that admitted it.
+   * Every remaining constructor argument is snapshotted below and revalidated
+   * by final-state admission, so a mutation the method performs is either
+   * captured whole or rejected -- never spliced. */
   paradox_own_builtin_special_value_leaves(
     VECTOR_ELT(roots, ROOT_SPECIAL_VALS),
     special_receipt.typed

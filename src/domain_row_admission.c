@@ -1018,9 +1018,24 @@ static inline void own_public_domain_rows(
     paradox_special_values_receipt_t *selected_receipt = NULL;
     if (context->captures_special_values) {
       context->empty_special_names_present[row] = 0U;
+      /*
+       * Operation-time admission keeps the structural ALTREP rejection that
+       * construction relaxes. Materializing a leaf here would dispatch an Elt
+       * method inside masked row admission, where the terminal receipt that
+       * follows is allocation- and callback-free and every selected column is
+       * already rooted; a reentrant method would observe and could replace
+       * that half-owned generation. Construction has no such phase: it owns
+       * the shell it is admitting.
+       *
+       * A constructed Domain therefore never reaches this gate with an ALTREP
+       * leaf -- the owner below stores the materialized copy -- so an ALTREP
+       * leaf in a live table means the column was written by reference after
+       * construction, which is exactly the corrupt state this rejects.
+       */
       if (!paradox_prepare_builtin_special_values_kind(
           context->resolved_kind,
           special_values,
+          PARADOX_SPECIAL_VALUES_INGRESS_OPERATION,
           &receipt,
           context->work_since_interrupt
         )) {

@@ -453,12 +453,15 @@ test_that("semantic Domain atomic vectors materialize once before admission", {
   expect_true(all(vapply(as.list(nested), inherits, logical(1L), "ParamLgl")))
 })
 
-test_that("typed ALTREP specials reject before aliased value leaves are observed", {
+test_that("typed ALTREP specials are materialized alongside aliased leaves", {
   skip_if_not(
     domain2_altrep_helpers_available(),
     "the internal stateful ALTREP test class is unavailable"
   )
 
+  # A typed special value is a semantic value, not an identity token, so the
+  # same ALTREP object aliased into another value field is materialized in
+  # both roles and the Domain retains only detached ordinary copies.
   for (field in c("default_value", "init_value")) {
     callbacks = 0L
     hostile = native_stateful_altrep(
@@ -474,29 +477,45 @@ test_that("typed ALTREP specials reject before aliased value leaves are observed
       arguments$init_given = TRUE
     }
 
-    invoke = function() do.call(domain2_construct, arguments)
-    expect_error(
-      invoke(),
-      "special_vals",
-      fixed = TRUE,
+    domain = do.call(domain2_construct, arguments)
+    special = domain$special_vals[[1L]][[1L]]
+    aliased = if (identical(field, "default_value")) {
+      domain$default[[1L]]
+    } else {
+      domain$.init[[1L]]
+    }
+    expect_identical(special, 0.5, info = field)
+    expect_identical(aliased, 0.5, info = field)
+    # Detachment is object identity: neither stored leaf is the live provider.
+    expect_false(
+      identical(data.table::address(special), data.table::address(hostile)),
       info = field
     )
-    expect_identical(callbacks, 0L, info = field)
+    expect_false(
+      identical(data.table::address(aliased), data.table::address(hostile)),
+      info = field
+    )
+    # The leaf is observed under the owner's receipt rather than refused
+    # unobserved, which is what makes the materialized copy trustworthy.
+    expect_gte(callbacks, 1L)
   }
 
-  callbacks = 0L
-  hostile_levels = native_stateful_altrep(
-    c("a", "b"),
-    c("a", "b"),
-    callback = function() callbacks <<- callbacks + 1L,
-    callback_after = 0L
-  )
+  # `levels` has always been materialized from its own snapshot, so aliasing
+  # one object into both roles now materializes both. Neither retains the
+  # provider.
+  hostile_levels = native_stateful_altrep(c("a", "b"), c("a", "b"))
   arguments = domain2_args(p_fct(c("a", "b")))
   arguments$special_vals = list(hostile_levels)
   arguments$levels = hostile_levels
-  invoke = function() do.call(domain2_construct, arguments)
-  expect_error(invoke(), "special_vals", fixed = TRUE)
-  expect_identical(callbacks, 0L)
+  domain = do.call(domain2_construct, arguments)
+  expect_identical(domain$levels[[1L]], c("a", "b"))
+  expect_identical(domain$special_vals[[1L]][[1L]], c("a", "b"))
+  for (stored in list(domain$levels[[1L]], domain$special_vals[[1L]][[1L]])) {
+    expect_false(identical(
+      data.table::address(stored),
+      data.table::address(hostile_levels)
+    ))
+  }
 })
 
 test_that("semantic snapshots do not launder structure added by ALTREP reentry", {

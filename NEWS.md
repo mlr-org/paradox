@@ -119,7 +119,17 @@ hazards that Paradox 2 is intended to remove.
   interpreting it.
   The outer `special_vals` list is structural for every Domain kind and follows
   the ordinary non-ALTREP/non-S4 rule; only its leaves follow the typed or
-  opaque ParamUty policies below.
+  opaque ParamUty policies below. A typed special-value leaf is a semantic
+  value rather than an identity token, so a stable atomic ALTREP spelling of
+  one—`special_vals = list(1:5)`, a deferred string conversion, and the other
+  ordinary base-R representations—is admitted at construction and materialized
+  once into an ordinary vector, exactly as a `default` or initial value is. The
+  Domain that results is identical to one built from the materialized twin.
+  Leaves the value owner would not materialize, namely S4 and non-atomic ones,
+  keep their identity contract and stay rejected. Operation-time masked
+  admission still rejects every ALTREP leaf structurally, without observing an
+  element: a constructed Domain stores the materialized copy, so an ALTREP leaf
+  in a live table means the column was written by reference afterwards.
 * Every public operation on a typed built-in Domain validates the exact
   complete sixteen-column outward shell, including typed zero-row and
   empty-value exits; the canonical zero-column empty Domain retains its

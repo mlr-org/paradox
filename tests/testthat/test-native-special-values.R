@@ -210,3 +210,195 @@ test_that("ParamUty special matching preserves opaque identity semantics", {
   expect_false(param_set$test(list(payload = environment_equal)))
   expect_identical(calls, 1L)
 })
+
+# Only the first `inspect` line describes the object itself; later lines are its
+# attributes, whose representation is a separate question. `names<-` on an
+# atomic vector materializes the value and leaves a deferred-string names
+# attribute, so the value and its metadata must be judged apart.
+special_leaf_is_altrep = function(value) {
+  grepl(
+    "compact|deferred|wrapper",
+    capture.output(.Internal(inspect(value)))[[1L]]
+  )
+}
+
+special_wrapper_recipe = function(value) {
+  names(value) = as.character(seq_along(value))
+  value
+}
+
+test_that("typed special values admit stable ALTREP spellings", {
+  # A typed special value is a semantic value, not an identity token, so the
+  # representation its caller happened to build is not part of the Domain.
+  altrep_specials = list(
+    compact_integer = list(domain = function(s) p_int(0L, 1000L, special_vals = s),
+      leaf = 1:5),
+    compact_real = list(domain = function(s) p_dbl(0, 1000, special_vals = s),
+      leaf = as.numeric(1:3)),
+    deferred_string = list(domain = function(s) p_fct(c("a", "b"), special_vals = s),
+      leaf = as.character(1:3))
+  )
+  for (name in names(altrep_specials)) {
+    case = altrep_specials[[name]]
+    expect_true(special_leaf_is_altrep(case$leaf), info = name)
+    domain = case$domain(list(case$leaf))
+    stored = domain$special_vals[[1L]][[1L]]
+    # The admitted leaf is materialized once; nothing ALTREP is retained.
+    expect_false(special_leaf_is_altrep(stored), info = name)
+    expect_identical(stored, case$leaf, info = name)
+  }
+
+  # The `names<-` wrapper recipe at the repository's boundary sizes. For an
+  # atomic leaf the recipe materializes the value itself and leaves only the
+  # names attribute deferred; the character form stays a deferred string.
+  for (size in c(63L, 64L, 200L)) {
+    label = paste("size", size)
+    numeric_leaf = special_wrapper_recipe(as.numeric(seq_len(size)))
+    integer_leaf = special_wrapper_recipe(seq_len(size))
+    character_leaf = special_wrapper_recipe(as.character(seq_len(size)))
+    expect_true(special_leaf_is_altrep(character_leaf), info = label)
+
+    numeric_domain = p_dbl(0, 1e6, special_vals = list(numeric_leaf))
+    integer_domain = p_int(0L, 1000000L, special_vals = list(integer_leaf))
+    character_domain = p_fct(c("a", "b"), special_vals = list(character_leaf))
+    for (pair in list(
+      list(domain = numeric_domain, leaf = numeric_leaf),
+      list(domain = integer_domain, leaf = integer_leaf),
+      list(domain = character_domain, leaf = character_leaf)
+    )) {
+      stored = pair$domain$special_vals[[1L]][[1L]]
+      expect_false(special_leaf_is_altrep(stored), info = label)
+      expect_identical(stored, pair$leaf, info = label)
+    }
+  }
+})
+
+test_that("an ALTREP special value is exactly its materialized twin", {
+  altrep = p_int(0L, 10L, special_vals = list(1:5))
+  ordinary = p_int(0L, 10L, special_vals = list(c(1L, 2L, 3L, 4L, 5L)))
+  # Representation is not Domain state: the two Domains are one value.
+  expect_identical(altrep, ordinary)
+
+  for (value in list(1:5, c(1L, 2L, 3L, 4L, 5L), 3L, 99L, c(1L, 2L))) {
+    label = paste(deparse(value), collapse = "")
+    from_altrep = tryCatch(
+      domain_check(altrep, list(value)),
+      error = function(condition) conditionMessage(condition)
+    )
+    from_ordinary = tryCatch(
+      domain_check(ordinary, list(value)),
+      error = function(condition) conditionMessage(condition)
+    )
+    expect_identical(from_altrep, from_ordinary, info = label)
+  }
+  expect_true(domain_check(altrep, list(1:5)))
+  expect_true(domain_check(altrep, list(3L)))
+  expect_identical(domain_qunif(altrep, 0.5), 5L)
+  expect_identical(domain_nlevels(altrep), 11)
+
+  # The special survives a serialization round trip as an ordinary value.
+  restored = unserialize(serialize(altrep, NULL))
+  expect_true(domain_check(restored, list(1:5)))
+  expect_false(special_leaf_is_altrep(restored$special_vals[[1L]][[1L]]))
+
+  # The BASE-ParamSet construction ingress reaches the same state.
+  set = ps(a = p_int(0L, 10L, special_vals = list(1:5)))
+  expect_true(set$check(list(a = 1:5)))
+  expect_false(
+    special_leaf_is_altrep(set$params$special_vals[[1L]][[1L]])
+  )
+})
+
+test_that("masked admission rejects an ALTREP special installed by reference", {
+  # A constructed Domain stores the materialized leaf, so an ALTREP leaf in a
+  # live table can only have been written by reference afterwards. Operation
+  # time may not observe it, so it stays a structural rejection there.
+  mutator = get("C_test_gc_column_mutator", envir = asNamespace("paradox"))
+  install_special_leaf = function(domain, leaf) {
+    pointer = .Call(
+      mutator,
+      domain,
+      match("special_vals", names(domain)) - 1L,
+      list(list(leaf))
+    )
+    rm(pointer)
+    for (iteration in 1:3) {
+      invisible(gc(full = TRUE))
+    }
+    domain
+  }
+
+  # Labels are fixed strings: `deparse()` and friends read every element and
+  # materialize the leaf in place, which would disarm the fixture before it is
+  # installed.
+  tampered_leaves = list(
+    compact_integer = 1:5,
+    deferred_string = as.character(1:3),
+    compact_real = as.numeric(1:3)
+  )
+  for (label in names(tampered_leaves)) {
+    domain = install_special_leaf(
+      p_int(0L, 10L, special_vals = list(c(1L, 2L))),
+      tampered_leaves[[label]]
+    )
+    expect_true(
+      special_leaf_is_altrep(domain$special_vals[[1L]][[1L]]),
+      info = label
+    )
+    expect_error(
+      domain_check(domain, list(3L)),
+      "Corrupt Domain storage: `special_vals` is not canonical",
+      fixed = TRUE,
+      info = label
+    )
+    # Operations whose mask does not interpret `special_vals` are unaffected:
+    # the rejection belongs to the rule, not to the table.
+    expect_identical(domain_sanitize(domain, list(3L)), list(3L), info = label)
+    expect_identical(domain_qunif(domain, 0.5), 5L, info = label)
+    expect_identical(domain_nlevels(domain), 11, info = label)
+  }
+
+  # The same by-reference write with an ordinary leaf is admitted, so the
+  # rejection above is about the representation and nothing else.
+  ordinary = install_special_leaf(
+    p_int(0L, 10L, special_vals = list(c(1L, 2L))),
+    c(7L, 8L)
+  )
+  expect_true(domain_check(ordinary, list(3L)))
+  expect_true(domain_check(ordinary, list(c(7L, 8L))))
+})
+
+test_that("special leaves the value owner cannot materialize stay rejected", {
+  # The canonical value-leaf owner materializes non-S4 atomic leaves only, and
+  # returns everything else by identity. A leaf it would return unchanged must
+  # not be admitted, or the Domain would store a live ALTREP.
+  s4_altrep = asS4(as.character(1:3))
+  expect_true(special_leaf_is_altrep(s4_altrep))
+  expect_true(isS4(s4_altrep))
+  expect_error(
+    p_fct(c("a", "b"), special_vals = list(s4_altrep)),
+    "Invalid built-in Domain final state in field `special_vals`",
+    fixed = TRUE
+  )
+
+  # The same leaf without the S4 bit is admitted, so the rejection is the S4
+  # identity contract rather than the representation.
+  expect_silent(p_fct(c("a", "b"), special_vals = list(as.character(1:3))))
+
+  # An ordinary S4 leaf keeps its established identity semantics.
+  expect_silent(p_int(0L, 10L, special_vals = list(asS4(c(1L, 2L)))))
+})
+
+test_that("a Dataptr-less ALTREP special fails closed at the public boundary", {
+  # This fixture implements Elt and Length but no Dataptr, so R's own argument
+  # handling in the public constructor refuses it before the native ingress is
+  # reached. The point of the test is that the special-value role is no weaker
+  # than its established peers: the same provider is rejected identically as a
+  # default and as an initial value.
+  provider = function() {
+    native_stateful_altrep(c(1, 2, 3), c(9, 9, 9), elt_switch_after = 1L)
+  }
+  expect_error(p_dbl(0, 100, special_vals = list(provider())))
+  expect_error(p_dbl(0, 100, default = provider()))
+  expect_error(p_dbl(0, 100, init = provider()))
+})

@@ -49,10 +49,29 @@ typedef struct {
 } paradox_special_values_receipt_t;
 
 /*
+ * Which ingress is admitting a special-values shell. The two differ only in
+ * what they may do with a typed ALTREP leaf, and that difference is a property
+ * of the caller's phase rather than of the value.
+ *
+ * CONSTRUCTION owns the shell it is admitting and hands every typed atomic
+ * leaf to the canonical value-leaf owner immediately afterwards, which
+ * materializes a stable ALTREP under its own double-capture receipt. Observing
+ * such a leaf there is therefore permitted and bounded.
+ *
+ * OPERATION admits a live caller-owned table inside masked row admission,
+ * where no ALTREP method may dispatch at all. It keeps the structural
+ * rejection: `ALTREP()` is decided without observing an element.
+ */
+typedef enum {
+  PARADOX_SPECIAL_VALUES_INGRESS_CONSTRUCTION = 0,
+  PARADOX_SPECIAL_VALUES_INGRESS_OPERATION
+} paradox_special_values_ingress_t;
+
+/*
  * Perform the special-values part of canonical Domain-row admission before a
- * typed default/init leaf can be materialized.  For the four typed kinds this
- * rejects every ALTREP leaf without observing an element.  Unknown
- * class/storage pairs are left for the row owner's earlier class diagnostic.
+ * typed default/init leaf can be materialized.  Unknown class/storage pairs
+ * are left for the row owner's earlier class diagnostic.  Constructor callers
+ * use the construction ingress.
  */
 attribute_hidden int paradox_prepare_builtin_special_values(
   SEXP cls,
@@ -89,6 +108,7 @@ attribute_hidden int paradox_is_empty_domain_table_class(SEXP classes);
 attribute_hidden int paradox_prepare_builtin_special_values_kind(
   paradox_builtin_domain_kind_t kind,
   SEXP special_values,
+  paradox_special_values_ingress_t ingress,
   paradox_special_values_receipt_t *receipt,
   R_xlen_t *work_since_interrupt
 );
