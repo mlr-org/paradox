@@ -272,8 +272,12 @@ test_that("wrapper ALTREP vectors pass semantic ingress at 63, 64, and 200", {
       as.character(seq_len(size)),
       info = as.character(size)
     )
-    ordinary = metadata_altrep_plain_doubles(size)
+    ordinary = numeric(size)
     names(ordinary) = metadata_altrep_plain_characters(size)
+    # R 3.6 may wrap an already referenced ordinary vector merely to install
+    # names. Filling the payload afterwards materializes that representation,
+    # giving the byte comparison the ordinary twin it claims to use.
+    ordinary[seq_len(size)] = seq_len(size)
     expect_identical(
       metadata_altrep_bytes(stored),
       metadata_altrep_bytes(ordinary),

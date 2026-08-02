@@ -1,6 +1,10 @@
 .make_p_fct_trafo = function(levels, trafo) {
-  force(levels)
-  force(trafo)
+  # Assignment after forcing replaces the formal promise cells with their
+  # realized values. Besides retaining the exact force order, this prevents a
+  # package-owned callback frame from manufacturing R 4.5's intentional
+  # fail-closed migration boundary for arbitrary reached promises.
+  levels = force(levels)
+  trafo = force(trafo)
   .paradox_strip_srcref(function(x) {
     x = levels[[x]]
     if (!is.null(trafo)) x = trafo(x)

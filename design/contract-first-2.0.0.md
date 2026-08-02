@@ -1392,7 +1392,10 @@ migration boundary for a containing object:
   expression; an unforced one contributes its expression and evaluation
   environment on R 3.6--4.4 and R >= 4.6. R 4.5 fails recursive migration
   closed on a reached promise with an R 4.0--4.4 or R >= 4.6 instruction.
-  Ordinary factory callback frames can retain such formal promises. R >= 4.6 treats a
+  Ordinary factory callback frames can retain such formal promises. The
+  package-owned `p_fct()` transformation factory replaces its already-forced
+  formal cells with direct values and therefore does not manufacture that
+  boundary itself. R >= 4.6 treats a
   detached `PROMSXP` outside a binding/dots cell as opaque.
   R 3.6 cannot retrieve an arbitrary active-binding function and therefore
   fails this migration closed with an R >= 4.0 upgrade instruction rather than

@@ -665,7 +665,10 @@ families.
   it could force a delayed cell without `R_GetBindingType`; current source must
   contain the exact three reviewed call sites and every call must follow the
   classifier, while the DSO contains one undefined-symbol row. Tests record
-  side effects and cover all three policy branches.
+  side effects and cover all three policy branches. The `p_fct()` mapping
+  factory's exact `levels` and `trafo` frame cells must be direct-value binding
+  snapshots after their ordered forcing, so an ordinary current factor object
+  remains traversable on R 4.5 without weakening the arbitrary-promise rule.
   The same inventory authenticates the independent Domain-rendering policy:
   `Rf_GetOption1` is absent through R 4.4, where the compatibility facade uses
   public `base::getOption()`, and occurs exactly once from R 4.5 onward. The

@@ -190,7 +190,9 @@ The migration implementation has three layers:
    migration closed on such a promise because its compiled-code policy rejects
    the old accessors and no replacement exists; ordinary callback factories
    can retain such formal promises, so migrate that graph under R 4.0--4.4 or
-   R >= 4.6. R >= 4.6 uses public
+   R >= 4.6. The package-owned `p_fct()` transformation factory replaces its
+   already-forced formal cells with direct values, so it does not create that
+   boundary itself. R >= 4.6 uses public
    binding/dots accessors and treats a detached `PROMSXP` outside those cells
    as opaque. Because R 3.6 exposes no accessor for an active binding's
    function,
@@ -1195,7 +1197,9 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   R 4.5 fails recursive migration closed on a reached promise because its
   compiled-code policy classifies those accessors as non-API. This includes
   formal promises retained by ordinary factory callback frames, even when
-  forced or unused. R >= 4.6 uses
+  forced or unused. The package-owned factor transformation factory stores its
+  two already-forced captures as direct frame values; arbitrary user factories
+  retain the general rule. R >= 4.6 uses
   only the documented experimental binding/delayed-binding/dots APIs. None of
   the three detached-promise accessors is declared locally or present in an
   R >= 4.5 DSO. On R >= 4.6, a detached `PROMSXP` reached outside the public

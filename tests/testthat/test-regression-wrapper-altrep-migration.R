@@ -92,10 +92,20 @@ test_that("p_fct materializes a list levels carrier before capturing it", {
     levels = as.list(seq_len(size))
     names(levels) = paste0("L", seq_len(size))
     domain = p_fct(levels)
-    captured = get("levels", envir = environment(domain$.trafo[[1L]]))
+    callback_environment = environment(domain$.trafo[[1L]])
+    captured = paradox:::.paradox_plain_binding_snapshot(
+      callback_environment,
+      "levels"
+    )
+    captured_trafo = paradox:::.paradox_plain_binding_snapshot(
+      callback_environment,
+      "trafo"
+    )
 
-    expect_true(paradox:::.upgrade_paradox_is_ordinary_list(captured))
-    expect_identical(names(captured), paste0("L", seq_len(size)))
+    expect_true(captured$ok)
+    expect_true(paradox:::.upgrade_paradox_is_ordinary_list(captured$value))
+    expect_identical(names(captured$value), paste0("L", seq_len(size)))
+    expect_identical(captured_trafo, list(ok = TRUE, value = NULL))
     expect_identical(domain$.trafo[[1L]]("L5"), 5L)
     expect_identical(domain$levels[[1L]], paste0("L", seq_len(size)))
   }

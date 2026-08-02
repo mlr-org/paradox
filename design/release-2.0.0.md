@@ -789,7 +789,9 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   R 4.5 compiled-code policy classifies those accessors as non-API, so recursive
   migration fails closed on a reached promise and requests R 4.0--4.4 or
   R >= 4.6. Ordinary factory callback frames can retain such formal promises
-  even when the argument was forced or unused.
+  even when the argument was forced or unused. The package-owned factor
+  transformation factory replaces its two already-forced formal cells with
+  direct values, avoiding that boundary inside current `p_fct()` objects.
   R >= 4.6 instead uses only its experimental binding/delayed-binding/dots
   APIs. An R >= 4.5 DSO excludes all three detached-promise accessors. On
   R >= 4.6, a `PROMSXP` reached outside a binding/dots cell is opaque.

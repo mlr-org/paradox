@@ -1909,9 +1909,14 @@ operator action.
   so recursive migration fails closed on a reached promise and directs the
   caller to R 4.0--4.4 or R >= 4.6. This can arise without an explicit
   `delayedAssign()`: ordinary factory-created callback closures may retain
-  forced or unreferenced formal promises in their lexical call frame. It is a
+  forced or unreferenced formal promises in their lexical call frame. This is a
   limitation of the one-way recursive migration operation on exactly R 4.5,
-  not of ordinary ParamSet operations. Never force, silently skip, or inspect
+  not of ordinary ParamSet operations, and the package must not manufacture it
+  inside its own current objects:
+  the `p_fct()` transformation factory replaces its two already-forced formal
+  cells with direct values, and the non-forcing binding-snapshot regression
+  authenticates both cells. Arbitrary user factories retain the general rule.
+  Never force, silently skip, or inspect
   those cells through the three symbols that R 4.5's compiled-code policy
   rejects merely to make migration appear successful. R >= 4.6 uses the
   public binding/dots API, while a
