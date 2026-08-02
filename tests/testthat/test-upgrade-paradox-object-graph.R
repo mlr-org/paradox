@@ -1015,7 +1015,19 @@ test_that("graph discovery rejects structural ALTREP without observation", {
 
   expect_error(
     discover_upgrade_candidates(carrier),
-    "structural list/expression vectors must not use ALTREP",
+    paste0(
+      "structural list/expression vectors must not use ALTREP; rebuild the ",
+      "container with an ordinary copy such as x[seq_along(x)] before migration"
+    ),
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 0L)
+
+  # The remedy the message names is the one the recursive entry point applies
+  # to the carrier it owns; a nested carrier keeps the rejection.
+  expect_error(
+    upgrade_paradox_object_graph(list(nested = carrier)),
+    "rebuild the container with an ordinary copy such as x[seq_along(x)]",
     fixed = TRUE
   )
   expect_identical(callbacks, 0L)
@@ -1847,56 +1859,65 @@ test_that("legacy table snapshots cannot splice post-receipt column writes", {
   state$fired = FALSE
   state$old_leaf = new.env(parent = emptyenv())
   state$new_leaf = new.env(parent = emptyenv())
-  state$leaf = structure(1L, generation = state$old_leaf)
-  state$old_repr = new.env(parent = emptyenv())
-  state$new_repr = new.env(parent = emptyenv())
+  state$old_repr = quote(p_uty(tags = "old"))
+  state$new_repr = quote(p_uty(tags = "new"))
+  state$domain = p_uty(tags = "old")
+  data.table::set(state$domain, i = 1L, j = "id", value = "payload")
+  data.table::set(
+    state$domain,
+    i = 1L,
+    j = "special_vals",
+    value = list(list(list(state$old_leaf)))
+  )
+  data.table::setattr(state$domain, "repr", state$old_repr)
+
   mutate_source = function() {
     state$fired = TRUE
-    # These writes are one source generation. The test-only hook runs after
-    # the terminal native receipt and before R consumes the returned snapshot.
-    # A shallow list-column snapshot used to expose its atomic leaf to the
-    # allocating R migration layer, producing new-leaf/old-repr output that
-    # never existed in the source.
-    data.table::setnames(state$table, "tag", "changed")
+    # These writes are one source generation, landing after the terminal
+    # native receipt and before the R migration layer builds its result. A
+    # shallow list-column snapshot used to expose its leaves to that
+    # allocating layer, producing new-leaf/old-repr output that never existed
+    # in the source.
+    data.table::set(state$domain, i = 1L, j = "id", value = "changed")
     data.table::set(
-      state$table,
+      state$domain,
       i = 1L,
-      j = 2L,
-      value = "new"
+      j = "special_vals",
+      value = list(list(list(state$new_leaf)))
     )
-    data.table::setattr(state$leaf, "generation", state$new_leaf)
-    data.table::setattr(state$table, "repr", state$new_repr)
+    data.table::set(
+      state$domain,
+      i = 1L,
+      j = ".tags",
+      value = list(list("new"))
+    )
+    data.table::setattr(state$domain, "repr", state$new_repr)
   }
-  state$table = structure(
-    list(
-      id = c("a", "b"),
-      tag = c("old", "old"),
-      payload = list(state$leaf, state$leaf)
-    ),
-    class = c("data.table", "data.frame"),
-    repr = state$old_repr
+
+  # The mutation must land in the window between the native table receipt and
+  # every remaining R migration step. Wrapping the boundary function itself is
+  # that injection point; production code carries no test hook.
+  snapshot_table = paradox:::.upgrade_paradox_table
+  testthat::local_mocked_bindings(
+    .upgrade_paradox_table = function(...) {
+      snapshot = snapshot_table(...)
+      mutate_source()
+      snapshot
+    },
+    .package = "paradox"
   )
 
-  result = paradox:::.upgrade_paradox_table(
-    state$table,
-    c("id", "tag", "payload"),
-    "adversarial table",
-    extra_attributes = "repr",
-    .after_snapshot = mutate_source
-  )
+  upgraded = upgrade_paradox_object(state$domain)
+
   expect_true(state$fired)
-  expect_identical(names(result), c("id", "tag", "payload"))
-  expect_identical(result$tag, c("old", "old"))
-  expect_true(all(vapply(
-    result$payload,
-    function(value) identical(attr(value, "generation"), state$old_leaf),
-    logical(1L)
-  )))
-  expect_identical(attr(result, ".paradox_upgrade_repr"), state$old_repr)
-  expect_identical(names(state$table), c("id", "changed", "payload"))
-  expect_identical(state$table$changed, c("new", "old"))
-  expect_identical(attr(state$leaf, "generation"), state$new_leaf)
-  expect_identical(attr(state$table, "repr"), state$new_repr)
+  expect_identical(upgraded$id, "payload")
+  expect_identical(upgraded$.tags[[1L]], "old")
+  expect_identical(upgraded$special_vals[[1L]][[1L]], state$old_leaf)
+  expect_identical(attr(upgraded, "repr", exact = TRUE), state$old_repr)
+  expect_identical(state$domain$id, "changed")
+  expect_identical(state$domain$.tags[[1L]], "new")
+  expect_identical(state$domain$special_vals[[1L]][[1L]], state$new_leaf)
+  expect_identical(attr(state$domain, "repr", exact = TRUE), state$new_repr)
 })
 
 test_that("legacy table receipts finish later ALTREP callbacks first", {
@@ -1934,6 +1955,37 @@ test_that("legacy table receipts finish later ALTREP callbacks first", {
   expect_true(state$fired)
   expect_identical(state$table$tag, c("new", "old"))
   expect_identical(attr(state$table, "repr"), state$new_repr)
+  expect_null(snapshot)
+})
+
+test_that("legacy table snapshots reject a renamed source generation", {
+  # The column payloads stay untouched here, so only the terminal shell
+  # currency check can distinguish the selected generation from the source.
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  ids = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = function() {
+      state$fired = TRUE
+      data.table::setnames(state$table, "tag", "changed")
+    },
+    callback_after = c(NA_integer_, 2L)
+  )
+  state$table = structure(
+    list(tag = c("old", "old"), id = ids),
+    class = c("data.table", "data.frame")
+  )
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    state$table,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_true(state$fired)
+  expect_identical(names(state$table), c("changed", "id"))
+  expect_identical(state$table$changed, c("old", "old"))
   expect_null(snapshot)
 })
 
@@ -2193,13 +2245,17 @@ test_that("legacy Condition Length retains a self-detached RHS", {
       state$fired = TRUE
       # Remove the exact ALTREP whose Length method is executing from every
       # caller-owned parent, then collect.  The native receipt must retain its
-      # selected RHS independently of the mutable Condition owner graph.
-      invisible(.Call(
-        data.table:::Csetlistelt,
+      # selected RHS independently of the mutable Condition owner graph. The
+      # package's own by-reference cell mutator performs that replacement from
+      # the collection this callback triggers.
+      pending = .Call(
+        paradox:::C_test_gc_column_mutator,
         state$condition,
-        1L,
+        0L,
         2L
-      ))
+      )
+      rm(pending)
+      gc(full = TRUE)
       gc(full = TRUE)
     },
     # Snapshot materialization owns the first Length observation; dispatch on
@@ -2253,13 +2309,17 @@ test_that("legacy requirement Length retains its detached Condition sibling", {
       state$fired = TRUE
       # The selected Condition is a sibling of the dispatching `on` leaf. Once
       # this by-reference replacement occurs, only the native receipt may keep
-      # the old Condition alive for the immediately following check.
-      invisible(.Call(
-        data.table:::Csetlistelt,
+      # the old Condition alive for the immediately following check. The
+      # package's own by-reference cell mutator performs that replacement from
+      # the collection this callback triggers.
+      pending = .Call(
+        paradox:::C_test_gc_column_mutator,
         state$requirement,
-        2L,
+        1L,
         state$new_condition
-      ))
+      )
+      rm(pending)
+      gc(full = TRUE)
       gc(full = TRUE)
       if (state$sentinel_finalized) {
         stop("detached Condition finalized during requirement receipt")

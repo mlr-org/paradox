@@ -104,6 +104,71 @@ test_that("Condition access does not dispatch through dollar methods", {
   expect_identical(condition_as_string(cond), "x == 1")
 })
 
+test_that("an overbound attribute spine still reports the Condition class", {
+  unsupported = "Unsupported Condition class; supported classes are 'CondEqual' and 'CondAnyOf'."
+
+  # More attributes than a canonical Condition can carry, and no class among
+  # them: the closed-dispatch diagnostic still wins over the payload one.
+  overbound = list(rhs = 1L, condition_format_string = "%s == %s")
+  attr(overbound, "first_extra") = TRUE
+  attr(overbound, "second_extra") = TRUE
+  expect_error(condition_test(overbound, 1L), unsupported, fixed = TRUE)
+  expect_error(condition_as_string(overbound), unsupported, fixed = TRUE)
+
+  # A single extra attribute already exceeds the canonical shape, and the
+  # class-less answer must not depend on how far the spine reaches.
+  short = list(rhs = 1L, condition_format_string = "%s == %s")
+  attr(short, "first_extra") = TRUE
+  expect_error(condition_test(short, 1L), unsupported, fixed = TRUE)
+
+  # A supported class inside the bounded window keeps the payload diagnostic.
+  classed = CondEqual(1L)
+  attr(classed, "first_extra") = TRUE
+  attr(classed, "second_extra") = TRUE
+  expect_error(
+    condition_test(classed, 1L),
+    "Malformed built-in Condition object",
+    fixed = TRUE
+  )
+})
+
+test_that("built-in Condition constructors stay lenient about the RHS", {
+  # Paradox 1 accepted any atomic right-hand side, and a condition-shaped
+  # object stays constructible for that compatibility. The closed engine owns
+  # the testable shape rule, so each of these fails at use rather than at
+  # construction, and no package path can persist one.
+  unusable = list(
+    CondEqual(1 + 0i),
+    CondEqual(as.raw(1L)),
+    CondEqual(c(only = 1L)),
+    CondAnyOf(c(a = 1L, b = 2L))
+  )
+  for (cond in unusable) {
+    expect_s3_class(cond, "Condition")
+    expect_error(
+      condition_test(cond, 1L),
+      "Malformed built-in Condition object",
+      fixed = TRUE
+    )
+    set = ps(parent = p_int(0, 4), child = p_lgl())
+    expect_error(
+      set$add_dep("child", "parent", cond),
+      "Malformed built-in dependency Condition",
+      fixed = TRUE
+    )
+    expect_identical(nrow(set$deps), 0L)
+    expect_error(
+      upgrade_paradox_object(cond),
+      paste0(
+        "Cannot upgrade Paradox object at x: legacy Condition right-hand side ",
+        "must be an attribute-free logical, integer, numeric, or character ",
+        "vector"
+      ),
+      fixed = TRUE
+    )
+  }
+})
+
 test_that("Condition admission accepts attribute order but rejects extras", {
   condition = CondEqual(1L)
   reordered = condition

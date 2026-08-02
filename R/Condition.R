@@ -131,6 +131,14 @@ print.Condition = function(x, ...) {
 
 # -- CondEqual
 
+# The two built-in constructors stay deliberately more permissive than the
+# closed engine: Paradox 1 accepted any atomic right-hand side, and a
+# condition-shaped object remains constructible and printable here for that
+# compatibility. The engine is the single owner of the testable shape rule, and
+# every path that persists or evaluates a Condition -- `$add_dep()`,
+# `$deps<-`, Domain requirement admission, ParamSet construction,
+# `condition_test()`, and legacy migration -- validates through it, so no
+# unusable Condition can reach stored state.
 #' @export
 CondEqual = function(rhs) {
   if (isS4(rhs)) {

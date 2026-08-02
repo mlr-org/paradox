@@ -306,6 +306,42 @@
   identical(.Call(C_upgrade_structural_list_exact, x), TRUE)
 }
 
+# Base R answers `names<-` on a referenced list of at least 64 elements with a
+# wrapper ALTREP shell (R >= 4.3). Every native structural gate, and the
+# migration crawler in particular, rejects a structural list ALTREP before
+# observing it, so package-owned and package-received list carriers are
+# materialized in R. `.subset()` carries the names attribute and never
+# dispatches an S3 `[` method; the remaining attributes are reinstalled one at a
+# time because `attributes<-` re-wraps a list of this size. Element identities
+# are unchanged, which is what every caller of this helper depends on.
+.paradox_materialize_list_carrier = function(x) {
+  copy = .subset(x, seq_along(x))
+  stored = attributes(x)
+  for (name in names(stored)) {
+    if (identical(name, "names")) next
+    attr(copy, name) = stored[[name]]
+  }
+  copy
+}
+
+# The recursive entry point is the one place that receives a caller-owned
+# container of unbounded length, so it is the one place where an ordinary
+# `names<-` can have produced a structural wrapper the crawler must not
+# observe. The container itself is a carrier: discovery keys on the identity of
+# the objects it holds, mutates those objects in place, and returns the
+# caller's original argument, so replacing the carrier is invisible. Nested
+# containers keep the native rejection; materializing them would mean invoking
+# unknown ALTREP methods from inside the crawl. The standalone upgrader needs
+# no such step: it admits only fixed-shape two- and sixteen-element Condition
+# and Domain carriers, which are below R's wrapper threshold.
+.upgrade_paradox_graph_root = function(x) {
+  if (typeof(x) != "list" || isS4(x) ||
+      .upgrade_paradox_is_ordinary_list(x)) {
+    return(x)
+  }
+  .paradox_materialize_list_carrier(x)
+}
+
 .upgrade_paradox_reject_owner_finalizer = function(
     x,
     shell,
@@ -375,6 +411,10 @@
   ))
 }
 
+# Scope: the legacy ParamSetCollection children carrier only. Every other
+# legacy list carrier is owned by the native table snapshot, which detaches its
+# leaves under the schema-specific policy this helper does not know. Reusing it
+# for a new embedded path would silently install a second, weaker owner.
 .upgrade_paradox_copy_list = function(x) {
   if (!.upgrade_paradox_is_ordinary_list(x) || is.object(x)) return(x)
   stable = .Call(C_upgrade_carrier_list_snapshot, x)
@@ -391,8 +431,7 @@
     columns,
     path,
     classes = c("data.table", "data.frame"),
-    extra_attributes = character(),
-    .after_snapshot = NULL) {
+    extra_attributes = character()) {
   allow_repr = identical(extra_attributes, "repr")
   snapshot = tryCatch(
     .Call(
@@ -416,9 +455,6 @@
       "expected canonical data.table columns `%s`",
       paste(columns, collapse = "`, `")
     )
-  }
-  if (!is.null(.after_snapshot)) {
-    .after_snapshot()
   }
   materialized = unname(snapshot$table)
   names(materialized) = columns
@@ -444,6 +480,34 @@
   param_set_data_table_facade(columns)
 }
 
+# The closed native Condition engine is the single owner of the right-hand-side
+# shape rule: dependency admission and `condition_test()` both reject anything
+# but an attribute-free logical, integer, numeric, or character vector. A
+# migrated object must be usable by those owners, so the two built-in kinds are
+# admitted through the engine before they are returned.
+.upgrade_paradox_admit_condition = function(cond, path) {
+  admitted = tryCatch({
+    condition_test(cond, NULL)
+    TRUE
+  }, error = function(error) FALSE)
+  if (!isTRUE(admitted)) {
+    .upgrade_paradox_abort(
+      path,
+      paste0(
+        "legacy Condition right-hand side must be an attribute-free logical, ",
+        "integer, numeric, or character vector"
+      )
+    )
+  }
+  cond
+}
+
+# Scope: the standalone `upgrade_paradox_object()` entry point only. Legacy
+# Conditions embedded in a dependency table or a Domain requirement are
+# admitted, detached, and rebuilt by the native table owner, which applies the
+# strict engine rule directly. This validator is deliberately the more lenient
+# of the two -- it also admits the untestable base `Condition` class -- so it
+# must not become the owner of a new embedded path.
 .upgrade_paradox_condition = function(cond, path, allow_base = FALSE) {
   classes = .upgrade_paradox_class_snapshot(cond, path)
   if (!.upgrade_paradox_is_ordinary_list(cond) || length(cond) != 2L ||
@@ -461,7 +525,7 @@
         !identical(format, "%s == %s")) {
       .upgrade_paradox_abort(path, "malformed legacy CondEqual")
     }
-    return(CondEqual(rhs))
+    return(.upgrade_paradox_admit_condition(CondEqual(rhs), path))
   }
   if (identical(classes, c("CondAnyOf", "Condition"))) {
     if (!is.atomic(rhs) || !length(rhs) || anyNA(plain_rhs) ||
@@ -469,9 +533,12 @@
         !identical(format, "%s %%in%% {%s}")) {
       .upgrade_paradox_abort(path, "malformed legacy CondAnyOf")
     }
-    return(CondAnyOf(rhs))
+    return(.upgrade_paradox_admit_condition(CondAnyOf(rhs), path))
   }
   if (allow_base && identical(classes, "Condition")) {
+    # The base `Condition` class is outside the closed engine by design: it is
+    # constructible and printable but never testable, so there is no engine
+    # rule to admit it against.
     if (!is.character(format) || length(format) != 1L || is.na(format)) {
       .upgrade_paradox_abort(path, "malformed legacy Condition format")
     }
@@ -1098,6 +1165,8 @@
     .upgrade_paradox_abort(path, "legacy values must be a canonical named list")
   }
   ids = param_columns$id
+  # Backstop only; the native snapshot is the authoritative owner of these
+  # name rules and has already refused every shape rechecked here.
   value_names = names(snapshot)
   if (is.null(value_names)) value_names = character(length(snapshot))
   if (length(value_names) != length(snapshot) || anyNA(value_names) ||
@@ -2842,7 +2911,7 @@
 #' upgrade_paradox_object_graph(model)
 #' }
 upgrade_paradox_object_graph = function(x) {
-  discovery = .Call(C_upgrade_graph_discover, x)
+  discovery = .Call(C_upgrade_graph_discover, .upgrade_paradox_graph_root(x))
   if (!.upgrade_paradox_is_ordinary_list(discovery) ||
       !identical(names(discovery), c("objects", "paths")) ||
       !.upgrade_paradox_is_ordinary_list(discovery$objects) ||

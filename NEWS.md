@@ -577,6 +577,25 @@ hazards that Paradox 2 is intended to remove.
   wave, the post-transplant barrier detects it and errors, but does not roll
   back a completed transplant or promise retry of the externally corrupted
   graph.
+* Migration output is closed under the operations that consume it. Base R
+  answers `names<-` on a referenced list of at least 64 elements with a
+  structural wrapper the crawler must reject before observing it, so
+  `upgrade_paradox_object_graph()` materializes the caller-owned top-level
+  container once before the crawl, and `p_fct()` materializes a list `levels`
+  carrier before its transformation closure captures it. A nested container of
+  that shape is still rejected, now naming the ordinary-copy remedy. A
+  standalone legacy `CondEqual`/`CondAnyOf` is admitted through the same closed
+  Condition engine that `$add_dep()` and `condition_test()` use, so a complex,
+  raw, or attributed right-hand side fails at migration time instead of
+  producing an object no engine accepts; the exported constructors stay as
+  permissive as Paradox 1, and the engine remains the single owner of the
+  testable shape rule. A legacy Domain `repr` must be the ordinary
+  non-ALTREP/non-S4 object that construction admits, so a migrated Domain still
+  builds; its content stays opaque print-only metadata. Migrated typed values
+  whose attribute metadata contains a closure still fail migration closed, and
+  a migrated `ParamUty` value leaf keeps the legacy object's exact identity even
+  when its outward representation is an atomic vector, which remains a
+  documented aliasing channel.
 * New Paradox 2 R6 objects call versioned namespace targets directly.
   Historical unversioned ParamSet-family leanification targets are cold
   compatibility gateways. Current shell authentication accepts an ordinary
