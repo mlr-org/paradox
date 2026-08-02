@@ -139,6 +139,33 @@ hazards that Paradox 2 is intended to remove.
   Operations that complete and root admission before a later value-side
   callback, including `domain_sanitize()`, retain that already coherent
   snapshot.
+* The printable Domain `repr` carrier's shape rule has one owner. Its content
+  stays an opaque print-only payload, but an ALTREP or S4 carrier is rejected
+  by every Domain operation and by `ParamSet` construction alike, rather than
+  only by construction.
+* Structural defects of a Domain are reported as corrupt storage rather than
+  as change during admission. An ordinary `row.names` carrier that disagrees
+  with the admitted row count, or that is not an ordinary integer/character
+  vector, now reports `Corrupt Domain storage`, and the `id` column takes the
+  same diagnostic-rich route as the other fifteen columns. `Domain changed
+  during admission` is retained for divergence detected after a window in
+  which change was possible.
+* A Domain carrying data.table's `index` or `sorted` cache attribute -- which
+  ordinary filtering or keying installs by reference -- is rejected with a
+  message naming that attribute and how to clear it.
+* `domain_qunif()` on a zero-row Domain validates `x` on the same rule as a
+  nonzero Domain and returns the Domain kind's mapped empty vector rather than
+  `logical(0)`; a zero-row `ParamUty` Domain reports the same undefined-mapping
+  error as a nonzero one.
+* The numeric Domain capsule's bounds and tolerance rule has one spelling
+  shared by row admission, capsule validation, and quantile mapping. A capsule
+  whose integer tolerance exceeds `0.5`, or whose integer bounds are neither
+  integer-valued nor infinite, is rejected by `$qunif()` and grid generation as
+  well as by `$check()`.
+* Names, classes, and other closed ASCII labels are compared by bytes, so a
+  `bytes`-encoded spelling of a canonical name is accepted; semantic equality
+  of arbitrary strings such as parameter IDs never equates a `bytes` string
+  with another encoding. The two comparators answer different questions.
 * Base `extra_trafo` callbacks retain unnamed list results, including the
   one-dimensional form used by `to_tune(ParamSet)`. Collection child callbacks
   require names so their output can be translated into the collection namespace.

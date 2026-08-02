@@ -363,11 +363,15 @@ static void run_domain_admission_test_hook(SEXP hooks,
  * This adapter deliberately keeps one protection owner while exposing its
  * four semantic phases as separate C functions.  Besides making each phase
  * reviewable in isolation, this keeps rchk's path-sensitive state space
- * bounded when the package is compiled at -O0.  Optimized package builds may
- * inline these standard-C helpers.  Every SEXP in this record is only a
- * borrowed alias: `root_indices` or `rows` owns every value retained across
- * an allocation, callback, or phase boundary.  The orchestrator alone
- * releases the permanent indexed block.
+ * bounded when the package is compiled at -O0.  Optimized package builds must
+ * inline all four completely: no helper symbol or call may remain and the
+ * optimized external-call inventory must stay identical to the single-function
+ * form, which is the release harness's gate on this extraction.  A build
+ * configuration that prevents that inlining violates it.
+ *
+ * Every SEXP in this record is only a borrowed alias: `root_indices` or `rows`
+ * owns every value retained across an allocation, callback, or phase
+ * boundary.  The orchestrator alone releases the permanent indexed block.
  */
 typedef struct {
   paradox_builtin_domain_kind_t kind;
@@ -404,37 +408,29 @@ typedef enum {
   DOMAIN_ADMISSION_GROUPING_CHANGED
 } domain_admission_status_t;
 
-/* Select and root the complete outward shell before the sole potentially
- * dispatching row-name observation. */
-static inline void select_public_domain_shell(
-    SEXP domain, domain_admission_context_t *context) {
+/* Every canonical column participates in both the pre-callback selection and
+ * the post-callback recapture; the complete mask has one spelling. */
+static inline unsigned int complete_public_domain_mask(void) {
   unsigned int selected_mask = 0U;
   for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     selected_mask |= 1U << column;
   }
-  if (!paradox_domain_capture_outer_metadata(
-      domain,
-      &context->outward_metadata
-    )) {
-    Rf_error(
-      "Corrupt Domain storage: outer metadata must be ordinary and bounded"
-    );
-  }
-  paradox_domain_select_captured_columns_with_positions(
-    domain,
-    context->outward_metadata.names,
-    "Domain storage",
-    "Domain",
-    selected_mask,
-    context->selected_columns,
-    context->selected_positions
-  );
-  if (XLENGTH(domain) != PARADOX_DOMAIN_COLUMN_COUNT) {
-    Rf_error(
-      "Corrupt Domain storage: `Domain` must have exactly %d columns",
-      PARADOX_DOMAIN_COLUMN_COUNT
-    );
-  }
+  return selected_mask;
+}
+
+/*
+ * Root every selected column in its permanent indexed slot and require the
+ * complete sixteen-column shell. Pre-callback selection and post-callback
+ * recapture share this one bounded owner so the two cannot drift.
+ *
+ * `first_pass` separates the two windows for the ID carrier alone. Before any
+ * observable callback the ID column's defects are static storage corruption
+ * and take the same diagnostic-rich route as the other fifteen columns; after
+ * the one row-name Length observation a mismatch is exactly the shape
+ * replacement this phase exists to reject.
+ */
+static inline void root_and_require_public_domain_columns(
+    const domain_admission_context_t *context, int first_pass) {
   for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     REPROTECT(
       context->selected_columns[column],
@@ -443,7 +439,7 @@ static inline void select_public_domain_shell(
   }
   for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     SEXP value = context->selected_columns[column];
-    if (column == PARADOX_DOMAIN_ID) {
+    if (column == PARADOX_DOMAIN_ID && !first_pass) {
       if (!paradox_domain_column_shell_is_exact(
           value,
           PARADOX_DOMAIN_ID,
@@ -468,6 +464,34 @@ static inline void select_public_domain_shell(
       );
     }
   }
+}
+
+/* Select and root the complete outward shell before the sole potentially
+ * dispatching row-name observation. */
+static inline void select_public_domain_shell(
+    SEXP domain, domain_admission_context_t *context) {
+  if (!paradox_domain_capture_outer_metadata(
+      domain,
+      &context->outward_metadata
+    )) {
+    paradox_domain_reject_outer_metadata(domain, &context->outward_metadata);
+  }
+  paradox_domain_select_captured_columns_with_positions(
+    domain,
+    context->outward_metadata.names,
+    "Domain storage",
+    "Domain",
+    complete_public_domain_mask(),
+    context->selected_columns,
+    context->selected_positions
+  );
+  if (XLENGTH(domain) != PARADOX_DOMAIN_COLUMN_COUNT) {
+    Rf_error(
+      "Corrupt Domain storage: `Domain` must have exactly %d columns",
+      PARADOX_DOMAIN_COLUMN_COUNT
+    );
+  }
+  root_and_require_public_domain_columns(context, TRUE);
 
   context->outward_row_names = context->outward_metadata.row_names;
   const int callback_capable_row_names = ALTREP(
@@ -477,11 +501,33 @@ static inline void select_public_domain_shell(
     context->outward_row_names,
     context->root_indices[DOMAIN_ADMISSION_ROOT_ROW_NAMES]
   );
+  /*
+   * An ordinary row-name carrier answers Length without an observable
+   * callback, so no user code can have run between the column shells above and
+   * this count: a malformed carrier or a disagreement with the admitted row
+   * count is static storage corruption. Only a callback-capable carrier keeps
+   * the change family here, because its one allowed Length observation is
+   * itself the window in which the table may have been replaced.
+   */
   if (!paradox_public_row_names_count(
       context->outward_row_names,
       &context->outward_row_count
     )) {
+    if (!callback_capable_row_names) {
+      Rf_error(
+        "Corrupt Domain storage: `Domain` row names must use an ordinary "
+        "integer or character representation"
+      );
+    }
     Rf_error("Domain changed during admission");
+  }
+  if (!callback_capable_row_names &&
+      context->outward_row_count != context->row_count) {
+    Rf_error(
+      "Corrupt Domain storage: `Domain` row names must describe a row count "
+      "of %.0f",
+      (double) context->row_count
+    );
   }
   context->selection_is_current = !callback_capable_row_names;
 }
@@ -507,16 +553,12 @@ static inline void capture_public_domain_generation(
           context->outward_row_names) {
         Rf_error("Domain changed during admission");
       }
-      unsigned int selected_mask = 0U;
-      for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
-        selected_mask |= 1U << column;
-      }
       paradox_domain_select_captured_columns_with_positions(
         domain,
         context->outward_metadata.names,
         "Domain storage",
         "Domain",
-        selected_mask,
+        complete_public_domain_mask(),
         context->selected_columns,
         context->selected_positions
       );
@@ -526,39 +568,7 @@ static inline void capture_public_domain_generation(
       Rf_error("Domain changed during admission");
     }
     if (!context->selection_is_current) {
-      for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
-        REPROTECT(
-          context->selected_columns[column],
-          context->root_indices[column]
-        );
-      }
-      for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
-        SEXP value = context->selected_columns[column];
-        if (column == PARADOX_DOMAIN_ID) {
-          if (!paradox_domain_column_shell_is_exact(
-              value,
-              PARADOX_DOMAIN_ID,
-              context->row_count
-            )) {
-            Rf_error("Domain shape changed during admission");
-          }
-        } else if (paradox_domain_column_types[column] == REALSXP) {
-          paradox_require_numeric_column(
-            value,
-            context->row_count,
-            "Domain storage",
-            paradox_domain_column_names[column]
-          );
-        } else {
-          paradox_require_column_checked(
-            value,
-            paradox_domain_column_types[column],
-            context->row_count,
-            "Domain storage",
-            paradox_domain_column_names[column]
-          );
-        }
-      }
+      root_and_require_public_domain_columns(context, FALSE);
     }
     /* Any allocation followed by `continue` must select a fresh generation. */
     context->selection_is_current = FALSE;
@@ -576,13 +586,15 @@ static inline void capture_public_domain_generation(
       ) != context->kind) {
       Rf_error("Domain shape changed during admission");
     }
+    /* The `repr` carrier's shape is proven by the shared metadata capture that
+     * produced these fields; this phase states no second spelling of it. A
+     * count still disagreeing here can only follow the callback-capable
+     * row-name Length observation, so it stays in the change family. */
     if (outward_attribute_count != context->expected_attribute_count ||
         context->outward_row_count != context->row_count ||
         (context->outward_selfref != R_NilValue &&
           (TYPEOF(context->outward_selfref) != EXTPTRSXP ||
-            Rf_isS4(context->outward_selfref))) ||
-        (context->outward_repr != R_NilValue &&
-          Rf_isS4(context->outward_repr))) {
+            Rf_isS4(context->outward_selfref)))) {
       Rf_error("Domain changed during admission");
     }
     REPROTECT(
@@ -1115,7 +1127,6 @@ static inline domain_admission_status_t public_domain_generation_status(
     (current_selfref == R_NilValue ||
       (TYPEOF(current_selfref) == EXTPTRSXP &&
         !Rf_isS4(current_selfref))) &&
-    (current_repr == R_NilValue || !Rf_isS4(current_repr)) &&
     (TYPEOF(current_row_names) == INTSXP ||
       TYPEOF(current_row_names) == STRSXP) &&
     !Rf_isS4(current_row_names) && !Rf_isObject(current_row_names) &&
@@ -1251,6 +1262,12 @@ static inline domain_admission_status_t public_domain_generation_status(
        * The optional-names receipt of an undetached empty shell is per row.
        * An identical live/admitted pair can reuse the preceding comparison
        * only when both rows also captured the same names-presence byte.
+       *
+       * Reuse also depends on the loop's exit condition: a later row is only
+       * reached while `current` still holds, so a recorded prior pair is
+       * always one this receipt already accepted, including its type and
+       * shell checks. Any reordering that lets a row run after a failure must
+       * clear these prior records.
        */
       if (!(have_prior_special_values &&
           source == prior_live_special_values &&

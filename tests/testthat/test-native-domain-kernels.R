@@ -699,7 +699,9 @@ test_that("empty Domain semantics are owned by the native kernels", {
   zero_double = p_dbl(0, 1)[0]
   expect_true(domain_check(zero_double, list()))
   expect_identical(domain_nlevels(zero_double), integer())
-  expect_identical(domain_qunif(zero_double, 0.5), logical())
+  # A zero-row exit carries the kind's mapped storage type, exactly as the
+  # nonzero results of the same Domain do.
+  expect_identical(domain_qunif(zero_double, 0.5), numeric())
 
   check = native_domain_symbol("domain_check_builtin")
   property = native_domain_symbol("domain_property_builtin")
@@ -876,9 +878,13 @@ test_that("Domain checks re-admit row shape after ALTREP materialization", {
     callback_after = 0L
   )
 
+  # The ID carrier takes the same diagnostic-rich column route as the other
+  # fifteen columns: a shell that cannot carry the admitted row count is
+  # reported as the structural defect it is, whatever replaced it.
   expect_error(
     domain_check(domain, list(value)),
-    "Domain shape changed|must have type .* length 2"
+    "Corrupt Domain storage: `id` must have type `character` and length 1",
+    fixed = TRUE
   )
   expect_identical(callbacks, 1L)
   expect_identical(domain$id, c("x", "y"))
@@ -1587,4 +1593,255 @@ test_that("large closed Domain loops remain interruptible and correct", {
   expect_true(domain_check(domain, as.list(rep(0.5, size))))
   expect_identical(domain_qunif(domain, rep(0.5, size)), rep(0.5, size))
   expect_identical(domain_sanitize(domain, rep(0.5, size)), as.list(rep(0.5, size)))
+})
+
+test_that("Domain operations observe one row-name Length and no labels", {
+  # The fixture counts its own Elt and Length dispatches, so the contract that
+  # each operation performs exactly one row-name Length observation is asserted
+  # as an exact count rather than inferred from a callback having fired.
+  fixture_calls = native_domain_symbol("test_stateful_altrep_calls")
+  build = function(rows) {
+    domain = native_domain_bind(rep(list(p_dbl(0, 1)), rows))
+    row_names = native_stateful_altrep(
+      paste0("row-", seq_len(rows)),
+      paste0("row-", seq_len(rows))
+    )
+    attr(domain, "row.names") = row_names
+    list(domain = domain, row_names = attr(domain, "row.names", exact = TRUE))
+  }
+  zero = c(elt = 0L, length = 0L)
+  one_length = c(elt = 0L, length = 1L)
+
+  fixture = build(2L)
+  expect_identical(.Call(fixture_calls, fixture$row_names), zero)
+  expect_identical(domain_qunif(fixture$domain, c(0.25, 0.75)), c(0.25, 0.75))
+  expect_identical(.Call(fixture_calls, fixture$row_names), one_length)
+
+  for (operation in list(
+    function(domain) domain_check(domain, list(0.25, 0.75)),
+    function(domain) domain_sanitize(domain, list(0.25, 0.75)),
+    function(domain) domain_nlevels(domain),
+    function(domain) domain_is_number(domain)
+  )) {
+    fixture = build(2L)
+    invisible(operation(fixture$domain))
+    expect_identical(.Call(fixture_calls, fixture$row_names), one_length)
+  }
+})
+
+test_that("quantile mapping cannot combine two row-name Length answers", {
+  # A second Length observation would answer three rows for a two-row Domain.
+  # The divergent fixture therefore fails closed if the single-observation
+  # discipline is ever relaxed, and the counter pins that it was not.
+  fixture_calls = native_domain_symbol("test_stateful_altrep_calls")
+  domain = native_domain_bind(rep(list(p_dbl(0, 1)), 2L))
+  row_names = native_stateful_altrep(
+    c("row-a", "row-b"),
+    c("row-a", "row-b", "row-c"),
+    length_switch_after = 1L
+  )
+  attr(domain, "row.names") = row_names
+  row_names = attr(domain, "row.names", exact = TRUE)
+  expect_identical(.Call(fixture_calls, row_names), c(elt = 0L, length = 0L))
+
+  expect_identical(domain_qunif(domain, c(0.25, 0.75)), c(0.25, 0.75))
+  expect_identical(.Call(fixture_calls, row_names), c(elt = 0L, length = 1L))
+})
+
+test_that("domain_check reads its internal flag value exactly once", {
+  # A second read of this fixture answers NA, which would be treated as
+  # "internal" and silently stop honouring `special_vals`.
+  fixture_calls = native_domain_symbol("test_stateful_altrep_calls")
+  flag = native_stateful_altrep(FALSE, NA, elt_switch_after = 1L)
+  expect_identical(.Call(fixture_calls, flag), c(elt = 0L, length = 0L))
+
+  expect_true(domain_check(p_dbl(0, 1), list(0.5), flag))
+  expect_identical(.Call(fixture_calls, flag)[["elt"]], 1L)
+})
+
+test_that("the fixture counter readback is closed to foreign values", {
+  fixture_calls = native_domain_symbol("test_stateful_altrep_calls")
+  for (foreign in list(1:3, list(), p_dbl(0, 1), NULL, "x")) {
+    expect_error(
+      .Call(fixture_calls, foreign),
+      "`value` must be a stateful ALTREP test fixture",
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("static Domain row-name corruption is reported as corrupt storage", {
+  # Nothing observable runs between the column shells and an ordinary
+  # row-name carrier's count, so a disagreement there is storage corruption
+  # rather than divergence during admission.
+  domain = p_dbl(0, 1)
+  data.table::setattr(domain, "row.names", 1:3)
+  for (operation in list(
+    function(d) domain_check(d, list(0.5)),
+    function(d) domain_qunif(d, 0.5),
+    function(d) domain_sanitize(d, list(0.5)),
+    function(d) domain_nlevels(d),
+    function(d) domain_is_bounded(d)
+  )) {
+    expect_error(
+      operation(domain),
+      "Corrupt Domain storage: `Domain` row names must describe a row count of 1",
+      fixed = TRUE
+    )
+  }
+
+  attributed = 1L
+  attr(attributed, "junk") = TRUE
+  malformed = unclass(p_dbl(0, 1))
+  spine = attributes(p_dbl(0, 1))
+  spine$row.names = attributed
+  attributes(malformed) = spine
+  expect_error(
+    domain_check(malformed, list(0.5)),
+    paste(
+      "Corrupt Domain storage: `Domain` row names must use an ordinary",
+      "integer or character representation"
+    ),
+    fixed = TRUE
+  )
+})
+
+test_that("a reentrant row-name mutation is still reported as change", {
+  # Character ALTREP fixtures and both registered mutator seams exist on every
+  # supported R release, so this needs no capability guard.
+  namespace = asNamespace("paradox")
+  attribute_mutator = get("C_test_gc_attribute_mutator", envir = namespace)
+  state = new.env(parent = emptyenv())
+  state$callbacks = 0L
+  state$replacement = native_stateful_altrep(
+    c("replacement-a", "replacement-b", "replacement-c"),
+    c("replacement-a", "replacement-b", "replacement-c")
+  )
+  row_names = native_stateful_altrep(
+    c("row-a", "row-b"),
+    c("row-a", "row-b"),
+    callback = function() {
+      state$callbacks = state$callbacks + 1L
+      pointer = .Call(
+        attribute_mutator,
+        state$domain,
+        "row.names",
+        state$replacement
+      )
+      rm(pointer)
+      for (iteration in 1:3) {
+        invisible(gc(full = TRUE))
+      }
+    }
+  )
+  state$domain = native_domain_bind(rep(list(p_dbl(0, 1)), 2L))
+  attr(state$domain, "row.names") = row_names
+  invisible(.Call(
+    get("C_test_stateful_altrep_row_names_rearm", envir = namespace),
+    state$domain,
+    c(NA_integer_, 0L)
+  ))
+
+  # A callback-capable carrier's one Length observation is itself the window
+  # in which the table can be replaced, so this stays in the change family.
+  expect_error(
+    domain_check(state$domain, list(0.25, 0.75)),
+    "Domain changed during admission",
+    fixed = TRUE
+  )
+  expect_identical(state$callbacks, 1L)
+})
+
+test_that("the printable Domain repr carrier has one shape rule", {
+  # The carrier's content stays opaque; only its representation is
+  # constrained, and operations and construction enforce the same rule.
+  formal_class = "ParadoxReprCarrierProbe"
+  if (!methods::isClass(formal_class)) {
+    methods::setClass(formal_class, slots = c(payload = "integer"))
+  }
+  for (carrier in list(
+    1:99,
+    methods::new(formal_class, payload = 1L),
+    asS4(list(payload = 1L))
+  )) {
+    domain = p_int(0, 1)
+    attr(domain, "repr") = carrier
+    for (operation in list(
+      function(d) domain_check(d, list(0L)),
+      function(d) domain_qunif(d, 0.5),
+      function(d) domain_nlevels(d),
+      function(d) domain_sanitize(d, list(0L)),
+      function(d) domain_is_number(d)
+    )) {
+      expect_error(
+        operation(domain),
+        "Corrupt Domain storage: outer metadata must be ordinary and bounded",
+        fixed = TRUE
+      )
+    }
+    expect_error(
+      ps(x = domain),
+      "ParamSet parameters must be canonical built-in Domain objects",
+      fixed = TRUE
+    )
+  }
+
+  for (carrier in list(NULL, "printable", c(1, 2))) {
+    domain = p_int(0, 1)
+    attr(domain, "repr") = carrier
+    expect_true(domain_check(domain, list(0L)))
+    expect_s3_class(ps(x = domain), "ParamSet")
+  }
+})
+
+test_that("zero-row quantile exits validate x and carry the mapped type", {
+  expected = list(
+    dbl = list(domain = p_dbl(0, 1), empty = numeric()),
+    int = list(domain = p_int(0, 10), empty = integer()),
+    fct = list(domain = p_fct(c("a", "b")), empty = character()),
+    lgl = list(domain = p_lgl(), empty = logical())
+  )
+  for (kind in names(expected)) {
+    zero = expected[[kind]]$domain[0]
+    expect_identical(nrow(zero), 0L, info = kind)
+    expect_identical(domain_qunif(zero, 0.5), expected[[kind]]$empty, info = kind)
+    expect_identical(
+      domain_qunif(zero, numeric()),
+      expected[[kind]]$empty,
+      info = kind
+    )
+    for (junk in list("junk", factor("a"), list(0.5), TRUE)) {
+      expect_error(
+        domain_qunif(zero, junk),
+        "`x` must be an unclassed numeric vector",
+        info = kind
+      )
+      expect_error(
+        domain_qunif(expected[[kind]]$domain, junk),
+        "`x` must be an unclassed numeric vector",
+        info = kind
+      )
+    }
+  }
+
+  # ParamUty has no mapped type at any row count and keeps the operation's
+  # single undefined-mapping rejection.
+  expect_error(
+    domain_qunif(p_uty()[0], 0.5),
+    "Quantile mapping is undefined for ParamUty Domains",
+    fixed = TRUE
+  )
+  expect_error(
+    domain_qunif(p_uty()[0], numeric()),
+    "Quantile mapping is undefined for ParamUty Domains",
+    fixed = TRUE
+  )
+  expect_error(domain_qunif(p_uty()[0], "junk"), "`x` must be an unclassed numeric vector")
+
+  # The classless empty Domain has no kind to map and keeps its answer.
+  expect_identical(domain_qunif(paradox:::empty_domain, c(-1, 2)), logical())
+  expect_error(
+    domain_qunif(paradox:::empty_domain, "junk"),
+    "`x` must be an unclassed numeric vector"
+  )
 })

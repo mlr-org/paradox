@@ -30,6 +30,17 @@ const SEXPTYPE paradox_domain_column_types[PARADOX_DOMAIN_COLUMN_COUNT] = {
   VECSXP, VECSXP, STRSXP, VECSXP, VECSXP, VECSXP, LGLSXP, VECSXP
 };
 
+/*
+ * Byte comparison against a constant ASCII label. Every caller compares
+ * against a member of a closed, package-owned ASCII name set -- column names,
+ * built-in class and storage names, cargo keys -- where the stored bytes
+ * decide identity and no translation can change the answer. A `bytes`-encoded
+ * spelling of such a name is therefore accepted here, deliberately unlike
+ * `paradox_domain_strings_equal()` below, which decides semantic equality of
+ * arbitrary user strings and never equates a `bytes` string with any other
+ * encoding. The asymmetry is the difference between the two questions, not an
+ * inconsistency.
+ */
 int paradox_domain_string_is(SEXP string, const char *expected) {
   return string != NA_STRING && strcmp(CHAR(string), expected) == 0;
 }
@@ -42,6 +53,13 @@ static SEXP interned_domain_column_names[PARADOX_DOMAIN_COLUMN_COUNT];
 static SEXP interned_domain_selfref_symbol;
 static SEXP interned_domain_repr_symbol;
 
+/* data.table's by-reference caches. They are not part of any Domain
+ * representation, but ordinary filtering or keying installs them on a live
+ * Domain, so the rejection below can name them. */
+static const char *const domain_data_table_cache_tags[] = {"index", "sorted"};
+#define PARADOX_DOMAIN_CACHE_TAG_COUNT 2
+static SEXP interned_domain_cache_symbols[PARADOX_DOMAIN_CACHE_TAG_COUNT];
+
 void paradox_domain_intern_column_names(void) {
   for (int column = 0; column < PARADOX_DOMAIN_COLUMN_COUNT; ++column) {
     SEXP name = Rf_mkChar(paradox_domain_column_names[column]);
@@ -50,6 +68,37 @@ void paradox_domain_intern_column_names(void) {
   }
   interned_domain_selfref_symbol = Rf_install(".internal.selfref");
   interned_domain_repr_symbol = Rf_install("repr");
+  for (int tag = 0; tag < PARADOX_DOMAIN_CACHE_TAG_COUNT; ++tag) {
+    interned_domain_cache_symbols[tag] =
+      Rf_install(domain_data_table_cache_tags[tag]);
+  }
+}
+
+void paradox_domain_reject_outer_metadata(SEXP domain,
+    const paradox_domain_outer_metadata_t *metadata) {
+  /* The capture's five-cell bound aborts before reporting a sixth tag, so the
+   * cache tags are also probed directly. This runs only once admission has
+   * already decided to reject, and never widens what is admitted. */
+  for (int tag = 0; tag < PARADOX_DOMAIN_CACHE_TAG_COUNT; ++tag) {
+    int present = FALSE;
+    if (metadata->unsupported_tag == interned_domain_cache_symbols[tag] ||
+        (paradox_bounded_metadata_has_tag(
+          domain,
+          interned_domain_cache_symbols[tag],
+          &present
+        ) && present)) {
+      Rf_error(
+        "Corrupt Domain storage: `Domain` carries the data.table `%s` cache "
+        "attribute; remove it with `data.table::setattr(x, \"%s\", NULL)` or "
+        "rebuild the Domain",
+        domain_data_table_cache_tags[tag],
+        domain_data_table_cache_tags[tag]
+      );
+    }
+  }
+  Rf_error(
+    "Corrupt Domain storage: outer metadata must be ordinary and bounded"
+  );
 }
 
 SEXP paradox_domain_selfref_symbol(void) {
@@ -75,6 +124,9 @@ static void capture_domain_outer_attribute(SEXP tag, SEXP value, void *data) {
   } else if (tag == interned_domain_repr_symbol) {
     destination = &metadata->repr;
   } else {
+    if (metadata->unsupported_tag == R_NilValue) {
+      metadata->unsupported_tag = tag;
+    }
     metadata->valid = FALSE;
     return;
   }
@@ -86,9 +138,24 @@ static void capture_domain_outer_attribute(SEXP tag, SEXP value, void *data) {
   ++metadata->count;
 }
 
+/*
+ * The printable `repr` carrier is metadata no Domain rule interprets: its
+ * content stays opaque to every operation. Its shape is nevertheless part of
+ * the public table contract, because an ALTREP or S4 carrier can dispatch
+ * arbitrary R from an attribute read and this capture is allocation- and
+ * callback-free by construction. One spelling of that rule serves every
+ * boundary admitting a public Domain: a boundary that tolerates a carrier only
+ * because its adapter never reads it still admits tables the constructor
+ * rejects.
+ */
+int paradox_domain_repr_carrier_is_ordinary(SEXP repr) {
+  return repr == R_NilValue || (!ALTREP(repr) && !Rf_isS4(repr));
+}
+
 int paradox_domain_capture_outer_metadata(SEXP domain,
     paradox_domain_outer_metadata_t *metadata) {
   *metadata = (paradox_domain_outer_metadata_t) {
+    R_NilValue,
     R_NilValue,
     R_NilValue,
     R_NilValue,
@@ -107,7 +174,8 @@ int paradox_domain_capture_outer_metadata(SEXP domain,
     ) || !metadata->valid || metadata->count != count ||
       metadata->names == R_NilValue ||
       metadata->classes == R_NilValue ||
-      metadata->row_names == R_NilValue) {
+      metadata->row_names == R_NilValue ||
+      !paradox_domain_repr_carrier_is_ordinary(metadata->repr)) {
     return FALSE;
   }
   const R_xlen_t expected = 3 +
@@ -456,6 +524,14 @@ static int native_ascii_strings_equal(SEXP left, SEXP right, int *known) {
   }
 }
 
+/*
+ * Semantic equality of two arbitrary user strings, such as parameter IDs and
+ * factor groupings. A `bytes` string declares that its payload has no
+ * character interpretation, so it equals only another `bytes` string with the
+ * same payload. `paradox_domain_string_is()` above answers a different
+ * question over a closed ASCII name set and deliberately does not share this
+ * rule.
+ */
 int paradox_domain_strings_equal(SEXP left, SEXP right) {
   if (left == right) {
     return TRUE;
@@ -1087,6 +1163,125 @@ static int validate_params_rooted(SEXP params, SEXP selected_id,
   result->classes = classes;
   result->row_count = row_count;
   return TRUE;
+}
+
+int paradox_domain_plain_integer_bound(double value) {
+  if (!R_FINITE(value)) {
+    return TRUE;
+  }
+  if (value < -(double) INT_MAX || value > (double) INT_MAX) {
+    return FALSE;
+  }
+  return value == (double) ((int) value);
+}
+
+int paradox_domain_numeric_capsule_is_canonical(int integer_kind,
+    double lower, double upper, double tolerance) {
+  /* `R_FINITE()` already refuses a missing or NaN tolerance; the bound
+   * comparison below is false for either NaN operand, so both bounds are
+   * tested for missingness explicitly. */
+  if (ISNAN(lower) || ISNAN(upper) || !R_FINITE(tolerance) ||
+      tolerance < 0.0 || lower > upper) {
+    return FALSE;
+  }
+  return !integer_kind ||
+    (tolerance <= 0.5 &&
+      paradox_domain_plain_integer_bound(lower) &&
+      paradox_domain_plain_integer_bound(upper));
+}
+
+static uint64_t hash_id_bytes(const unsigned char *text, uint64_t hash) {
+  while (*text != '\0') {
+    hash ^= (uint64_t) *text;
+    hash *= UINT64_C(1099511628211);
+    ++text;
+  }
+  return hash;
+}
+
+/* Identifier equality is the encoding-aware comparator below, so the hash has
+ * to agree with it: every translatable spelling hashes its UTF-8 bytes, and a
+ * bytes-encoded identifier -- which that comparator never equates with a
+ * non-bytes one -- is separated by a distinct prefix. */
+static uint64_t hash_id_string(SEXP string) {
+  uint64_t hash = UINT64_C(14695981039346656037);
+  if (Rf_getCharCE(string) == CE_BYTES) {
+    hash ^= UINT64_C(0xff);
+    hash *= UINT64_C(1099511628211);
+    return hash_id_bytes((const unsigned char *) CHAR(string), hash);
+  }
+  PROTECT(string);
+  const void *vmax = vmaxget();
+  const char *text = Rf_translateCharUTF8(string);
+  hash = hash_id_bytes((const unsigned char *) text, hash);
+  vmaxset(vmax);
+  UNPROTECT(1);
+  return hash;
+}
+
+paradox_domain_id_map_status_t paradox_domain_id_map_init(SEXP ids,
+    paradox_domain_id_map_t *map) {
+  const R_xlen_t size = XLENGTH(ids);
+  if (size > R_XLEN_T_MAX / 2) {
+    return PARADOX_DOMAIN_ID_MAP_TOO_MANY;
+  }
+  R_xlen_t capacity = 1;
+  const R_xlen_t needed = size == 0 ? 1 : size * 2;
+  while (capacity < needed) {
+    if (capacity > R_XLEN_T_MAX / 2) {
+      return PARADOX_DOMAIN_ID_MAP_CAPACITY;
+    }
+    capacity *= 2;
+  }
+  paradox_domain_id_slot_t *slots =
+    paradox_temporary_alloc(capacity, sizeof(*slots));
+  memset(slots, 0, (size_t) capacity * sizeof(*slots));
+  const R_xlen_t mask = capacity - 1;
+  R_xlen_t work_since_interrupt = 0;
+  for (R_xlen_t row = 0; row < size; ++row) {
+    paradox_account_work(&work_since_interrupt);
+    SEXP id = STRING_ELT(ids, row);
+    const uint64_t hash = hash_id_string(id);
+    R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
+    while (slots[slot].row_plus_one != 0) {
+      paradox_account_work(&work_since_interrupt);
+      const R_xlen_t present = slots[slot].row_plus_one - 1;
+      if (slots[slot].hash == hash && paradox_domain_strings_equal(
+          STRING_ELT(ids, present), id
+        )) {
+        return PARADOX_DOMAIN_ID_MAP_DUPLICATE;
+      }
+      slot = (slot + 1) & mask;
+    }
+    slots[slot].hash = hash;
+    slots[slot].row_plus_one = row + 1;
+  }
+  map->slots = slots;
+  map->capacity = capacity;
+  map->ids = ids;
+  return PARADOX_DOMAIN_ID_MAP_OK;
+}
+
+int paradox_domain_id_map_find(const paradox_domain_id_map_t *map, SEXP id,
+    R_xlen_t *row, R_xlen_t *work_since_interrupt) {
+  /* An early exit, not a rule: the comparator below refuses every pairing
+   * involving a missing identifier, and admitted `id` columns carry none. */
+  if (id == NA_STRING) return FALSE;
+  const uint64_t hash = hash_id_string(id);
+  const R_xlen_t mask = map->capacity - 1;
+  R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
+  while (map->slots[slot].row_plus_one != 0) {
+    paradox_account_work(work_since_interrupt);
+    const R_xlen_t present = map->slots[slot].row_plus_one - 1;
+    if (map->slots[slot].hash == hash && paradox_domain_strings_equal(
+        STRING_ELT(map->ids, present), id
+      )) {
+      *row = present;
+      return TRUE;
+    }
+    slot = (slot + 1) & mask;
+  }
+  return FALSE;
 }
 
 int paradox_domain_validate_params(SEXP params, SEXP selected_id,

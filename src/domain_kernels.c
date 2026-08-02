@@ -118,11 +118,20 @@ static void capture_empty_domain_attribute(
   *destination = value;
 }
 
+/*
+ * The empty Domain shares the canonical sixteen-column schema with exactly one
+ * documented divergence: its `.tags` cell is a zero-length character vector
+ * rather than the list the populated projection carries. Deriving every other
+ * type from `paradox_domain_column_types` keeps that divergence the only one a
+ * schema change can produce.
+ */
+static SEXPTYPE empty_domain_column_type(int column) {
+  return column == (int) PARADOX_DOMAIN_TAGS
+    ? STRSXP
+    : paradox_domain_column_types[column];
+}
+
 static void validate_empty_domain(SEXP param) {
-  static const int column_types[] = {
-    STRSXP, STRSXP, STRSXP, VECSXP, REALSXP, REALSXP, REALSXP, VECSXP,
-    VECSXP, VECSXP, STRSXP, STRSXP, VECSXP, VECSXP, LGLSXP, VECSXP
-  };
   const R_xlen_t column_count = (R_xlen_t) (
     PARADOX_DOMAIN_COLUMN_COUNT
   );
@@ -185,7 +194,8 @@ static void validate_empty_domain(SEXP param) {
     if (!paradox_domain_string_is(
         STRING_ELT(names, column),
         paradox_domain_column_names[column]
-      ) || TYPEOF(value) != column_types[column] || ALTREP(value) ||
+      ) || (SEXPTYPE) TYPEOF(value) != empty_domain_column_type((int) column) ||
+        ALTREP(value) ||
         Rf_isS4(value) || Rf_isObject(value) ||
         !paradox_api_has_no_attributes(value) ||
         XLENGTH(value) != 0) {
@@ -262,9 +272,7 @@ static domain_shape_t domain_shape(SEXP param) {
       "id"
     );
     UNPROTECT(1);
-    Rf_error(
-      "Corrupt Domain storage: outer metadata must be ordinary and bounded"
-    );
+    paradox_domain_reject_outer_metadata(param, &metadata);
   }
   const domain_kind_t kind = class_kind(metadata.classes);
   if (kind == DOMAIN_KIND_UNKNOWN) {
@@ -1764,15 +1772,44 @@ static SEXP qunif_logical(SEXP x, R_xlen_t size) {
   return result;
 }
 
+/*
+ * A zero-row exit must be shape-consistent with the nonzero results of the
+ * same Domain kind: callers stack, `rbind()`, and `vapply()` over quantile
+ * results without inspecting the row count first, so the empty answer carries
+ * the kind's mapped storage type. ParamUty has no mapped type at any row
+ * count, and keeps the operation's single undefined-mapping rejection.
+ */
+static SEXP empty_qunif_result(const domain_shape_t *info) {
+  switch (info->kind) {
+  case DOMAIN_KIND_DBL:
+    return Rf_allocVector(REALSXP, 0);
+  case DOMAIN_KIND_INT:
+    return Rf_allocVector(INTSXP, 0);
+  case DOMAIN_KIND_FCT:
+    return Rf_allocVector(STRSXP, 0);
+  case DOMAIN_KIND_UTY:
+    Rf_error("Quantile mapping is undefined for ParamUty Domains");
+  case DOMAIN_KIND_LGL:
+  case DOMAIN_KIND_EMPTY:
+  case DOMAIN_KIND_UNKNOWN:
+    break;
+  }
+  return Rf_allocVector(LGLSXP, 0);
+}
+
 SEXP paradox_domain_qunif_builtin(SEXP param, SEXP x) {
   const domain_shape_t info = domain_shape(param);
   if (info.size == 0) {
+    /* `x` is rejected on the same shell rule and in the same order as the
+     * nonzero path; a Domain with no rows does not make a malformed quantile
+     * input acceptable. */
+    require_unclassed_qunif_source_shell(x);
     admit_domain_before_empty_exit(
       param,
       &info,
       PARADOX_DOMAIN_INTERPRET_BOUNDS | PARADOX_DOMAIN_INTERPRET_LEVELS
     );
-    return Rf_allocVector(LGLSXP, 0);
+    return empty_qunif_result(&info);
   }
   require_unclassed_qunif_source_shell(x);
   /*
