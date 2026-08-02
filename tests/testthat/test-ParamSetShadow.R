@@ -837,22 +837,26 @@ test_that("Collection verification authenticates descendant Shadow signatures", 
   expect_identical(repaired[[2L]], origin$.__enclos_env__$private$.core)
   expect_identical(collection_private$.core, collection_core)
 
-  # The same parent proof must also include the carrier contents: this
-  # package-native primitive changes a list entry without replacing the list.
+  # The same parent proof must also include the carrier contents: the
+  # package's own by-reference cell mutator changes a list entry without
+  # replacing the list, landing from the collection the gc barrier triggers.
   selected = shadow_private$.core
   repaired = attr(selected, signature_name, exact = TRUE)
-  invisible(.Call(
-    data.table:::Csetlistelt,
+  pending_first = .Call(
+    paradox:::C_test_gc_column_mutator,
+    repaired,
+    0L,
+    donor_signature[[1L]]
+  )
+  pending_second = .Call(
+    paradox:::C_test_gc_column_mutator,
     repaired,
     1L,
-    donor_signature[[1L]]
-  ))
-  invisible(.Call(
-    data.table:::Csetlistelt,
-    repaired,
-    2L,
     donor_signature[[2L]]
-  ))
+  )
+  rm(pending_first, pending_second)
+  gc(full = TRUE)
+  gc(full = TRUE)
   expect_identical(collection$ids(), "owner.x")
   expect_false(identical(shadow_private$.core, selected))
   expect_identical(collection_private$.core, collection_core)
@@ -887,19 +891,24 @@ test_that("nested collections reauthenticate one shared Shadow exactly", {
 
   # Preserve the carrier pointer and rewrite both alternating entries. The
   # shared child is visited once, but neither collection is allowed to turn a
-  # probabilistic digest of this mutable list into a verification proof.
-  invisible(.Call(
-    data.table:::Csetlistelt,
+  # probabilistic digest of this mutable list into a verification proof. The
+  # package's own by-reference cell mutator lands both rewrites from the gc
+  # barrier without replacing the carrier.
+  pending_first = .Call(
+    paradox:::C_test_gc_column_mutator,
+    signature,
+    0L,
+    donor_signature[[1L]]
+  )
+  pending_second = .Call(
+    paradox:::C_test_gc_column_mutator,
     signature,
     1L,
-    donor_signature[[1L]]
-  ))
-  invisible(.Call(
-    data.table:::Csetlistelt,
-    signature,
-    2L,
     donor_signature[[2L]]
-  ))
+  )
+  rm(pending_first, pending_second)
+  gc(full = TRUE)
+  gc(full = TRUE)
 
   expect_identical(
     outer$ids(),
@@ -919,15 +928,20 @@ test_that("nested collections reauthenticate one shared Shadow exactly", {
 test_that("Shadow verification authenticates in-place cache entries", {
   signature_name = ".paradox.shadow.snapshot.v1"
   set_list_element = function(value, index, replacement) {
-    # This registered data.table primitive is intentionally used directly:
-    # unlike ordinary `[<-`, it changes an existing ordinary list without
-    # duplicating its shell.
-    invisible(.Call(
-      data.table:::Csetlistelt,
+    # The package's own by-reference cell mutator changes an existing ordinary
+    # list without duplicating its shell -- unlike ordinary `[<-`. It lands
+    # from the collection the explicit gc barrier below triggers, so the entry
+    # is replaced before this helper returns.
+    pending = .Call(
+      paradox:::C_test_gc_column_mutator,
       value,
-      as.integer(index),
+      as.integer(index) - 1L,
       replacement
-    ))
+    )
+    rm(pending)
+    gc(full = TRUE)
+    gc(full = TRUE)
+    invisible(value)
   }
 
   origin = ps(x = p_int())

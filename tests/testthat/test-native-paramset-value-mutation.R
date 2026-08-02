@@ -860,12 +860,17 @@ test_that("shadow assignment authenticates in-place signature contents", {
       holder$signature = signature
       holder$original_entry = signature[[2L]]
       replacement = ps(other = p_int())$.__enclos_env__$private$.core
-      .Call(
-        get("Csetlistelt", envir = asNamespace("data.table")),
+      # The package's own by-reference cell mutator replaces the entry from
+      # the collection triggered below, while this callback still runs.
+      pending = .Call(
+        paradox:::C_test_gc_column_mutator,
         signature,
-        2L,
+        1L,
         replacement
       )
+      rm(pending)
+      gc(full = TRUE)
+      gc(full = TRUE)
     }
     TRUE
   }))
@@ -873,12 +878,15 @@ test_that("shadow assignment authenticates in-place signature contents", {
   armed = TRUE
   on.exit({
     if (!is.null(holder$signature)) {
-      .Call(
-        get("Csetlistelt", envir = asNamespace("data.table")),
+      pending = .Call(
+        paradox:::C_test_gc_column_mutator,
         holder$signature,
-        2L,
+        1L,
         holder$original_entry
       )
+      rm(pending)
+      gc(full = TRUE)
+      gc(full = TRUE)
     }
   }, add = TRUE)
 
