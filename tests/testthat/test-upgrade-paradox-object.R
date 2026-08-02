@@ -2226,3 +2226,361 @@ test_that("the single-object API refuses to return an invalid prepared graph", {
   )
   expect_identical(serialize(legacy, NULL), legacy_bytes)
 })
+
+# Crafted Domain fixtures for the native table-admission arms. Building the
+# columns from a real Domain keeps every field except the one under test
+# canonical, so each error below names exactly one rejected shape.
+legacy_domain_fixture = function(...) {
+  template = p_dbl(0, 1)
+  overrides = list(...)
+  columns = lapply(seq_along(template), function(index) {
+    .subset2(template, index)
+  })
+  names(columns) = names(template)
+  columns[names(overrides)] = overrides
+  result = structure(
+    columns,
+    class = class(template),
+    row.names = attr(template, "row.names", exact = TRUE)
+  )
+  attr(result, "repr") = attr(template, "repr", exact = TRUE)
+  result
+}
+
+legacy_domain_requirement = function(cond, on = "parent") {
+  legacy_domain_fixture(
+    .requirements = list(list(list(on = on, cond = cond)))
+  )
+}
+
+legacy_condition_shell = function(rhs, format, classes) {
+  structure(
+    list(rhs = rhs, condition_format_string = format),
+    class = classes
+  )
+}
+
+test_that("crafted legacy Domain fixtures still migrate unchanged", {
+  upgraded = upgrade_paradox_object(legacy_domain_fixture())
+
+  expect_identical(class(upgraded), class(p_dbl(0, 1)))
+  expect_identical(upgraded$lower, 0)
+  expect_identical(upgraded$upper, 1)
+  expect_identical(ps(x = upgraded)$class, c(x = "ParamDbl"))
+})
+
+test_that("legacy table columns reject unsupported structural shapes", {
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(id = asS4("x"))),
+    paste0(
+      "Cannot upgrade Paradox object at x: could not snapshot legacy table ",
+      "structure (table column `id` has unsupported structural representation)"
+    ),
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(id = new.env())),
+    "table column `id` has unsupported structural representation",
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(cls = identity)),
+    "table column `cls` has unsupported structural representation",
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(
+      levels = structure(list(NULL), sorted = TRUE)
+    )),
+    "table column `levels` has unsupported attributes",
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(
+      lower = structure(0, unit = "seconds")
+    )),
+    "table column `lower` has unsupported attributes",
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(cls = "NotAParamClass")),
+    paste0(
+      "could not snapshot legacy table structure (legacy Domain class column ",
+      "is malformed)"
+    ),
+    fixed = TRUE
+  )
+})
+
+test_that("legacy table list columns reject ALTREP without observing it", {
+  skip_if_no_list_altrep()
+
+  observations = 0L
+  levels = native_stateful_altrep(
+    list(NULL),
+    list(NULL),
+    callback = function() {
+      observations <<- observations + 1L
+    },
+    callback_after = 0L,
+    duplicate_returns_self = TRUE
+  )
+  fixture = legacy_domain_fixture(levels = levels)
+  native_stateful_altrep_rearm(levels, callback_after = 0L)
+
+  expect_error(
+    upgrade_paradox_object(fixture),
+    "table column `levels` has unsupported structural representation",
+    fixed = TRUE
+  )
+  expect_identical(observations, 0L)
+})
+
+test_that("embedded legacy requirement Conditions fail closed per shape", {
+  malformed = paste0(
+    "could not snapshot legacy table structure (table column ",
+    "`.requirements` contains malformed interpreted structure)"
+  )
+
+  expect_s3_class(
+    upgrade_paradox_object(legacy_domain_requirement(CondEqual(1L))),
+    "Domain"
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_requirement(legacy_condition_shell(
+      NA_integer_, "%s == %s", c("CondEqual", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_requirement(legacy_condition_shell(
+      c(1L, 1L), "%s %%in%% {%s}", c("CondAnyOf", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_requirement(legacy_condition_shell(
+      1L, "%s equals %s", c("CondEqual", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_requirement(legacy_condition_shell(
+      c(only = 1L), "%s == %s", c("CondEqual", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(
+      .requirements = list(list(list(on = "parent")))
+    )),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_domain_fixture(
+      .requirements = list(list(list(parent = "parent", cond = CondEqual(1L))))
+    )),
+    malformed,
+    fixed = TRUE
+  )
+
+  # A Condition-shaped list without any class reaches the closed-dispatch
+  # diagnostic instead of the structural one.
+  expect_error(
+    upgrade_paradox_object(legacy_domain_requirement(
+      list(rhs = 1L, condition_format_string = "%s == %s")
+    )),
+    paste0(
+      "could not snapshot legacy table structure (Unsupported Condition ",
+      "class; supported classes are 'CondEqual' and 'CondAnyOf'.)"
+    ),
+    fixed = TRUE
+  )
+})
+
+test_that("legacy Domain repr must be an ordinary construction-ready object", {
+  s4_repr = legacy_domain_fixture()
+  data.table::setattr(s4_repr, "repr", asS4(quote(p_dbl(0, 1))))
+  expect_error(
+    upgrade_paradox_object(s4_repr),
+    paste0(
+      "Cannot upgrade Paradox object at x: could not snapshot legacy table ",
+      "structure (legacy Domain `repr` metadata must be an ordinary ",
+      "non-ALTREP/non-S4 object)"
+    ),
+    fixed = TRUE
+  )
+
+  # `attr<-` retains a base compact sequence, which every supported runtime
+  # produces for `1:n`, so the ALTREP arm needs no runtime-specific fixture.
+  altrep_repr = legacy_domain_fixture()
+  attr(altrep_repr, "repr") = 1:70
+  expect_error(
+    upgrade_paradox_object(altrep_repr),
+    "legacy Domain `repr` metadata must be an ordinary non-ALTREP/non-S4 object",
+    fixed = TRUE
+  )
+
+  # A valid repr round-trips and the migrated Domain stays closed under
+  # construction.
+  valid = legacy_domain_fixture()
+  data.table::setattr(valid, "repr", quote(p_dbl(lower = 0, upper = 1)))
+  upgraded = upgrade_paradox_object(valid)
+  expect_identical(
+    attr(upgraded, "repr", exact = TRUE),
+    quote(p_dbl(lower = 0, upper = 1))
+  )
+  expect_identical(ps(x = upgraded)$class, c(x = "ParamDbl"))
+})
+
+test_that("standalone Condition upgrades are closed under engine use", {
+  unusable = paste0(
+    "Cannot upgrade Paradox object at x: legacy Condition right-hand side ",
+    "must be an attribute-free logical, integer, numeric, or character vector"
+  )
+
+  expect_error(
+    upgrade_paradox_object(legacy_condition_shell(
+      1 + 0i, "%s == %s", c("CondEqual", "Condition")
+    )),
+    unusable,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_condition_shell(
+      as.raw(1L), "%s == %s", c("CondEqual", "Condition")
+    )),
+    unusable,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_condition_shell(
+      c(first = 1L), "%s == %s", c("CondEqual", "Condition")
+    )),
+    unusable,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_condition_shell(
+      c(a = 1L, b = 2L), "%s %%in%% {%s}", c("CondAnyOf", "Condition")
+    )),
+    unusable,
+    fixed = TRUE
+  )
+
+  # Every legal Condition still migrates and is accepted by both engine owners.
+  equal = upgrade_paradox_object(legacy_condition_shell(
+    3L, "%s == %s", c("CondEqual", "Condition")
+  ))
+  any_of = upgrade_paradox_object(legacy_condition_shell(
+    c("a", "b"), "%s %%in%% {%s}", c("CondAnyOf", "Condition")
+  ))
+  expect_identical(class(equal), c("CondEqual", "Condition"))
+  expect_identical(condition_test(equal, c(3L, 4L)), c(TRUE, FALSE))
+  expect_identical(condition_test(any_of, c("a", "c")), c(TRUE, FALSE))
+
+  set = ps(parent = p_int(0, 4), child = p_lgl())
+  set$add_dep("child", "parent", equal)
+  expect_identical(set$deps$cond[[1L]], equal)
+
+  strings = ps(parent = p_fct(c("a", "b", "c")), child = p_lgl())
+  strings$add_dep("child", "parent", any_of)
+  expect_identical(strings$deps$cond[[1L]], any_of)
+
+  # The untestable base class stays constructible for compatibility.
+  base = upgrade_paradox_object(structure(
+    list(rhs = 1 + 0i, condition_format_string = "%s ~ %s"),
+    class = "Condition"
+  ))
+  expect_identical(class(base), "Condition")
+  expect_identical(base$rhs, 1 + 0i)
+})
+
+test_that("legacy values snapshot failures keep their wrapper diagnostic", {
+  state = new.env(parent = emptyenv())
+  # A typed leaf that rewrites its own attribute spine while it is being
+  # snapshotted makes the native values pass raise instead of reporting a
+  # shape, which is the only way to reach the R wrapper diagnostic.
+  leaf = native_stateful_altrep(
+    c(1, 2),
+    c(1, 2),
+    callback = function() {
+      data.table::setattr(state$values$x, "unexpected", TRUE)
+    },
+    callback_after = 0L
+  )
+  state$values = list(x = leaf)
+
+  expect_error(
+    paradox:::.upgrade_paradox_values(
+      state$values,
+      list(id = "x", cls = "ParamDbl"),
+      "x$private$.values"
+    ),
+    paste0(
+      "Cannot upgrade Paradox object at x$private$.values: could not snapshot ",
+      "legacy values (Semantic vector structure changed while being ",
+      "snapshotted)"
+    ),
+    fixed = TRUE
+  )
+})
+
+test_that("legacy dependency table Conditions fail closed per shape", {
+  skip_if_no_active_binding_inspection()
+
+  legacy_with_condition = function(cond) {
+    legacy = legacy_base_from_current(
+      ps(parent = p_int(0, 4), child = p_lgl())
+    )
+    private = mlr3misc::get_private(legacy)
+    private$.deps = as_legacy_table(list(
+      id = "child",
+      on = "parent",
+      cond = list(cond)
+    ))
+    legacy
+  }
+  malformed = paste0(
+    "could not snapshot legacy table structure (table column `cond` ",
+    "contains malformed interpreted structure)"
+  )
+
+  expect_s3_class(
+    upgrade_paradox_object(legacy_with_condition(CondEqual(1L))),
+    "ParamSet"
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_with_condition(legacy_condition_shell(
+      NA_integer_, "%s == %s", c("CondEqual", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_with_condition(legacy_condition_shell(
+      c(1L, 1L), "%s %%in%% {%s}", c("CondAnyOf", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_with_condition(legacy_condition_shell(
+      1L, "%s equals %s", c("CondEqual", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+  expect_error(
+    upgrade_paradox_object(legacy_with_condition(legacy_condition_shell(
+      c(only = 1L), "%s == %s", c("CondEqual", "Condition")
+    ))),
+    malformed,
+    fixed = TRUE
+  )
+})

@@ -49,9 +49,12 @@ typedef struct {
   int exact;
 } condition_attribute_snapshot_t;
 
+/* An unexpected tag makes the shell inexact but must not stop class selection:
+ * the closed-dispatch diagnostic below is owned by the class attribute
+ * wherever it sits inside the bounded window. */
 static void snapshot_condition_attribute(SEXP tag, SEXP value, void *data) {
   condition_attribute_snapshot_t *snapshot = data;
-  if (!snapshot->exact || snapshot->count == R_XLEN_T_MAX) {
+  if (snapshot->count == R_XLEN_T_MAX) {
     snapshot->exact = FALSE;
     return;
   }
@@ -88,20 +91,23 @@ static int condition_outer_exact(SEXP condition,
     &attributes,
     &observed_attribute_count
   );
-  if (!bounded_attributes || !attributes.exact ||
-      attributes.count != (R_xlen_t) observed_attribute_count) {
-    return FALSE;
-  }
   /*
    * Class selection owns the public closed-dispatch diagnostic even when the
    * remaining Condition shell is malformed. This preserves the useful
    * distinction between an unsupported/missing Condition kind and corrupt
-   * payload fields without reading an unbounded attribute spine.
+   * payload fields without reading an unbounded attribute spine. A canonical
+   * Condition carries exactly `names` and `class`, so a spine the bounded pass
+   * could not finish without delivering a class is an unsupported Condition
+   * kind rather than a corrupt payload.
    */
   if (!attributes.saw_classes) {
     Rf_error(
       "Unsupported Condition class; supported classes are 'CondEqual' and 'CondAnyOf'."
     );
+  }
+  if (!bounded_attributes || !attributes.exact ||
+      attributes.count != (R_xlen_t) observed_attribute_count) {
+    return FALSE;
   }
 
   SEXP classes = PROTECT(attributes.classes);
@@ -477,6 +483,10 @@ int paradox_builtin_condition_snapshot_lengths_current(
       type != STRSXP) {
     return FALSE;
   }
+  /* This is the callback-completion phase of the two-phase receipt: it exists
+   * only to finish every dispatching Length before any payload is compared. An
+   * ordinary source cannot dispatch, so its length carries no callback and is
+   * compared by the terminal payload receipt instead. */
   if (!ALTREP(source_rhs)) return TRUE;
   /* Length may dispatch into R.  The callback can rewrite the owning
    * Condition cell before allocating, so the owner graph alone is not a root

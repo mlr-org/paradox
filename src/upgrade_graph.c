@@ -317,7 +317,8 @@ typedef enum {
   UPGRADE_TABLE_LEAF_DOMAIN_CARGO,
   UPGRADE_TABLE_LEAF_DOMAIN_LEVELS,
   UPGRADE_TABLE_LEAF_DOMAIN_SPECIAL_VALUES,
-  UPGRADE_TABLE_LEAF_DOMAIN_VALUE,
+  UPGRADE_TABLE_LEAF_DOMAIN_DEFAULT,
+  UPGRADE_TABLE_LEAF_DOMAIN_INIT,
   UPGRADE_TABLE_LEAF_DOMAIN_REQUIREMENTS
 } upgrade_table_leaf_policy_t;
 
@@ -396,8 +397,9 @@ static upgrade_table_leaf_policy_t upgrade_table_leaf_policy(
   case PARADOX_DOMAIN_SPECIAL_VALS:
     return UPGRADE_TABLE_LEAF_DOMAIN_SPECIAL_VALUES;
   case PARADOX_DOMAIN_DEFAULT:
+    return UPGRADE_TABLE_LEAF_DOMAIN_DEFAULT;
   case PARADOX_DOMAIN_INIT:
-    return UPGRADE_TABLE_LEAF_DOMAIN_VALUE;
+    return UPGRADE_TABLE_LEAF_DOMAIN_INIT;
   case PARADOX_DOMAIN_REQUIREMENTS:
     return UPGRADE_TABLE_LEAF_DOMAIN_REQUIREMENTS;
   case PARADOX_DOMAIN_TRAFO:
@@ -487,10 +489,17 @@ static SEXP snapshot_upgrade_table_leaf(SEXP source,
       typed,
       work_since_interrupt
     );
-  case UPGRADE_TABLE_LEAF_DOMAIN_VALUE:
+  case UPGRADE_TABLE_LEAF_DOMAIN_DEFAULT:
     return paradox_detach_domain_row_field(
       source,
       PARADOX_DOMAIN_DEFAULT,
+      typed,
+      work_since_interrupt
+    );
+  case UPGRADE_TABLE_LEAF_DOMAIN_INIT:
+    return paradox_detach_domain_row_field(
+      source,
+      PARADOX_DOMAIN_INIT,
       typed,
       work_since_interrupt
     );
@@ -670,7 +679,8 @@ static int upgrade_table_leaf_lengths_are_current(SEXP source,
       owned,
       typed
     );
-  case UPGRADE_TABLE_LEAF_DOMAIN_VALUE:
+  case UPGRADE_TABLE_LEAF_DOMAIN_DEFAULT:
+  case UPGRADE_TABLE_LEAF_DOMAIN_INIT:
     if (source != owned && exact_upgrade_no_default(owned)) {
       return exact_upgrade_no_default(source);
     }
@@ -739,7 +749,8 @@ static int upgrade_table_leaf_is_current(SEXP source, SEXP owned,
       owned,
       typed
     );
-  case UPGRADE_TABLE_LEAF_DOMAIN_VALUE:
+  case UPGRADE_TABLE_LEAF_DOMAIN_DEFAULT:
+  case UPGRADE_TABLE_LEAF_DOMAIN_INIT:
     if (source != owned && exact_upgrade_no_default(owned)) {
       return exact_upgrade_no_default(source);
     }
@@ -969,6 +980,23 @@ SEXP paradox_upgrade_table_list_snapshot(SEXP source,
       !exact_upgrade_table_classes(observed_classes, expected_classes)) {
     UNPROTECT(5);
     return R_NilValue;
+  }
+
+  /*
+   * `repr` content stays deliberately opaque -- it is print-only Domain
+   * metadata that migration never interprets -- but its shape is not free:
+   * Domain construction admits only an ordinary non-ALTREP/non-S4 carrier, so
+   * capturing any other shape would produce migration output that no longer
+   * builds. Enforce that one rule here, after the table receipts, so the
+   * failure is a migration diagnostic rather than a later construction error.
+   */
+  if (attributes.repr != R_NilValue &&
+      (ALTREP(attributes.repr) || Rf_isS4(attributes.repr))) {
+    UNPROTECT(5);
+    Rf_error(
+      "legacy Domain `repr` metadata must be an ordinary non-ALTREP/non-S4 "
+      "object"
+    );
   }
 
   SET_VECTOR_ELT(result, 0, table);
@@ -2073,7 +2101,9 @@ static void schedule_vector(
    */
   if (ALTREP(vector)) {
     Rf_error(
-      "Object graph structural list/expression vectors must not use ALTREP"
+      "Object graph structural list/expression vectors must not use ALTREP; "
+      "rebuild the container with an ordinary copy such as x[seq_along(x)] "
+      "before migration"
     );
   }
   SEXP source = PROTECT(vector);
@@ -3239,9 +3269,20 @@ static void inspect_node(
     paradox_upgrade_work_t work) {
   SEXP node = work.node;
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(node);
+  /*
+   * A base `names<-` wrapper and a hostile stateful provider are the same
+   * structural list ALTREP here: telling them apart, or unwrapping either one,
+   * requires observing the object through non-API methods that may evaluate R
+   * code while the crawler is selecting edges. The rejection therefore stays
+   * unconditional, and the R migration boundary materializes the one carrier
+   * it owns -- the caller-supplied top-level container -- before this walk
+   * begins. The remedy for every other carrier belongs in the message.
+   */
   if ((type == VECSXP || type == EXPRSXP) && ALTREP(node)) {
     Rf_error(
-      "Object graph structural list/expression vectors must not use ALTREP"
+      "Object graph structural list/expression vectors must not use ALTREP; "
+      "rebuild the container with an ordinary copy such as x[seq_along(x)] "
+      "before migration"
     );
   }
 

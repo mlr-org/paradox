@@ -31,6 +31,15 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
       # position, so materialize the package-generated carrier once here.
       names(levels) = c(as.character(levels))
     }
+    if (is.list(levels)) {
+      # `names<-` on a referenced list of at least 64 elements answers with a
+      # base wrapper ALTREP (R >= 4.3), and the caller's own list may already
+      # be one. The closure below captures this carrier, and legacy migration
+      # walks that closure's environment, where a structural list ALTREP is
+      # rejected before it is observed. Materialize the carrier once here;
+      # element identities and names are unchanged.
+      levels = .paradox_materialize_list_carrier(levels)
+    }
     # A package-owned two-binding closure is enough here. `crate()` compiled a
     # fresh function for every Domain construction, which dominated numeric
     # and list-valued p_fct() calls without adding semantic isolation.
