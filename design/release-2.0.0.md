@@ -121,7 +121,7 @@ SHA-256 values are
 and
 `26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
 
-Compatibility inputs are now converged for the final candidate-owned run.
+The final candidate-owned compatibility runs use the converged inputs below.
 Fail-closed staged CRAN refresh
 `.local/compat/cran-refresh/release-refresh-20260801-r2` projects exactly 37
 tested direct `Depends`/`Imports`/`Suggests` consumers from index SHA-256
@@ -174,6 +174,86 @@ to
 `1ec7d01daa2cd4be985c7157cbc86580651488571edb362e97b5a85d93e4bd55`:
 Pak embedded run-local Rush provenance and build times, making the P1 proof
 stale before P2 completed. They are harness diagnostic evidence only.
+
+Final broad compatibility and documentation execution is owned by
+package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260801T182922Z`, commit
+`b650735804449ef6c64b8d042a56907faa6ec980`, tree
+`03fe5119ece241839d4d429678e4b2baa5e16df1`. The repository corpus completed
+19 of 28 exact rows; all nine retained non-green rows are reviewed
+non-Paradox upstream, optional-runtime, environmental-dependency, or bounded-
+timeout exclusions. Completion/rows/manifest/seal SHA-256 values are
+`22a513d6616c1187fcab1d88f3e670f996dfa94bf45dbc14cfe205e44e5e5a4c`,
+`45b25d9a72d824c190bd93f2b1b2da22a8de21db8b09dba88a2d00860cb28847`,
+`57568e320e8249b04aa1616e74d8d4133d990726bbe33faeef243117752ec99f`,
+and
+`c696aa92599f31e28fe5a1f9d077856844dc024fbb635af83c2af8a259144a1d`.
+The reverse-dependency run completed 10 of 22 rows without finding a candidate
+defect. Its six intentional Paradox-2 compatibility breaks are covered by the
+prepared downstream heads; the other retained failures are reviewed unrelated
+or environmental results. Commit
+`a3689c29a667a1244c7cb008beb495b8ed550b88` repairs only replay validation of
+the refill-wave bound and does not relabel the `b650735` execution. Corrected
+completion/results/acceptance/waves/manifest/seal SHA-256 values are
+`0ed2690ad40a2d5a907184cbb75859a9a3e70ea38b2c1b8120722d4aae63bb33`,
+`53a64ba02a06fa4640eb065abd9bf04c961f6fdd2bdefb980f2a4d673c2d4000`,
+`9bc0e18b3e1862f67da066c96c3003312cd545aa3e6174d0232bf94ef73b3b03`,
+`2733911aef02cd305609b664169f397201e0c169aea2298fae7122694d665c23`,
+`3f8a11be96975400421cb23cea0086cc82f99e4096ee9e73abd5fac59935e31c`,
+and
+`9b946c3cd55622aad967aad5c3563ba4dbdfd926038b674f8a410d1e2bff6cfc`.
+The runner retained by the original execution still has the pre-repair bytes
+and reproduces the known refill-wave validation error; replay requires the
+corrected `a3689c2` verifier. This is an explicit harness-evidence boundary,
+not package or artifact corruption. The containing compatibility coordinator
+has status `failed` because the broad and reverse stages deliberately preserve
+nonzero status for reviewed non-green rows; do not call the coordinator green.
+Its completion/JSON-summary/TSV-summary SHA-256 values are
+`354c55591cd0bec2600b0443acb3091773ce31a432812671c4e49e7decfb0840`,
+`7beb0f6bfb19da5d1a169aab6a0b7ca50b9954ced362d2b38c4dccccee4032ec`,
+and
+`595dafad1cb8fc4c0229cb8da1a9823200bfd8c10af9092b0aea9f22af92ffcf`.
+All seven mandatory documentation rows pass and 14 of 17 rows pass overall.
+Results/manifest/seal SHA-256 values are
+`12da725ef6e271f87627f483379285408927ea4641f5beba0959e5b6f024387f`,
+`696ddc76ec7c17220bb0286fae0bfe7764b8fd79544356e60c6e7cf769e43d1b`,
+and
+`0e58a7a58088b48d0123dd7161a9104aba846fffb6a24e20a7cdabdd42c6b6b0`.
+
+The final ten-package profile is frozen at
+`refs/paradox-release/validation-tooling-20260801T222635Z`, commit
+`ba51b7e056a5c84d2e2a7e02fc517617aeb235fd`, tree
+`3effd430c0f76d22d20dbcebb3fe60ddb4d11c79`, and remains
+package-facing-source identical to candidate `4e549f3`. Fresh Paradox-1 and
+Paradox-2 preparations reproduce the exact dependency-library endpoint
+`3828cdaf0c767d89fa30ea595845d3eab9695dfdb80bee909a5b3fabcc31919e`;
+both ten-package overlays pass independent validation. Every one of the eight
+prepared heads builds and checks with final `Status: OK` on both axes.
+Paradox-1 completion/results/manifest/seal SHA-256 values are
+`794bf1a58d92c27d8afe3a8a0706ab2f93f829fda9f813219470e1c12f6d713b`,
+`434d22063a1eb1db58bb6fc93c8e2195858650c1306693dd66aa8e06a0b806c8`,
+`f58b4ca0a91b8fb6b1900c1347bb6716a65f2f392e0932a376a859ce4379a4b5`,
+and
+`8389d22bf9070d2daa6807f85d89765a6fd91ef99adffa248dca22cfeb385944`.
+Paradox-2 values are
+`5384d6aa2b8c10381d684eb9c63deadecf863f128d95986d5393381aa96afcbb`,
+`2e3f139454680633ae28ebe40f4ddfa05e554467221cb526756a84c944526b02`,
+`e3c48c83614353718556f0b812b4a44742252820e6d3013a5023caee88aae9ad`,
+and
+`cd5b0b7bcbbd1edda8e0e5442e6b5909ae94ff6990b5a55c4635930b4c47863a`.
+
+Final benchmark
+`.local/benchmarks/release-candidate-4e549f3-final-benchmark-ba51b7e-r1`
+passes its sealed 82-row policy: 79 rows pass, three are bounded marginal
+reviews, and none fails. The marginal rows are
+`design_transpose_plain` allocation, `shadow_values_live` timing, and
+`collection_values_nested` allocation. Completion/manifest/seal SHA-256
+values are
+`a78db4858022b108a7f6f0f750057b8665a2b8b9a3a218f2b9ba4bb1845f9e88`,
+`17d6c60d64005345cf8e00ebcf8adc2430dc71c0366f5e1b30cba7b6c000cdaa`,
+and
+`fc7853a81fab6be0fd0f5745aebdcd16687f16d503405baebe8db39d6239944f`.
+All applicable local release gates are now complete.
 
 The active direct-child portability companion is
 `refs/paradox-release/portability-harness-7b4440b`, commit
@@ -1101,13 +1181,14 @@ green gates.
 - [x] refresh the reviewed CRAN direct-consumer set to the exact 37-package
   `release-refresh-20260801-r2` proposal, authenticate every archive offline,
   and pin the exact Rush provider required by the current downstream heads;
-- [ ] install fresh candidate-owned
+- [x] install fresh candidate-owned
   `release-refresh-20260720` bridge overlays for both axes with the final
   ten-package profile, run all eight exact prepared-head source checks, and
   seal the recalibrated benchmark;
-- [ ] run and retain the complete applicable gate matrix against that exact
-  candidate, including the remaining downstream, documentation, benchmark, and
-  hosted portability stages.
+- [x] run and retain every applicable local gate against that exact candidate,
+  including downstream, documentation, benchmark, and memory stages;
+- [ ] complete the hosted Windows x86-64/macOS ARM64 portability run and the
+  manual downstream/publication/release handoff.
 
 ### State and public model
 
@@ -1242,7 +1323,7 @@ green gates.
   recorded candidate; the complete priority-zero/one Paradox-2 repository
   corpus and five-package source-check conclusions remain historical evidence
   only;
-- [ ] authenticate the refreshed snapshot/provenance manifests and exact
+- [x] authenticate the refreshed snapshot/provenance manifests and exact
   `3c4bf94`/`a795406`/`35e4bdc` bridge heads in fresh candidate-owned
   ten-package overlays, then build and check all eight changed PR heads on
   both Paradox axes;
@@ -1546,11 +1627,11 @@ and is not a replacement for the complete release matrix:
 These are the exact final local handoff heads after the object-graph migration,
 owner-registry bridges, informative native diagnostics, dormant-value
 adaptations, and pruning of redundant downstream changes. Their intended
-dual-version development tests are complete; fresh active-profile
-authentication and compatibility checks remain pending. Repository policy
-still requires the user to push the retained branches and create, update, or
-close PRs manually. The obsolete mlr3 and mlr3fselect branches are evidence
-only and must not be published as replacements.
+dual-version development tests and exact final source-package checks on both
+Paradox axes are complete. Repository policy still requires the user to push
+the retained branches and create, update, or close PRs manually. The obsolete
+mlr3 and mlr3fselect branches are evidence only and must not be published as
+replacements.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
@@ -1563,6 +1644,7 @@ only and must not be published as replacements.
 | mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | obsolete head `ae8e1d1` | Close without replacement; removing its feature-fraction diagnostic gate leaves an empty effective diff. |
 | mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat-current` | head `a7954067061f20a45dd9e6c03129dca0ba0f1753` (base `bef040ae5c886bf5b09863b956d341eb3cbd772c`) | Retain only the GraphLearner deep-clone ownership fix, mutation-isolation regression, dual-version dormant spline contract, and symmetric inflation of the dictionary comparison shell. |
 | mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` (upstream base `8960c9292221e7065e5175762e12354c6eb08607`; previous bridge head `c1cdad5a78913c9a47fec1003de8d4309275c80c`) | Preserve byte-identical Paradox-1 messages; the four Paradox-2 headers name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
+| mlr3forecast | `.local/compat/github-release-refresh-20260720/mlr3forecast` | `paradox2-snapshots-20260801` | head `35e4bdc914a913508450866e629309f8364077ec` (base `8e352550f2334e42c8c81ee80d3e237b807abebe`) | Preserve byte-identical Paradox-1 messages; the three Paradox-2 Lags/Rolling headers name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
 
 A final read-only live-head audit does not add another mlr3fselect probe. Its
 current `29fa095` delta changes the sole Paradox-specific branch by deleting
@@ -1797,8 +1879,8 @@ For the exact candidate ref, retain and verify:
    exact R-3.6 declared-floor smoke with `R_DEFAULT_PACKAGES` isolated, and
    the full-only sealed R-4.0.5-to-R-3.6.3 serialization handoff;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
-4. every exact default head in `compat/github-bridge-provenance.tsv`, the four
-   superseding heads in the `release-refresh-20260720` profile against both
+4. all ten exact reviewed overlay heads in the `release-refresh-20260720`
+   profile, with all eight changed PR heads built and checked against both
    Paradox majors, then priority-zero/one reverse dependencies and maintained
    mlr-org repositories;
 5. GCT, instrumented-R Valgrind, bounded rchk, direct routine/hazard probes,
@@ -1888,16 +1970,16 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending`. Package-facing candidate `4e549f3` is
-frozen and its nine-task `release-core`, including every supported R minor,
-passes. Three disjoint independent source-review partitions cover its complete
-bounded-rchk report and the exact generated policy is current. The corrected
-post-policy donor and combined GCT/Valgrind/rchk run pass independent
-validation; r1 remains diagnostic because its scope receipt confused eight
-selected files with ten reviewed skip scopes. The fresh downstream overlay and
-compatibility DAG, documentation and sealed benchmark, hosted Windows x86-64/
-macOS ARM64 gates, and user publication of prepared downstream branches/PRs,
-the release tag, and workflow all remain mandatory.
+The local release decision is `accepted`; the overall release decision remains
+`pending` only on hosted and manual work. Package-facing candidate `4e549f3`
+is frozen and all applicable local gates are complete and accepted: nine-task `release-core`
+including every supported R minor, complete reviewed bounded-rchk and combined
+GCT/Valgrind/rchk, refreshed broad and reverse compatibility, mandatory
+documentation, exact ten-package overlays and eight-head source checks on both
+Paradox axes, and the sealed 82-row benchmark. The remaining mandatory actions
+are the exact hosted Windows x86-64/macOS ARM64 portability run and the
+user-performed downstream branch/PR publication, dependency release ordering,
+release tag, workflow publication, and final release coordination.
 
 ## Historical rejected or superseded refs
 

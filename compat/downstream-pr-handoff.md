@@ -34,17 +34,66 @@ Package-facing source is frozen at
 `release-refresh-20260720`/`paradox2` compatibility axis now binds that exact
 immutable identity. The eight clean branch heads above are the current
 reviewed migration inputs and remain unpublished; the prepared compatibility
-gates must bind these exact heads before the user publishes them.
+gates bind these exact heads on both Paradox axes.
 
-## Retained evidence and final bounded refresh
+## Final retained evidence
 
-The active candidate's b650735 compatibility execution authenticated the first
-seven prepared heads on both Paradox axes, the broad corpus, reverse
-dependencies, and documentation. Those exact results remain immutable. The
-later mlr3forecast bridge is deliberately not relabeled into them: the final
-profile adds its tenth overlay package and requires fresh exact eight-head
-source checks on both axes. The older evidence below remains useful history but
-must not be presented as active-candidate proof.
+The active candidate's broad corpus, reverse-dependency, and documentation
+execution is owned by tooling commit
+`b650735804449ef6c64b8d042a56907faa6ec980`. Those exact results remain
+immutable: 19 of 28 broad repositories pass, all nine retained non-green rows
+are reviewed non-Paradox exclusions, the reverse run finds no candidate
+defect, and every mandatory documentation row passes.
+
+The final ten-package profile and mlr3forecast addition are owned by
+package-facing-source-identical tooling commit
+`ba51b7e056a5c84d2e2a7e02fc517617aeb235fd`, tree
+`3effd430c0f76d22d20dbcebb3fe60ddb4d11c79`. Fresh Paradox-1 and Paradox-2
+overlays pass independent verification, and all eight exact heads above build
+and finish `R CMD check` with `Status: OK` on both axes. The Paradox-1
+completion/results/manifest/seal SHA-256 values are
+`794bf1a58d92c27d8afe3a8a0706ab2f93f829fda9f813219470e1c12f6d713b`,
+`434d22063a1eb1db58bb6fc93c8e2195858650c1306693dd66aa8e06a0b806c8`,
+`f58b4ca0a91b8fb6b1900c1347bb6716a65f2f392e0932a376a859ce4379a4b5`,
+and
+`8389d22bf9070d2daa6807f85d89765a6fd91ef99adffa248dca22cfeb385944`.
+The Paradox-2 values are
+`5384d6aa2b8c10381d684eb9c63deadecf863f128d95986d5393381aa96afcbb`,
+`2e3f139454680633ae28ebe40f4ddfa05e554467221cb526756a84c944526b02`,
+`e3c48c83614353718556f0b812b4a44742252820e6d3013a5023caee88aae9ad`,
+and
+`cd5b0b7bcbbd1edda8e0e5442e6b5909ae94ff6990b5a55c4635930b4c47863a`.
+The older evidence below remains useful history but must not be presented as
+active-candidate proof.
+
+## Manual hosted-portability handoff
+
+The exact candidate and direct-child harness tags already exist locally and
+remain absent from the remote. After reviewing the refs, the user can publish
+and dispatch them with:
+
+```sh
+git -C /home/mewse/paradox_neo push origin \
+  refs/tags/paradox-2.0.0-ci-4e549f3 \
+  refs/tags/paradox-2.0.0-ci-4e549f3-harness-7b4440b
+gh workflow run r-cmd-check.yml --repo mlr-org/paradox \
+  --ref paradox-2.0.0-ci-4e549f3-harness-7b4440b
+```
+
+The harness tag points to direct child
+`7b4440b1b2e9fb75606da6f4bc8eb3cbf939bf6c`; its workflow checks out candidate
+tag `paradox-2.0.0-ci-4e549f3` at
+`4e549f3a8994f513cee1d88d71e037c733a51531`. Do not dispatch from the mutable
+development branch. After dispatch, obtain the exact run ID with:
+
+```sh
+gh run list --repo mlr-org/paradox --workflow r-cmd-check.yml \
+  --event workflow_dispatch --limit 5 \
+  --json databaseId,headSha,status,conclusion,url
+```
+
+Retain and independently verify the three platform artifacts and four REST
+jobs before treating hosted portability as accepted.
 
 ### Exact Paradox 1 owner conclusion
 
@@ -104,10 +153,10 @@ The result, evidence-manifest, and completion-seal SHA-256 values are
 and `3b2221874fcbd4f5d11be4b3eb63bd3b32f1086930645ae1311280b617e83b55`.
 Tooling commit `a05cd51` changes only release-policy and evidence paths relative
 to the candidate: it is package-facing-source-identical, not package-identical.
-This narrower run remains corroborating owner evidence; it is not the current
-five-row final source-package set.
+This narrower run remains corroborating owner evidence; it is not that
+historical candidate's five-row final source-package set.
 
-### Exact-candidate broad corpus
+### Historical exact-candidate broad corpus (`8797f11`)
 
 The complete priority-zero/one repository corpus was retained under
 `.local/compat/runs/migration-release-final-p2-8797f11-fc92edd-bench-r1/repository-tests-priority-1-release-refresh-20260720-paradox2/`.
@@ -470,6 +519,14 @@ gh pr create --web --repo mlr-org/mlr3fda --base main --head paradox2-snapshots 
 - branch: `paradox2-snapshots-20260801`
 - target branch: `main`
 - proposed title: `Support Paradox 2 diagnostics in forecasting snapshots`
+
+The 2026-08-02 read-only publication audit found remote `main` at
+`58868a8cdeee74f3793a190308c635b48900e804`, twelve commits beyond the recorded
+base. Those upstream commits and this branch's four test/snapshot paths are
+disjoint, so the exact tested head remains a clean PR input and was not rebased
+after the final two-axis checks. If a later upstream change touches one of
+those four paths before publication, rebase and repeat the focused dual-axis
+check instead of claiming the retained head evidence.
 
 Proposed body:
 

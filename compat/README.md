@@ -409,7 +409,7 @@ compat/check-downstream-profile --candidate-source "$candidate_source" \
 Use a distinct run/library/overlay with `axis=paradox1` for the released
 Paradox-1 compatibility axis. On that axis, add
 `--repositories bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda,mlr3forecast`
-to the `test-repositories.R` command and retain the same seven-package
+to the `test-repositories.R` command and retain the same eight-package
 `check-downstream-profile` selection. Do not repeat the complete consumer
 corpus, reverse-dependency, documentation, differential, or benchmark gates on
 Paradox 1.
