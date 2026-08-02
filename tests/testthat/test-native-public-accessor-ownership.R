@@ -87,7 +87,7 @@ test_that("the general data.table finalizer materializes stable ALTREP columns",
   ))
 })
 
-test_that("package facades own ordinary structure and reject structural ALTREP", {
+test_that("package facades own ordinary structure and materialize ALTREP metadata", {
   facade = paradox:::param_set_data_table_facade(list(
     left = 1:3,
     right = letters[1:3]
@@ -102,7 +102,9 @@ test_that("package facades own ordinary structure and reject structural ALTREP",
     exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
     "the internal stateful ALTREP test class is unavailable"
   )
-  structural_altrep = native_stateful_altrep(
+  # A stable atomic ALTREP attribute is ordinary base-R output, so the
+  # finalizer materializes it instead of rejecting the whole table.
+  atomic_altrep = native_stateful_altrep(
     c(1L, 2L),
     c(1L, 2L)
   )
@@ -111,11 +113,27 @@ test_that("package facades own ordinary structure and reject structural ALTREP",
     names = "value",
     row.names = c(NA_integer_, -2L),
     class = c("data.table", "data.frame"),
-    metadata = structural_altrep
+    metadata = atomic_altrep
+  )
+  finalized = .Call(paradox:::C_finalize_data_table, source)
+  expect_identical(attr(finalized, "metadata", exact = TRUE), c(1L, 2L))
+
+  unstable_altrep = native_stateful_altrep(
+    c(1L, 2L),
+    c(9L, 9L),
+    elt_switch_after = 2L
+  )
+  unstable_source = structure(
+    list(value = 1:2),
+    names = "value",
+    row.names = c(NA_integer_, -2L),
+    class = c("data.table", "data.frame"),
+    metadata = unstable_altrep
   )
   expect_error(
-    .Call(paradox:::C_finalize_data_table, source),
-    "expected bounded data.table metadata"
+    .Call(paradox:::C_finalize_data_table, unstable_source),
+    "Built-in metadata ALTREP changed while being snapshotted",
+    fixed = TRUE
   )
 })
 
@@ -309,6 +327,48 @@ test_that("preexisting overlong attribute spines reject cleanly", {
   )
 })
 
+test_that("bounded metadata copying preserves selected attribute order", {
+  ordered = structure(3L, class = "foo", extra = 1)
+  result = .Call(
+    get(
+      "C_test_builtin_metadata_copy_reentry",
+      envir = asNamespace("paradox")
+    ),
+    ordered,
+    NULL
+  )
+  expect_identical(names(attributes(result)), c("class", "extra"))
+
+  reversed = structure(3L, extra = 1, class = "foo")
+  result = .Call(
+    get(
+      "C_test_builtin_metadata_copy_reentry",
+      envir = asNamespace("paradox")
+    ),
+    reversed,
+    NULL
+  )
+  expect_identical(names(attributes(result)), c("extra", "class"))
+
+  # Nested attribute carriers keep their own selected order too.
+  nested = structure(
+    3L,
+    payload = structure(1:4, dim = c(2L, 2L), note = "n", class = "m")
+  )
+  result = .Call(
+    get(
+      "C_test_builtin_metadata_copy_reentry",
+      envir = asNamespace("paradox")
+    ),
+    nested,
+    NULL
+  )
+  expect_identical(
+    names(attributes(attr(result, "payload", exact = TRUE))),
+    c("dim", "note", "class")
+  )
+})
+
 test_that("setter-normalized raw attributes cannot disappear silently", {
   # Public setters remove an empty `class`, so create the same raw serialized
   # pairlist by renaming an equally long ordinary attribute in the bytes.
@@ -331,6 +391,8 @@ test_that("setter-normalized raw attributes cannot disappear silently", {
   value = unserialize(bytes)
   expect_identical(attr(value, "class", exact = TRUE), character())
 
+  # The source itself never moves here, so the receipt must name the spelling
+  # rather than blame a concurrent change.
   expect_error(
     .Call(
       get(
@@ -340,8 +402,58 @@ test_that("setter-normalized raw attributes cannot disappear silently", {
       value,
       NULL
     ),
-    "Built-in value changed while being snapshotted"
+    "Built-in value metadata uses a spelling public R setters cannot reproduce",
+    fixed = TRUE
   )
+})
+
+test_that("genuine metadata mutation keeps the changed-while-snapshotted report", {
+  skip_if_not(
+    exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
+    "the internal stateful ALTREP test class is unavailable"
+  )
+  # The mutation has to land after the first attribute has already been
+  # selected and copied, so arm it from an ALTREP attribute that is copied
+  # second. A hook would run before any attribute was selected at all.
+  metadata = list("original")
+  state = new.env(parent = emptyenv())
+  state$callbacks = 0L
+  trigger = native_stateful_altrep(
+    c(1, 2),
+    c(1, 2),
+    callback = function() {
+      state$callbacks = state$callbacks + 1L
+      pointer = state$mutator
+      state$mutator = NULL
+      rm(pointer)
+      for (attempt in seq_len(3L)) {
+        invisible(gc(full = TRUE))
+      }
+    },
+    callback_after = 0L
+  )
+  state$mutator = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    metadata,
+    0L,
+    "replaced"
+  )
+  value = structure(3L, metadata = metadata, trigger = trigger)
+
+  expect_error(
+    .Call(
+      get(
+        "C_test_builtin_metadata_copy_reentry",
+        envir = asNamespace("paradox")
+      ),
+      value,
+      NULL
+    ),
+    "Built-in value changed while being snapshotted",
+    fixed = TRUE
+  )
+  expect_identical(state$callbacks, 1L)
+  expect_identical(metadata[[1L]], "replaced")
 })
 
 test_that("metadata root back-edges reject at the bounded graph root", {
@@ -430,7 +542,7 @@ test_that("bounded metadata copying preserves public attribute families", {
     expect_identical(length(result_value), length(source_value))
     source_attributes = attributes(source_value)
     result_attributes = attributes(result_value)
-    expect_setequal(names(result_attributes), names(source_attributes))
+    expect_identical(names(result_attributes), names(source_attributes))
     for (attribute in names(source_attributes)) {
       expect_identical(
         attr(result_value, attribute, exact = TRUE),

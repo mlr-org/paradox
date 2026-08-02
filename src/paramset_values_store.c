@@ -1558,6 +1558,44 @@ static SEXP snapshot_transaction_values(SEXP values,
   return result;
 }
 
+/*
+ * The unchecked store deliberately does not check values, and a user may ruin
+ * their own object with one. It must still refuse to manufacture state that
+ * the package itself later calls corrupt: every reader classifies a stored
+ * leaf's class shape and fail-closes when that shape is unclassifiable, so a
+ * committed leaf carrying, for example, an `NA` class label would make each
+ * subsequent read of the same object an error. Classification is the readers'
+ * own bounded operation and costs one object-bit test per unclassed leaf.
+ */
+static void scan_unchecked_value_leaves(SEXP values,
+    R_xlen_t *work_since_interrupt) {
+  const R_xlen_t size = XLENGTH(values);
+  SEXP names = Rf_getAttrib(values, R_NamesSymbol);
+  const int named = TYPEOF(names) == STRSXP && XLENGTH(names) == size;
+  for (R_xlen_t index = 0; index < size; ++index) {
+    paradox_account_work(work_since_interrupt);
+    SEXP classes = R_NilValue;
+    if (paradox_api_opaque_leaf_class_snapshot(
+        VECTOR_ELT(values, index),
+        &classes
+      )) {
+      continue;
+    }
+    SEXP safe = PROTECT(paradox_diagnostic_charsxp(
+      named ? STRING_ELT(names, index) : NA_STRING
+    ));
+    paradox_utf8_piece_t pieces[3] = {
+      paradox_utf8_ascii_piece("ParamSet value '"),
+      paradox_utf8_charsxp_piece(safe),
+      paradox_utf8_ascii_piece(
+        "' has class metadata that no ParamSet reader can classify"
+      )
+    };
+    SEXP message = PROTECT(paradox_utf8_message(pieces, 3));
+    paradox_error_from_scalar_string(message);
+  }
+}
+
 static SEXP root_value_sources(SEXP values) {
   const R_xlen_t size = XLENGTH(values);
   SEXP names = Rf_getAttrib(values, R_NamesSymbol);
@@ -2508,6 +2546,9 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
     values,
     &work_since_interrupt
   ));
+  if (!validate) {
+    scan_unchecked_value_leaves(stable_values, &work_since_interrupt);
+  }
   const uintptr_t planning_epoch = paradox_core_state_epoch_value();
   build_value_write_plan(
     &transaction,

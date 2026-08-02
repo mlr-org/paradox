@@ -245,12 +245,16 @@ int paradox_public_row_names_count(SEXP row_names, R_xlen_t *row_count) {
   }
 
   R_xlen_t rows;
-  if (ALTREP(row_names)) {
-    /* Modern base R legitimately retains compact integer sequences and
-     * deferred strings as explicit row names. Their labels are irrelevant to
-     * every admitted operation, so select one stable Length and no elements. */
-    rows = XLENGTH(row_names);
-  } else if (type == INTSXP && XLENGTH(row_names) == 2 &&
+  /*
+   * R's compact `c(NA, +/-n)` row-name form encodes the row count in its
+   * second element instead of its length, so that spelling has to be decoded
+   * before any Length answer is trusted -- including when an ALTREP carrier
+   * wraps it, which would otherwise report two rows. Every other
+   * representation, including base R's compact integer sequences and deferred
+   * strings, carries labels that are irrelevant to each admitted operation, so
+   * they select one stable Length and no elements.
+   */
+  if (type == INTSXP && XLENGTH(row_names) == 2 &&
       INTEGER_ELT(row_names, 0) == NA_INTEGER) {
     const int encoded = INTEGER_ELT(row_names, 1);
     if (encoded == NA_INTEGER) return FALSE;
@@ -1642,6 +1646,40 @@ static inline SEXP snapshot_ordinary_vector_payload(
   return result;
 }
 
+#define PARADOX_BUILTIN_METADATA_STRUCTURAL_ALTREP_MESSAGE \
+  "Structural ALTREP metadata cannot be materialized as a built-in attribute"
+
+/*
+ * Ordinary base-R output routinely stores ALTREP attribute *values*:
+ * `names(x) <- as.character(...)` retains a deferred string and
+ * `attr(x, "i") <- 1:n` retains a compact sequence.  Such values must
+ * construct, store, and migrate, so an atomic ALTREP metadata node is
+ * materialized once below on the same terms the semantic-vector shell above
+ * already states for ALTREP names.  A provider stays contained: its payload is
+ * observed under a double capture, both observations are bracketed by the
+ * shape receipt, and the terminal allocation-free receipt still proves the
+ * surrounding graph unchanged.
+ *
+ * Structural VECSXP/EXPRSXP ALTREP is not materializable on these terms.  Its
+ * elements are SEXP identities that a legitimate provider may re-create per
+ * observation, so a double capture cannot separate a stable provider from an
+ * unstable one, and the terminal receipt would have to dispatch an Elt method
+ * inside its allocation-free window to compare them at all.
+ */
+static int builtin_metadata_altrep_is_materializable(SEXP value) {
+  switch ((SEXPTYPE) TYPEOF(value)) {
+  case LGLSXP:
+  case INTSXP:
+  case REALSXP:
+  case CPLXSXP:
+  case RAWSXP:
+  case STRSXP:
+    return TRUE;
+  default:
+    return FALSE;
+  }
+}
+
 /*
  * R's ordinary deep duplicator is itself recursive and does not detect
  * cycles. Built-in leaves deliberately retain arbitrary *ordinary* metadata,
@@ -1659,6 +1697,7 @@ static inline SEXP snapshot_ordinary_vector_payload(
 typedef struct {
   SEXP path[PARADOX_BUILTIN_METADATA_MAX_DEPTH];
   size_t nodes;
+  int structural_altrep;
 } builtin_metadata_graph_t;
 
 typedef struct {
@@ -1737,7 +1776,11 @@ static int builtin_metadata_attribute_graph_is_ordinary(
 
 static int builtin_metadata_graph_is_ordinary(SEXP value,
     builtin_metadata_graph_t *graph, size_t depth) {
-  if (ALTREP(value) || Rf_isS4(value)) return FALSE;
+  if (Rf_isS4(value)) return FALSE;
+  if (ALTREP(value) && !builtin_metadata_altrep_is_materializable(value)) {
+    graph->structural_altrep = TRUE;
+    return FALSE;
+  }
   if (graph->nodes >= PARADOX_BUILTIN_METADATA_MAX_NODES) return FALSE;
   ++graph->nodes;
 
@@ -1822,18 +1865,30 @@ static int builtin_metadata_graph_is_ordinary(SEXP value,
   }
 }
 
-static int builtin_metadata_attributes_are_ordinary(SEXP value) {
+/*
+ * `structural_altrep` reports the one rejection cause the generic bounded
+ * diagnostic cannot name, so callers can say ALTREP explicitly.  It must be
+ * answered on every exit, including the S4 short circuit.
+ */
+static int builtin_metadata_attributes_are_ordinary(SEXP value,
+    int *structural_altrep) {
+  if (structural_altrep != NULL) *structural_altrep = FALSE;
   if (Rf_isS4(value)) return FALSE;
   builtin_metadata_graph_t graph;
   /* Count the selected carrier exactly as the complete-graph preflight does,
    * but deliberately do not traverse its semantic payload. */
   graph.path[0] = value;
   graph.nodes = 1U;
-  return builtin_metadata_attribute_graph_is_ordinary(
+  graph.structural_altrep = FALSE;
+  const int ordinary = builtin_metadata_attribute_graph_is_ordinary(
     value,
     &graph,
     1U
   );
+  if (structural_altrep != NULL) {
+    *structural_altrep = graph.structural_altrep;
+  }
+  return ordinary;
 }
 
 typedef struct {
@@ -1871,6 +1926,14 @@ static void capture_builtin_metadata_copy_attribute(SEXP tag, SEXP value,
 NORET static void builtin_metadata_copy_error(
     const builtin_metadata_copy_t *copy) {
   Rf_error("%s", copy->failure_message);
+}
+
+NORET static void builtin_metadata_structural_altrep_error(void) {
+  Rf_error("%s", PARADOX_BUILTIN_METADATA_STRUCTURAL_ALTREP_MESSAGE);
+}
+
+NORET static void builtin_metadata_unstable_altrep_error(void) {
+  Rf_error("Built-in metadata ALTREP changed while being snapshotted");
 }
 
 static SEXP copy_builtin_metadata_graph(
@@ -2492,31 +2555,32 @@ static void copy_builtin_metadata_attributes(
     UNPROTECT(1);
   }
   clear_builtin_metadata_attributes(destination, copy);
-  SEXP comment_symbol = Rf_install("comment");
   /*
-   * Rf_setAttrib() is the sole cross-version public setter. Install
-   * dependency-sensitive standard attributes in one fixed order: dim before
-   * names/general metadata and dimnames, then class last so its object bit is
-   * terminal. Names, row.names, tsp, comment, and general attributes retain
-   * their relative selected order in the middle wave.
+   * Rf_setAttrib() is the sole cross-version public setter and every setter
+   * dependency runs in one direction: `dimnames<-` requires `dim`, and
+   * `names<-` on a one-dimensional array is redirected to `dimnames`. Any
+   * source a public setter could build therefore stores `dim` ahead of
+   * `dimnames`, so installing strictly in selected order reproduces both the
+   * attribute set and its order. A raw spelling that inverts that dependency
+   * is not installable and rejects here rather than through R's setter.
    * Unsupported raw spellings that public R normalizes are rejected by the
    * allocation-free receipt rather than reproduced through SET_ATTRIB.
    */
-  for (int priority = 0; priority <= 3; ++priority) {
-    for (R_xlen_t index = 0; index < selected_count; ++index) {
-      SEXP tag = VECTOR_ELT(captured, 3 * index);
-      if (builtin_metadata_attribute_priority(
-          tag,
-          comment_symbol
-        ) != priority) {
-        continue;
-      }
-      Rf_setAttrib(
-        destination,
-        tag,
-        VECTOR_ELT(captured, 3 * index + 2)
-      );
+  R_xlen_t dimensions_index = selected_count;
+  for (R_xlen_t index = 0; index < selected_count; ++index) {
+    SEXP tag = VECTOR_ELT(captured, 3 * index);
+    if (tag == R_DimSymbol) dimensions_index = index;
+    if (tag == R_DimNamesSymbol && index < dimensions_index) {
+      UNPROTECT(1);
+      builtin_metadata_copy_error(copy);
     }
+  }
+  for (R_xlen_t index = 0; index < selected_count; ++index) {
+    Rf_setAttrib(
+      destination,
+      VECTOR_ELT(captured, 3 * index),
+      VECTOR_ELT(captured, 3 * index + 2)
+    );
   }
   if ((Rf_isObject(destination) != FALSE) != source_object) {
     UNPROTECT(1);
@@ -2526,9 +2590,117 @@ static void copy_builtin_metadata_attributes(
 }
 
 static int builtin_metadata_copy_source_shape(
-    SEXP source, SEXPTYPE type, R_xlen_t size) {
-  return !ALTREP(source) && !Rf_isS4(source) &&
+    SEXP source, SEXPTYPE type, R_xlen_t size, int altrep) {
+  return (ALTREP(source) != FALSE) == (altrep != FALSE) && !Rf_isS4(source) &&
     (SEXPTYPE) TYPEOF(source) == type && XLENGTH(source) == size;
+}
+
+typedef enum {
+  PARADOX_ALTREP_METADATA_OWNED = 0,
+  PARADOX_ALTREP_METADATA_SHAPE_CHANGED,
+  PARADOX_ALTREP_METADATA_UNSTABLE
+} altrep_metadata_payload_status_t;
+
+/*
+ * Materialize one stable atomic ALTREP metadata payload under a double
+ * capture. Ordinary metadata nodes are already observed twice -- once by the
+ * copy, once by the terminal receipt's payload comparison -- so observing an
+ * ALTREP node exactly twice keeps the same budget while moving the second
+ * observation ahead of the allocation-free terminal window, where an Elt
+ * method must not run. Both observations are bracketed by the shape receipt,
+ * so an Elt method that re-enters R cannot pair one generation's type or
+ * length with another generation's elements. `destination` and `source` are
+ * rooted by the caller and this routine allocates nothing.
+ */
+static altrep_metadata_payload_status_t materialize_altrep_metadata_payload(
+    SEXP destination, SEXP source, SEXPTYPE type, R_xlen_t size) {
+  for (R_xlen_t index = 0; index < size; ++index) {
+    if (index != 0 &&
+        index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+      R_CheckUserInterrupt();
+    }
+    switch (type) {
+    case LGLSXP:
+      SET_LOGICAL_ELT(destination, index, LOGICAL_ELT(source, index));
+      break;
+    case INTSXP:
+      SET_INTEGER_ELT(destination, index, INTEGER_ELT(source, index));
+      break;
+    case REALSXP:
+      SET_REAL_ELT(destination, index, REAL_ELT(source, index));
+      break;
+    case CPLXSXP:
+      paradox_api_set_complex_elt(
+        destination,
+        index,
+        COMPLEX_ELT(source, index)
+      );
+      break;
+    case RAWSXP:
+      paradox_api_set_raw_elt(destination, index, RAW_ELT(source, index));
+      break;
+    case STRSXP:
+      SET_STRING_ELT(destination, index, STRING_ELT(source, index));
+      break;
+    default:
+      return PARADOX_ALTREP_METADATA_SHAPE_CHANGED;
+    }
+  }
+  if (!builtin_metadata_copy_source_shape(source, type, size, TRUE)) {
+    return PARADOX_ALTREP_METADATA_SHAPE_CHANGED;
+  }
+  for (R_xlen_t index = 0; index < size; ++index) {
+    if (index != 0 &&
+        index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+      R_CheckUserInterrupt();
+    }
+    switch (type) {
+    case LGLSXP:
+      if (LOGICAL_ELT(source, index) != LOGICAL_ELT(destination, index)) {
+        return PARADOX_ALTREP_METADATA_UNSTABLE;
+      }
+      break;
+    case INTSXP:
+      if (INTEGER_ELT(source, index) != INTEGER_ELT(destination, index)) {
+        return PARADOX_ALTREP_METADATA_UNSTABLE;
+      }
+      break;
+    case REALSXP: {
+      const double owned = REAL_ELT(destination, index);
+      const double current = REAL_ELT(source, index);
+      /* Bit-identical NaN payloads are not required; a repeated missing or
+       * not-a-number answer is the same observation for metadata. */
+      if (current != owned && !(ISNAN(current) && ISNAN(owned))) {
+        return PARADOX_ALTREP_METADATA_UNSTABLE;
+      }
+      break;
+    }
+    case CPLXSXP: {
+      const Rcomplex owned = COMPLEX_ELT(destination, index);
+      const Rcomplex current = COMPLEX_ELT(source, index);
+      if ((current.r != owned.r && !(ISNAN(current.r) && ISNAN(owned.r))) ||
+          (current.i != owned.i && !(ISNAN(current.i) && ISNAN(owned.i)))) {
+        return PARADOX_ALTREP_METADATA_UNSTABLE;
+      }
+      break;
+    }
+    case RAWSXP:
+      if (RAW_ELT(source, index) != RAW_ELT(destination, index)) {
+        return PARADOX_ALTREP_METADATA_UNSTABLE;
+      }
+      break;
+    case STRSXP:
+      if (STRING_ELT(source, index) != STRING_ELT(destination, index)) {
+        return PARADOX_ALTREP_METADATA_UNSTABLE;
+      }
+      break;
+    default:
+      return PARADOX_ALTREP_METADATA_SHAPE_CHANGED;
+    }
+  }
+  return builtin_metadata_copy_source_shape(source, type, size, TRUE)
+    ? PARADOX_ALTREP_METADATA_OWNED
+    : PARADOX_ALTREP_METADATA_SHAPE_CHANGED;
 }
 
 /*
@@ -2541,7 +2713,12 @@ static int builtin_metadata_copy_source_shape(
 static SEXP copy_builtin_metadata_graph(
     SEXP source, builtin_metadata_copy_t *copy, size_t depth) {
   PROTECT(source);
-  if (ALTREP(source) || Rf_isS4(source) ||
+  const int source_altrep = ALTREP(source) != FALSE;
+  if (source_altrep && !builtin_metadata_altrep_is_materializable(source)) {
+    UNPROTECT(1);
+    builtin_metadata_structural_altrep_error();
+  }
+  if (Rf_isS4(source) ||
       copy->nodes >= PARADOX_BUILTIN_METADATA_MAX_NODES) {
     UNPROTECT(1);
     builtin_metadata_copy_error(copy);
@@ -2587,9 +2764,42 @@ static SEXP copy_builtin_metadata_graph(
   case STRSXP: {
     const R_xlen_t size = XLENGTH(source);
     SEXP result = PROTECT(Rf_allocVector(type, size));
-    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+    if (!builtin_metadata_copy_source_shape(
+        source,
+        type,
+        size,
+        source_altrep
+      )) {
       UNPROTECT(2);
       builtin_metadata_copy_error(copy);
+    }
+    if (source_altrep) {
+      const altrep_metadata_payload_status_t status =
+        materialize_altrep_metadata_payload(result, source, type, size);
+      if (status != PARADOX_ALTREP_METADATA_OWNED) {
+        UNPROTECT(2);
+        if (status == PARADOX_ALTREP_METADATA_UNSTABLE) {
+          builtin_metadata_unstable_altrep_error();
+        }
+        builtin_metadata_copy_error(copy);
+      }
+      copy_builtin_metadata_attributes(
+        result,
+        source,
+        copy,
+        depth + 1U
+      );
+      if (!builtin_metadata_copy_source_shape(
+          source,
+          type,
+          size,
+          source_altrep
+        )) {
+        UNPROTECT(2);
+        builtin_metadata_copy_error(copy);
+      }
+      UNPROTECT(2);
+      return result;
     }
     switch (type) {
     case LGLSXP:
@@ -2662,7 +2872,12 @@ static SEXP copy_builtin_metadata_graph(
       copy,
       depth + 1U
     );
-    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+    if (!builtin_metadata_copy_source_shape(
+        source,
+        type,
+        size,
+        source_altrep
+      )) {
       UNPROTECT(2);
       builtin_metadata_copy_error(copy);
     }
@@ -2679,7 +2894,12 @@ static SEXP copy_builtin_metadata_graph(
     }
     SEXP result = PROTECT(Rf_allocVector(type, size));
     SEXP selected = PROTECT(Rf_allocVector(VECSXP, size));
-    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+    if (!builtin_metadata_copy_source_shape(
+        source,
+        type,
+        size,
+        source_altrep
+      )) {
       UNPROTECT(3);
       builtin_metadata_copy_error(copy);
     }
@@ -2701,7 +2921,12 @@ static SEXP copy_builtin_metadata_graph(
       copy,
       depth + 1U
     );
-    if (!builtin_metadata_copy_source_shape(source, type, size)) {
+    if (!builtin_metadata_copy_source_shape(
+        source,
+        type,
+        size,
+        source_altrep
+      )) {
       UNPROTECT(3);
       builtin_metadata_copy_error(copy);
     }
@@ -2900,11 +3125,23 @@ static int builtin_metadata_attribute_graph_receipt_current(
 
 static int builtin_metadata_receipt_current(SEXP source, SEXP snapshot,
     builtin_metadata_receipt_t *receipt, size_t depth) {
-  if (ALTREP(source) || ALTREP(snapshot) ||
+  if (ALTREP(snapshot) ||
       Rf_isS4(source) || Rf_isS4(snapshot) ||
       TYPEOF(source) != TYPEOF(snapshot) ||
       (Rf_isObject(source) != FALSE) !=
         (Rf_isObject(snapshot) != FALSE)) {
+    return FALSE;
+  }
+  /*
+   * A materialized ALTREP metadata node keeps a structural receipt only. This
+   * window must stay allocation- and callback-free to be evidence at all, and
+   * both an element read and a length read may dispatch into R. The payload
+   * agreement was already certified by the double capture that produced the
+   * snapshot; what remains to prove here is that the live carrier still is the
+   * same representation carrying the same metadata graph.
+   */
+  const int source_altrep = ALTREP(source) != FALSE;
+  if (source_altrep && !builtin_metadata_altrep_is_materializable(source)) {
     return FALSE;
   }
   if (receipt->nodes >= PARADOX_BUILTIN_METADATA_MAX_NODES) return FALSE;
@@ -2962,7 +3199,8 @@ static int builtin_metadata_receipt_current(SEXP source, SEXP snapshot,
   case CPLXSXP:
   case RAWSXP:
   case STRSXP:
-    return paradox_ordinary_vector_payload_equal(source, snapshot);
+    return source_altrep ||
+      paradox_ordinary_vector_payload_equal(source, snapshot);
   case VECSXP:
   case EXPRSXP:
     if (XLENGTH(source) != XLENGTH(snapshot)) return FALSE;
@@ -3009,6 +3247,9 @@ int paradox_builtin_value_leaf_receipt_current(SEXP source, SEXP snapshot) {
       type != CPLXSXP && type != STRSXP && type != RAWSXP) {
     return source == snapshot;
   }
+  /* An ALTREP semantic leaf has its own materialize-once receipt; this one
+   * proves an ordinary leaf's complete payload and metadata. */
+  if (ALTREP(source)) return FALSE;
   builtin_metadata_receipt_t receipt;
   receipt.nodes = 0U;
   return builtin_metadata_receipt_current(
@@ -3052,6 +3293,31 @@ int paradox_altrep_builtin_value_leaf_metadata_is_current(
   return builtin_metadata_attributes_receipt_current(source, snapshot);
 }
 
+#define PARADOX_BUILTIN_METADATA_UNREPRODUCIBLE_SPELLING \
+  "Built-in value metadata uses a spelling public R setters cannot reproduce"
+
+/*
+ * Separate a raw spelling that public setters normalize from a source that
+ * changed while it was being copied. An unchanged source normalizes to the
+ * same package-owned graph every time it is copied, so repeating the copy
+ * answers exactly that question; a source that moved cannot reproduce the
+ * earlier snapshot. This runs only once admission has already failed, so it
+ * may allocate; the fresh carrier repeats the snapshot's type and length
+ * because the standard setters are length-sensitive.
+ */
+static int builtin_metadata_copy_is_reproducible(
+    SEXP source, SEXP snapshot, const char *failure_message) {
+  SEXP repeated = PROTECT(Rf_allocVector(
+    (SEXPTYPE) TYPEOF(snapshot),
+    XLENGTH(snapshot)
+  ));
+  own_builtin_metadata_attributes(repeated, source, failure_message);
+  const int reproducible =
+    builtin_metadata_attributes_receipt_current(repeated, snapshot);
+  UNPROTECT(1);
+  return reproducible;
+}
+
 static void run_builtin_metadata_copy_hook(SEXP hook) {
   if (hook == R_NilValue) return;
   PROTECT(hook);
@@ -3086,11 +3352,15 @@ static SEXP snapshot_builtin_value_leaf(SEXP value, SEXP hook) {
      * path is therefore one allocation plus one memcpy/pointer loop; it never
      * asks R's pairlist duplicator to traverse a caller-owned attribute spine.
      */
-    if (!builtin_metadata_attributes_are_ordinary(value)) {
+    int structural_altrep = FALSE;
+    if (!builtin_metadata_attributes_are_ordinary(
+        value,
+        &structural_altrep
+      )) {
       UNPROTECT(1);
-      Rf_error(
-        "Built-in value metadata must be ordinary, acyclic, and bounded"
-      );
+      Rf_error("%s", structural_altrep
+        ? PARADOX_BUILTIN_METADATA_STRUCTURAL_ALTREP_MESSAGE
+        : "Built-in value metadata must be ordinary, acyclic, and bounded");
     }
     /* The package-owned copier repeats the complete bound after this
      * test-only seam.  A pending finalizer can therefore make the operation
@@ -3105,10 +3375,20 @@ static SEXP snapshot_builtin_value_leaf(SEXP value, SEXP hook) {
       &copy,
       0U
     ));
-    if (!paradox_ordinary_vector_payload_equal(value, result) ||
+    const int payload_current =
+      paradox_ordinary_vector_payload_equal(value, result);
+    if (!payload_current ||
         !builtin_metadata_attributes_receipt_current(value, result)) {
+      const int reproducible = payload_current &&
+        builtin_metadata_copy_is_reproducible(
+          value,
+          result,
+          copy.failure_message
+        );
       UNPROTECT(2);
-      Rf_error("Built-in value changed while being snapshotted");
+      Rf_error("%s", reproducible
+        ? PARADOX_BUILTIN_METADATA_UNREPRODUCIBLE_SPELLING
+        : "Built-in value changed while being snapshotted");
     }
     UNPROTECT(2);
     return result;
@@ -3175,11 +3455,15 @@ static SEXP snapshot_builtin_value_leaf(SEXP value, SEXP hook) {
      * Copy directly from the receipted live carrier through the bounded
      * package-owned mapper. No R duplicator sees its attribute pairlist.
      */
-    if (!builtin_metadata_attributes_are_ordinary(value)) {
+    int structural_altrep = FALSE;
+    if (!builtin_metadata_attributes_are_ordinary(
+        value,
+        &structural_altrep
+      )) {
       UNPROTECT(4);
-      Rf_error(
-        "Built-in value metadata must be ordinary, acyclic, and bounded"
-      );
+      Rf_error("%s", structural_altrep
+        ? PARADOX_BUILTIN_METADATA_STRUCTURAL_ALTREP_MESSAGE
+        : "Built-in value metadata must be ordinary, acyclic, and bounded");
     }
     run_builtin_metadata_copy_hook(hook);
     own_builtin_metadata_attributes(
@@ -3191,8 +3475,15 @@ static SEXP snapshot_builtin_value_leaf(SEXP value, SEXP hook) {
         value,
         result
       )) {
+      const int reproducible = builtin_metadata_copy_is_reproducible(
+        value,
+        result,
+        "Built-in value metadata must be ordinary, acyclic, and bounded"
+      );
       UNPROTECT(4);
-      Rf_error("Built-in value changed while being snapshotted");
+      Rf_error("%s", reproducible
+        ? PARADOX_BUILTIN_METADATA_UNREPRODUCIBLE_SPELLING
+        : "Built-in value changed while being snapshotted");
     }
     atomic_leaf_attribute_receipt_t final_receipt = {
       attribute_tags,
@@ -3416,6 +3707,7 @@ static SEXP snapshot_public_data_table_column(SEXP value) {
     TRUE
   };
   R_xlen_t selected_attribute_count = 0;
+  int structural_altrep = FALSE;
   if (!paradox_api_map_bounded_stored_attributes(
       value,
       (R_xlen_t) PARADOX_BUILTIN_METADATA_MAX_DEPTH,
@@ -3425,11 +3717,14 @@ static SEXP snapshot_public_data_table_column(SEXP value) {
     ) || !selected_receipt.current ||
       selected_receipt.count != attribute_count ||
       selected_attribute_count != attribute_count ||
-      !builtin_metadata_attributes_are_ordinary(value)) {
+      !builtin_metadata_attributes_are_ordinary(
+        value,
+        &structural_altrep
+      )) {
     UNPROTECT(protect_count);
-    Rf_error(
-      "data.table column metadata must be ordinary, acyclic, and bounded"
-    );
+    Rf_error("%s", structural_altrep
+      ? PARADOX_BUILTIN_METADATA_STRUCTURAL_ALTREP_MESSAGE
+      : "data.table column metadata must be ordinary, acyclic, and bounded");
   }
 
   own_builtin_metadata_attributes(
@@ -3438,8 +3733,16 @@ static SEXP snapshot_public_data_table_column(SEXP value) {
     "data.table column metadata must be ordinary, acyclic, and bounded"
   );
   if (!builtin_metadata_attributes_receipt_current(value, owned)) {
+    const int reproducible = builtin_metadata_copy_is_reproducible(
+      value,
+      owned,
+      "data.table column metadata must be ordinary, acyclic, and bounded"
+    );
     UNPROTECT(protect_count);
-    Rf_error("data.table column changed while being snapshotted");
+    Rf_error("%s", reproducible
+      ? "data.table column metadata uses a spelling public R setters cannot "
+        "reproduce"
+      : "data.table column changed while being snapshotted");
   }
   atomic_leaf_attribute_receipt_t final_receipt = {
     attribute_tags,
@@ -3541,7 +3844,7 @@ SEXP paradox_finalize_data_table(SEXP table) {
    * is removed below and replaced only after every column spine is private.
    */
   PROTECT(table);
-  if (!builtin_metadata_attributes_are_ordinary(table)) {
+  if (!builtin_metadata_attributes_are_ordinary(table, NULL)) {
     UNPROTECT(1);
     Rf_error("Internal error: expected bounded data.table metadata");
   }

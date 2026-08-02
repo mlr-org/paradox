@@ -271,12 +271,19 @@ hazards that Paradox 2 is intended to remove.
   Caller-owned attribute spines are now copied through bounded package-owned
   metadata operations instead of R's general pairlist/recursive duplicators.
   Public detached built-in metadata supports ordinary acyclic graphs up to 64
-  attributes/recursive frames and 65,536 nodes; setter-invalid raw spellings,
-  cycles, closures/`DOTSXP` used as presentation metadata, and overbound graphs
-  reject cleanly. The already-receipted Domain `repr` carrier above is the
-  sole package-defined opaque exception. Quantile and typed-list compatibility
-  retain shallow nested metadata identity while applying the same
-  64-attribute top-level bound.
+  attributes/recursive frames and 65,536 nodes, and reproduces the selected
+  attribute order. Stable atomic ALTREP attribute values -- the deferred
+  strings, compact sequences, and wrappers that `names(x) <- as.character(...)`
+  and `attr(x, "i") <- 1:n` produce -- are materialized once into ordinary
+  vectors, so such values construct, store, and migrate. Cycles, S4 nodes,
+  closures/`DOTSXP` used as presentation metadata, structural
+  list/expression ALTREP attribute values, overbound graphs, and ALTREP
+  providers that answer differently on a second observation still reject
+  cleanly; a raw spelling that public R setters would normalize now reports
+  that spelling rather than a concurrent change. The already-receipted Domain
+  `repr` carrier above is the sole package-defined opaque exception. Quantile
+  and typed-list compatibility retain shallow nested metadata identity while
+  applying the same 64-attribute top-level bound.
 * Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small
   serializable mapping closures directly instead of compiling a fresh
   `crate()` closure for every Domain instance.
@@ -458,8 +465,12 @@ hazards that Paradox 2 is intended to remove.
   when assigned through `$values`; Paradox ignores and removes that container
   class instead of using it for dispatch. Checked and unchecked direct
   assignment reject an outer ALTREP before observation and canonicalize an
-  accepted empty shell to native `list()`. This keeps ordinary classed controls
-  interoperable without reopening the removed S3 extension engine. Explicit
+  accepted empty shell to native `list()`. Unchecked assignment does not check
+  values, but it does classify each leaf's class shape exactly as every reader
+  does, so it can no longer commit a value -- an `NA` class label, say -- that
+  makes every later read of the same object report corrupt state. This keeps
+  ordinary classed controls interoperable without reopening the removed S3
+  extension engine. Explicit
   `$search_space(values=)` has the same ordinary-or-representation-only-S3
   named-list boundary and selects tokens natively without `[` dispatch;
   ALTREP, S4/list-like, or otherwise attributed containers reject. Only
