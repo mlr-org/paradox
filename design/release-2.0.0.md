@@ -3,19 +3,56 @@
 ## Status
 
 **The active immutable package-facing candidate is
-`refs/paradox-release/candidate-20260801T092108Z`, commit
-`4e549f3a8994f513cee1d88d71e037c733a51531`, tree
-`4f17819b92f7dfb255c8aafe501ff3e684027d67`. Its exact nine-task
-`release-core` run passed. The four harness rows, C23 under GCC 15.2 and Clang
-22, the complete API-header matrix, all 33 differential cases, and the full
-native-release lane on R 4.6.1 passed. `runtime-supported` passed the complete
-suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2 with 67,109
-passing assertions and 145 exact reviewed skips: 131 capability-result skips
-plus 14 guarded whole-file skips for the two ConfigSpace files across seven
-runtimes. Together those lanes exercise every minor series from R 3.6 through
-current.
-The corrected-harness donor and combined GCT/Valgrind/rchk run also pass, so
-combined-memory acceptance is complete.**
+`refs/paradox-release/candidate-20260802T183338Z`, commit
+`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
+`95012f6ae771b04fe91afcf30f8df3b78daa701a`. Its exact nine-task
+`release-core` run passed all harness, differential, API-header, GCC/Clang C23,
+native-release, and supported-runtime rows. The runtime row covers the full
+suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, while native
+release covers current R 4.6.1. Fresh bounded-rchk discovery is source-clean,
+fully reviewed, and its regenerated policy is checked in. Combined memory,
+compatibility, benchmarks, and hosted portability remain to be rerun for this
+replacement candidate; earlier `4e549f3` conclusions are historical.**
+
+The exact coordinator is
+`.local/verify/runs/release-candidate-f27776e-r1`. Completion, JSON-summary,
+and TSV-summary SHA-256 values are respectively
+`d43233b72252559f85e22886c714663cdd5bc2cd6596776fa212d5a0db9448b5`,
+`24dcbb1acc8c313491772f39b6d03490ef47beecdc1b6d4b1e8e45f076b725f1`,
+and
+`b8f7c17e05190be64e3b745c7f6d64d9ec15cecf5725ca1ba1cc035ab701925b`.
+Replayable native child `release-candidate-f27776e-r1-native-release-a001`
+passes independent validation. Its source-manifest, source-tree, modes-tree,
+completion, and result SHA-256 values are
+`67ce64d443709ebf2f5808a2a09232f375b7df0a8f311a6882ab1447e5558294`,
+`dc807b317f8d5a89d87c554c3d39c6991285711f1d0ee48eae3c80494f7e3277`,
+`c01a064b3457614090fcab6cfad765544e494299bbc3ff7cf5a180896f207323`,
+`4d3dddf2c1bc5939437a64e702297203198e39e041daba85e6a6532cd111df53`,
+and
+`b46b47fc3e4196d5fecfc3f8d706579f6597de7de243595df59c25f385ea3d3c`.
+
+Discovery `release-candidate-f27776e-rchk-discovery-r1` ran bcheck,
+maacheck, and fficheck successfully and failed only at the intended old-policy
+comparison. It analyzed 1,305 functions and 201,585 states; 116 blocks contain
+397 UP and 30 PB diagnostics, and fficheck records 111 routines. Three
+independent reviews found no C defect. The sole normalized addition is the
+benign address-taken `classes` out-parameter in
+`scan_unchecked_value_leaves()`, still owned by the protected transaction
+snapshot and unused after the scan. Raw/semantic bcheck, byte-empty maacheck,
+and fficheck SHA-256 values are respectively
+`35d5ad41f7fe4bcbe62d8848759dd694e00be29bf06c2109852d608d4ae304f7`,
+`c5a7396c584257e309d4738bac5dae13934764801c17612a683779834719a5fa`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
+Independent generation and cross-validation produced policy/block/rationale
+SHA-256 values
+`3ca2416f9d0920850431381d35fc0ce00f8d2fe5b4e08fe98d85f86e47dfd806`,
+`5ae729f8d3b07bd471050a81f793a862fda59e1a4457483fb66618e27acc250a`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+
+### Historical `4e549f3` acceptance record
 
 The exact coordinator is
 `.local/verify/runs/release-candidate-4e549f3-r1`. Its completion,

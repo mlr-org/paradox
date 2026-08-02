@@ -35,9 +35,48 @@ verify copied modes and source stability. A passed functional native run whose
 manifest disagrees with its copied-tree receipt is not a replayable source
 donor and cannot be repaired in place.
 
-### 2026-08-01 bounded-state discovery
+### 2026-08-02 replacement-candidate discovery
 
 The active immutable candidate is
+`refs/paradox-release/candidate-20260802T183338Z`, commit
+`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
+`95012f6ae771b04fe91afcf30f8df3b78daa701a`. Its replayable release-core
+native donor is `release-candidate-f27776e-r1-native-release-a001`; the source
+manifest, source tree, modes tree, completion, and result hashes are recorded
+in the active release ledger.
+
+Discovery `release-candidate-f27776e-rchk-discovery-r1` completed every
+analyzer and failed only at the intended stale-policy comparison. Bcheck
+analyzed 1,305 functions and 201,585 states; 116 blocks contain 397 UP and 30
+PB diagnostics. Maacheck is byte-empty and fficheck records all 111 routines
+and one registration call. Three independent reviews found no defect. After
+normalizing source-line and compiler suffix movement, the only addition is
+`scan_unchecked_value_leaves()` losing the address-taken `classes`
+out-parameter. Its protected transaction snapshot owns the complete leaf and
+metadata, and the alias is not used after the bounded scan, so the existing
+`ADDRESS_TAKEN_MODEL` rationale applies.
+
+Raw bcheck, semantic bcheck, maacheck, and fficheck SHA-256 values are
+`35d5ad41f7fe4bcbe62d8848759dd694e00be29bf06c2109852d608d4ae304f7`,
+`c5a7396c584257e309d4738bac5dae13934764801c17612a683779834719a5fa`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
+The exact reviewed-assignment input SHA-256 is
+`a217e24c7dc5d179aa9e7353af7e0d940c12c726f6d40a1dbab995c065acc698`.
+Current and retained generators produced byte-identical policy directories,
+and each validator accepted the other's output. Policy, blocks, and rationale
+catalog SHA-256 values are
+`3ca2416f9d0920850431381d35fc0ce00f8d2fe5b4e08fe98d85f86e47dfd806`,
+`5ae729f8d3b07bd471050a81f793a862fda59e1a4457483fb66618e27acc250a`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+Discovery is not acceptance. A new static/focused donor from the converged
+policy commit must seed the final combined GCT/Valgrind/rchk run.
+
+### Historical 2026-08-01 bounded-state discovery
+
+The superseded immutable candidate was
 `refs/paradox-release/candidate-20260801T092108Z`, commit
 `4e549f3a8994f513cee1d88d71e037c733a51531`, tree
 `4f17819b92f7dfb255c8aafe501ff3e684027d67`. Its replayable release-core
@@ -134,8 +173,8 @@ bcheck, semantic, byte-empty maacheck, and fficheck SHA-256 values are
 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
 and
 `26bfc1718868d77f8f1d477c0d60312cfc707d1cebc8afd433079bf6f51918a0`.
-This corrected combined run, not discovery or r1, owns active memory
-acceptance.
+This corrected combined run, not discovery or r1, owned memory acceptance for
+the superseded `4e549f3` package-facing source. It does not accept `f27776e`.
 
 ### 2026-07-27 provenance incident
 

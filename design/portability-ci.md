@@ -372,6 +372,11 @@ phase-specific home and temporary directories. It selects a fresh empty site
 library and an explicit user library for the phase, while preserving
 `R_KEEP_PKG_SOURCE=yes`. Build, check, and install command environments are
 also pinned to the authenticated empty environment file.
+Clearing means deleting each `Env:` item with `Remove-Item`, not assigning
+`$null`: PowerShell's binder may coerce `$null` to an empty string, and current
+.NET can retain that empty environment entry. The first hosted old-Windows
+attempts exposed this deterministically when hostile `R_HOME` survived the
+reset; those runs are harness failures and must not be retried at the old SHA.
 `R_PKG_CXX_STD` is consequently absent throughout the
 complete closure. The helper emits one read-only exact-policy receipt per
 phase; all three are retained in the artifact and independently replayed, so
