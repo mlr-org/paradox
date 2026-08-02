@@ -921,7 +921,7 @@ test_that("Domain constructors remain rooted during GC and callback reentry", {
 })
 
 
-test_that("typed value metadata rejects structural ALTREP names unobserved", {
+test_that("typed value metadata materializes stable ALTREP names once", {
   skip_on_cran()
   namespace = asNamespace("paradox")
   skip_if_not(
@@ -929,6 +929,9 @@ test_that("typed value metadata rejects structural ALTREP names unobserved", {
     "the internal stateful ALTREP test class is unavailable"
   )
 
+  # A stable atomic ALTREP attribute value is ordinary base-R output and must
+  # be admitted; the copier materializes it under a double capture, so the
+  # provider is observed exactly twice and the owned names are ordinary.
   state = new.env(parent = emptyenv())
   state$callbacks = 0L
   deferred = native_stateful_altrep(
@@ -945,21 +948,40 @@ test_that("typed value metadata rejects structural ALTREP names unobserved", {
     c(0L, 0L)
   )
 
+  owned = .Call(
+    get(
+      "C_test_builtin_metadata_copy_reentry",
+      envir = asNamespace("paradox")
+    ),
+    value,
+    NULL
+  )
+  expect_identical(names(owned), "a")
+  expect_identical(state$callbacks, 2L)
+  domain = p_dbl(0, 2, default = value)
+  expect_identical(names(domain$default[[1L]]), "a")
+
+  # A provider that answers the second observation differently is not stable
+  # and must keep failing closed before anything is owned. A non-special
+  # attribute is installed without observing the provider, so the switch
+  # counter starts exactly at the copier's first observation.
+  unstable = native_stateful_altrep(
+    "a",
+    "changed",
+    elt_switch_after = 1L
+  )
+  moved = 1
+  attr(moved, "meta") = unstable
   expect_error(
     .Call(
       get(
         "C_test_builtin_metadata_copy_reentry",
         envir = asNamespace("paradox")
       ),
-      value,
+      moved,
       NULL
     ),
-    "Built-in value metadata must be ordinary, acyclic, and bounded"
-  )
-  expect_identical(state$callbacks, 0L)
-  expect_error(
-    p_dbl(0, 2, default = value),
-    "Built-in value metadata must be ordinary, acyclic, and bounded"
+    "Built-in metadata ALTREP changed while being snapshotted"
   )
 })
 

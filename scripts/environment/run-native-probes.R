@@ -2063,6 +2063,20 @@ main <- function() {
         identical(names(rows[[1L]]), c("x", "y")),
         "row-name Length reentry escaped owned table metadata")
     },
+    direct_test_stateful_altrep_calls = function() {
+      value <- stateful(c(1L, 2L), c(1L, 2L))
+      before <- .Call(symbol("test_stateful_altrep_calls"), value)
+      observed_elt <- value[[1L]]
+      observed_length <- length(value)
+      after <- .Call(symbol("test_stateful_altrep_calls"), value)
+      check(
+        identical(before, c(elt = 0L, length = 0L)) &&
+          identical(observed_elt, 1L) &&
+          identical(observed_length, 2L) &&
+          identical(after, c(elt = 1L, length = 1L)),
+        "stateful ALTREP counter readback differs"
+      )
+    },
     direct_test_public_row_names_count = function() {
       callbacks <- 0L
       value <- stateful(
