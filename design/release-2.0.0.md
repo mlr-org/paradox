@@ -52,6 +52,18 @@ SHA-256 values
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
 
+Combined attempt `release-candidate-f27776e-memory-r1` passed GCT but stopped
+in Valgrind prerequisite preflight before either Valgrind or rchk ran. The
+fresh and sealed 30,917-row toolchain receipts differed only because
+`.local/toolchain/lib` had mode `0777` instead of `0775`. Root cause was a
+compatibility self-test's external directory symlink: R's forced recursive
+scratch cleanup performs a pre-unlink `chmod` that follows the link. The
+fixture now avoids the external link, supplies the copied scratch Git's
+libraries through explicit `LD_LIBRARY_PATH`, and asserts that the live mode
+does not move. Restoring `0775` reproduces the sealed toolchain state. This is
+harness/environment diagnostic evidence, not a package or analyzer failure;
+a fresh donor and combined run are required.
+
 ### Historical `4e549f3` acceptance record
 
 The exact coordinator is

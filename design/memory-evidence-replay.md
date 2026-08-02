@@ -71,6 +71,15 @@ catalog SHA-256 values are
 `5ae729f8d3b07bd471050a81f793a862fda59e1a4457483fb66618e27acc250a`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+Attempt `release-candidate-f27776e-memory-r1` passed GCT and stopped in
+Valgrind structure preflight before Valgrind/rchk execution. Its fresh
+toolchain receipt differed from the sealed receipt only at the top-level
+`lib` directory mode, `0777` versus `0775`. The culprit was a self-test
+directory symlink to that live tree combined with R's forced recursive cleanup,
+which applies `chmod` before unlink and follows the link. The fixture now uses
+an explicit library search path for its copied scratch Git and creates no
+external link; its focused regression confirms the live mode stays unchanged.
+The exact sealed mode has been restored. R1 is diagnostic only.
 Discovery is not acceptance. A new static/focused donor from the converged
 policy commit must seed the final combined GCT/Valgrind/rchk run.
 

@@ -142,9 +142,14 @@ auth_primary <- file.path(scratch, "auth-primary")
 auth_toolchain <- file.path(auth_primary, ".local", "toolchain")
 dir.create(file.path(auth_toolchain, "bin"), recursive = TRUE)
 auth_git <- file.path(auth_toolchain, "bin", "git")
-if (!file.copy(git, auth_git, copy.mode = TRUE) ||
-    !file.symlink(file.path(root, ".local", "toolchain", "lib"),
-      file.path(auth_toolchain, "lib"))) {
+live_toolchain_lib <- normalizePath(
+  file.path(root, ".local", "toolchain", "lib"),
+  winslash = "/", mustWork = TRUE
+)
+live_toolchain_lib_mode <- file.info(
+  live_toolchain_lib, extra_cols = FALSE
+)$mode[[1L]]
+if (!file.copy(git, auth_git, copy.mode = TRUE)) {
   stop("could not construct the detached-authentication toolchain fixture",
     call. = FALSE)
 }
@@ -170,12 +175,21 @@ auth_path <- paste(c(dirname(auth_git), Sys.getenv("PATH")),
 auth_result <- processx::run(file.path(root, "compat",
   "authenticate-candidate-git"),
   c(auth_primary, auth_ref, auth_commit, auth_tree, auth_source),
-  wd = auth_primary, env = c(PATH = auth_path), stdout = "|", stderr = "|",
+  wd = auth_primary,
+  env = c(PATH = auth_path, LD_LIBRARY_PATH = live_toolchain_lib),
+  stdout = "|", stderr = "|",
   error_on_status = FALSE, cleanup_tree = TRUE)
 if (!identical(auth_result$status, 0L) || !identical(trimws(auth_result$stdout),
     "candidate_git_authentication=passed")) {
   stop("five-argument detached candidate authentication failed: ",
     auth_result$stderr, call. = FALSE)
+}
+if (!identical(
+    file.info(live_toolchain_lib, extra_cols = FALSE)$mode[[1L]],
+    live_toolchain_lib_mode
+  )) {
+  stop("detached-authentication fixture changed the live toolchain mode",
+    call. = FALSE)
 }
 
 # Reproduce the exact-provider property that matters across independent

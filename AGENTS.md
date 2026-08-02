@@ -71,6 +71,17 @@ SHA-256 values are
 `5ae729f8d3b07bd471050a81f793a862fda59e1a4457483fb66618e27acc250a`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+First combined attempt `release-candidate-f27776e-memory-r1` passed GCT and
+then failed closed before Valgrind or rchk because the live toolchain receipt
+had exactly one mode difference: `.local/toolchain/lib` was `0777` instead of
+the sealed `0775`; all other 30,916 rows matched. A compatibility self-test had
+copied Git beside a directory symlink to the live library, then R's
+`unlink(..., recursive = TRUE, force = TRUE)` followed that symlink during its
+pre-unlink `chmod`. The fixture now has no external filesystem link: the
+scratch Git receives the authenticated library only through an explicit
+`LD_LIBRARY_PATH`, and the test asserts that the live mode is unchanged. The
+exact mode was restored to `0775`; r1 is environment/harness diagnostic
+evidence only. Freeze the repair and use a new donor and run ID.
 Discovery is not memory acceptance. Freeze this package-facing-source-
 identical policy/ledger state, make a fresh static/focused donor, and run the
 combined GCT/Valgrind/rchk gate before compatibility and benchmark acceptance.

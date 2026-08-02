@@ -52,6 +52,15 @@ values are
 `5ae729f8d3b07bd471050a81f793a862fda59e1a4457483fb66618e27acc250a`,
 and
 `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+Combined run `release-candidate-f27776e-memory-r1` passed GCT and then failed
+closed before Valgrind/rchk because one live toolchain directory mode was
+`0777` rather than its sealed `0775`; every other receipt row matched. The
+mode came from R's force-cleanup `chmod` following a compatibility self-test
+symlink into the live toolchain. The fixture now uses explicit
+`LD_LIBRARY_PATH` for its copied scratch Git and creates no external link, with
+an exact unchanged-mode regression. The accepted mode has been restored. R1
+is preflight diagnostic evidence only; the repaired tooling requires a new
+donor and combined run.
 The combined memory, compatibility, benchmark, and hosted gates remain open
 for this candidate. The following `4e549f3` evidence is historical.
 
