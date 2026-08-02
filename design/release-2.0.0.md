@@ -10,9 +10,10 @@
 native-release, and supported-runtime rows. The runtime row covers the full
 suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, while native
 release covers current R 4.6.1. Fresh bounded-rchk discovery is source-clean,
-fully reviewed, and its regenerated policy is checked in. Combined memory,
-compatibility, benchmarks, and hosted portability remain to be rerun for this
-replacement candidate; earlier `4e549f3` conclusions are historical.**
+fully reviewed, its regenerated policy is checked in, and the fresh combined
+GCT/Valgrind/rchk run passes independent validation. Compatibility, benchmarks,
+and hosted portability remain to be rerun for this replacement candidate;
+earlier `4e549f3` conclusions are historical.**
 
 The exact coordinator is
 `.local/verify/runs/release-candidate-f27776e-r1`. Completion, JSON-summary,
@@ -62,7 +63,44 @@ fixture now avoids the external link, supplies the copied scratch Git's
 libraries through explicit `LD_LIBRARY_PATH`, and asserts that the live mode
 does not move. Restoring `0775` reproduces the sealed toolchain state. This is
 harness/environment diagnostic evidence, not a package or analyzer failure;
-a fresh donor and combined run are required.
+a fresh donor and combined run were required.
+
+The repair is frozen at package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260802T203920Z`, commit
+`c20c1a3e7bb459757d57038c6eaa89daa6d9082c`, tree
+`c8f8ca6e697b4b6bd46761ff408de1e4376c5eab`. Donor
+`release-candidate-f27776e-native-policy-r2` passed all six static/focused
+modes and independent validation. Its source-manifest, source-tree,
+modes-tree, completion, and result SHA-256 values are
+`b4216e4b508fb7cb0776ced8cd0c1ee7fa19df880d89106d4625ffb819af95fa`,
+`81ada3c322292685931da76f8791ced8ee1275f7ae7ad035ab4a083c87816ecf`,
+`4735b3df6228d1cb13ee1cc9dfb0ec3900cc934228f68ec00a0cc159582506a3`,
+`4fe4b6e06de316fcbf8d91d6ca6f3da365a8f5f691359230137b7d9743cc0285`,
+and
+`56b25164c1497e29f09d991fe5527620e9a6bfed14a63e20f63187f41f082cac`.
+
+Combined run `release-candidate-f27776e-memory-r2` passed GCT, Valgrind,
+bounded rchk, and independent validation. Completion, result,
+memory-source-tree, modes-tree, validator, and source-archive SHA-256 values
+are
+`62e81f915f39b9500a5a964f99cc2d384765f96d6571185584fe1fe0660b44dd`,
+`b23c6bb8a0d521ea4366d3914eb24529454fea5b2d00a265ab3e36373d499f1d`,
+`18969ef1367133958dc4271c8dc48468f100b2853458e0af07be04751d515877`,
+`98943dfffcb27025d3d098052ddf87c0cadc0cff5b06866aea1fc580612d7344`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`0da3db695f7182fbf6ce436d52f12f3de7f29cb109b582682054484b3b7e5177`.
+GCT covers all 111 registered routines plus four hazards. Valgrind reports no
+errors, loss, or suppression; eight files and 141 blocks yield 1,018 passes
+and ten exact reviewed skips. Rchk matches 1,305 functions, 201,585 states,
+116 blocks, 397 UP, and 30 PB. Its raw bcheck, semantic, empty maacheck, and
+fficheck hashes are
+`3afe281aa9aeb59a3ba468b60119b767ece80b0bd56ec38068b2d890bfc068cd`,
+`c5a7396c584257e309d4738bac5dae13934764801c17612a683779834719a5fa`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
+Combined-memory acceptance is complete for `f27776e`.
 
 ### Historical `4e549f3` acceptance record
 

@@ -80,8 +80,26 @@ which applies `chmod` before unlink and follows the link. The fixture now uses
 an explicit library search path for its copied scratch Git and creates no
 external link; its focused regression confirms the live mode stays unchanged.
 The exact sealed mode has been restored. R1 is diagnostic only.
-Discovery is not acceptance. A new static/focused donor from the converged
-policy commit must seed the final combined GCT/Valgrind/rchk run.
+The repair is frozen at package-facing-source-identical ref
+`refs/paradox-release/validation-tooling-20260802T203920Z`, commit
+`c20c1a3e7bb459757d57038c6eaa89daa6d9082c`. Donor
+`release-candidate-f27776e-native-policy-r2` passed all static/focused modes
+and independent validation. Combined run
+`release-candidate-f27776e-memory-r2` then passed GCT, Valgrind, bounded rchk,
+and independent replay. Its completion, result, memory-source-tree,
+modes-tree, independent-validator, and source-archive SHA-256 values are
+`62e81f915f39b9500a5a964f99cc2d384765f96d6571185584fe1fe0660b44dd`,
+`b23c6bb8a0d521ea4366d3914eb24529454fea5b2d00a265ab3e36373d499f1d`,
+`18969ef1367133958dc4271c8dc48468f100b2853458e0af07be04751d515877`,
+`98943dfffcb27025d3d098052ddf87c0cadc0cff5b06866aea1fc580612d7344`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`0da3db695f7182fbf6ce436d52f12f3de7f29cb109b582682054484b3b7e5177`.
+GCT covers all 111 routines and four hazards. Valgrind reports zero errors,
+losses, or suppressions; eight files, 141 blocks, and 1,028 expectations
+resolve to 1,018 passes and ten reviewed skips. Rchk matches the source-bound
+116-block, 397-UP/30-PB policy over 1,305 functions and 201,585 states.
+Discovery alone is not acceptance; r2 owns the active combined-memory result.
 
 ### Historical 2026-08-01 bounded-state discovery
 

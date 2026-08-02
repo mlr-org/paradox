@@ -61,8 +61,37 @@ symlink into the live toolchain. The fixture now uses explicit
 an exact unchanged-mode regression. The accepted mode has been restored. R1
 is preflight diagnostic evidence only; the repaired tooling requires a new
 donor and combined run.
-The combined memory, compatibility, benchmark, and hosted gates remain open
-for this candidate. The following `4e549f3` evidence is historical.
+
+Package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260802T203920Z`, commit
+`c20c1a3e7bb459757d57038c6eaa89daa6d9082c`, tree
+`c8f8ca6e697b4b6bd46761ff408de1e4376c5eab`, contains the repair. Fresh donor
+`release-candidate-f27776e-native-policy-r2` passed all static/focused modes
+and independent validation. Its source-manifest, source-tree, modes-tree,
+completion, and result hashes are
+`b4216e4b508fb7cb0776ced8cd0c1ee7fa19df880d89106d4625ffb819af95fa`,
+`81ada3c322292685931da76f8791ced8ee1275f7ae7ad035ab4a083c87816ecf`,
+`4735b3df6228d1cb13ee1cc9dfb0ec3900cc934228f68ec00a0cc159582506a3`,
+`4fe4b6e06de316fcbf8d91d6ca6f3da365a8f5f691359230137b7d9743cc0285`,
+and
+`56b25164c1497e29f09d991fe5527620e9a6bfed14a63e20f63187f41f082cac`.
+
+`release-candidate-f27776e-memory-r2` passed all three modes and independent
+validation. Completion, result, memory-source-tree, modes-tree, validator, and
+source-archive hashes are
+`62e81f915f39b9500a5a964f99cc2d384765f96d6571185584fe1fe0660b44dd`,
+`b23c6bb8a0d521ea4366d3914eb24529454fea5b2d00a265ab3e36373d499f1d`,
+`18969ef1367133958dc4271c8dc48468f100b2853458e0af07be04751d515877`,
+`98943dfffcb27025d3d098052ddf87c0cadc0cff5b06866aea1fc580612d7344`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`0da3db695f7182fbf6ce436d52f12f3de7f29cb109b582682054484b3b7e5177`.
+GCT covers 111 routines plus four hazards. Valgrind has zero errors, loss, or
+suppressions across eight files, 141 blocks, and 1,028 expectations (1,018
+passes and ten reviewed skips). Rchk reproduces 1,305 functions, 201,585
+states, 116 blocks, 397 UP, and 30 PB. Combined memory is accepted.
+Compatibility, benchmark, and hosted gates remain open for this candidate. The
+following `4e549f3` evidence is historical.
 
 ### Historical `4e549f3` validation record
 
