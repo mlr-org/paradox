@@ -11,9 +11,11 @@ pass. Fresh dual-axis compatibility, mandatory documentation, exact-head
 checks, and the independently sealed benchmark also complete every applicable
 local gate. The broad-corpus and reverse-dependency coordinators retain their
 reviewed semantic nonzero statuses as factual evidence; they are not relabeled
-green. A new direct-child portability companion passes local validation.
-Hosted portability and the manual remote/downstream/publication handoff remain
-pending.**
+green. The first hosted companion for this candidate completed every job
+successfully, but its retained old-Windows evidence failed closed because
+checkout line-ending conversion changed the reviewed runtime-lock bytes. A
+replacement direct-child companion passes local validation. Its hosted
+execution and the manual remote/downstream/publication handoff remain pending.**
 
 Coordinator `.local/verify/runs/release-candidate-a0a9ff3-r1` passed all nine
 tasks in 3,429.2 seconds. Completion, JSON-summary, and TSV-summary SHA-256
@@ -183,18 +185,44 @@ completion/manifest/seal/decision-table hashes are
 and
 `a45d9ed8a91e7344616428b9e6235f7c1b2412ba80ea973622148d7d4067c0cc`.
 
-The active locally validated direct-child companion is
+Initial locally validated direct-child companion
 `refs/paradox-release/portability-harness-da5a500`, commit
 `da5a500936d00f7bc4c44989258d5bc385082252`, tree
-`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, with local tag
-`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole parent is exact candidate
-`a0a9ff3`; its only changed path is `.github/workflows/r-cmd-check.yml`,
-SHA-256
+`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, with tag
+`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`, changed only
+`.github/workflows/r-cmd-check.yml`, SHA-256
 `6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`.
-The inherited old-Windows helper remains exact `100644` blob
-`3b420d542dc5a1ae5506380543159cdea84517fa`. The local release validator and
-actionlint pass. All applicable local gates are complete; hosted execution and
-the manual remote/downstream/publication handoff remain.
+Hosted run `30853585319` at that exact head completed current Windows x86-64,
+macOS ARM64, exact Windows R 3.6.3/Rtools35, and the aggregate required-job
+gate successfully. Offline evidence validation nevertheless rejected the run:
+the reviewed runtime-lock entry is exact Git blob
+`5e9fb484b63cff6ee51ab2101dcaa37defd0e603`, with 7,776-byte raw SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`,
+whereas the retained old-Windows artifact copied the 7,819-byte CRLF checkout,
+SHA-256
+`ff1fa9d5b65a52fc843e25d1de1e2429128cc114a9541f20e92c772f07ae4d4b`.
+This is deterministic harness/evidence-representation failure, not a package
+failure; the green hosted statuses do not close portability, and `da5a500`
+must not be retried unchanged.
+
+The repair and its independent validators are frozen at clean,
+package-facing-source-identical tooling ref
+`refs/paradox-release/portability-tooling-20260803T221658Z`, commit
+`3f48d33821712d3a79626dc4041a792d3efac0c9`, tree
+`5797a2bfb7c24d9e1d8c190af1908ac636786156`. The active locally validated
+replacement is exact direct child
+`refs/paradox-release/portability-harness-00a24cb`, commit
+`00a24cb3a094f08e486e4271d673a13f18df0a90`, tree
+`96fc9ad4fc7d9607f9222bfa2f50b3a19a0ff0b0`, tagged
+`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb`. Its sole changed path remains the
+package-excluded `.github/workflows/r-cmd-check.yml`, SHA-256
+`bb17199b4c6621bcc427961e499e9fc88e00407e48b73789de0447c9c57f1e40`.
+The old-Windows identity step now authenticates and installs the exact raw
+candidate lock blob before the unchanged helper consumes it. Local structural,
+deterministic-renderer, adversarial, offline-verifier, and actionlint checks
+pass. All applicable package-facing local gates remain complete; hosted
+execution of `00a24cb` and the manual remote/downstream/publication handoff
+remain.
 
 ### Historical `f27776e` acceptance record
 
@@ -417,7 +445,8 @@ The hosted old-GCC log also exposed `-Wmissing-braces` at the upgrade-walker
 zero initializer; the replacement uses a C99 designated scalar initializer.
 At that historical point the replacement source was unfrozen and required a
 new candidate and direct-child companion after focused gates converged; active
-candidate `a0a9ff3` and companion `da5a500` now close those local obligations.
+candidate `a0a9ff3` now closes those source obligations, while its hosted
+companion history and active replacement are recorded above.
 
 ### Historical `4e549f3` acceptance record
 
@@ -1649,9 +1678,16 @@ green gates.
   Paradox-2 compatibility/documentation, retain the factual 20-of-28 corpus
   and 10-of-22 reverse conclusions, and independently seal benchmark r2 with
   79 passes, three bounded marginals, and zero failures;
-- [x] create and locally validate exact one-path direct-child Windows
+- [x] create and locally validate initial exact one-path direct-child Windows
   x86-64/macOS ARM64 portability companion `da5a500`;
-- [ ] manually publish and execute companion `da5a500`, then complete the
+- [x] retain hosted run `30853585319` after all four jobs passed but offline
+  evidence validation rejected the CRLF-converted old-Windows runtime lock;
+  classify it as harness diagnostic evidence, not a package failure, and do
+  not retry immutable companion `da5a500`;
+- [x] freeze package-facing-source-identical portability repair tooling at
+  `3f48d33` and locally validate replacement exact one-path direct child
+  `00a24cb` plus tag `paradox-2.0.0-ci-a0a9ff3-harness-00a24cb`;
+- [ ] manually publish and execute companion `00a24cb`, then complete the
   manual downstream/publication/release handoff.
 
 ### State and public model
@@ -2440,12 +2476,15 @@ The release decision remains open for active candidate `a0a9ff3`, but every
 applicable local gate is complete. Its exact compiler/runtime/package and
 memory foundation, fresh dual-axis compatibility and documentation results,
 reviewed factual broad/reverse aggregates, exact-head checks, and independently
-sealed benchmark are accepted. Direct-child companion `da5a500` passes local
-validation; only its hosted Windows/macOS execution and manual coordination
-remain. That work includes user-performed publication of the final Paradox
-refs, hosted workflow dispatch, mark-ready/review/merge/release sequencing for
-the eight downstream PRs, dependency release ordering, the release tag, and
-final release coordination.
+sealed benchmark are accepted. Hosted run `30853585319` completed every job
+against direct child `da5a500`, but its CRLF-converted retained runtime lock
+failed the offline byte-identity gate; it is rejected harness evidence and
+must not be retried unchanged. Replacement direct-child companion `00a24cb`
+passes local validation; only its hosted Windows/macOS execution and manual
+coordination remain. That work includes user-performed publication of the
+final Paradox refs, hosted workflow dispatch, mark-ready/review/merge/release
+sequencing for the eight downstream PRs, dependency release ordering, the
+release tag, and final release coordination.
 
 ## Historical rejected or superseded refs
 

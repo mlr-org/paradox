@@ -360,7 +360,17 @@ The R 3.6.3/Rtools35 job installs no current-index binary or solved dependency
 set. A reviewed PowerShell driver selects the seven-package runtime closure from
 `environment/runtime-r-3.6.3-packages.lock`, downloads a locked primary or
 fallback source URL, verifies every SHA-256 before use, and installs in explicit
-dependency order into a fresh short-path library. Locked `digest` 0.6.39 is a
+dependency order into a fresh short-path library. The reviewed lock has 43 LF
+lines, 7,776 bytes, exact `100644` Git blob
+`5e9fb484b63cff6ee51ab2101dcaa37defd0e603`, and SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`.
+The checkout worktree is not byte authority: the old-Windows identity step
+authenticates that tree entry, blob, and raw digest, writes `git cat-file blob`
+output through a checked temporary file and atomic replacement, then rechecks
+both identities on the final path before PowerShell reads it. Retained evidence
+must contain those exact bytes. Checkout-converted content must fail closed;
+neither the installer nor the offline verifier may normalize line endings.
+Locked `digest` 0.6.39 is a
 sentinel for the ordinary old-toolchain path: its authenticated source uses
 C++11 constructs without declaring `CXX_STD`, while exact R 3.6.3 Windows
 already defines default `CXX` as `g++ -std=gnu++11`. There is therefore no
@@ -519,8 +529,11 @@ run and artifacts.
 The replacement-candidate renderer assumes every executable helper has already
 converged in the immutable candidate. Its direct child changes exactly
 `.github/workflows/r-cmd-check.yml`, while both hosted jobs still authenticate
-the inherited old-Windows installer's exact `100644` tree entry. This keeps the
-parent/diff proof minimal without weakening helper provenance.
+the inherited old-Windows installer's exact `100644` tree entry. The
+old-Windows checkout additionally authenticates the candidate lock's exact
+tree entry, blob, and raw SHA-256 and materializes those blob bytes before the
+installer runs. This keeps the parent/diff proof minimal without weakening
+helper or lock provenance.
 
 The active immutable candidate is
 `refs/paradox-release/candidate-20260803T131049Z`, commit
@@ -530,21 +543,40 @@ installer, bounded R 3.6 Rd-xref policy, and portable old-GCC initializer. Its
 local release-core, combined-memory, dual-axis compatibility, and mandatory
 documentation gates pass at their stated boundaries.
 
-The locally frozen direct child is
-`refs/paradox-release/portability-harness-da5a500`, commit
-`da5a500936d00f7bc4c44989258d5bc385082252`, tree
-`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, with local tag
-`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole parent is `a0a9ff3` and
-its sole changed path is `.github/workflows/r-cmd-check.yml`; that rendered
-workflow's SHA-256 is
-`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`.
-The inherited old-Windows installer remains exact `100644` Git blob
-`3b420d542dc5a1ae5506380543159cdea84517fa`. General and release-mode
-structural validation, deterministic renderer tests, helper-blob adversary,
-offline evidence-verifier fixtures, documentation-economy checks, and
-actionlint all pass locally. Hosted execution remains pending; the only
-current manual publication and dispatch procedure is recorded in
-`compat/downstream-pr-handoff.md`. Agents must not publish or dispatch it.
+Hosted run `30853585319` executed immutable direct child `da5a500`. Its current
+Windows, exact R 3.6.3/Rtools35 Windows, macOS ARM64, and aggregate completion
+jobs all succeeded, and all three package executions completed. The run is
+nevertheless unsealed diagnostic evidence. Windows checkout converted the
+reviewed 43-line LF lock from 7,776 bytes and SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`
+to 7,819 CRLF bytes and SHA-256
+`ff1fa9d5b65a52fc843e25d1de1e2429128cc114a9541f20e92c772f07ae4d4b`.
+Deleting the 43 inserted carriage returns reproduces the reviewed bytes, but
+the offline verifier correctly rejects that byte identity. Retained directory
+`.local/ci/r-cmd-check-30853585319-r1` is diagnostic only; its precomputed
+acceptance receipt and dependent manifests are not proof. `da5a500` is
+immutable failed-evidence history and must not be retried.
+
+The repair is frozen at package-facing-source-identical tooling ref
+`refs/paradox-release/portability-tooling-20260803T221658Z`, commit
+`3f48d33821712d3a79626dc4041a792d3efac0c9`, tree
+`5797a2bfb7c24d9e1d8c190af1908ac636786156`. The active locally frozen direct
+child is `refs/paradox-release/portability-harness-00a24cb`, commit
+`00a24cb3a094f08e486e4271d673a13f18df0a90`, tree
+`96fc9ad4fc7d9607f9222bfa2f50b3a19a0ff0b0`, with tag
+`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb`. Its sole parent is `a0a9ff3` and
+its sole changed path is `.github/workflows/r-cmd-check.yml`; the workflow's
+SHA-256 is
+`bb17199b4c6621bcc427961e499e9fc88e00407e48b73789de0447c9c57f1e40`.
+The inherited installer remains exact `100644` Git blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`; the old-Windows checkout also
+authenticates and materializes the reviewed runtime-lock blob before use.
+General/release structural validation, deterministic renderer tests,
+helper/lock adversaries, offline evidence-verifier fixtures,
+documentation-economy checks, PowerShell parsing, and actionlint pass locally.
+Fresh hosted execution and independent artifact verification remain pending;
+the manual procedure is recorded in `compat/downstream-pr-handoff.md`. Agents
+must not publish or dispatch it.
 
 Hosted branch run `30807900755`, at remote head
 `dfc1a2f8fbf52c569563b48842b2f45be480a5c9`, passed all current Linux,
@@ -554,8 +586,9 @@ candidate's repair: R 3.6 now disables only the redundant Rd-cross-reference
 check so the bounded closure retains exactly its intended missing-Suggests
 NOTE, and the upgrade walker now uses the portable C99 scalar initializer.
 Retrying the old branch or any superseded companion cannot execute those
-repairs. No hosted result below transfers to `a0a9ff3`; only a fresh run whose
-head is `da5a500936d00f7bc4c44989258d5bc385082252` can close hosted portability.
+repairs. No hosted result below transfers to `a0a9ff3`; only a fresh run of the
+active `00a24cb` companion whose independent artifact verifier passes can close
+hosted portability.
 
 For now-superseded candidate
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the first locally validated
@@ -633,9 +666,9 @@ rows and exact old-Windows build/install/load/smoke path. Its old-Windows check
 failed only because the bounded closure produced the expected missing-Suggests
 NOTE plus a redundant Rd-cross-reference NOTE. `582eba8` is therefore also
 immutable failed-harness history and must not be retried. The active replacement
-is the `a0a9ff3`/`da5a500` candidate-companion pair above; obsolete `f27776e`,
-`582eba8`, `198e838`, or `ff3b510` publication and dispatch commands must not be
-executed.
+is the `a0a9ff3`/`00a24cb` candidate-companion pair above; obsolete `f27776e`,
+`582eba8`, `198e838`, `ff3b510`, or `da5a500` publication, dispatch, and retry
+commands must not be executed.
 
 ## Acceptance
 

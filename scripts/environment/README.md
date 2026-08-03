@@ -160,6 +160,23 @@ first-line banner. The workflow and retained `rtools35.tsv`
 also require the official GCC, G++, `objdump`, and Make SHA-256 values recorded
 in `design/portability-ci.md`; a pre-existing look-alike `C:\Rtools` must fail.
 
+The release renderer leaves the ordinary macOS/current-Windows matrix checkout
+block unchanged. Only the exact old-Windows checkout additionally binds
+`environment/runtime-r-3.6.3-packages.lock` as exact `100644` Git blob
+`5e9fb484b63cff6ee51ab2101dcaa37defd0e603`, whose raw bytes have SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`.
+Its normal clean-worktree assertion runs before the intentional rewrite,
+because a Git-clean Windows CRLF checkout becomes worktree-modified when the
+reviewed LF bytes are installed. The step writes `git cat-file blob` output to
+a fresh sibling temporary file, verifies its raw no-filter Git hash and
+SHA-256, changes it to an ordinary `0644` file, atomically moves it over the
+checkout path, and repeats both content checks. An exit trap removes an
+incomplete temporary file. The installer therefore copies and hashes the
+reviewed object bytes rather than checkout-filter output. The offline verifier
+requires this exact old-Windows-only ordering and continues to reject a CRLF
+lock even when its retained self-reported digest agrees with those wrong
+bytes.
+
 ```sh
 Rscript scripts/environment/test-portability-workflow.R "$PARADOX_ROOT" general
 Rscript scripts/environment/test-portability-release-renderer.R
@@ -174,9 +191,18 @@ job and completion job. It checks out itself so a reviewed harness-only helper
 is available from the converged candidate, then proves that it has exactly one
 parent (the immutable candidate), changes exactly the package-excluded
 workflow, and carries the exact reviewed inherited `100644` helper Git tree
-entry. Its offline evidence must contain four successful
-REST jobs (both ordinary platform rows, exact R 3.6.3/Rtools35 Windows, and
-completion) and exactly three platform artifacts.
+entry. Only that old-Windows checkout performs the exact source-lock
+materialization described above; neither ordinary matrix row does. Its offline
+evidence must contain four successful REST jobs (both ordinary platform rows,
+exact R 3.6.3/Rtools35 Windows, and completion) and exactly three platform
+artifacts.
+
+`verifier-acceptance.log` is deterministic, precomputed expected output and is
+itself covered by the retained manifests. It is not proof that verification
+ran successfully. Evidence is promoted only when the current verifier exits
+zero with that exact output and its retained copy independently does the same.
+A failed or interrupted staging directory remains unsealed even if its copied
+`verifier-acceptance.log` says `portability_ci_evidence=passed`.
 
 Render a candidate-bound companion into a new, absent path with:
 
@@ -189,11 +215,14 @@ Rscript scripts/environment/render-portability-release-workflow.R \
 
 The deterministic renderer first validates the general workflow, reduces only
 its ordinary matrix, pins both credential-free checkouts to the triggering
-companion SHA, inserts the same exact candidate-parent/single-path/helper-tree
-assertion into the matrix and old-Windows jobs, and runs the release validator
-before atomically publishing the new file. The path assertion is now the sole
-workflow diff; the helper-tree assertion independently authenticates the
-inherited installer. It refuses an existing or symbolic output.
+companion SHA, and inserts the same exact candidate-parent/single-path/helper-
+tree assertion into the matrix and old-Windows jobs. It derives the lock from
+the candidate tree rather than converted worktree bytes, and extends only the
+old-Windows assertion with the exact lock identity and materialization. It runs
+the release validator before atomically publishing the new file. The workflow
+remains the sole companion diff; the helper and lock tree assertions
+independently authenticate the inherited inputs. The renderer refuses an
+existing or symbolic output.
 
 The old-Windows artifact is the sole check-log exception to final
 `Status: OK`. R 3.6's `_R_CHECK_DEPENDS_ONLY_` isolates execution libraries but

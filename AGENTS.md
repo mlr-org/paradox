@@ -211,25 +211,47 @@ Completion/manifest/seal/decision-table SHA-256 values are
 and
 `a45d9ed8a91e7344616428b9e6235f7c1b2412ba80ea973622148d7d4067c0cc`.
 
-The active local hosted-portability companion is the immutable direct child
-`refs/paradox-release/portability-harness-da5a500`, commit
-`da5a500936d00f7bc4c44989258d5bc385082252`, tree
-`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, with local tag
-`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole changed path is the
-package-excluded `.github/workflows/r-cmd-check.yml`, SHA-256
-`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`,
-so it is package-facing-source identical to `a0a9ff3`. It authenticates the
-candidate's exact old-Windows helper as `100644` blob
-`3b420d542dc5a1ae5506380543159cdea84517fa`. Local structural,
-deterministic-renderer, release-mode, helper adversary, PowerShell parser,
-offline verifier, documentation-economy, and actionlint checks pass.
+Hosted run `30853585319` executed immutable companion `da5a500`. All four REST
+jobs were green: macOS ARM64 `91819262022`, exact Windows R 3.6.3/Rtools35
+`91819262085`, current Windows x86-64 `91819262096`, and aggregate completion
+`91826284167`. All three package executions completed successfully. The run is
+nevertheless unsealed diagnostic evidence: Windows checkout converted the
+reviewed 43-line runtime lock from LF to CRLF before the installer copied and
+hashed it. The candidate lock is 7,776 bytes, exact `100644` Git blob
+`5e9fb484b63cff6ee51ab2101dcaa37defd0e603`, and SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`;
+the retained artifact lock is 7,819 bytes with SHA-256
+`ff1fa9d5b65a52fc843e25d1de1e2429128cc114a9541f20e92c772f07ae4d4b`.
+Removing its 43 inserted carriage returns reproduces the reviewed bytes
+exactly, but normalization is not acceptance. The offline verifier correctly
+rejects the artifact's byte identity. Retained directory
+`.local/ci/r-cmd-check-30853585319-r1` is diagnostic only; its precomputed
+acceptance receipt and dependent manifests must not be cited as proof.
+`da5a500` is immutable failed-evidence history and must not be retried.
 
-Every applicable local gate for exact candidate `a0a9ff3` is complete. Hosted
-Windows x86-64, macOS ARM64, and exact Windows R 3.6.3/Rtools35 execution of
-`da5a500` remain pending, as do the user's manual remote publication actions.
-The `f27776e` compatibility/benchmark evidence and `582eba8` hosted result are
-historical and do not transfer; no release acceptance is claimed before the
-new hosted evidence completes.
+The workflow-only repair is frozen at package-facing-source-identical tooling
+ref `refs/paradox-release/portability-tooling-20260803T221658Z`, commit
+`3f48d33821712d3a79626dc4041a792d3efac0c9`, tree
+`5797a2bfb7c24d9e1d8c190af1908ac636786156`. The active hosted-portability
+companion is exact direct child
+`refs/paradox-release/portability-harness-00a24cb`, commit
+`00a24cb3a094f08e486e4271d673a13f18df0a90`, tree
+`96fc9ad4fc7d9607f9222bfa2f50b3a19a0ff0b0`, with tag
+`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb`. Its sole changed path is the
+package-excluded `.github/workflows/r-cmd-check.yml`, SHA-256
+`bb17199b4c6621bcc427961e499e9fc88e00407e48b73789de0447c9c57f1e40`,
+so it remains package-facing-source identical to `a0a9ff3`. It authenticates
+the inherited installer and the lock's exact tree entry, materializes the
+reviewed Git-blob bytes before old-Windows execution, and verifies both the
+blob and SHA-256 before use. Local structural, deterministic-renderer,
+release-mode, helper/lock adversary, PowerShell parser, offline-verifier,
+documentation-economy, and actionlint checks pass.
+
+Every applicable local package gate for exact candidate `a0a9ff3` remains
+complete. Fresh hosted execution and independent artifact verification of
+`00a24cb` remain, as do the user's manual remote and downstream publication
+actions. No historical `f27776e`, `582eba8`, or `da5a500` result transfers to
+that final hosted conclusion.
 
 ### Historical `f27776e` candidate record
 
@@ -1488,6 +1510,12 @@ SHA-256 source lock, builds and loads the candidate DLL, runs focused semantic
 smoke probes, and performs a bounded runtime-import-only check. It complements
 the complete local R 3.6 behavior stage; it is the compiler/linker/loader and
 old-Windows ABI proof and is mandatory in the release companion.
+The checkout's text-converted worktree copy is not lock authority. Before the
+installer runs, the workflow must authenticate the candidate's exact `100644`
+lock tree entry, Git blob, and raw SHA-256, materialize that blob through a
+checked temporary file and atomic replacement, and recheck both identities on
+the final path. Retained evidence must contain those exact bytes. Never weaken
+this to line-ending normalization in the installer or offline verifier.
 Do not authenticate that lane from paths or self-reported banners alone:
 `design/portability-ci.md` records the official Rtools35 GCC, G++, `objdump`,
 and Make byte digests, and the workflow, source installer, retained
@@ -3904,12 +3932,17 @@ workflow. The converged immutable candidate must already contain every helper
 it will execute. The companion checks out itself, proves it has the candidate
 as its sole parent and the workflow as its sole changed path, authenticates the
 inherited installer helper's exact Git tree entry, and retains the separate
-old-Windows job and both completion layers.
+old-Windows job and both completion layers. The old-Windows identity step also
+authenticates the reviewed runtime lock's exact tree entry, blob, and raw
+SHA-256, then writes the exact blob bytes through a verified temporary file and
+atomic replacement before any installer phase. A green job whose retained lock
+was changed by checkout line-ending conversion is not accepted evidence.
 Create that workflow with
 `scripts/environment/render-portability-release-workflow.R`, never by a
 one-job hand edit: the renderer pins both companion checkouts credential-free,
-inserts both exact parent/diff/helper assertions, and runs the release
-structural validator before publishing an absent output path.
+inserts both exact parent/diff/helper assertions, adds the old-Windows-only
+lock authentication/materialization block, and runs the release structural
+validator before publishing an absent output path.
 
 Profile representative constructor, `check`/`check_dt`/`check_dependencies`,
 `has_deps`, values, domains/params/dependencies, subset/collection, live Shadow

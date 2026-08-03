@@ -38,9 +38,11 @@ errors, losses, or suppressions; the analyzer selection has 1,018 passes and
 ten reviewed skips. Rchk reproduces 1,305 functions, 201,585 states, 116
 blocks, 397 UP, and 30 PB. Fresh compatibility, mandatory documentation,
 exact-head checks, and the independently sealed benchmark complete every
-applicable local gate. A fresh direct-child portability companion passes local
-validation; hosted execution and the manual remote/downstream/publication
-handoff remain pending.
+applicable local gate. The first hosted companion for this candidate completed
+every job, but its old-Windows artifact failed offline byte validation after
+checkout converted the reviewed runtime lock to CRLF. A replacement
+direct-child portability companion passes local validation; its hosted
+execution and the manual remote/downstream/publication handoff remain pending.
 
 Final local compatibility and benchmark execution is owned by clean,
 package-facing-source-identical tooling ref
@@ -164,16 +166,40 @@ are
 and
 `a45d9ed8a91e7344616428b9e6235f7c1b2412ba80ea973622148d7d4067c0cc`.
 
-The active local portability companion is exact direct child
+Initial exact direct child
 `refs/paradox-release/portability-harness-da5a500`, commit
 `da5a500936d00f7bc4c44989258d5bc385082252`, tree
-`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, tagged locally as
-`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole diff is the
+`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, tag
+`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`, changed only the package-excluded
+workflow, SHA-256
+`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`.
+Hosted run `30853585319` at that head completed current Windows x86-64, macOS
+ARM64, exact Windows R 3.6.3/Rtools35, and the aggregate required-job gate
+successfully. It is not accepted portability evidence: offline validation
+found the reviewed 7,776-byte runtime-lock Git blob
+`5e9fb484b63cff6ee51ab2101dcaa37defd0e603`, SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`,
+had been retained from the Windows checkout as a 7,819-byte CRLF file,
+SHA-256
+`ff1fa9d5b65a52fc843e25d1de1e2429128cc114a9541f20e92c772f07ae4d4b`.
+This deterministic evidence-representation defect is not a package failure;
+do not retry immutable companion `da5a500`.
+
+The repair is frozen at clean package-facing-source-identical tooling ref
+`refs/paradox-release/portability-tooling-20260803T221658Z`, commit
+`3f48d33821712d3a79626dc4041a792d3efac0c9`, tree
+`5797a2bfb7c24d9e1d8c190af1908ac636786156`. The active locally validated
+replacement is exact direct child
+`refs/paradox-release/portability-harness-00a24cb`, commit
+`00a24cb3a094f08e486e4271d673a13f18df0a90`, tree
+`96fc9ad4fc7d9607f9222bfa2f50b3a19a0ff0b0`, tag
+`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb`. Its sole diff remains the
 package-excluded workflow, SHA-256
-`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`;
-the inherited helper remains exact `100644` Git blob
-`3b420d542dc5a1ae5506380543159cdea84517fa`. The local release validator and
-actionlint pass. Hosted execution is the remaining portability gate.
+`bb17199b4c6621bcc427961e499e9fc88e00407e48b73789de0447c9c57f1e40`.
+The old-Windows identity step authenticates and installs the exact raw
+candidate lock blob before the unchanged helper reads it; local structural,
+deterministic-renderer, adversarial, offline-verifier, and actionlint checks
+pass. Hosted execution of `00a24cb` is the remaining portability gate.
 
 ### Historical `f27776e` validation record
 
