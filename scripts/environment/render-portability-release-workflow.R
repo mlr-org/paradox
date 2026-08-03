@@ -215,9 +215,10 @@ checkout_block <- c(
     "\"$candidate\" \"$harness\")\""
   ),
   "          readonly changed",
-  "          expected_changed=\"$(printf '%s\\n' \\",
-  "            .github/workflows/r-cmd-check.yml \\",
-  "            scripts/environment/install-hosted-r36-windows.ps1)\"",
+  paste0(
+    "          expected_changed=\"$(printf '%s\\n' ",
+    ".github/workflows/r-cmd-check.yml)\""
+  ),
   "          readonly expected_changed",
   '          test "$changed" = "$expected_changed"',
   '          test -z "$(git status --porcelain=v1 --untracked-files=all)"'

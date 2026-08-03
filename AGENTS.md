@@ -19,10 +19,15 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The active immutable package-facing candidate is
+The most recently fully validated immutable package-facing candidate was
 `refs/paradox-release/candidate-20260802T183338Z`, commit
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
-`95012f6ae771b04fe91afcf30f8df3b78daa701a`. It supersedes `4e549f3`
+`95012f6ae771b04fe91afcf30f8df3b78daa701a`. It is now superseded by the
+unfrozen source at `f977660`: that source stores plain values, rather than
+unforced formal promises, in every package-owned retained callback factory and
+adds the corresponding recursive-migration regressions. No historical
+package-bound acceptance result transfers to those changed R sources. The
+`f27776e` candidate had superseded `4e549f3`
 after the final review batch fixed a deterministic hosted-Windows environment
 reset, one repeated integer-ALTREP row-name length observation, old-R-specific
 test assumptions, and package-owned `p_fct()` transformation promises that R
@@ -246,19 +251,26 @@ select exact R 3.6 x86-64 executables`; the log proves the direct x64 files
 existed but does not identify which `Get-Command` result differed. No R,
 compiler, package build, DLL load, or Paradox test ran. Missing receipts and
 artifact plus aggregate failure are consequences. Do not retry either immutable
-failed companion.
+failed companion. Hosted run `30807910809` against `582eba8` subsequently
+passed current Windows x86-64 and macOS ARM64. Exact Windows R 3.6.3/Rtools35
+built, installed, loaded, smoked, and checked Paradox successfully, but R
+3.6.3 emitted a second environmental Rd-cross-reference NOTE because the
+deliberately bounded seven-package ABI closure omits `lhs` and `spacefillr`.
+The runner correctly rejected that result under its exact one-NOTE contract;
+retrying `582eba8` unchanged is deterministic and useless. The bounded hosted
+check now sets documented R 3.6 switch `_R_CHECK_RD_XREFS_=false`. Full local
+and current hosted checks own documentation cross-reference coverage; the old
+Windows lane continues to require exactly the one complete missing-Suggests
+NOTE. The same hosted log exposed an old-GCC `-Wmissing-braces` warning in the
+upgrade walker initializer; use one C99 designated scalar initializer so all
+remaining members receive standard zero initialization without `memset()` or
+an all-bits-zero pointer assumption.
 
-The replacement invokes authenticated absolute R, Rscript, and Rtools paths,
-uses fresh no-BOM R files instead of multiline `-e`, and carries the corrected
-helper in the companion itself. At the last audit, remote branch `paradox_c`
-was `f5da8a9`; candidate, `198e838`, and `ff3b510` tags were remote, while the
-new `582eba8` tag was absent. Hosted execution remains the sole validation
-gate: the user must publish the updated branch and exact new tag, then dispatch
-one fresh run.
-
-All applicable local gates are complete for `f27776e`. The `4e549f3`
-compatibility, memory, benchmark, and hosted results are historical and do not
-accept `f27776e`.
+The next release candidate must include both the package-facing `f977660`
+callback/migration fixes and the converged old-Windows/warning repairs. It must
+receive fresh package-bound validation before a new direct-child portability
+companion is rendered. `582eba8` and all local `f27776e` package-bound results
+are historical; do not relabel them as acceptance of the replacement payload.
 
 The superseded immutable candidate was
 `refs/paradox-release/candidate-20260801T092108Z`, commit
@@ -3666,7 +3678,10 @@ Never accept a green GitHub matrix label as portability evidence by itself.
 Each platform row must reject a nonzero `rcmdcheck` child status and require one
 sole final `Status: OK`, except for the separate R 3.6.3/Rtools35 row. R 3.6's
 `_R_CHECK_DEPENDS_ONLY_` does not suppress its dependency-inventory NOTE, so
-that runtime-import-only row instead requires child exit zero, exactly one
+that runtime-import-only row sets documented R 3.6 switch
+`_R_CHECK_RD_XREFS_=false`, because its exact ABI closure intentionally omits
+the external documentation targets and full local/current checks own that
+coverage. It then requires child exit zero, exactly one
 missing-Suggests NOTE naming the complete expected nine-package set, no other
 NOTE/WARNING/ERROR/halt, and one sole final `Status: 1 NOTE`. Current Windows
 and macOS retain exact `Status: OK`. An always-run completion job must then
@@ -3675,11 +3690,12 @@ independently requires four successful REST jobs (macOS ARM64, current Windows
 x86-64, exact R 3.6.3/Rtools35 Windows x86-64, and completion), all three exact
 platform artifacts, their check logs, and frozen companion/candidate
 provenance. A
-release-only direct-child companion may change only the workflow and an exact
-package-excluded harness helper. It checks out itself, proves it has the
-immutable candidate as its sole parent, authenticates the helper's exact Git
-tree entry, and retains the separate old-Windows job and both completion
-layers.
+release-only direct-child companion may change only the package-excluded
+workflow. The converged immutable candidate must already contain every helper
+it will execute. The companion checks out itself, proves it has the candidate
+as its sole parent and the workflow as its sole changed path, authenticates the
+inherited installer helper's exact Git tree entry, and retains the separate
+old-Windows job and both completion layers.
 Create that workflow with
 `scripts/environment/render-portability-release-workflow.R`, never by a
 one-job hand edit: the renderer pins both companion checkouts credential-free,

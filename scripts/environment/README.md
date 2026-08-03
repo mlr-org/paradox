@@ -171,11 +171,10 @@ Rscript scripts/environment/test-portability-ci-evidence-verifier.R
 The release-only direct-child companion may reduce the ordinary matrix to
 macOS ARM64 and current Windows x86-64, but it retains the separate old-Windows
 job and completion job. It checks out itself so a reviewed harness-only helper
-repair is available, then proves that it has exactly one parent (the immutable
-candidate), changes exactly the workflow and old-Windows installer helper,
-and carries the exact reviewed `100644` helper Git tree entry. Both changed
-paths are excluded from package builds, so the package-facing source remains
-identical to the candidate. Its offline evidence must contain four successful
+is available from the converged candidate, then proves that it has exactly one
+parent (the immutable candidate), changes exactly the package-excluded
+workflow, and carries the exact reviewed inherited `100644` helper Git tree
+entry. Its offline evidence must contain four successful
 REST jobs (both ordinary platform rows, exact R 3.6.3/Rtools35 Windows, and
 completion) and exactly three platform artifacts.
 
@@ -190,14 +189,19 @@ Rscript scripts/environment/render-portability-release-workflow.R \
 
 The deterministic renderer first validates the general workflow, reduces only
 its ordinary matrix, pins both credential-free checkouts to the triggering
-companion SHA, inserts the same exact candidate-parent/two-path/helper-tree
+companion SHA, inserts the same exact candidate-parent/single-path/helper-tree
 assertion into the matrix and old-Windows jobs, and runs the release validator
-before atomically publishing the new file. It refuses an existing or symbolic
-output.
+before atomically publishing the new file. The path assertion is now the sole
+workflow diff; the helper-tree assertion independently authenticates the
+inherited installer. It refuses an existing or symbolic output.
 
 The old-Windows artifact is the sole check-log exception to final
 `Status: OK`. R 3.6's `_R_CHECK_DEPENDS_ONLY_` isolates execution libraries but
-does not remove the missing-Suggests dependency NOTE. Its verifier therefore
+does not remove the missing-Suggests dependency NOTE. The runner sets the
+documented R 3.6 switch `_R_CHECK_RD_XREFS_=false` only for this bounded ABI
+proof because its exact closure intentionally omits external documentation
+targets; complete local and current hosted checks retain cross-reference
+coverage. Its verifier therefore
 requires process exit zero, exactly one dependency NOTE containing the complete
 nine-package direct-Suggests set, no other NOTE/WARNING/ERROR/halt, and one sole
 final `Status: 1 NOTE`. Current Windows and macOS artifacts remain exact

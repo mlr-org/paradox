@@ -404,7 +404,11 @@ runtime-import-only `R CMD check` deliberately uses `--no-tests --no-examples
 --ignore-vignettes --no-manual`: the local authenticated R 3.6 stage owns complete
 old-runtime behavior, while this hosted lane uniquely proves the old Windows
 compiler/linker/loader ABI. R 3.6's `_R_CHECK_DEPENDS_ONLY_` changes execution
-libraries but does not suppress its dependency-inventory NOTE. Therefore this
+libraries but does not suppress its dependency-inventory NOTE. The driver also
+sets the documented R 3.6 switch `_R_CHECK_RD_XREFS_=false`: the exact bounded
+ABI closure intentionally omits the external `lhs` and `spacefillr`
+documentation targets, while the complete local and current hosted checks own
+cross-reference coverage. Therefore this
 lane requires child exit zero and exactly one final `Status: 1 NOTE`, with the
 package-dependency section naming exactly the nine unavailable direct Suggests
 and no other NOTE, WARNING, ERROR, or halt. Current Windows and macOS still
@@ -512,7 +516,13 @@ tags, dispatch remote workflows, or open PRs. The user performs each remote
 write manually. After publication, agents may read and verify the resulting CI
 run and artifacts.
 
-For active candidate
+The replacement-candidate renderer assumes every executable helper has already
+converged in the immutable candidate. Its direct child changes exactly
+`.github/workflows/r-cmd-check.yml`, while both hosted jobs still authenticate
+the inherited old-Windows installer's exact `100644` tree entry. This keeps the
+parent/diff proof minimal without weakening helper provenance.
+
+For now-superseded candidate
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the first locally validated
 direct-child companion was
 `refs/paradox-release/portability-harness-198e838`, commit
@@ -560,10 +570,10 @@ the architecture, provenance, direct-path, and helper-blob contracts. The full
 helper and all four old-Windows workflow blocks also parse with zero errors
 under official portable PowerShell 7.6.4.
 
-Final validation is frozen at
+Final validation for superseded payload `f27776e` is frozen at
 `refs/paradox-release/portability-tooling-20260803T103512Z`, commit
 `812e5abef05c86f743425f6d984fb146c2827434`, tree
-`e99604f05c10db57406773383d2e0a73746a139c`. The active immutable companion is
+`e99604f05c10db57406773383d2e0a73746a139c`. Its historical immutable companion is
 `refs/paradox-release/portability-harness-582eba8`, commit
 `582eba86e7a05428f63608272c1c6c6e11a894f4`, tree
 `e5ba13f476b4997fea4dbaf5d60369a058ad024c`, with tag
@@ -583,10 +593,12 @@ that complete helper tree entry before execution. General/release validation,
 deterministic rendering, helper-blob adversary, exact committed blobs,
 CI-evidence fixtures, documentation economy, and actionlint pass.
 
-At the last remote audit, branch `paradox_c` was `f5da8a9`; candidate and both
-failed companion tags were remote, while the active `582eba8` tag was absent.
-Only manual branch/tag publication and one fresh hosted execution remain.
-Neither `198e838` nor `ff3b510` may be retried.
+Hosted run `30807910809` later proved that companion's current Windows/macOS
+rows and exact old-Windows build/install/load/smoke path. Its old-Windows check
+failed only because the bounded closure produced the expected missing-Suggests
+NOTE plus a redundant Rd-cross-reference NOTE. `582eba8` is therefore also
+immutable failed-harness history and must not be retried. A fresh candidate
+and single-workflow-path companion are required.
 
 ## Acceptance
 

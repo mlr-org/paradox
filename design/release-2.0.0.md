@@ -2,10 +2,13 @@
 
 ## Status
 
-**The active immutable package-facing candidate is
+**There is currently no active immutable package-facing candidate. The most
+recent fully validated candidate was
 `refs/paradox-release/candidate-20260802T183338Z`, commit
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
-`95012f6ae771b04fe91afcf30f8df3b78daa701a`. Its exact nine-task
+`95012f6ae771b04fe91afcf30f8df3b78daa701a`. Current unfrozen source
+`f977660` fixes retained formal-promise factories and recursive migration and
+therefore supersedes that payload. Its exact nine-task
 `release-core` run passed all harness, differential, API-header, GCC/Clang C23,
 native-release, and supported-runtime rows. The runtime row covers the full
 suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, while native
@@ -13,9 +16,10 @@ release covers current R 4.6.1. Fresh bounded-rchk discovery is source-clean,
 fully reviewed, its regenerated policy is checked in, and the fresh combined
 GCT/Valgrind/rchk run passes independent validation. Fresh dual-axis
 compatibility, documentation, and the sealed benchmark are complete under
-package-facing-source-identical tooling. Hosted Windows/macOS portability is
-the only remaining validation gate; earlier `4e549f3` conclusions are
-historical.**
+package-facing-source-identical tooling, but those package-bound conclusions
+do not transfer to `f977660`. The next candidate must include the current
+package fixes plus the old-Windows bounded-check and old-GCC-warning repairs,
+then receive fresh validation.**
 
 The exact coordinator is
 `.local/verify/runs/release-candidate-f27776e-r1`. Completion, JSON-summary,
@@ -195,11 +199,12 @@ hashes are
 and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
 
-Final portability-validation tooling is frozen at
+Final portability-validation tooling for superseded payload `f27776e` is
+frozen at
 `refs/paradox-release/portability-tooling-20260803T103512Z`, commit
 `812e5abef05c86f743425f6d984fb146c2827434`, tree
-`e99604f05c10db57406773383d2e0a73746a139c`. The active direct-child companion
-is `refs/paradox-release/portability-harness-582eba8`, commit
+`e99604f05c10db57406773383d2e0a73746a139c`. Its historical direct-child
+companion is `refs/paradox-release/portability-harness-582eba8`, commit
 `582eba86e7a05428f63608272c1c6c6e11a894f4`, tree
 `e5ba13f476b4997fea4dbaf5d60369a058ad024c`. It changes exactly the workflow
 and old-Windows installer helper below the package-excluded `.github` and
@@ -221,11 +226,20 @@ used now-superseded `ff3b510`; current Windows and macOS again passed, while
 old-Windows job `91654062556` stopped at `PATH does not select exact R 3.6
 x86-64 executables` before R, a compiler, or Paradox ran. Missing old-Windows
 receipts/artifact and aggregate completion are consequential. Retrying either
-immutable companion cannot test the final repair. At the last audit, branch
-`paradox_c` was remote at `f5da8a9`, all earlier tags were remote, and active
-tag `paradox-2.0.0-ci-f27776e-harness-582eba8` was local only. Publish the
-updated branch and that exact tag, then dispatch one fresh hosted run. All
-applicable local gates are complete.
+immutable companion cannot test its repair. Run `30807910809` against
+`582eba8` then passed current Windows and macOS and completed the exact
+R 3.6.3/Rtools35 build, install, load, smoke, and bounded package check. The
+old-Windows wrapper rejected deterministic `Status: 2 NOTEs`: the expected
+missing-Suggests NOTE plus an Rd-cross-reference NOTE for `lhs` and
+`spacefillr`, intentionally outside the seven-package ABI closure. This is a
+harness-policy failure, not a package failure, and retrying `582eba8` unchanged
+is useless. The replacement sets documented R 3.6 switch
+`_R_CHECK_RD_XREFS_=false` only for that bounded ABI check, preserving the
+exact one-NOTE contract while complete local/current checks own documentation.
+The hosted old-GCC log also exposed `-Wmissing-braces` at the upgrade-walker
+zero initializer; the replacement uses a C99 designated scalar initializer.
+Current source is unfrozen and requires a new candidate and direct-child
+companion after focused gates converge.
 
 ### Historical `4e549f3` acceptance record
 
@@ -2224,16 +2238,15 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The local release decision is `accepted`; the overall release decision remains
-`pending` only on hosted and manual work. Package-facing candidate `f27776e`
-is frozen and all applicable local gates are complete and accepted: nine-task `release-core`
-including every supported R minor, complete reviewed bounded-rchk and combined
-GCT/Valgrind/rchk, refreshed broad and reverse compatibility, mandatory
-documentation, exact ten-package overlays and eight-head source checks on both
-Paradox axes, and the sealed 82-row benchmark. The remaining mandatory actions
-are the exact hosted Windows x86-64/macOS ARM64 portability run from companion
-tag `paradox-2.0.0-ci-f27776e-harness-582eba8` and the user-performed
-publication of the final Paradox refs, hosted workflow dispatch,
+The release decision is reopened. Candidate `f27776e` retains complete
+historical evidence, but current package-facing source `f977660` fixes
+retained callback frames and recursive migration and therefore requires a
+fresh immutable candidate. The converged source must first pass focused
+compiler/package tests, supported runtimes, and affected downstream packages;
+then the package-bound release gates and a new hosted Windows/macOS companion
+must be run as required by their source identities. The remaining manual work
+also includes user-performed publication of the final Paradox refs, hosted
+workflow dispatch,
 mark-ready/review/merge/release sequence for the eight downstream PRs,
 dependency release ordering, release tag, and final release coordination.
 

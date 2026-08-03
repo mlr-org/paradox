@@ -3355,7 +3355,7 @@ static SEXP upgrade_graph_discover_with_boundary_hook(
     SEXP root, SEXP boundary_hook) {
   PROTECT(root);
   PROTECT(boundary_hook);
-  paradox_upgrade_walker_t walker = {0};
+  paradox_upgrade_walker_t walker = {.work_since_interrupt = 0};
 
   walker.seen.capacity = 1024;
   walker.seen.keys = temporary_size_alloc(

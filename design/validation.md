@@ -1482,7 +1482,11 @@ Windows release x86-64, exact Windows x86-64 R 3.6.3/Rtools35, and real macOS
 Apple-silicon ARM64 CI must check the exact candidate source. The old-Windows
 job is a separate source-build/link/load/smoke lane over the authenticated
 seven-package runtime closure; the local real R 3.6.3 stage retains ownership
-of complete old-R behavior. Its R 3.6 dependency check may retain only the
+of complete old-R behavior. Its bounded check sets
+`_R_CHECK_RD_XREFS_=false`; documentation cross-references remain covered by
+the complete local and current hosted package checks rather than by an ABI
+closure that intentionally lacks their external targets. Its R 3.6 dependency
+check may retain only the
 single exact unavailable-Suggests NOTE and final `Status: 1 NOTE`; current
 platform checks retain exact `Status: OK`. The independent local R 3.6.3
 source-package check has the analogous exact four-package missing-Suggests

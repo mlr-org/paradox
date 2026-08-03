@@ -143,6 +143,7 @@ Sys.setenv(
   "_R_CHECK_FORCE_SUGGESTS_" = "false",
   "_R_CHECK_CRAN_INCOMING_" = "false",
   "_R_CHECK_DEPENDS_ONLY_" = "TRUE",
+  "_R_CHECK_RD_XREFS_" = "false",
   NOT_CRAN = "false"
 )
 

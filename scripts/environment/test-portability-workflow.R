@@ -176,9 +176,10 @@ check_release_identity <- function(identity, label) {
     'test "$helper_entry" = "$expected_helper_entry"',
     'changed="$(git diff --name-only "$candidate" "$harness")"',
     "readonly changed",
-    "expected_changed=\"$(printf '%s\\n' \\",
-    ".github/workflows/r-cmd-check.yml \\",
-    "scripts/environment/install-hosted-r36-windows.ps1)\"",
+    paste0(
+      "expected_changed=\"$(printf '%s\\n' ",
+      ".github/workflows/r-cmd-check.yml)\""
+    ),
     "readonly expected_changed",
     'test "$changed" = "$expected_changed"',
     'test -z "$(git status --porcelain=v1 --untracked-files=all)"'
@@ -649,7 +650,18 @@ if (!file.exists(isolation_helper_path) ||
 }
 installer_lines <- readLines(installer_path, warn = FALSE)
 installer <- paste(installer_lines, collapse = "\n")
-runner <- paste(readLines(runner_path, warn = FALSE), collapse = "\n")
+runner_lines <- readLines(runner_path, warn = FALSE)
+runner <- paste(runner_lines, collapse = "\n")
+expected_runner_check_environment <- c(
+  "Sys.setenv(",
+  "R_LIBS_USER = dependency_library,",
+  '"_R_CHECK_FORCE_SUGGESTS_" = "false",',
+  '"_R_CHECK_CRAN_INCOMING_" = "false",',
+  '"_R_CHECK_DEPENDS_ONLY_" = "TRUE",',
+  '"_R_CHECK_RD_XREFS_" = "false",',
+  'NOT_CRAN = "false"',
+  ")"
+)
 trimmed_installer_lines <- trimws(installer_lines)
 expected_r_exe_parameter <- c(
   "[Parameter(Mandatory = $true)]",
@@ -1148,6 +1160,14 @@ if (any(!vapply(
     !grepl('"--no-examples"', runner, fixed = TRUE) ||
     !grepl('"--ignore-vignettes"', runner, fixed = TRUE) ||
     !grepl('"--no-manual"', runner, fixed = TRUE) ||
+    !contains_contiguous(
+      trimws(runner_lines),
+      expected_runner_check_environment
+    ) ||
+    count_fixed(
+      '"_R_CHECK_RD_XREFS_" = "false"',
+      runner
+    ) != 1L ||
     !grepl('"Status: 1 NOTE"', runner, fixed = TRUE) ||
     !grepl(
       "Packages suggested but not available for checking:",

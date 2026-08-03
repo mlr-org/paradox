@@ -795,6 +795,19 @@ verify_portability_ci_evidence <- function(
     )) != 2L) {
     fail("executed workflow is not bound to the exact candidate parent")
   }
+  expected_changed <- paste0(
+    "expected_changed=\"$(printf '%s\\n' ",
+    ".github/workflows/r-cmd-check.yml)\""
+  )
+  if (sum(workflow_lines ==
+        'changed="$(git diff --name-only "$candidate" "$harness")"') != 2L ||
+      sum(workflow_lines == "readonly changed") != 2L ||
+      sum(workflow_lines == expected_changed) != 2L ||
+      sum(workflow_lines == "readonly expected_changed") != 2L ||
+      sum(workflow_lines ==
+        'test "$changed" = "$expected_changed"') != 2L) {
+    fail("executed workflow does not bind the exact one-path companion diff")
+  }
   helper_blob_lines <- grep(
     "^readonly expected_helper_blob=[0-9a-f]{40}$",
     workflow_lines,

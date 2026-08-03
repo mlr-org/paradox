@@ -156,6 +156,44 @@ if (is.null(attr(mutated_helper_validation, "status")) ||
     attr(mutated_helper_validation, "status") == 0L) {
   fail("release validator accepted a changed installer helper blob")
 }
+
+expected_changed_line <- paste0(
+  "          expected_changed=\"$(printf '%s\\n' ",
+  ".github/workflows/r-cmd-check.yml)\""
+)
+expected_changed_positions <- which(
+  mutated_helper_lines == expected_changed_line
+)
+if (length(expected_changed_positions) != 2L) {
+  fail("rendered workflow does not bind two exact one-path diff policies")
+}
+mutated_changed_identity <- file.path(
+  scratch, "mutated-changed-identity.yml"
+)
+mutated_changed_lines <- mutated_helper_lines
+mutated_changed_lines[[expected_changed_positions[[1L]]]] <- paste0(
+  "          expected_changed=\"$(printf '%s\\n' ",
+  "scripts/environment/install-hosted-r36-windows.ps1)\""
+)
+writeLines(mutated_changed_lines, mutated_changed_identity)
+mutated_changed_validation <- suppressWarnings(system2(
+  rscript,
+  args = c(
+    "--vanilla",
+    shQuote(validator),
+    shQuote(root),
+    "release",
+    shQuote(mutated_changed_identity),
+    candidate_tag,
+    candidate_commit
+  ),
+  stdout = TRUE,
+  stderr = TRUE
+))
+if (is.null(attr(mutated_changed_validation, "status")) ||
+    attr(mutated_changed_validation, "status") == 0L) {
+  fail("release validator accepted a changed companion diff policy")
+}
 actionlint <- file.path(root, ".local", "tools", "bin", "actionlint")
 if (!file.exists(actionlint)) {
   fail("repository-local actionlint is required")

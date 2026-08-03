@@ -43,6 +43,22 @@ writeLines(c(
   "on: workflow_dispatch",
   paste0("          readonly candidate=", candidate_commit),
   paste0("          readonly candidate=", candidate_commit),
+  '          changed="$(git diff --name-only "$candidate" "$harness")"',
+  "          readonly changed",
+  paste0(
+    "          expected_changed=\"$(printf '%s\\n' ",
+    ".github/workflows/r-cmd-check.yml)\""
+  ),
+  "          readonly expected_changed",
+  '          test "$changed" = "$expected_changed"',
+  '          changed="$(git diff --name-only "$candidate" "$harness")"',
+  "          readonly changed",
+  paste0(
+    "          expected_changed=\"$(printf '%s\\n' ",
+    ".github/workflows/r-cmd-check.yml)\""
+  ),
+  "          readonly expected_changed",
+  '          test "$changed" = "$expected_changed"',
   "          readonly helper=scripts/environment/install-hosted-r36-windows.ps1",
   paste0("          readonly expected_helper_blob=", strrep("c", 40L)),
   paste0(
@@ -595,6 +611,33 @@ if (status(result) != 0L ||
     result, collapse = "\n"
   ))
 }
+
+workflow_lines <- readLines(workflow, warn = FALSE)
+workflow_changed_positions <- grep(
+  "^          expected_changed=", workflow_lines
+)
+if (length(workflow_changed_positions) != 2L) {
+  fail("synthetic workflow lacks two exact one-path diff policies")
+}
+mutated_workflow <- workflow_lines
+mutated_workflow[[workflow_changed_positions[[1L]]]] <- paste0(
+  "          expected_changed=\"$(printf '%s\\n' ",
+  "scripts/environment/install-hosted-r36-windows.ps1)\""
+)
+writeLines(mutated_workflow, workflow)
+workflow_sha_index <- match("--workflow-sha256", arguments) + 1L
+arguments[[workflow_sha_index]] <- unname(tools::sha256sum(workflow))
+result <- invoke()
+if (status(result) == 0L ||
+    !any(grepl(
+      "does not bind the exact one-path companion diff",
+      result,
+      fixed = TRUE
+    ))) {
+  fail("verifier accepted a forged companion diff policy")
+}
+writeLines(workflow_lines, workflow)
+arguments[[workflow_sha_index]] <- workflow_sha256
 
 old_windows_closure <- file.path(
   fixture,
