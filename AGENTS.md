@@ -2154,9 +2154,12 @@ operator action.
   limitation of the one-way recursive migration operation on exactly R 4.5,
   not of ordinary ParamSet operations, and the package must not manufacture it
   inside its own current objects:
-  the `p_fct()` transformation factory replaces its two already-forced formal
-  cells with direct values, and the non-forcing binding-snapshot regression
-  authenticates both cells. Arbitrary user factories retain the general rule.
+  every package-owned callback factory (the `p_fct()`/log-scale `p_int()`
+  transformation factories, the detached Collection/Shadow plan callbacks, the
+  tuning ParamSet renaming trafo, and the retired-binding diagnostics
+  installed by the transplant) replaces its already-forced formal cells with
+  direct values, and the non-forcing binding-snapshot regressions authenticate
+  those frames. Arbitrary user factories retain the general rule.
   Never force, silently skip, or inspect
   those cells through the three symbols that R 4.5's compiled-code policy
   rejects merely to make migration appear successful. R >= 4.6 uses the

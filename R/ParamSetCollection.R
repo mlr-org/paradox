@@ -6,7 +6,11 @@
 # immediately; there is no second R implementation of collection callback
 # semantics.
 param_set_collection_constraint_closure = function(plan) {
-  force(plan)
+  # Assignment after forcing stores the plan as a direct frame value. These
+  # carriers are retained in user-serialized ParamSets, and a formal promise
+  # cell would manufacture R 4.5's fail-closed recursive-migration promise
+  # boundary inside a package-owned callback (see `.make_p_fct_trafo`).
+  plan = force(plan)
   .paradox_strip_srcref(function(x) {
     .Call(C_param_set_collection_detached_constraint, plan, x)
   })
@@ -25,7 +29,8 @@ param_set_collection_constraint_factory = function(
 }
 
 param_set_collection_extra_trafo_closure = function(plan) {
-  force(plan)
+  # Same direct-value rule as the constraint closure above.
+  plan = force(plan)
   .paradox_strip_srcref(function(x) {
     .Call(C_param_set_collection_detached_extra_trafo, plan, x)
   })

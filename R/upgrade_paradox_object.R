@@ -2505,8 +2505,13 @@
 .paradox_upgrade_retired_token = new.env(parent = emptyenv())
 
 .upgrade_paradox_retired_binding = function(name, owner_package) {
-  force(name)
-  force(owner_package)
+  # Assignment after forcing replaces the formal promise cells with their
+  # realized values. These diagnostic closures are installed into transplanted
+  # shells, so a retained promise cell would manufacture R 4.5's fail-closed
+  # recursive-migration boundary inside every upgraded object (see
+  # `.make_p_fct_trafo`).
+  name = force(name)
+  owner_package = force(owner_package)
   token = .paradox_upgrade_retired_token
   force(token)
   function(value) {

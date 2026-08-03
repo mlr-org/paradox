@@ -2584,3 +2584,40 @@ test_that("legacy dependency table Conditions fail closed per shape", {
     fixed = TRUE
   )
 })
+
+test_that("retired-API diagnostics authenticate and stay promise-free", {
+  # These closures are installed into transplanted shells. Their frames must
+  # hold direct values: the authenticator below reads them through the
+  # non-forcing plain-binding snapshot, and a formal promise cell would both
+  # fail that authentication on every runtime and manufacture the R 4.5
+  # recursive-migration promise boundary inside every upgraded object.
+  binding = paradox:::.upgrade_paradox_retired_binding("values", "paradox")
+  frame = environment(binding)
+  for (cell in c("name", "owner_package", "token")) {
+    snapshot = paradox:::.paradox_plain_binding_snapshot(frame, cell)
+    expect_true(isTRUE(snapshot$ok), info = cell)
+  }
+  expect_true(paradox:::.upgrade_paradox_is_retired_binding(
+    binding,
+    "values",
+    "paradox"
+  ))
+  expect_false(paradox:::.upgrade_paradox_is_retired_binding(
+    binding,
+    "other",
+    "paradox"
+  ))
+  expect_false(paradox:::.upgrade_paradox_is_retired_binding(
+    binding,
+    "values",
+    "elsewhere"
+  ))
+  expect_error(
+    binding(NULL),
+    paste0(
+      "`$values` belonged to the Paradox 1 implementation in package ",
+      "'paradox' and was retired in Paradox 2"
+    ),
+    fixed = TRUE
+  )
+})

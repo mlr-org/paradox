@@ -456,8 +456,12 @@ param_set_to_tune_ps = function(pslike, call, param, usersupplied = TRUE,
 }
 
 .make_tune_param_set_trafo = function(trafo, pname) {
-  force(trafo)
-  force(pname)
+  # Assignment after forcing replaces the formal promise cells with their
+  # realized values. This closure is stored in search spaces and in upgraded
+  # legacy trafos, where a retained promise cell would manufacture R 4.5's
+  # fail-closed recursive-migration boundary (see `.make_p_fct_trafo`).
+  trafo = force(trafo)
+  pname = force(pname)
   .paradox_strip_srcref(function(x, param_set) {
     result = trafo(x)
     if (typeof(result) != "list" || inherits(result, "data.frame") ||

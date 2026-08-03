@@ -1,7 +1,11 @@
 
 .make_p_int_logscale_trafo = function(lower, upper) {
-  force(lower)
-  force(upper)
+  # Assignment after forcing replaces the formal promise cells with their
+  # realized values, so this package-owned callback frame cannot manufacture
+  # R 4.5's fail-closed recursive-migration promise boundary (see
+  # `.make_p_fct_trafo` for the full rationale).
+  lower = force(lower)
+  upper = force(upper)
   .paradox_strip_srcref(
     function(x) as.integer(max(min(exp(x), upper), lower))
   )

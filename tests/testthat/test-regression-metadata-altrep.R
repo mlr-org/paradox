@@ -37,12 +37,6 @@ metadata_altrep_plain_integers = function(n) {
   result
 }
 
-metadata_altrep_plain_doubles = function(n) {
-  result = numeric(n)
-  result[seq_len(n)] = seq_len(n)
-  result
-}
-
 metadata_altrep_plain_characters = function(n) {
   result = character(n)
   result[seq_len(n)] = as.character(seq_len(n))

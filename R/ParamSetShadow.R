@@ -5,7 +5,10 @@
 # merge adapter; it contains no second activity, merge, or result-admission
 # implementation.
 param_set_shadow_constraint_closure = function(plan) {
-  force(plan)
+  # Assignment after forcing stores the plan as a direct frame value; a formal
+  # promise cell would manufacture R 4.5's fail-closed recursive-migration
+  # promise boundary inside a package-owned callback (see `.make_p_fct_trafo`).
+  plan = force(plan)
   .paradox_strip_srcref(function(x) {
     .Call(C_param_set_shadow_constraint, plan, x)
   })

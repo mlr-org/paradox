@@ -258,6 +258,13 @@ test_that("typed special values admit stable ALTREP spellings", {
     numeric_leaf = special_wrapper_recipe(as.numeric(seq_len(size)))
     integer_leaf = special_wrapper_recipe(seq_len(size))
     character_leaf = special_wrapper_recipe(as.character(seq_len(size)))
+    if (getRversion() >= "4.0.0") {
+      # R >= 4.0 keeps the character recipe a deferred string at every
+      # boundary size, proving the loop exercises live ALTREP ingress there.
+      # R 3.6 materializes it while installing names (and wraps all three
+      # kinds from 64 elements), which the same admissions below still cover.
+      expect_true(special_leaf_is_altrep(character_leaf), info = label)
+    }
     numeric_domain = p_dbl(0, 1e6, special_vals = list(numeric_leaf))
     integer_domain = p_int(0L, 1000000L, special_vals = list(integer_leaf))
     character_domain = p_fct(c("a", "b"), special_vals = list(character_leaf))
@@ -385,7 +392,12 @@ test_that("ALTREP specials the value owner cannot materialize stay rejected", {
     # result is an ordinary S4 identity leaf and follows the established
     # pointer-special contract; this runtime cannot spell the rejected case.
     ordinary_s4 = p_fct(c("a", "b"), special_vals = list(s4_altrep))
-    expect_identical(ordinary_s4$special_vals[[1L]][[1L]], s4_altrep)
+    stored_s4 = ordinary_s4$special_vals[[1L]][[1L]]
+    expect_identical(stored_s4, s4_altrep)
+    expect_identical(
+      data.table::address(stored_s4),
+      data.table::address(s4_altrep)
+    )
   }
 
   # The same leaf without the S4 bit is admitted, so the rejection is the S4

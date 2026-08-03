@@ -325,10 +325,13 @@ hazards that Paradox 2 is intended to remove.
   applying the same 64-attribute top-level bound.
 * Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small
   serializable mapping closures directly instead of compiling a fresh
-  `crate()` closure for every Domain instance. The factor factory replaces its
-  two already-forced formal cells with direct values, so Paradox does not
+  `crate()` closure for every Domain instance. Every package-owned callback
+  factory -- the factor and log-scale integer mapping closures, the detached
+  Collection/Shadow plan callbacks, the tuning ParamSet renaming trafo, and
+  the retired-API diagnostics installed by the object upgrader -- replaces its
+  already-forced formal cells with direct values, so Paradox does not
   manufacture an avoidable R 4.5 recursive-migration promise boundary inside
-  its own callback.
+  its own callbacks.
 * Constructor final-state checking, ParamSet construction, and ObjectTuneToken
   Domain admission now share one canonical native built-in Domain-row owner.
   Malformed kind/storage, cargo, grouping, bounds, levels, default, tags,

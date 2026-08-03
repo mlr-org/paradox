@@ -139,6 +139,63 @@ test_that("factory-frame promises use the exact R 4.5 migration boundary", {
   expect_identical(param_set$values, values)
 })
 
+test_that("package-owned callback factories store plain frame bindings", {
+  # The boundary above is documented for arbitrary user factories. The package
+  # must not manufacture it inside its own current objects: every factory
+  # below stores its captures as direct frame values, never as formal promise
+  # cells, so graphs made only of package-manufactured callbacks migrate on
+  # every supported runtime including exactly R 4.5.
+  expect_plain_cells = function(closure, cells) {
+    frame = environment(closure)
+    for (cell in cells) {
+      snapshot = paradox:::.paradox_plain_binding_snapshot(frame, cell)
+      expect_true(isTRUE(snapshot$ok), info = cell)
+    }
+  }
+  # Closures homed below the test frame would drag testthat's own promises
+  # into the walked graph; base-homed callbacks keep the carriers clean.
+  base_trafo = eval(quote(function(x, param_set) x), baseenv())
+  base_constraint = eval(quote(function(x) TRUE), baseenv())
+
+  logscale_set = ps(x = p_int(1, 10, logscale = TRUE))
+  logscale_trafo = logscale_set$params$.trafo[[1L]]
+  expect_plain_cells(logscale_trafo, c("lower", "upper"))
+  expect_identical(logscale_trafo(0), 1L)
+  expect_identical(logscale_trafo(100), 10L)
+
+  member = ps(a = p_dbl())
+  member$extra_trafo = base_trafo
+  member$constraint = base_constraint
+  flattened = c(member, ps(b = p_dbl()))$flatten()
+  expect_plain_cells(flattened$extra_trafo, "plan")
+  expect_plain_cells(flattened$constraint, "plan")
+  expect_true(flattened$test(list(a = 0.5, b = 0.5)))
+
+  shadow_origin = ps(hidden = p_int(), x = p_dbl())
+  shadow_origin$values = list(hidden = 2L)
+  shadow_origin$constraint = base_constraint
+  detached_shadow = ParamSetShadow$new(shadow_origin, "hidden")$flatten()
+  expect_plain_cells(detached_shadow$constraint, "plan")
+  expect_true(detached_shadow$test(list(x = 0.5)))
+
+  tuned = ps(a = p_int(1, 1000))
+  tuned$values$a = to_tune(ps(a = p_int(1, 5)))
+  search_space = tuned$search_space()
+  expect_plain_cells(search_space$extra_trafo, "plan")
+  renaming = paradox:::.make_tune_param_set_trafo(identity, "a")
+  expect_plain_cells(renaming, c("trafo", "pname"))
+  expect_identical(renaming(list(b = 2L), NULL), list(a = 2L))
+
+  for (carrier in list(
+    list(logscale_set),
+    list(flattened),
+    list(detached_shadow),
+    list(search_space)
+  )) {
+    expect_identical(upgrade_paradox_object_graph(carrier), carrier)
+  }
+})
+
 test_that("current ParamSet stubs bypass historical migration gateways", {
   parameter_set = ps(x = p_dbl())
   stub = paste(deparse(body(parameter_set$ids)), collapse = "\n")
