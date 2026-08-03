@@ -527,6 +527,32 @@ pass. Existing remote jobs ran stale SHA `67ec356`; their old-Windows
 `R_HOME` failure is deterministic old-harness evidence and must not be
 restarted. Only a fresh dispatch at the harness tag can close portability.
 
+Hosted run `30793059118` executed that exact `198e838` companion. Current
+Windows x86-64 and macOS ARM64 passed, but the exact R 3.6.3 job failed in
+toolchain preflight before building or loading Paradox. Pinned `setup-r` puts
+`C:\R\bin` on `PATH`; R 3.6's top-level Windows `Rfe.exe` launcher reconstructs
+a `cmd.exe` command, does not escape embedded double quotes, and cannot
+faithfully relay the workflow's multiline `Rscript.exe -e` operand. R therefore
+received an empty expression and stopped with `option '-e' requires a non-empty
+argument`. The missing receipts, artifact, and aggregate failure are expected
+consequences of that primary stop. This is deterministic harness evidence;
+retrying `198e838` cannot test a repair.
+
+The corrected old-Windows policy bypasses `Rfe.exe`: every phase selects and
+checks the exact installed `C:\R\bin\x64` applications before launching R.
+Workflow-owned architecture and provenance expressions are written as fresh
+UTF-8-without-BOM files, executed by the direct x86-64 `Rscript.exe`, and
+removed before the phase can pass. The closure phase prepends the same exact
+directory, explicitly selects PowerShell's standard native-argument mode, and
+reauthenticates both applications before the locked installer resolves its
+reviewed two `-e` calls. Their structured arguments therefore reach the real
+Rscript executable rather than the lossy forwarding launcher. Structural
+tests inventory every such installer call, reject any workflow `-e` call,
+require the direct executable path in every phase, and adversarially restore
+empty architecture and provenance expressions. A new immutable direct-child
+companion and fresh hosted run are required; `198e838` remains failed harness
+history.
+
 ## Acceptance
 
 Portability is accepted only when the local R matrix, pinned-header/symbol and

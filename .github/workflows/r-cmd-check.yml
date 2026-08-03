@@ -176,16 +176,24 @@ jobs:
             -WorkRoot "$env:PARADOX_R36_WORK" `
             -Phase toolchain `
             -Initialize
+          # R 3.6's top-level Windows launchers rebuild a cmd.exe command and
+          # cannot faithfully relay general native arguments. Select the exact
+          # installed x86-64 executables directly in every old-Windows phase.
+          $rBin = "C:\R\bin\x64"
+          $rExe = Join-Path $rBin "R.exe"
+          $rScriptExe = Join-Path $rBin "Rscript.exe"
           $rtools = "C:\Rtools"
           $gcc = Join-Path $rtools "mingw_64\bin\gcc.exe"
           $gxx = Join-Path $rtools "mingw_64\bin\g++.exe"
           $objdump = Join-Path $rtools "mingw_64\bin\objdump.exe"
           $make = Join-Path $rtools "bin\make.exe"
-          if (-not (Test-Path -LiteralPath $gcc -PathType Leaf) -or
+          if (-not (Test-Path -LiteralPath $rExe -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $rScriptExe -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $gcc -PathType Leaf) -or
               -not (Test-Path -LiteralPath $gxx -PathType Leaf) -or
               -not (Test-Path -LiteralPath $objdump -PathType Leaf) -or
               -not (Test-Path -LiteralPath $make -PathType Leaf)) {
-            throw "setup-r did not install the exact Rtools35 x86-64 toolchain"
+            throw "setup-r did not install the exact R 3.6/Rtools35 x86-64 toolchain"
           }
           $expectedToolHashes = @(
             [pscustomobject]@{
@@ -214,22 +222,60 @@ jobs:
             }
           }
           $env:PATH = (
-            "$rtools\bin;$rtools\mingw_64\bin;" + $env:PATH
+            "$rBin;$rtools\bin;$rtools\mingw_64\bin;" + $env:PATH
           )
           @(
+            $rBin,
             "$rtools\bin",
             "$rtools\mingw_64\bin"
           ) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-          & Rscript.exe --vanilla -e '
-            stopifnot(
-              identical(as.character(getRversion()), "3.6.3"),
-              identical(.Platform$OS.type, "windows"),
-              grepl("^(x86_64|x64)$", tolower(R.version$arch))
-            )
-            cat(R.version$version.string, "\n", R.version$platform, "\n")
-          '
-          if ($LASTEXITCODE -ne 0) {
+          $resolvedR = (
+            Get-Command R.exe -CommandType Application -ErrorAction Stop
+          ).Source
+          $resolvedRScript = (
+            Get-Command Rscript.exe -CommandType Application -ErrorAction Stop
+          ).Source
+          if (-not [String]::Equals(
+              [IO.Path]::GetFullPath($resolvedR),
+              [IO.Path]::GetFullPath($rExe),
+              [StringComparison]::OrdinalIgnoreCase
+          ) -or -not [String]::Equals(
+              [IO.Path]::GetFullPath($resolvedRScript),
+              [IO.Path]::GetFullPath($rScriptExe),
+              [StringComparison]::OrdinalIgnoreCase
+          )) {
+            throw "PATH does not select exact R 3.6 x86-64 executables"
+          }
+
+          $rArchitectureScript = Join-Path `
+            $env:TEMP `
+            "verify-r36-architecture.R"
+          if (Test-Path -LiteralPath $rArchitectureScript) {
+            throw "R architecture probe path is not fresh"
+          }
+          $rArchitectureCode = @(
+            'stopifnot(',
+            '  identical(as.character(getRversion()), "3.6.3"),',
+            '  identical(.Platform$OS.type, "windows"),',
+            '  grepl("^(x86_64|x64)$", tolower(R.version$arch))',
+            ')',
+            'cat(R.version$version.string, "\n", R.version$platform, "\n")'
+          )
+          $utf8NoBom = New-Object Text.UTF8Encoding($false)
+          [IO.File]::WriteAllLines(
+            $rArchitectureScript,
+            $rArchitectureCode,
+            $utf8NoBom
+          )
+          try {
+            & $rScriptExe --vanilla $rArchitectureScript
+            $rArchitectureStatus = $LASTEXITCODE
+          } finally {
+            Remove-Item -LiteralPath $rArchitectureScript -Force
+          }
+          if ($rArchitectureStatus -ne 0 -or
+              (Test-Path -LiteralPath $rArchitectureScript)) {
             throw "exact R 3.6.3 architecture verification failed"
           }
 
@@ -300,12 +346,12 @@ jobs:
               throw "$Label does not select the exact Rtools35 executable"
             }
           }
-          $rConfiguredCc = (& R.exe CMD config CC | Out-String).Trim()
+          $rConfiguredCc = (& $rExe CMD config CC | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) {
             throw "R CMD config CC failed"
           }
           Assert-RConfiguredToolPath $rConfiguredCc $gcc "R CMD config CC"
-          $rConfiguredCxx = (& R.exe CMD config CXX | Out-String).Trim()
+          $rConfiguredCxx = (& $rExe CMD config CXX | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) {
             throw "R CMD config CXX failed"
           }
@@ -318,13 +364,13 @@ jobs:
             $rConfiguredCxxTokens[0] `
             $gxx `
             "R CMD config CXX"
-          $rConfiguredCxx11 = (& R.exe CMD config CXX11 | Out-String).Trim()
+          $rConfiguredCxx11 = (& $rExe CMD config CXX11 | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) {
             throw "R CMD config CXX11 failed"
           }
           Assert-RConfiguredToolPath $rConfiguredCxx11 $gxx "R CMD config CXX11"
           $rConfiguredCxx11Std = (
-            & R.exe CMD config CXX11STD | Out-String
+            & $rExe CMD config CXX11STD | Out-String
           ).Trim()
           if ($LASTEXITCODE -ne 0 -or
               $rConfiguredCxx11Std -cne "-std=gnu++11") {
@@ -347,6 +393,34 @@ jobs:
             -IsolationRoot "$env:PARADOX_R36_ISOLATION" `
             -WorkRoot "$env:PARADOX_R36_WORK" `
             -Phase closure
+          if (-not (Get-Variable `
+              -Name PSNativeCommandArgumentPassing `
+              -ErrorAction SilentlyContinue)) {
+            throw "pwsh lacks explicit native argument-passing control"
+          }
+          $PSNativeCommandArgumentPassing = "Standard"
+          if ($PSNativeCommandArgumentPassing -cne "Standard") {
+            throw "pwsh did not select standard native argument passing"
+          }
+          $rBin = "C:\R\bin\x64"
+          $env:PATH = "$rBin;" + $env:PATH
+          $resolvedR = (
+            Get-Command R.exe -CommandType Application -ErrorAction Stop
+          ).Source
+          $resolvedRScript = (
+            Get-Command Rscript.exe -CommandType Application -ErrorAction Stop
+          ).Source
+          if (-not [String]::Equals(
+              [IO.Path]::GetFullPath($resolvedR),
+              [IO.Path]::GetFullPath((Join-Path $rBin "R.exe")),
+              [StringComparison]::OrdinalIgnoreCase
+          ) -or -not [String]::Equals(
+              [IO.Path]::GetFullPath($resolvedRScript),
+              [IO.Path]::GetFullPath((Join-Path $rBin "Rscript.exe")),
+              [StringComparison]::OrdinalIgnoreCase
+          )) {
+            throw "closure phase does not select exact R 3.6 x86-64 executables"
+          }
           & "$env:GITHUB_WORKSPACE\scripts\environment\install-hosted-r36-windows.ps1" `
             -RepositoryRoot "$env:GITHUB_WORKSPACE" `
             -WorkRoot "$env:PARADOX_R36_WORK" `
@@ -361,7 +435,11 @@ jobs:
             -IsolationRoot "$env:PARADOX_R36_ISOLATION" `
             -WorkRoot "$env:PARADOX_R36_WORK" `
             -Phase candidate
-          & Rscript.exe --vanilla `
+          $rScriptExe = "C:\R\bin\x64\Rscript.exe"
+          if (-not (Test-Path -LiteralPath $rScriptExe -PathType Leaf)) {
+            throw "candidate phase lacks exact R 3.6 x86-64 Rscript"
+          }
+          & $rScriptExe --vanilla `
             "$env:GITHUB_WORKSPACE\scripts\environment\run-hosted-r36-windows.R" `
             "$env:GITHUB_WORKSPACE" `
             "$env:PARADOX_R36_WORK" `
@@ -419,10 +497,34 @@ jobs:
               $checkedOut -notmatch "^[0-9a-f]{40}$") {
             throw "could not retain the exact checked-out commit"
           }
-          $rPlatform = (& Rscript.exe --vanilla -e '
-            cat(R.version$platform)
-          ').Trim()
-          if ($LASTEXITCODE -ne 0 -or -not $rPlatform) {
+          $rScriptExe = "C:\R\bin\x64\Rscript.exe"
+          if (-not (Test-Path -LiteralPath $rScriptExe -PathType Leaf)) {
+            throw "provenance phase lacks exact R 3.6 x86-64 Rscript"
+          }
+          $rPlatformScript = Join-Path `
+            $env:RUNNER_TEMP `
+            "retain-r36-platform.R"
+          if (Test-Path -LiteralPath $rPlatformScript) {
+            throw "R platform probe path is not fresh"
+          }
+          $encoding = New-Object Text.UTF8Encoding($false)
+          [IO.File]::WriteAllText(
+            $rPlatformScript,
+            'cat(R.version$platform)',
+            $encoding
+          )
+          try {
+            $rPlatformOutput = @(
+              & $rScriptExe --vanilla $rPlatformScript
+            )
+            $rPlatformStatus = $LASTEXITCODE
+          } finally {
+            Remove-Item -LiteralPath $rPlatformScript -Force
+          }
+          $rPlatform = ($rPlatformOutput -join "`n").Trim()
+          if ($rPlatformStatus -ne 0 -or
+              (Test-Path -LiteralPath $rPlatformScript) -or
+              -not $rPlatform) {
             throw "could not retain the exact R platform"
           }
           $lines = @(
@@ -433,7 +535,6 @@ jobs:
             "runner_arch=$env:RUNNER_ARCH",
             "r_platform=$rPlatform"
           )
-          $encoding = New-Object Text.UTF8Encoding($false)
           [IO.File]::WriteAllLines(
             (Join-Path $directory "provenance.txt"),
             $lines,

@@ -292,6 +292,31 @@ if (length(old_setup) != 1L ||
 toolchain <- old_step_by_name("Verify exact R 3.6 Windows toolchain")
 closure <- old_step_by_name("Install exact R 3.6 source closure")
 old_check <- old_step_by_name("Build, smoke, and check on R 3.6 Windows")
+toolchain_lines <- trimws(strsplit(
+  toolchain$run, "\n", fixed = TRUE
+)[[1L]])
+if (sum(toolchain_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
+    sum(toolchain_lines ==
+      "Get-Command R.exe -CommandType Application -ErrorAction Stop") != 1L ||
+    sum(toolchain_lines ==
+      "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop") !=
+      1L ||
+    sum(toolchain_lines == "$rArchitectureScript = Join-Path `") != 1L ||
+    sum(toolchain_lines ==
+      "& $rScriptExe --vanilla $rArchitectureScript") != 1L ||
+    !grepl("[IO.File]::WriteAllLines(", toolchain$run, fixed = TRUE) ||
+    !grepl("Text.UTF8Encoding($false)", toolchain$run, fixed = TRUE) ||
+    !grepl(
+      "Remove-Item -LiteralPath $rArchitectureScript -Force",
+      toolchain$run,
+      fixed = TRUE
+    ) ||
+    grepl(" --vanilla -e", toolchain$run, fixed = TRUE)) {
+  fail(
+    "old-Windows architecture admission does not use one fresh, no-BOM ",
+    "file through the direct x86-64 Rscript"
+  )
+}
 isolation_helper_literal <-
   "scripts\\environment\\enter-hosted-r36-windows.ps1"
 isolation_calls <- c(
@@ -299,6 +324,46 @@ isolation_calls <- c(
   closure = closure$run,
   candidate = old_check$run
 )
+closure_lines <- trimws(strsplit(closure$run, "\n", fixed = TRUE)[[1L]])
+old_check_lines <- trimws(strsplit(
+  old_check$run, "\n", fixed = TRUE
+)[[1L]])
+if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
+    sum(closure_lines ==
+      '$PSNativeCommandArgumentPassing = "Standard"') != 1L ||
+    sum(closure_lines ==
+      'if ($PSNativeCommandArgumentPassing -cne "Standard") {') != 1L ||
+    sum(closure_lines == '$env:PATH = "$rBin;" + $env:PATH') != 1L ||
+    sum(closure_lines ==
+      "Get-Command R.exe -CommandType Application -ErrorAction Stop") != 1L ||
+    sum(closure_lines ==
+      "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop") !=
+      1L ||
+    sum(old_check_lines ==
+      '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
+    sum(old_check_lines == "& $rScriptExe --vanilla `") != 1L ||
+    any(grepl(" --vanilla -e", c(closure$run, old_check$run), fixed = TRUE)) ||
+    any(grepl("& R.exe", isolation_calls, fixed = TRUE)) ||
+    any(grepl("& Rscript.exe", isolation_calls, fixed = TRUE))) {
+  fail("old-Windows closure/candidate phases can traverse the Rfe wrapper")
+}
+closure_installer_position <- grep(
+  "install-hosted-r36-windows.ps1", closure_lines, fixed = TRUE
+)
+closure_admission_positions <- c(
+  which(closure_lines == '$PSNativeCommandArgumentPassing = "Standard"'),
+  which(closure_lines == '$rBin = "C:\\R\\bin\\x64"'),
+  which(closure_lines == '$env:PATH = "$rBin;" + $env:PATH'),
+  which(closure_lines ==
+    "Get-Command R.exe -CommandType Application -ErrorAction Stop"),
+  which(closure_lines ==
+    "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop")
+)
+if (length(closure_installer_position) != 1L ||
+    length(closure_admission_positions) != 5L ||
+    any(closure_admission_positions >= closure_installer_position)) {
+  fail("old-Windows direct-R admission does not precede closure execution")
+}
 expected_phases <- names(isolation_calls)
 if (any(!vapply(
       isolation_calls,
@@ -406,8 +471,20 @@ if (!file.exists(isolation_helper_path) ||
     nzchar(Sys.readlink(isolation_helper_path))) {
   fail("old-Windows hostile-environment isolation helper is absent or symbolic")
 }
-installer <- paste(readLines(installer_path, warn = FALSE), collapse = "\n")
+installer_lines <- readLines(installer_path, warn = FALSE)
+installer <- paste(installer_lines, collapse = "\n")
 runner <- paste(readLines(runner_path, warn = FALSE), collapse = "\n")
+trimmed_installer_lines <- trimws(installer_lines)
+if (sum(trimmed_installer_lines ==
+      '$RExe = (Get-Command "R.exe" -ErrorAction Stop).Source') != 1L ||
+    sum(trimmed_installer_lines ==
+      '$RScriptExe = (Get-Command "Rscript.exe" -ErrorAction Stop).Source') !=
+      1L ||
+    sum(trimmed_installer_lines == '"-e",') != 2L ||
+    sum(trimmed_installer_lines == "-FilePath $RScriptExe `") != 2L ||
+    grepl("$env:PATH", installer, fixed = TRUE)) {
+  fail("old-Windows installer native R/Rscript inventory changed")
+}
 isolation_helper_lines <- readLines(isolation_helper_path, warn = FALSE)
 isolation_helper <- paste(isolation_helper_lines, collapse = "\n")
 reset_start <- which(trimws(isolation_helper_lines) ==
@@ -784,6 +861,28 @@ if (any(!vapply(
 
 old_provenance <- old_step_by_name("Retain old-Windows provenance")
 old_upload <- old_step_by_name("Upload old-Windows evidence")
+old_provenance_lines <- trimws(strsplit(
+  old_provenance$run, "\n", fixed = TRUE
+)[[1L]])
+if (sum(old_provenance_lines ==
+      '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
+    sum(old_provenance_lines == "$rPlatformScript = Join-Path `") != 1L ||
+    sum(old_provenance_lines ==
+      "& $rScriptExe --vanilla $rPlatformScript") != 1L ||
+    !grepl("[IO.File]::WriteAllText(", old_provenance$run, fixed = TRUE) ||
+    !grepl("Text.UTF8Encoding($false)", old_provenance$run, fixed = TRUE) ||
+    !grepl(
+      "Remove-Item -LiteralPath $rPlatformScript -Force",
+      old_provenance$run,
+      fixed = TRUE
+    ) ||
+    grepl(" --vanilla -e", old_provenance$run, fixed = TRUE) ||
+    grepl("& Rscript.exe", old_provenance$run, fixed = TRUE)) {
+  fail(
+    "old-Windows provenance does not use one fresh, no-BOM file through ",
+    "the direct x86-64 Rscript"
+  )
+}
 if (!identical(old_provenance[["if"]], "always()") ||
     !identical(old_provenance$shell, "pwsh") ||
     !grepl("checked_out_sha=", old_provenance$run, fixed = TRUE) ||
