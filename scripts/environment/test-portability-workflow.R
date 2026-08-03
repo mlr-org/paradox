@@ -386,6 +386,10 @@ if (sum(toolchain_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
       "^\\$env:PATH[[:space:]]*=",
       toolchain_lines
     )) != 1L ||
+    sum(grepl(
+      "^\\$rArchitectureScript[[:space:]]*=",
+      toolchain_lines
+    )) != 1L ||
     sum(toolchain_lines ==
       "Get-Command R.exe -CommandType Application -ErrorAction Stop") != 1L ||
     sum(toolchain_lines ==
@@ -469,6 +473,10 @@ if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
     )) != 1L ||
     sum(closure_lines ==
       '$PSNativeCommandArgumentPassing = "Standard"') != 1L ||
+    sum(grepl(
+      "^\\$PSNativeCommandArgumentPassing[[:space:]]*=",
+      closure_lines
+    )) != 1L ||
     sum(closure_lines ==
       'if ($PSNativeCommandArgumentPassing -cne "Standard") {') != 1L ||
     sum(closure_lines == '$env:PATH = "$rBin;" + $env:PATH') != 1L ||
@@ -1042,6 +1050,10 @@ if (sum(old_provenance_lines ==
       '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
     sum(grepl(
       "^\\$rScriptExe[[:space:]]*=",
+      old_provenance_lines
+    )) != 1L ||
+    sum(grepl(
+      "^\\$rPlatformScript[[:space:]]*=",
       old_provenance_lines
     )) != 1L ||
     sum(old_provenance_lines == "$rPlatformScript = Join-Path `") != 1L ||
