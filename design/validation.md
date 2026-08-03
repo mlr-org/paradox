@@ -168,11 +168,16 @@ Completion/manifest/seal/decisions hashes are
 `4af296b0a895470efb927c6f39f8de32872749029af14a272d4c3d05ccaab524`,
 and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
-All applicable local gates are complete. Active portability companion
-`refs/paradox-release/portability-harness-198e838` changes only the rendered
-workflow and passes all local structural checks; fresh hosted execution is the
-only remaining validation gate. The following `4e549f3` evidence is
-historical.
+All applicable local gates are complete. Final portability tooling
+`refs/paradox-release/portability-tooling-20260803T084137Z` at `a2af703`
+validates active companion `refs/paradox-release/portability-harness-ff3b510`
+at `ff3b510`; it changes only the rendered workflow, SHA-256
+`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
+Hosted run `30793059118` against superseded `198e838` passed current Windows
+and macOS but stopped the old-Windows job in launcher preflight before Paradox
+was built or loaded. Retrying it cannot test the correction. Fresh hosted
+execution of `ff3b510` is the only remaining validation gate. The following
+`4e549f3` evidence is historical.
 
 ### Historical `4e549f3` validation record
 

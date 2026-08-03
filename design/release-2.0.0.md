@@ -195,17 +195,27 @@ hashes are
 and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
 
-The active direct-child portability companion is
-`refs/paradox-release/portability-harness-198e838`, commit
-`198e838566579806d6c3bd48e1327c293473257b`, tree
-`0ff93580b05e1e37994d301922f77490b2a5bb81`; it changes only the workflow,
+Final portability-validation tooling is frozen at
+`refs/paradox-release/portability-tooling-20260803T084137Z`, commit
+`a2af7030a4fe3e1109b8be2200aa61e7566dc0f6`, tree
+`62b9a6ca0e99949361db862546a94d057ff5b0b0`; the workflow fix itself landed at
+`102e68c2f4f073d2573bc81e89172d9f202adbe5`. The active direct-child companion
+is `refs/paradox-release/portability-harness-ff3b510`, commit
+`ff3b510bb31404d586c71531771f38715e3db763`, tree
+`387a8c724dddfcd18a2b21ccdfc940776c2534d6`. It changes only the workflow,
 whose rendered SHA-256 is
-`5a60156cb79e403dcc38fceeb075d223a4397dab4a74989b36a745ccadfebec0`.
-Local candidate/harness tags are `paradox-2.0.0-ci-f27776e` and
-`paradox-2.0.0-ci-f27776e-harness-198e838`. All local structural portability
-checks pass. Existing hosted jobs ran stale remote SHA `67ec356` and must not
-be restarted; publish these exact refs and dispatch one fresh hosted run.
-All applicable local gates are complete.
+`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
+All local structural portability checks pass under that tooling.
+
+Hosted run `30793059118` used superseded companion `198e838`. Current Windows
+and macOS passed; exact Windows R 3.6.3 failed in toolchain preflight before
+building or loading Paradox because top-level `Rfe.exe` lost a multiline `-e`
+operand. Missing receipts, artifact upload, and aggregate completion are
+consequential. Retrying that immutable companion cannot test the repair. At the
+pre-publication audit, the candidate and failed companion tags were remote,
+while active tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` was local only.
+Publish the updated branch and that exact tag, then dispatch one fresh hosted
+run. All applicable local gates are complete.
 
 ### Historical `4e549f3` acceptance record
 
@@ -1387,7 +1397,7 @@ green gates.
   `release-refresh-20260720` bridge overlays for both axes with the final
   ten-package profile, run all eight exact prepared-head source checks, and
   seal the recalibrated benchmark for the superseded `4e549f3` candidate;
-- [x] close the final hosted-Windows environment, integer-ALTREP row-name,
+- [x] close the hosted-Windows `R_HOME` reset, integer-ALTREP row-name,
   old-R fixture, and R-4.5 package-promise review findings; freeze replacement
   candidate `f27776e` at
   `refs/paradox-release/candidate-20260802T183338Z`;
@@ -1407,8 +1417,12 @@ green gates.
   stage;
 - [x] seal the final 82-row `f27776e` benchmark with 78 passes, four bounded
   marginals, and zero failures;
-- [x] create and locally validate direct-child portability companion
-  `198e838` plus exact candidate/harness tags;
+- [x] create and locally validate initial direct-child portability companion
+  `198e838`; retain hosted run `30793059118` as failed-harness evidence after
+  it exposed the R 3.6 top-level launcher boundary;
+- [x] freeze the direct-x86-64-launcher correction and hardened regression
+  tooling at `a2af703`, and locally validate replacement direct-child companion
+  `ff3b510` plus its exact harness tag;
 - [x] run and retain every applicable local gate against `f27776e`, including
   downstream, documentation, benchmark, runtime, and memory stages;
 - [ ] complete the hosted Windows x86-64/macOS ARM64 portability run and the
@@ -2202,8 +2216,9 @@ including every supported R minor, complete reviewed bounded-rchk and combined
 GCT/Valgrind/rchk, refreshed broad and reverse compatibility, mandatory
 documentation, exact ten-package overlays and eight-head source checks on both
 Paradox axes, and the sealed 82-row benchmark. The remaining mandatory actions
-are the exact hosted Windows x86-64/macOS ARM64 portability run and the
-user-performed publication of the final Paradox refs, hosted workflow dispatch,
+are the exact hosted Windows x86-64/macOS ARM64 portability run from companion
+tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` and the user-performed
+publication of the final Paradox refs, hosted workflow dispatch,
 mark-ready/review/merge/release sequence for the eight downstream PRs,
 dependency release ordering, release tag, and final release coordination.
 

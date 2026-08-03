@@ -513,19 +513,15 @@ write manually. After publication, agents may read and verify the resulting CI
 run and artifacts.
 
 For active candidate
-`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the locally validated
-direct-child companion is
+`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the first locally validated
+direct-child companion was
 `refs/paradox-release/portability-harness-198e838`, commit
 `198e838566579806d6c3bd48e1327c293473257b`, tree
 `0ff93580b05e1e37994d301922f77490b2a5bb81`. It changes only
 `.github/workflows/r-cmd-check.yml`; rendered workflow SHA-256 is
 `5a60156cb79e403dcc38fceeb075d223a4397dab4a74989b36a745ccadfebec0`.
-The exact local tags are `paradox-2.0.0-ci-f27776e` and
-`paradox-2.0.0-ci-f27776e-harness-198e838`. General/release workflow
-validation, deterministic rendering, CI-evidence fixtures, and actionlint all
-pass. Existing remote jobs ran stale SHA `67ec356`; their old-Windows
-`R_HOME` failure is deterministic old-harness evidence and must not be
-restarted. Only a fresh dispatch at the harness tag can close portability.
+Its exact candidate and companion tags are remote. Its local structural checks
+passed, but its hosted result below makes it immutable failed-harness history.
 
 Hosted run `30793059118` executed that exact `198e838` companion. Current
 Windows x86-64 and macOS ARM64 passed, but the exact R 3.6.3 job failed in
@@ -548,10 +544,26 @@ reauthenticates both applications before the locked installer resolves its
 reviewed two `-e` calls. Their structured arguments therefore reach the real
 Rscript executable rather than the lossy forwarding launcher. Structural
 tests inventory every such installer call, reject any workflow `-e` call,
-require the direct executable path in every phase, and adversarially restore
-empty architecture and provenance expressions. A new immutable direct-child
-companion and fresh hosted run are required; `198e838` remains failed harness
-history.
+require the direct executable path in every phase, bind fresh no-BOM probe
+construction, status capture, cleanup, and exact path reauthentication, and
+adversarially mutate the architecture payload and empty the provenance payload.
+
+The workflow correction landed at
+`102e68c2f4f073d2573bc81e89172d9f202adbe5`. Hardened validation is frozen at
+`refs/paradox-release/portability-tooling-20260803T084137Z`, commit
+`a2af7030a4fe3e1109b8be2200aa61e7566dc0f6`, tree
+`62b9a6ca0e99949361db862546a94d057ff5b0b0`. The active immutable direct-child
+companion is `refs/paradox-release/portability-harness-ff3b510`, commit
+`ff3b510bb31404d586c71531771f38715e3db763`, tree
+`387a8c724dddfcd18a2b21ccdfc940776c2534d6`, with tag
+`paradox-2.0.0-ci-f27776e-harness-ff3b510`. It changes only the workflow; its
+rendered SHA-256 is
+`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
+General and release validation, deterministic rendering, exact committed-byte
+comparison, CI-evidence fixtures, and actionlint pass. The remote branch was
+`3a4f2f5` at the last audit and the new companion tag was absent. Only its
+manual publication and a fresh hosted execution remain; `198e838` must not be
+retried.
 
 ## Acceptance
 

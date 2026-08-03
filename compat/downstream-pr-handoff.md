@@ -73,28 +73,53 @@ history and must not be presented as active-candidate proof.
 
 ## Manual hosted-portability handoff
 
-The exact candidate and direct-child harness tags exist locally and remain
-absent from the remote. The current remote Paradox branch still names stale
-SHA `67ec356`; its deterministic old-Windows `R_HOME` failure cannot exercise
-the fix. Do not restart that run. After reviewing the refs, the user can
-publish the final branch and tags atomically and dispatch a fresh run with:
+Candidate tag `paradox-2.0.0-ci-f27776e` and failed companion tag
+`paradox-2.0.0-ci-f27776e-harness-198e838` are already remote. Hosted run
+`30793059118` proved that unchanged first companion cannot relay a multiline
+`-e` operand through R 3.6's top-level `Rfe.exe`; current Windows and macOS
+passed, but old Windows stopped before building or loading Paradox. Do not
+restart it. At the last audit, the remote branch was `3a4f2f5` and replacement
+companion tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` was absent. After
+reviewing the refs, the user can publish the updated branch and only the new
+tag atomically, then dispatch a fresh run with:
 
 ```sh
 test -z "$(git -C /home/mewse/paradox_neo status --porcelain)"
 test "$(git -C /home/mewse/paradox_neo symbolic-ref --short HEAD)" = paradox_c
 git -C /home/mewse/paradox_neo merge-base --is-ancestor \
-  f711c67dadd24fec80779a319d40f7032bed7e78 refs/heads/paradox_c
+  a2af7030a4fe3e1109b8be2200aa61e7566dc0f6 refs/heads/paradox_c
+test "$(git -C /home/mewse/paradox_neo diff --name-only \
+  a2af7030a4fe3e1109b8be2200aa61e7566dc0f6 refs/heads/paradox_c)" = \
+  "$(printf '%s\n' \
+    AGENTS.md \
+    compat/downstream-pr-handoff.md \
+    design/portability-ci.md \
+    design/release-2.0.0.md \
+    design/validation.md)"
+test "$(git -C /home/mewse/paradox_neo rev-parse refs/tags/paradox-2.0.0-ci-f27776e)" = \
+  f27776ee1eca5d964945aa53d14d0ec7947dccbf
+test "$(git -C /home/mewse/paradox_neo ls-remote --tags origin \
+  refs/tags/paradox-2.0.0-ci-f27776e | cut -f1)" = \
+  f27776ee1eca5d964945aa53d14d0ec7947dccbf
+test "$(git -C /home/mewse/paradox_neo rev-parse refs/tags/paradox-2.0.0-ci-f27776e-harness-ff3b510)" = \
+  ff3b510bb31404d586c71531771f38715e3db763
+test "$(git -C /home/mewse/paradox_neo rev-parse ff3b510bb31404d586c71531771f38715e3db763^)" = \
+  f27776ee1eca5d964945aa53d14d0ec7947dccbf
+test "$(git -C /home/mewse/paradox_neo diff --name-only f27776ee1eca5d964945aa53d14d0ec7947dccbf ff3b510bb31404d586c71531771f38715e3db763)" = \
+  .github/workflows/r-cmd-check.yml
 git -C /home/mewse/paradox_neo push --atomic origin \
   refs/heads/paradox_c:refs/heads/paradox_c \
-  refs/tags/paradox-2.0.0-ci-f27776e:refs/tags/paradox-2.0.0-ci-f27776e \
-  refs/tags/paradox-2.0.0-ci-f27776e-harness-198e838:refs/tags/paradox-2.0.0-ci-f27776e-harness-198e838
+  refs/tags/paradox-2.0.0-ci-f27776e-harness-ff3b510:refs/tags/paradox-2.0.0-ci-f27776e-harness-ff3b510
 gh workflow run r-cmd-check.yml --repo mlr-org/paradox \
-  --ref paradox-2.0.0-ci-f27776e-harness-198e838
+  --ref paradox-2.0.0-ci-f27776e-harness-ff3b510
 ```
 
-The harness tag points to direct child
-`198e838566579806d6c3bd48e1327c293473257b`, tree
-`0ff93580b05e1e37994d301922f77490b2a5bb81`; its workflow checks out candidate
+The replacement harness tag points to direct child
+`ff3b510bb31404d586c71531771f38715e3db763`, tree
+`387a8c724dddfcd18a2b21ccdfc940776c2534d6`; its sole diff from the candidate
+is `.github/workflows/r-cmd-check.yml`, SHA-256
+`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
+Its workflow checks out candidate
 tag `paradox-2.0.0-ci-f27776e` at
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`. Do not dispatch from the mutable
 development branch. After dispatch, obtain the exact run ID with:
@@ -106,7 +131,7 @@ gh run list --repo mlr-org/paradox --workflow r-cmd-check.yml \
 ```
 
 Select only the fresh run whose `headSha` is
-`198e838566579806d6c3bd48e1327c293473257b`. Retain and independently verify
+`ff3b510bb31404d586c71531771f38715e3db763`. Retain and independently verify
 its three platform artifacts and four REST jobs before treating hosted
 portability as accepted.
 

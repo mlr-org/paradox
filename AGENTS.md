@@ -214,19 +214,30 @@ integrity budgets. Completion/manifest/seal/decision-table SHA-256 values are
 and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
 
-The active direct-child portability companion is
-`refs/paradox-release/portability-harness-198e838`, commit
-`198e838566579806d6c3bd48e1327c293473257b`, tree
-`0ff93580b05e1e37994d301922f77490b2a5bb81`. It changes only
+The final portability-validation tooling is
+`refs/paradox-release/portability-tooling-20260803T084137Z`, commit
+`a2af7030a4fe3e1109b8be2200aa61e7566dc0f6`, tree
+`62b9a6ca0e99949361db862546a94d057ff5b0b0`. The workflow correction itself
+landed at `102e68c2f4f073d2573bc81e89172d9f202adbe5`. The active direct-child
+companion is `refs/paradox-release/portability-harness-ff3b510`, commit
+`ff3b510bb31404d586c71531771f38715e3db763`, tree
+`387a8c724dddfcd18a2b21ccdfc940776c2534d6`. It changes only
 `.github/workflows/r-cmd-check.yml`; the rendered workflow SHA-256 is
-`5a60156cb79e403dcc38fceeb075d223a4397dab4a74989b36a745ccadfebec0`.
-Local tags `paradox-2.0.0-ci-f27776e` and
-`paradox-2.0.0-ci-f27776e-harness-198e838` bind the candidate and companion.
+`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
+Local tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` binds that companion.
 Structural workflow, renderer, evidence-verifier, release-mode, and actionlint
-checks pass. Hosted execution remains the sole validation gate: the existing
-remote PR still names stale `67ec356`, and its deterministic old-Windows
-`R_HOME` failure cannot test the local fix. Do not restart any old run; the
-user must publish the exact new refs and dispatch a fresh hosted run.
+checks pass under the final tooling.
+
+Hosted run `30793059118` executed superseded companion `198e838`: current
+Windows and macOS passed, while exact Windows R 3.6.3 stopped in toolchain
+preflight before building or loading Paradox. R 3.6's top-level `Rfe.exe`
+launcher lost the workflow's multiline `-e` operand; the missing receipts,
+artifact, and aggregate failure are consequences. This is deterministic failed
+harness evidence, so retrying the unchanged run is useless. At the
+pre-publication audit, the candidate and failed companion tags were remote, the
+remote branch was `3a4f2f5`, and the new companion tag was absent. Hosted
+execution remains the sole validation gate: the user must publish the updated
+branch and exact new tag, then dispatch a fresh run.
 
 All applicable local gates are complete for `f27776e`. The `4e549f3`
 compatibility, memory, benchmark, and hosted results are historical and do not
