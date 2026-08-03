@@ -329,6 +329,11 @@ expected_toolchain_r_admission <- c(
   'throw "PATH does not select exact R 3.6 x86-64 executables"',
   "}"
 )
+expected_toolchain_r_definitions <- c(
+  '$rBin = "C:\\R\\bin\\x64"',
+  '$rExe = Join-Path $rBin "R.exe"',
+  '$rScriptExe = Join-Path $rBin "Rscript.exe"'
+)
 expected_architecture_payload <- c(
   "$rArchitectureCode = @(",
   "'stopifnot(',",
@@ -337,6 +342,21 @@ expected_architecture_payload <- c(
   "'  grepl(\"^(x86_64|x64)$\", tolower(R.version$arch))',",
   "')',",
   "'cat(R.version$version.string, \"\\n\", R.version$platform, \"\\n\")'",
+  ")"
+)
+expected_architecture_file <- c(
+  "$rArchitectureScript = Join-Path `",
+  "$env:TEMP `",
+  '"verify-r36-architecture.R"',
+  "if (Test-Path -LiteralPath $rArchitectureScript) {",
+  'throw "R architecture probe path is not fresh"',
+  "}",
+  expected_architecture_payload,
+  "$utf8NoBom = New-Object Text.UTF8Encoding($false)",
+  "[IO.File]::WriteAllLines(",
+  "$rArchitectureScript,",
+  "$rArchitectureCode,",
+  "$utf8NoBom",
   ")"
 )
 expected_architecture_execution <- c(
@@ -350,6 +370,22 @@ expected_architecture_execution <- c(
   "(Test-Path -LiteralPath $rArchitectureScript)) {"
 )
 if (sum(toolchain_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
+    sum(grepl(
+      "^\\$rBin[[:space:]]*=",
+      toolchain_lines
+    )) != 1L ||
+    sum(grepl(
+      "^\\$rExe[[:space:]]*=",
+      toolchain_lines
+    )) != 1L ||
+    sum(grepl(
+      "^\\$rScriptExe[[:space:]]*=",
+      toolchain_lines
+    )) != 1L ||
+    sum(grepl(
+      "^\\$env:PATH[[:space:]]*=",
+      toolchain_lines
+    )) != 1L ||
     sum(toolchain_lines ==
       "Get-Command R.exe -CommandType Application -ErrorAction Stop") != 1L ||
     sum(toolchain_lines ==
@@ -362,7 +398,11 @@ if (sum(toolchain_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
       toolchain_lines,
       expected_toolchain_r_admission
     ) ||
-    !contains_contiguous(toolchain_lines, expected_architecture_payload) ||
+    !contains_contiguous(
+      toolchain_lines,
+      expected_toolchain_r_definitions
+    ) ||
+    !contains_contiguous(toolchain_lines, expected_architecture_file) ||
     !contains_contiguous(toolchain_lines, expected_architecture_execution) ||
     !grepl("[IO.File]::WriteAllLines(", toolchain$run, fixed = TRUE) ||
     !grepl("Text.UTF8Encoding($false)", toolchain$run, fixed = TRUE) ||
@@ -411,6 +451,22 @@ expected_closure_r_admission <- c(
   "}"
 )
 if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
+    sum(grepl(
+      "^\\$rBin[[:space:]]*=",
+      closure_lines
+    )) != 1L ||
+    sum(grepl(
+      "^\\$env:PATH[[:space:]]*=",
+      closure_lines
+    )) != 1L ||
+    sum(grepl(
+      "^\\$resolvedR[[:space:]]*=",
+      closure_lines
+    )) != 1L ||
+    sum(grepl(
+      "^\\$resolvedRScript[[:space:]]*=",
+      closure_lines
+    )) != 1L ||
     sum(closure_lines ==
       '$PSNativeCommandArgumentPassing = "Standard"') != 1L ||
     sum(closure_lines ==
@@ -422,6 +478,10 @@ if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
       "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop") !=
       1L ||
     !contains_contiguous(closure_lines, expected_closure_r_admission) ||
+    sum(grepl(
+      "^\\$rScriptExe[[:space:]]*=",
+      old_check_lines
+    )) != 1L ||
     sum(old_check_lines ==
       '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
     sum(old_check_lines == "& $rScriptExe --vanilla `") != 1L ||
@@ -954,6 +1014,16 @@ expected_platform_payload <- c(
   "$encoding",
   ")"
 )
+expected_platform_file <- c(
+  "$rPlatformScript = Join-Path `",
+  "$env:RUNNER_TEMP `",
+  '"retain-r36-platform.R"',
+  "if (Test-Path -LiteralPath $rPlatformScript) {",
+  'throw "R platform probe path is not fresh"',
+  "}",
+  "$encoding = New-Object Text.UTF8Encoding($false)",
+  expected_platform_payload
+)
 expected_platform_execution <- c(
   "try {",
   "$rPlatformOutput = @(",
@@ -970,10 +1040,14 @@ expected_platform_execution <- c(
 )
 if (sum(old_provenance_lines ==
       '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
+    sum(grepl(
+      "^\\$rScriptExe[[:space:]]*=",
+      old_provenance_lines
+    )) != 1L ||
     sum(old_provenance_lines == "$rPlatformScript = Join-Path `") != 1L ||
     sum(old_provenance_lines ==
       "& $rScriptExe --vanilla $rPlatformScript") != 1L ||
-    !contains_contiguous(old_provenance_lines, expected_platform_payload) ||
+    !contains_contiguous(old_provenance_lines, expected_platform_file) ||
     !contains_contiguous(old_provenance_lines, expected_platform_execution) ||
     !grepl("[IO.File]::WriteAllText(", old_provenance$run, fixed = TRUE) ||
     !grepl("Text.UTF8Encoding($false)", old_provenance$run, fixed = TRUE) ||
