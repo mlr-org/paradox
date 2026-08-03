@@ -129,11 +129,14 @@ and the last observed remote `paradox_c` head is exactly
 `8f1654e3d1c91e395823c912a1727a91b7f6fb4f`. Agents must not run any command
 below. After reviewing the local refs, the user may publish the current branch
 and only the new `00a24cb` tag atomically, then dispatch that immutable tag.
-The lease and remote-tag assertions deliberately fail if remote state has
-moved; do not weaken or delete them.
+The exact reviewed local branch is frozen at coordination ref
+`refs/paradox-release/handoff-00a24cb`. The branch-ref, lease, and remote-tag
+assertions deliberately fail if either local or remote state has moved; do not
+weaken or delete them.
 
 ```sh
 repo=/home/mewse/paradox_neo
+branch_ref=refs/paradox-release/handoff-00a24cb
 candidate=a0a9ff3e05b535068392e0c20442ad9794f3b824
 old_companion=da5a500936d00f7bc4c44989258d5bc385082252
 companion=00a24cb3a094f08e486e4271d673a13f18df0a90
@@ -144,6 +147,9 @@ companion_tag=paradox-2.0.0-ci-a0a9ff3-harness-00a24cb
 
 test -z "$(git -C "$repo" status --porcelain=v1 --untracked-files=all)"
 test "$(git -C "$repo" symbolic-ref --short HEAD)" = paradox_c
+branch_head="$(git -C "$repo" rev-parse "$branch_ref")"
+readonly branch_head
+test "$(git -C "$repo" rev-parse refs/heads/paradox_c)" = "$branch_head"
 test "$(git -C "$repo" rev-parse refs/paradox-release/candidate-20260803T131049Z)" = "$candidate"
 test "$(git -C "$repo" rev-parse "refs/tags/$candidate_tag")" = "$candidate"
 test "$(git -C "$repo" rev-parse refs/paradox-release/portability-harness-da5a500)" = "$old_companion"
