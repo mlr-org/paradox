@@ -59,6 +59,34 @@ if (mode == "release") {
   fail("candidate identity arguments are valid only in release mode")
 }
 
+helper_relative <- "scripts/environment/install-hosted-r36-windows.ps1"
+helper_blob <- NULL
+if (mode == "release") {
+  helper <- file.path(root, helper_relative)
+  if (!file.exists(helper) || dir.exists(helper) ||
+      (!is.na(Sys.readlink(helper)) && nzchar(Sys.readlink(helper)))) {
+    fail("old-Windows installer helper is absent, non-regular, or symbolic")
+  }
+  helper_blob_result <- suppressWarnings(system2(
+    "git",
+    args = c(
+      "-C", shQuote(root), "hash-object",
+      paste0("--path=", helper_relative), "--", shQuote(helper)
+    ),
+    stdout = TRUE,
+    stderr = TRUE
+  ))
+  helper_blob_status <- attr(helper_blob_result, "status")
+  if (is.null(helper_blob_status)) {
+    helper_blob_status <- 0L
+  }
+  if (helper_blob_status != 0L || length(helper_blob_result) != 1L ||
+      !grepl("^[0-9a-f]{40}$", helper_blob_result)) {
+    fail("could not derive the exact old-Windows installer Git blob")
+  }
+  helper_blob <- helper_blob_result[[1L]]
+}
+
 if (!requireNamespace("yaml", quietly = TRUE)) {
   fail("repository-local yaml package is required")
 }
@@ -113,12 +141,52 @@ check_checkout <- function(target_steps, label) {
         checkout[[1L]]$uses,
         "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
       ) ||
-        !identical(checkout[[1L]]$with$ref, candidate_tag) ||
+        !identical(checkout[[1L]]$with$ref, "${{ github.sha }}") ||
+        !identical(checkout[[1L]]$with[["fetch-depth"]], 2L) ||
         !identical(checkout[[1L]]$with[["persist-credentials"]], FALSE)) {
-      fail(label, " does not pin a credential-free frozen checkout")
+      fail(label, " does not pin the credential-free companion checkout")
     }
   }
   invisible(checkout[[1L]])
+}
+
+check_release_identity <- function(identity, label) {
+  identity_lines <- trimws(strsplit(
+    identity$run, "\n", fixed = TRUE
+  )[[1L]])
+  expected_identity <- c(
+    "set -euo pipefail",
+    paste0("readonly candidate=", candidate_commit),
+    'readonly harness="${GITHUB_SHA:?}"',
+    'head="$(git rev-parse HEAD)"',
+    "readonly head",
+    'parents="$(git rev-list --parents -n 1 "$harness")"',
+    "readonly parents",
+    'test "$head" = "$harness"',
+    'test "$parents" = "$harness $candidate"',
+    paste0("readonly helper=", helper_relative),
+    paste0("readonly expected_helper_blob=", helper_blob),
+    'helper_entry="$(git ls-tree "$harness" -- "$helper")"',
+    "readonly helper_entry",
+    paste0(
+      "expected_helper_entry=\"$(printf '100644 blob %s\\t%s' ",
+      "\"$expected_helper_blob\" \"$helper\")\""
+    ),
+    "readonly expected_helper_entry",
+    'test "$helper_entry" = "$expected_helper_entry"',
+    'changed="$(git diff --name-only "$candidate" "$harness")"',
+    "readonly changed",
+    "expected_changed=\"$(printf '%s\\n' \\",
+    ".github/workflows/r-cmd-check.yml \\",
+    "scripts/environment/install-hosted-r36-windows.ps1)\"",
+    "readonly expected_changed",
+    'test "$changed" = "$expected_changed"',
+    'test -z "$(git status --porcelain=v1 --untracked-files=all)"'
+  )
+  if (!identical(identity$shell, "bash") ||
+      !contains_contiguous(identity_lines, expected_identity)) {
+    fail(label, " is not bound to the candidate/companion relation")
+  }
 }
 
 checkout <- Filter(
@@ -127,14 +195,8 @@ checkout <- Filter(
 )
 check_checkout(steps, "matrix job")
 if (mode == "release") {
-  identity <- step_by_name("Verify frozen candidate checkout")
-  identity_lines <- trimws(strsplit(identity$run, "\n", fixed = TRUE)[[1L]])
-  expected_lines <- grep("^readonly expected=", identity_lines, value = TRUE)
-  if (!identical(expected_lines, paste0("readonly expected=", candidate_commit)) ||
-      sum(identity_lines ==
-        'test "$(git rev-parse HEAD)" = "$expected"') != 1L) {
-    fail("workflow checkout assertion is not bound to the frozen commit")
-  }
+  identity <- step_by_name("Verify frozen harness checkout")
+  check_release_identity(identity, "matrix checkout assertion")
 }
 
 check_step <- step_by_name("Run R CMD check")
@@ -310,25 +372,6 @@ old_check <- old_step_by_name("Build, smoke, and check on R 3.6 Windows")
 toolchain_lines <- trimws(strsplit(
   toolchain$run, "\n", fixed = TRUE
 )[[1L]])
-expected_toolchain_r_admission <- c(
-  "$resolvedR = (",
-  "Get-Command R.exe -CommandType Application -ErrorAction Stop",
-  ").Source",
-  "$resolvedRScript = (",
-  "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop",
-  ").Source",
-  "if (-not [String]::Equals(",
-  "[IO.Path]::GetFullPath($resolvedR),",
-  "[IO.Path]::GetFullPath($rExe),",
-  "[StringComparison]::OrdinalIgnoreCase",
-  ") -or -not [String]::Equals(",
-  "[IO.Path]::GetFullPath($resolvedRScript),",
-  "[IO.Path]::GetFullPath($rScriptExe),",
-  "[StringComparison]::OrdinalIgnoreCase",
-  ")) {",
-  'throw "PATH does not select exact R 3.6 x86-64 executables"',
-  "}"
-)
 expected_toolchain_r_definitions <- c(
   '$rBin = "C:\\R\\bin\\x64"',
   '$rExe = Join-Path $rBin "R.exe"',
@@ -390,18 +433,11 @@ if (sum(toolchain_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
       "^\\$rArchitectureScript[[:space:]]*=",
       toolchain_lines
     )) != 1L ||
-    sum(toolchain_lines ==
-      "Get-Command R.exe -CommandType Application -ErrorAction Stop") != 1L ||
-    sum(toolchain_lines ==
-      "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop") !=
-      1L ||
+    any(grepl("Get-Command R.exe", toolchain_lines, fixed = TRUE)) ||
+    any(grepl("Get-Command Rscript.exe", toolchain_lines, fixed = TRUE)) ||
     sum(toolchain_lines == "$rArchitectureScript = Join-Path `") != 1L ||
     sum(toolchain_lines ==
       "& $rScriptExe --vanilla $rArchitectureScript") != 1L ||
-    !contains_contiguous(
-      toolchain_lines,
-      expected_toolchain_r_admission
-    ) ||
     !contains_contiguous(
       toolchain_lines,
       expected_toolchain_r_definitions
@@ -432,27 +468,33 @@ closure_lines <- trimws(strsplit(closure$run, "\n", fixed = TRUE)[[1L]])
 old_check_lines <- trimws(strsplit(
   old_check$run, "\n", fixed = TRUE
 )[[1L]])
-expected_closure_r_admission <- c(
-  "$resolvedR = (",
-  "Get-Command R.exe -CommandType Application -ErrorAction Stop",
-  ").Source",
-  "$resolvedRScript = (",
-  "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop",
-  ").Source",
-  "if (-not [String]::Equals(",
-  "[IO.Path]::GetFullPath($resolvedR),",
-  "[IO.Path]::GetFullPath((Join-Path $rBin \"R.exe\")),",
-  "[StringComparison]::OrdinalIgnoreCase",
-  ") -or -not [String]::Equals(",
-  "[IO.Path]::GetFullPath($resolvedRScript),",
-  "[IO.Path]::GetFullPath((Join-Path $rBin \"Rscript.exe\")),",
-  "[StringComparison]::OrdinalIgnoreCase",
-  ")) {",
-  paste0(
-    'throw "closure phase does not select exact R 3.6 ',
-    'x86-64 executables"'
-  ),
+expected_closure_r_definitions <- c(
+  '$rBin = "C:\\R\\bin\\x64"',
+  '$rExe = Join-Path $rBin "R.exe"',
+  '$rScriptExe = Join-Path $rBin "Rscript.exe"',
+  "if (-not (Test-Path -LiteralPath $rExe -PathType Leaf) -or",
+  "-not (Test-Path -LiteralPath $rScriptExe -PathType Leaf)) {",
+  'throw "closure phase lacks exact R 3.6 x86-64 executables"',
   "}"
+)
+expected_closure_installer <- c(
+  '& "$env:GITHUB_WORKSPACE\\scripts\\environment\\install-hosted-r36-windows.ps1" `',
+  '-RepositoryRoot "$env:GITHUB_WORKSPACE" `',
+  '-WorkRoot "$env:PARADOX_R36_WORK" `',
+  '-EvidenceRoot "$env:PARADOX_R36_EVIDENCE" `',
+  "-RExe $rExe `",
+  "-RScriptExe $rScriptExe"
+)
+expected_closure_path <- c(
+  "$env:PATH = (",
+  '"$rBin;C:\\Rtools\\bin;C:\\Rtools\\mingw_64\\bin;" + $env:PATH',
+  ")"
+)
+expected_candidate_path <- c(
+  "$env:PATH = (",
+  '"C:\\R\\bin\\x64;C:\\Rtools\\bin;C:\\Rtools\\mingw_64\\bin;" +',
+  "$env:PATH",
+  ")"
 )
 if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
     sum(grepl(
@@ -463,35 +505,21 @@ if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
       "^\\$env:PATH[[:space:]]*=",
       closure_lines
     )) != 1L ||
-    sum(grepl(
-      "^\\$resolvedR[[:space:]]*=",
-      closure_lines
-    )) != 1L ||
-    sum(grepl(
-      "^\\$resolvedRScript[[:space:]]*=",
-      closure_lines
-    )) != 1L ||
-    sum(closure_lines ==
-      '$PSNativeCommandArgumentPassing = "Standard"') != 1L ||
-    sum(grepl(
-      "^\\$PSNativeCommandArgumentPassing[[:space:]]*=",
-      closure_lines
-    )) != 1L ||
-    sum(closure_lines ==
-      'if ($PSNativeCommandArgumentPassing -cne "Standard") {') != 1L ||
-    sum(closure_lines == '$env:PATH = "$rBin;" + $env:PATH') != 1L ||
-    sum(closure_lines ==
-      "Get-Command R.exe -CommandType Application -ErrorAction Stop") != 1L ||
-    sum(closure_lines ==
-      "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop") !=
-      1L ||
-    !contains_contiguous(closure_lines, expected_closure_r_admission) ||
+    sum(grepl("^\\$rExe[[:space:]]*=", closure_lines)) != 1L ||
+    sum(grepl("^\\$rScriptExe[[:space:]]*=", closure_lines)) != 1L ||
+    any(grepl("PSNativeCommandArgumentPassing", closure_lines, fixed = TRUE)) ||
+    any(grepl("Get-Command R.exe", closure_lines, fixed = TRUE)) ||
+    any(grepl("Get-Command Rscript.exe", closure_lines, fixed = TRUE)) ||
+    !contains_contiguous(closure_lines, expected_closure_r_definitions) ||
+    !contains_contiguous(closure_lines, expected_closure_installer) ||
+    !contains_contiguous(closure_lines, expected_closure_path) ||
     sum(grepl(
       "^\\$rScriptExe[[:space:]]*=",
       old_check_lines
     )) != 1L ||
     sum(old_check_lines ==
       '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
+    !contains_contiguous(old_check_lines, expected_candidate_path) ||
     sum(old_check_lines == "& $rScriptExe --vanilla `") != 1L ||
     any(grepl(" --vanilla -e", c(closure$run, old_check$run), fixed = TRUE)) ||
     any(grepl("& R.exe", isolation_calls, fixed = TRUE)) ||
@@ -502,16 +530,13 @@ closure_installer_position <- grep(
   "install-hosted-r36-windows.ps1", closure_lines, fixed = TRUE
 )
 closure_admission_positions <- c(
-  which(closure_lines == '$PSNativeCommandArgumentPassing = "Standard"'),
   which(closure_lines == '$rBin = "C:\\R\\bin\\x64"'),
-  which(closure_lines == '$env:PATH = "$rBin;" + $env:PATH'),
-  which(closure_lines ==
-    "Get-Command R.exe -CommandType Application -ErrorAction Stop"),
-  which(closure_lines ==
-    "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop")
+  which(closure_lines == '$rExe = Join-Path $rBin "R.exe"'),
+  which(closure_lines == '$rScriptExe = Join-Path $rBin "Rscript.exe"'),
+  which(closure_lines == "$env:PATH = (")
 )
 if (length(closure_installer_position) != 1L ||
-    length(closure_admission_positions) != 5L ||
+    length(closure_admission_positions) != 4L ||
     any(closure_admission_positions >= closure_installer_position)) {
   fail("old-Windows direct-R admission does not precede closure execution")
 }
@@ -541,12 +566,12 @@ if (!identical(toolchain$shell, "pwsh") ||
     !grepl("mingw_64\\bin\\g++.exe", toolchain$run, fixed = TRUE) ||
     !grepl("mingw_64\\bin\\objdump.exe", toolchain$run, fixed = TRUE) ||
     !grepl("Get-FileHash", toolchain$run, fixed = TRUE) ||
-    !grepl(
+    grepl(
       'Get-Command gcc.exe -CommandType Application',
       toolchain$run,
       fixed = TRUE
     ) ||
-    !grepl(
+    grepl(
       'Get-Command g++.exe -CommandType Application',
       toolchain$run,
       fixed = TRUE
@@ -626,13 +651,173 @@ installer_lines <- readLines(installer_path, warn = FALSE)
 installer <- paste(installer_lines, collapse = "\n")
 runner <- paste(readLines(runner_path, warn = FALSE), collapse = "\n")
 trimmed_installer_lines <- trimws(installer_lines)
-if (sum(trimmed_installer_lines ==
-      '$RExe = (Get-Command "R.exe" -ErrorAction Stop).Source') != 1L ||
+expected_r_exe_parameter <- c(
+  "[Parameter(Mandatory = $true)]",
+  "[ValidateNotNullOrEmpty()]",
+  "[string]$RExe,"
+)
+expected_rscript_parameter <- c(
+  "[Parameter(Mandatory = $true)]",
+  "[ValidateNotNullOrEmpty()]",
+  "[string]$RScriptExe"
+)
+expected_installer_r_admission <- c(
+  "$RExe = [IO.Path]::GetFullPath($RExe)",
+  "$RScriptExe = [IO.Path]::GetFullPath($RScriptExe)",
+  '$ExpectedRExe = [IO.Path]::GetFullPath("C:\\R\\bin\\x64\\R.exe")',
+  paste0(
+    '$ExpectedRScriptExe = [IO.Path]::GetFullPath(',
+    '"C:\\R\\bin\\x64\\Rscript.exe")'
+  ),
+  "if (-not [String]::Equals(",
+  "$RExe,",
+  "$ExpectedRExe,",
+  "[StringComparison]::OrdinalIgnoreCase",
+  ") -or -not [String]::Equals(",
+  "$RScriptExe,",
+  "$ExpectedRScriptExe,",
+  "[StringComparison]::OrdinalIgnoreCase",
+  ") -or -not (Test-Path -LiteralPath $RExe -PathType Leaf) -or",
+  "-not (Test-Path -LiteralPath $RScriptExe -PathType Leaf)) {",
+  'throw "dependency installer requires exact R 3.6 x86-64 executables"',
+  "}",
+  "foreach ($Executable in @($RExe, $RScriptExe)) {",
+  "$Item = Get-Item -LiteralPath $Executable -Force",
+  "if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {",
+  'throw "dependency installer R executable is a reparse point"',
+  "}",
+  "}"
+)
+expected_installed_verifier_creation <- c(
+  '$VerifyInstalledScript = Join-Path $WorkRoot "verify-installed-version.R"',
+  "if (Test-Path -LiteralPath $VerifyInstalledScript) {",
+  'throw "installed-version verifier path is not fresh"',
+  "}",
+  "[IO.File]::WriteAllText(",
+  "$VerifyInstalledScript,",
+  "$VerifyInstalledCode,",
+  "$Utf8NoBom",
+  ")",
+  'Remove-Item -LiteralPath "Env:R_PKG_CXX_STD" -ErrorAction SilentlyContinue',
+  "try {",
+  "foreach ($Package in $InstallOrder) {"
+)
+expected_installed_verifier_invocation <- c(
+  "Invoke-Native `",
+  "-FilePath $RScriptExe `",
+  "-Arguments @(",
+  '"--vanilla",',
+  "$VerifyInstalledScript,",
+  "$LibraryRoot,",
+  "$Package,",
+  "$Row.Version",
+  ") `",
+  '-Label "installed-version verification for $Package"'
+)
+expected_installed_verifier_cleanup <- c(
+  "Remove-Item -LiteralPath $VerifyInstalledScript -Force",
+  "}",
+  "if (Test-Path -LiteralPath $VerifyInstalledScript) {",
+  'throw "installed-version verifier was not removed"',
+  "}"
+)
+expected_closure_verifier <- c(
+  '$VerifyClosureScript = Join-Path $WorkRoot "verify-runtime-closure.R"',
+  "if (Test-Path -LiteralPath $VerifyClosureScript) {",
+  'throw "runtime-closure verifier path is not fresh"',
+  "}",
+  "[IO.File]::WriteAllText(",
+  "$VerifyClosureScript,",
+  "$VerifyClosureCode,",
+  "$Utf8NoBom",
+  ")",
+  "try {",
+  "Invoke-Native `",
+  "-FilePath $RScriptExe `",
+  "-Arguments @(",
+  '"--vanilla",',
+  "$VerifyClosureScript,",
+  "$LibraryRoot",
+  ") `",
+  '-Label "complete runtime-closure verification"',
+  "} finally {",
+  "Remove-Item -LiteralPath $VerifyClosureScript -Force",
+  "}",
+  "if (Test-Path -LiteralPath $VerifyClosureScript) {",
+  'throw "runtime-closure verifier was not removed"',
+  "}"
+)
+if (sum(trimmed_installer_lines == '[string]$RExe,') != 1L ||
+    sum(trimmed_installer_lines == '[string]$RScriptExe') != 1L ||
+    sum(trimmed_installer_lines == '[ValidateNotNullOrEmpty()]') != 2L ||
+    !contains_contiguous(
+      trimmed_installer_lines,
+      expected_r_exe_parameter
+    ) ||
+    !contains_contiguous(
+      trimmed_installer_lines,
+      expected_rscript_parameter
+    ) ||
+    !contains_contiguous(
+      trimmed_installer_lines,
+      expected_installer_r_admission
+    ) ||
     sum(trimmed_installer_lines ==
-      '$RScriptExe = (Get-Command "Rscript.exe" -ErrorAction Stop).Source') !=
+      '$RExe = [IO.Path]::GetFullPath($RExe)') != 1L ||
+    sum(trimmed_installer_lines ==
+      '$RScriptExe = [IO.Path]::GetFullPath($RScriptExe)') != 1L ||
+    sum(trimmed_installer_lines ==
+      '$ExpectedRExe = [IO.Path]::GetFullPath("C:\\R\\bin\\x64\\R.exe")') !=
       1L ||
-    sum(trimmed_installer_lines == '"-e",') != 2L ||
+    sum(trimmed_installer_lines == paste0(
+      '$ExpectedRScriptExe = [IO.Path]::GetFullPath(',
+      '"C:\\R\\bin\\x64\\Rscript.exe")'
+    )) != 1L ||
+    any(grepl('Get-Command "R.exe"', installer_lines, fixed = TRUE)) ||
+    any(grepl('Get-Command "Rscript.exe"', installer_lines, fixed = TRUE)) ||
+    sum(trimmed_installer_lines == '"-e",') != 0L ||
     sum(trimmed_installer_lines == "-FilePath $RScriptExe `") != 2L ||
+    sum(trimmed_installer_lines ==
+      '$InstallOutput = @(& $RExe @InstallArguments 2>&1)') != 1L ||
+    any(grepl("& R.exe", installer_lines, fixed = TRUE)) ||
+    any(grepl("& Rscript.exe", installer_lines, fixed = TRUE)) ||
+    sum(trimmed_installer_lines ==
+      '$VerifyInstalledScript = Join-Path $WorkRoot "verify-installed-version.R"') !=
+      1L ||
+    sum(trimmed_installer_lines ==
+      '$VerifyClosureScript = Join-Path $WorkRoot "verify-runtime-closure.R"') !=
+      1L ||
+    sum(trimmed_installer_lines == "$VerifyInstalledScript,") != 2L ||
+    sum(trimmed_installer_lines == "$VerifyClosureScript,") != 2L ||
+    sum(trimmed_installer_lines ==
+      "Remove-Item -LiteralPath $VerifyInstalledScript -Force") != 1L ||
+    sum(trimmed_installer_lines ==
+      "Remove-Item -LiteralPath $VerifyClosureScript -Force") != 1L ||
+    !contains_contiguous(
+      trimmed_installer_lines,
+      expected_installed_verifier_creation
+    ) ||
+    !contains_contiguous(
+      trimmed_installer_lines,
+      expected_installed_verifier_invocation
+    ) ||
+    !contains_contiguous(
+      trimmed_installer_lines,
+      expected_installed_verifier_cleanup
+    ) ||
+    !contains_contiguous(trimmed_installer_lines, expected_closure_verifier) ||
+    sum(trimmed_installer_lines == "args <- commandArgs(TRUE)") != 2L ||
+    !grepl("utils::packageVersion", installer, fixed = TRUE) ||
+    !grepl('loadNamespace("data.table"', installer, fixed = TRUE) ||
+    !grepl('getLoadedDLLs()[["data_table"]]', installer, fixed = TRUE) ||
+    sum(trimmed_installer_lines ==
+      '$Tool.Path = [IO.Path]::GetFullPath($Tool.ExpectedPath)') != 1L ||
+    sum(trimmed_installer_lines ==
+      'if (-not (Test-Path -LiteralPath $Tool.Path -PathType Leaf)) {') != 1L ||
+    any(grepl("Get-Command gcc.exe", installer_lines, fixed = TRUE)) ||
+    any(grepl("Get-Command g++.exe", installer_lines, fixed = TRUE)) ||
+    any(grepl("Get-Command objdump.exe", installer_lines, fixed = TRUE)) ||
+    any(grepl("Get-Command make.exe", installer_lines, fixed = TRUE)) ||
     grepl("$env:PATH", installer, fixed = TRUE)) {
   fail("old-Windows installer native R/Rscript inventory changed")
 }
@@ -1101,20 +1286,8 @@ if (!identical(old_provenance[["if"]], "always()") ||
 }
 
 if (mode == "release") {
-  old_identity <- old_step_by_name("Verify frozen candidate checkout")
-  old_identity_lines <- trimws(strsplit(
-    old_identity$run, "\n", fixed = TRUE
-  )[[1L]])
-  old_expected <- grep(
-    "^readonly expected=", old_identity_lines, value = TRUE
-  )
-  if (!identical(old_expected, paste0(
-      "readonly expected=", candidate_commit
-    )) ||
-      sum(old_identity_lines ==
-        'test "$(git rev-parse HEAD)" = "$expected"') != 1L) {
-    fail("old-Windows checkout assertion is not bound to the frozen commit")
-  }
+  old_identity <- old_step_by_name("Verify frozen harness checkout")
+  check_release_identity(old_identity, "old-Windows checkout assertion")
 }
 
 completion <- step_by_name("Verify R CMD check completion")

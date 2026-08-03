@@ -13,7 +13,7 @@ usage <- function() {
     "  --run-attempt N          Expected run attempt (default: 1).\n",
     "  --harness-commit SHA     Required workflow companion commit.\n",
     "  --harness-tag TAG        Required workflow companion tag.\n",
-    "  --candidate-commit SHA   Required checked-out package commit.\n",
+    "  --candidate-commit SHA   Required frozen package parent commit.\n",
     "  --workflow-sha256 SHA    Required executed workflow file SHA-256.\n",
     "  -h, --help               Show this help.\n"
   ))
@@ -789,6 +789,32 @@ verify_portability_ci_evidence <- function(
   if (!identical(sha256_file(workflow_path), workflow_sha256)) {
     fail("executed workflow SHA-256 differs from the expected companion workflow")
   }
+  workflow_lines <- trimws(readLines(workflow_path, warn = FALSE))
+  if (sum(workflow_lines == paste0(
+      "readonly candidate=", candidate_commit
+    )) != 2L) {
+    fail("executed workflow is not bound to the exact candidate parent")
+  }
+  helper_blob_lines <- grep(
+    "^readonly expected_helper_blob=[0-9a-f]{40}$",
+    workflow_lines,
+    value = TRUE
+  )
+  if (sum(workflow_lines == paste0(
+      "readonly helper=",
+      "scripts/environment/install-hosted-r36-windows.ps1"
+    )) != 2L ||
+      length(helper_blob_lines) != 2L ||
+      length(unique(helper_blob_lines)) != 1L ||
+      sum(workflow_lines == paste0(
+        "expected_helper_entry=\"$(printf ",
+        "'100644 blob %s\\t%s' ",
+        "\"$expected_helper_blob\" \"$helper\")\""
+      )) != 2L ||
+      sum(workflow_lines ==
+        'test "$helper_entry" = "$expected_helper_entry"') != 2L) {
+    fail("executed workflow does not bind one exact installer helper tree entry")
+  }
 
   run <- read_json(run_path, "retained REST run metadata")
   if (!identical(integer_string(run$id, "run.id"), run_id) ||
@@ -839,7 +865,7 @@ verify_portability_ci_evidence <- function(
     fail("retained REST job names differ from the release matrix and completion gate")
   }
   expected_steps <- c(
-    "Verify frozen candidate checkout" = "3",
+    "Verify frozen harness checkout" = "3",
     "Verify runner and R architecture" = "6",
     "Verify native source compilation" = "7",
     "Run R CMD check" = "8",
@@ -848,7 +874,7 @@ verify_portability_ci_evidence <- function(
     "Upload check evidence" = "11"
   )
   expected_old_windows_steps <- c(
-    "Verify frozen candidate checkout" = "3",
+    "Verify frozen harness checkout" = "3",
     "Verify exact R 3.6 Windows toolchain" = "5",
     "Install exact R 3.6 source closure" = "6",
     "Build, smoke, and check on R 3.6 Windows" = "7",
@@ -1038,7 +1064,7 @@ verify_portability_ci_evidence <- function(
     expected_provenance <- c(
       workflow_sha = harness_commit,
       workflow_ref = expected_workflow_ref,
-      checked_out_sha = candidate_commit,
+      checked_out_sha = harness_commit,
       expected_platform
     )
     if (!identical(provenance, expected_provenance)) {

@@ -38,7 +38,28 @@ candidate_commit <- paste(rep("b", 40L), collapse = "")
 harness_tag <- "paradox-test-harness-aaaaaaaa"
 workflow_ref <- paste0("refs/tags/", harness_tag)
 workflow <- file.path(fixture, "r-cmd-check.yml")
-writeLines(c("name: fixture", "on: workflow_dispatch"), workflow)
+writeLines(c(
+  "name: fixture",
+  "on: workflow_dispatch",
+  paste0("          readonly candidate=", candidate_commit),
+  paste0("          readonly candidate=", candidate_commit),
+  "          readonly helper=scripts/environment/install-hosted-r36-windows.ps1",
+  paste0("          readonly expected_helper_blob=", strrep("c", 40L)),
+  paste0(
+    "          expected_helper_entry=\"$(printf ",
+    "'100644 blob %s\\t%s' ",
+    "\"$expected_helper_blob\" \"$helper\")\""
+  ),
+  '          test "$helper_entry" = "$expected_helper_entry"',
+  "          readonly helper=scripts/environment/install-hosted-r36-windows.ps1",
+  paste0("          readonly expected_helper_blob=", strrep("c", 40L)),
+  paste0(
+    "          expected_helper_entry=\"$(printf ",
+    "'100644 blob %s\\t%s' ",
+    "\"$expected_helper_blob\" \"$helper\")\""
+  ),
+  '          test "$helper_entry" = "$expected_helper_entry"'
+), workflow)
 workflow_sha256 <- unname(tools::sha256sum(workflow))
 
 write_json <- function(value, path) {
@@ -173,7 +194,7 @@ run <- list(
 write_json(run, file.path(fixture, "run.json"))
 
 required_steps <- c(
-  "Verify frozen candidate checkout" = 3L,
+  "Verify frozen harness checkout" = 3L,
   "Verify runner and R architecture" = 6L,
   "Verify native source compilation" = 7L,
   "Run R CMD check" = 8L,
@@ -182,7 +203,7 @@ required_steps <- c(
   "Upload check evidence" = 11L
 )
 old_windows_steps <- c(
-  "Verify frozen candidate checkout" = 3L,
+  "Verify frozen harness checkout" = 3L,
   "Verify exact R 3.6 Windows toolchain" = 5L,
   "Install exact R 3.6 source closure" = 6L,
   "Build, smoke, and check on R 3.6 Windows" = 7L,
@@ -283,7 +304,7 @@ artifacts <- lapply(artifact_specs, function(spec) {
   writeLines(c(
     paste0("workflow_sha=", harness_commit),
     paste0("workflow_ref=", workflow_ref),
-    paste0("checked_out_sha=", candidate_commit),
+    paste0("checked_out_sha=", harness_commit),
     paste0("runner_os=", spec$runner_os),
     paste0("runner_arch=", spec$runner_arch),
     paste0("r_platform=", spec$r_platform)

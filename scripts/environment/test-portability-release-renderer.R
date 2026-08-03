@@ -87,7 +87,7 @@ for (job_name in c("r-cmd-check", "r36-windows")) {
   identity <- Filter(
     function(step) identical(
       step$name %||% NULL,
-      "Verify frozen candidate checkout"
+      "Verify frozen harness checkout"
     ),
     steps
   )
@@ -96,11 +96,12 @@ for (job_name in c("r-cmd-check", "r36-windows")) {
         checkout[[1L]]$uses,
         "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
       ) ||
-      !identical(checkout[[1L]]$with$ref, candidate_tag) ||
+      !identical(checkout[[1L]]$with$ref, "${{ github.sha }}") ||
+      !identical(checkout[[1L]]$with[["fetch-depth"]], 2L) ||
       !identical(checkout[[1L]]$with[["persist-credentials"]], FALSE) ||
       length(identity) != 1L ||
       !grepl(candidate_commit, identity[[1L]]$run, fixed = TRUE)) {
-    fail("rendered release workflow did not bind both jobs to the candidate")
+    fail("rendered release workflow did not bind both jobs to the companion")
   }
 }
 
@@ -121,6 +122,39 @@ validation <- suppressWarnings(system2(
 if (!is.null(attr(validation, "status")) && attr(validation, "status") != 0L) {
   fail("existing release validator rejected rendered workflow:\n",
     paste(validation, collapse = "\n"))
+}
+
+mutated_helper_identity <- file.path(
+  scratch, "mutated-helper-identity.yml"
+)
+mutated_helper_lines <- readLines(first, warn = FALSE)
+helper_blob_positions <- grep(
+  "^          readonly expected_helper_blob=[0-9a-f]{40}$",
+  mutated_helper_lines
+)
+if (length(helper_blob_positions) != 2L) {
+  fail("rendered workflow does not bind two exact installer helper blobs")
+}
+mutated_helper_lines[[helper_blob_positions[[1L]]]] <-
+  paste0("          readonly expected_helper_blob=", strrep("0", 40L))
+writeLines(mutated_helper_lines, mutated_helper_identity)
+mutated_helper_validation <- suppressWarnings(system2(
+  rscript,
+  args = c(
+    "--vanilla",
+    shQuote(validator),
+    shQuote(root),
+    "release",
+    shQuote(mutated_helper_identity),
+    candidate_tag,
+    candidate_commit
+  ),
+  stdout = TRUE,
+  stderr = TRUE
+))
+if (is.null(attr(mutated_helper_validation, "status")) ||
+    attr(mutated_helper_validation, "status") == 0L) {
+  fail("release validator accepted a changed installer helper blob")
 }
 actionlint <- file.path(root, ".local", "tools", "bin", "actionlint")
 if (!file.exists(actionlint)) {
@@ -243,6 +277,43 @@ empty_platform_output <- file.path(scratch, "empty-platform-output.yml")
 if (invoke(empty_platform_output, input = empty_platform_source)$status == 0L ||
     file.exists(empty_platform_output)) {
   fail("release renderer accepted an empty old-Windows platform probe")
+}
+
+implicit_r_source <- file.path(scratch, "implicit-r-source.yml")
+implicit_r_lines <- readLines(source, warn = FALSE)
+implicit_r_position <- which(implicit_r_lines == "            -RExe $rExe `")
+if (length(implicit_r_position) != 1L) {
+  fail("general workflow has no exact old-Windows R executable handoff")
+}
+implicit_r_lines[[implicit_r_position]] <- "            -RExe R.exe `"
+writeLines(implicit_r_lines, implicit_r_source)
+implicit_r_output <- file.path(scratch, "implicit-r-output.yml")
+if (invoke(implicit_r_output, input = implicit_r_source)$status == 0L ||
+    file.exists(implicit_r_output)) {
+  fail("release renderer accepted name-based old-Windows R discovery")
+}
+
+implicit_rscript_source <- file.path(
+  scratch, "implicit-rscript-source.yml"
+)
+implicit_rscript_lines <- readLines(source, warn = FALSE)
+implicit_rscript_position <- which(implicit_rscript_lines ==
+  "            -RScriptExe $rScriptExe")
+if (length(implicit_rscript_position) != 1L) {
+  fail("general workflow has no exact old-Windows Rscript handoff")
+}
+implicit_rscript_lines[[implicit_rscript_position]] <-
+  "            -RScriptExe Rscript.exe"
+writeLines(implicit_rscript_lines, implicit_rscript_source)
+implicit_rscript_output <- file.path(
+  scratch, "implicit-rscript-output.yml"
+)
+if (invoke(
+      implicit_rscript_output,
+      input = implicit_rscript_source
+    )$status == 0L ||
+    file.exists(implicit_rscript_output)) {
+  fail("release renderer accepted name-based old-Windows Rscript discovery")
 }
 
 symbolic_source <- file.path(scratch, "symbolic-source.yml")

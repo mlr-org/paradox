@@ -53,6 +53,29 @@ if (!file.exists(source_argument) || dir.exists(source_argument) ||
 source <- normalizePath(
   source_argument, winslash = "/", mustWork = TRUE
 )
+helper_relative <- "scripts/environment/install-hosted-r36-windows.ps1"
+helper <- file.path(root, helper_relative)
+if (!file.exists(helper) || dir.exists(helper) || is_symbolic(helper)) {
+  fail("old-Windows installer helper is absent, non-regular, or symbolic")
+}
+helper_blob_result <- suppressWarnings(system2(
+  "git",
+  args = c(
+    "-C", shQuote(root), "hash-object",
+    paste0("--path=", helper_relative), "--", shQuote(helper)
+  ),
+  stdout = TRUE,
+  stderr = TRUE
+))
+helper_blob_status <- attr(helper_blob_result, "status")
+if (is.null(helper_blob_status)) {
+  helper_blob_status <- 0L
+}
+if (helper_blob_status != 0L || length(helper_blob_result) != 1L ||
+    !grepl("^[0-9a-f]{40}$", helper_blob_result)) {
+  fail("could not derive the exact old-Windows installer Git blob")
+}
+helper_blob <- helper_blob_result[[1L]]
 
 output_parent_argument <- dirname(output_argument)
 output_name <- basename(output_argument)
@@ -158,17 +181,45 @@ lines <- replace_exact(
 checkout_block <- c(
   "      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
   "        with:",
-  "          # The workflow comes from this harness-only companion, but build",
-  "          # and check inputs always come from the exact frozen candidate.",
-  paste0("          ref: ", candidate_tag),
+  "          # Check out the immutable companion whose package-facing source",
+  "          # is proved below to equal the exact frozen candidate.",
+  "          ref: ${{ github.sha }}",
+  "          fetch-depth: 2",
   "          persist-credentials: false",
   "",
-  "      - name: Verify frozen candidate checkout",
+  "      - name: Verify frozen harness checkout",
   "        shell: bash",
   "        run: |",
   "          set -euo pipefail",
-  paste0("          readonly expected=", candidate_commit),
-  '          test "$(git rev-parse HEAD)" = "$expected"',
+  paste0("          readonly candidate=", candidate_commit),
+  '          readonly harness="${GITHUB_SHA:?}"',
+  '          head="$(git rev-parse HEAD)"',
+  "          readonly head",
+  '          parents="$(git rev-list --parents -n 1 "$harness")"',
+  "          readonly parents",
+  '          test "$head" = "$harness"',
+  '          test "$parents" = "$harness $candidate"',
+  paste0("          readonly helper=", helper_relative),
+  paste0("          readonly expected_helper_blob=", helper_blob),
+  '          helper_entry="$(git ls-tree "$harness" -- "$helper")"',
+  "          readonly helper_entry",
+  paste0(
+    "          expected_helper_entry=\"$(printf ",
+    "'100644 blob %s\\t%s' ",
+    "\"$expected_helper_blob\" \"$helper\")\""
+  ),
+  "          readonly expected_helper_entry",
+  '          test "$helper_entry" = "$expected_helper_entry"',
+  paste0(
+    "          changed=\"$(git diff --name-only ",
+    "\"$candidate\" \"$harness\")\""
+  ),
+  "          readonly changed",
+  "          expected_changed=\"$(printf '%s\\n' \\",
+  "            .github/workflows/r-cmd-check.yml \\",
+  "            scripts/environment/install-hosted-r36-windows.ps1)\"",
+  "          readonly expected_changed",
+  '          test "$changed" = "$expected_changed"',
   '          test -z "$(git status --porcelain=v1 --untracked-files=all)"'
 )
 lines <- replace_exact(

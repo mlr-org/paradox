@@ -169,11 +169,15 @@ Rscript scripts/environment/test-portability-ci-evidence-verifier.R
 ```
 
 The release-only direct-child companion may reduce the ordinary matrix to
-macOS ARM64 and current Windows x86-64 and pin the immutable candidate
-checkout, but it retains the separate old-Windows job and completion job. Its
-offline evidence must contain four successful REST jobs (both ordinary
-platform rows, exact R 3.6.3/Rtools35 Windows, and completion) and exactly three
-platform artifacts.
+macOS ARM64 and current Windows x86-64, but it retains the separate old-Windows
+job and completion job. It checks out itself so a reviewed harness-only helper
+repair is available, then proves that it has exactly one parent (the immutable
+candidate), changes exactly the workflow and old-Windows installer helper,
+and carries the exact reviewed `100644` helper Git tree entry. Both changed
+paths are excluded from package builds, so the package-facing source remains
+identical to the candidate. Its offline evidence must contain four successful
+REST jobs (both ordinary platform rows, exact R 3.6.3/Rtools35 Windows, and
+completion) and exactly three platform artifacts.
 
 Render a candidate-bound companion into a new, absent path with:
 
@@ -185,10 +189,11 @@ Rscript scripts/environment/render-portability-release-workflow.R \
 ```
 
 The deterministic renderer first validates the general workflow, reduces only
-its ordinary matrix, pins both job checkouts credential-free, inserts the same
-exact frozen-commit assertion into the matrix and old-Windows jobs, and runs
-the release validator before atomically publishing the new file. It refuses an
-existing or symbolic output.
+its ordinary matrix, pins both credential-free checkouts to the triggering
+companion SHA, inserts the same exact candidate-parent/two-path/helper-tree
+assertion into the matrix and old-Windows jobs, and runs the release validator
+before atomically publishing the new file. It refuses an existing or symbolic
+output.
 
 The old-Windows artifact is the sole check-log exception to final
 `Status: OK`. R 3.6's `_R_CHECK_DEPENDS_ONLY_` isolates execution libraries but

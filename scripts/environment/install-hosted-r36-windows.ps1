@@ -7,7 +7,15 @@ param(
     [string]$WorkRoot,
 
     [Parameter(Mandatory = $true)]
-    [string]$EvidenceRoot
+    [string]$EvidenceRoot,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$RExe,
+
+    [Parameter(Mandatory = $true)]
+    [ValidateNotNullOrEmpty()]
+    [string]$RScriptExe
 )
 
 Set-StrictMode -Version Latest
@@ -48,6 +56,28 @@ if ($env:RUNNER_OS -and $env:RUNNER_OS -ne "Windows") {
 $RepositoryRoot = (Resolve-Path -LiteralPath $RepositoryRoot).Path
 $WorkRoot = [IO.Path]::GetFullPath($WorkRoot)
 $EvidenceRoot = [IO.Path]::GetFullPath($EvidenceRoot)
+$RExe = [IO.Path]::GetFullPath($RExe)
+$RScriptExe = [IO.Path]::GetFullPath($RScriptExe)
+$ExpectedRExe = [IO.Path]::GetFullPath("C:\R\bin\x64\R.exe")
+$ExpectedRScriptExe = [IO.Path]::GetFullPath("C:\R\bin\x64\Rscript.exe")
+if (-not [String]::Equals(
+        $RExe,
+        $ExpectedRExe,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or -not [String]::Equals(
+        $RScriptExe,
+        $ExpectedRScriptExe,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or -not (Test-Path -LiteralPath $RExe -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $RScriptExe -PathType Leaf)) {
+    throw "dependency installer requires exact R 3.6 x86-64 executables"
+}
+foreach ($Executable in @($RExe, $RScriptExe)) {
+    $Item = Get-Item -LiteralPath $Executable -Force
+    if (($Item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "dependency installer R executable is a reparse point"
+    }
+}
 $ExpectedLibraryRoot = Join-Path $WorkRoot "library"
 if ($env:PARADOX_R36_ISOLATION_SCHEMA -cne "hosted-r36-isolation-v1" -or
     $env:PARADOX_R36_ISOLATION_PHASE -cne "closure" -or
@@ -133,52 +163,41 @@ foreach ($Package in $InstallOrder) {
     $Selected[$Package] = $Row
 }
 
-$RExe = (Get-Command "R.exe" -ErrorAction Stop).Source
-$RScriptExe = (Get-Command "Rscript.exe" -ErrorAction Stop).Source
 $CurlExe = (Get-Command "curl.exe" -ErrorAction Stop).Source
 $ToolIdentities = @(
     [pscustomobject]@{
         Name = "gcc"
-        Command = "gcc.exe"
         ExpectedPath = "C:\Rtools\mingw_64\bin\gcc.exe"
         SHA256 = "2d415b0fd5eacb43268e2ddf080b50f706d9fa2465b1e32d04f54ce936fac3da"
         Path = $null
     },
     [pscustomobject]@{
         Name = "g++"
-        Command = "g++.exe"
         ExpectedPath = "C:\Rtools\mingw_64\bin\g++.exe"
         SHA256 = "0d3d581bca702c777fc045a2fe69696e5979d86e819efe2350e2ac43f33f2b7f"
         Path = $null
     },
     [pscustomobject]@{
         Name = "objdump"
-        Command = "objdump.exe"
         ExpectedPath = "C:\Rtools\mingw_64\bin\objdump.exe"
         SHA256 = "cbf5f996ef759be73502387c9d1296176f8bb7b6320b63cfb61371f7a98e7b59"
         Path = $null
     },
     [pscustomobject]@{
         Name = "make"
-        Command = "make.exe"
         ExpectedPath = "C:\Rtools\bin\make.exe"
         SHA256 = "ce462e4ca812718a077ae4b67ebec0bd2df0e7a3bc1e31897e40895023e13c72"
         Path = $null
     }
 )
 foreach ($Tool in $ToolIdentities) {
-    $Tool.Path = (
-        Get-Command `
-            $Tool.Command `
-            -CommandType Application `
-            -ErrorAction Stop
-    ).Source
-    if (-not [String]::Equals(
-        [IO.Path]::GetFullPath($Tool.Path),
-        [IO.Path]::GetFullPath($Tool.ExpectedPath),
-        [StringComparison]::OrdinalIgnoreCase
-    )) {
-        throw "dependency installer resolved an unexpected Rtools35 $($Tool.Name)"
+    $Tool.Path = [IO.Path]::GetFullPath($Tool.ExpectedPath)
+    if (-not (Test-Path -LiteralPath $Tool.Path -PathType Leaf)) {
+        throw "dependency installer lacks Rtools35 $($Tool.Name)"
+    }
+    $ToolItem = Get-Item -LiteralPath $Tool.Path -Force
+    if (($ToolItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "dependency installer Rtools35 $($Tool.Name) is a reparse point"
     }
     $ObservedToolHash = (
         Get-FileHash -LiteralPath $Tool.Path -Algorithm SHA256
@@ -232,6 +251,25 @@ $OriginalPkgCxxStd = if ($HadPkgCxxStd) {
 } else {
     $null
 }
+$VerifyInstalledCode = @'
+args <- commandArgs(TRUE)
+stopifnot(
+    length(args) == 3L,
+    identical(
+        as.character(utils::packageVersion(args[[2L]], lib.loc = args[[1L]])),
+        args[[3L]]
+    )
+)
+'@
+$VerifyInstalledScript = Join-Path $WorkRoot "verify-installed-version.R"
+if (Test-Path -LiteralPath $VerifyInstalledScript) {
+    throw "installed-version verifier path is not fresh"
+}
+[IO.File]::WriteAllText(
+    $VerifyInstalledScript,
+    $VerifyInstalledCode,
+    $Utf8NoBom
+)
 Remove-Item -LiteralPath "Env:R_PKG_CXX_STD" -ErrorAction SilentlyContinue
 try {
 foreach ($Package in $InstallOrder) {
@@ -360,22 +398,11 @@ foreach ($Package in $InstallOrder) {
         )
     }
 
-    $VerifyCode = @'
-args <- commandArgs(TRUE)
-stopifnot(
-    length(args) == 3L,
-    identical(
-        as.character(utils::packageVersion(args[[2L]], lib.loc = args[[1L]])),
-        args[[3L]]
-    )
-)
-'@
     Invoke-Native `
         -FilePath $RScriptExe `
         -Arguments @(
             "--vanilla",
-            "-e",
-            $VerifyCode,
+            $VerifyInstalledScript,
             $LibraryRoot,
             $Package,
             $Row.Version
@@ -400,6 +427,10 @@ stopifnot(
             -LiteralPath "Env:R_PKG_CXX_STD" `
             -ErrorAction SilentlyContinue
     }
+    Remove-Item -LiteralPath $VerifyInstalledScript -Force
+}
+if (Test-Path -LiteralPath $VerifyInstalledScript) {
+    throw "installed-version verifier was not removed"
 }
 
 $VerifyClosureCode = @'
@@ -431,15 +462,30 @@ stopifnot(
     grepl("\\.dll$", dll[["path"]], ignore.case = TRUE)
 )
 '@
-Invoke-Native `
-    -FilePath $RScriptExe `
-    -Arguments @(
-        "--vanilla",
-        "-e",
-        $VerifyClosureCode,
-        $LibraryRoot
-    ) `
-    -Label "complete runtime-closure verification"
+$VerifyClosureScript = Join-Path $WorkRoot "verify-runtime-closure.R"
+if (Test-Path -LiteralPath $VerifyClosureScript) {
+    throw "runtime-closure verifier path is not fresh"
+}
+[IO.File]::WriteAllText(
+    $VerifyClosureScript,
+    $VerifyClosureCode,
+    $Utf8NoBom
+)
+try {
+    Invoke-Native `
+        -FilePath $RScriptExe `
+        -Arguments @(
+            "--vanilla",
+            $VerifyClosureScript,
+            $LibraryRoot
+        ) `
+        -Label "complete runtime-closure verification"
+} finally {
+    Remove-Item -LiteralPath $VerifyClosureScript -Force
+}
+if (Test-Path -LiteralPath $VerifyClosureScript) {
+    throw "runtime-closure verifier was not removed"
+}
 
 [IO.File]::WriteAllLines(
     (Join-Path $ClosureEvidence "sources.tsv"),
