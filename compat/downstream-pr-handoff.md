@@ -73,23 +73,25 @@ history and must not be presented as active-candidate proof.
 
 ## Manual hosted-portability handoff
 
-Candidate tag `paradox-2.0.0-ci-f27776e` and failed companion tag
-`paradox-2.0.0-ci-f27776e-harness-198e838` are already remote. Hosted run
-`30793059118` proved that unchanged first companion cannot relay a multiline
-`-e` operand through R 3.6's top-level `Rfe.exe`; current Windows and macOS
-passed, but old Windows stopped before building or loading Paradox. Do not
-restart it. At the last audit, the remote branch was `3a4f2f5` and replacement
-companion tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` was absent. After
-reviewing the refs, the user can publish the updated branch and only the new
-tag atomically, then dispatch a fresh run with:
+Candidate tag `paradox-2.0.0-ci-f27776e` and failed companion tags
+`paradox-2.0.0-ci-f27776e-harness-198e838` and
+`paradox-2.0.0-ci-f27776e-harness-ff3b510` are already remote. Run
+`30793059118` stopped old Windows at the R 3.6 top-level `Rfe.exe` multiline
+argument boundary. Run `30803703541` passed the complete current-Windows and
+macOS jobs but stopped old-Windows job `91654062556` at the harness's
+`Get-Command`/PATH assertion before launching R. Do not restart either run.
+At the last audit, remote branch `paradox_c` was `f5da8a9` and final companion
+tag `paradox-2.0.0-ci-f27776e-harness-582eba8` was absent. After reviewing the
+refs, the user can publish the updated branch and only the new tag atomically,
+then dispatch a fresh run with:
 
 ```sh
 test -z "$(git -C /home/mewse/paradox_neo status --porcelain)"
 test "$(git -C /home/mewse/paradox_neo symbolic-ref --short HEAD)" = paradox_c
 git -C /home/mewse/paradox_neo merge-base --is-ancestor \
-  a2af7030a4fe3e1109b8be2200aa61e7566dc0f6 refs/heads/paradox_c
+  812e5abef05c86f743425f6d984fb146c2827434 refs/heads/paradox_c
 test "$(git -C /home/mewse/paradox_neo diff --name-only \
-  a2af7030a4fe3e1109b8be2200aa61e7566dc0f6 refs/heads/paradox_c)" = \
+  812e5abef05c86f743425f6d984fb146c2827434 refs/heads/paradox_c)" = \
   "$(printf '%s\n' \
     AGENTS.md \
     compat/downstream-pr-handoff.md \
@@ -101,28 +103,51 @@ test "$(git -C /home/mewse/paradox_neo rev-parse refs/tags/paradox-2.0.0-ci-f277
 test "$(git -C /home/mewse/paradox_neo ls-remote --tags origin \
   refs/tags/paradox-2.0.0-ci-f27776e | cut -f1)" = \
   f27776ee1eca5d964945aa53d14d0ec7947dccbf
-test "$(git -C /home/mewse/paradox_neo rev-parse refs/tags/paradox-2.0.0-ci-f27776e-harness-ff3b510)" = \
-  ff3b510bb31404d586c71531771f38715e3db763
-test "$(git -C /home/mewse/paradox_neo rev-parse ff3b510bb31404d586c71531771f38715e3db763^)" = \
-  f27776ee1eca5d964945aa53d14d0ec7947dccbf
-test "$(git -C /home/mewse/paradox_neo diff --name-only f27776ee1eca5d964945aa53d14d0ec7947dccbf ff3b510bb31404d586c71531771f38715e3db763)" = \
-  .github/workflows/r-cmd-check.yml
+test "$(git -C /home/mewse/paradox_neo rev-parse refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8)" = \
+  582eba86e7a05428f63608272c1c6c6e11a894f4
+test "$(git -C /home/mewse/paradox_neo rev-list --parents -n 1 \
+  582eba86e7a05428f63608272c1c6c6e11a894f4)" = \
+  "582eba86e7a05428f63608272c1c6c6e11a894f4 f27776ee1eca5d964945aa53d14d0ec7947dccbf"
+test "$(git -C /home/mewse/paradox_neo diff --name-only \
+  f27776ee1eca5d964945aa53d14d0ec7947dccbf \
+  582eba86e7a05428f63608272c1c6c6e11a894f4)" = \
+  "$(printf '%s\n' \
+    .github/workflows/r-cmd-check.yml \
+    scripts/environment/install-hosted-r36-windows.ps1)"
+test "$(git -C /home/mewse/paradox_neo ls-tree \
+  582eba86e7a05428f63608272c1c6c6e11a894f4 -- \
+  scripts/environment/install-hosted-r36-windows.ps1)" = \
+  "$(printf '100644 blob %s\t%s' \
+    3b420d542dc5a1ae5506380543159cdea84517fa \
+    scripts/environment/install-hosted-r36-windows.ps1)"
+test "$(git -C /home/mewse/paradox_neo show \
+  582eba86e7a05428f63608272c1c6c6e11a894f4:.github/workflows/r-cmd-check.yml | \
+  sha256sum | cut -d' ' -f1)" = \
+  a7d55d3f3df1543753fbea37424dd3702d8c8de187cb213354f5580db4f35f44
+test "$(git -C /home/mewse/paradox_neo show \
+  582eba86e7a05428f63608272c1c6c6e11a894f4:scripts/environment/install-hosted-r36-windows.ps1 | \
+  sha256sum | cut -d' ' -f1)" = \
+  283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b
+test "$(git -C /home/mewse/paradox_neo ls-remote --heads origin \
+  refs/heads/paradox_c | cut -f1)" = \
+  f5da8a9da00472438b3886e31c8ec8f079d5bfea
+test -z "$(git -C /home/mewse/paradox_neo ls-remote --tags origin \
+  refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8)"
 git -C /home/mewse/paradox_neo push --atomic origin \
   refs/heads/paradox_c:refs/heads/paradox_c \
-  refs/tags/paradox-2.0.0-ci-f27776e-harness-ff3b510:refs/tags/paradox-2.0.0-ci-f27776e-harness-ff3b510
+  refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8:refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8
 gh workflow run r-cmd-check.yml --repo mlr-org/paradox \
-  --ref paradox-2.0.0-ci-f27776e-harness-ff3b510
+  --ref paradox-2.0.0-ci-f27776e-harness-582eba8
 ```
 
 The replacement harness tag points to direct child
-`ff3b510bb31404d586c71531771f38715e3db763`, tree
-`387a8c724dddfcd18a2b21ccdfc940776c2534d6`; its sole diff from the candidate
-is `.github/workflows/r-cmd-check.yml`, SHA-256
-`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
-Its workflow checks out candidate
-tag `paradox-2.0.0-ci-f27776e` at
-`f27776ee1eca5d964945aa53d14d0ec7947dccbf`. Do not dispatch from the mutable
-development branch. After dispatch, obtain the exact run ID with:
+`582eba86e7a05428f63608272c1c6c6e11a894f4`, tree
+`e5ba13f476b4997fea4dbaf5d60369a058ad024c`. Its two changed paths are excluded
+from package builds. The workflow checks out that immutable companion, proves
+its sole parent is candidate `f27776e`, admits only the two reviewed changes,
+and authenticates the helper's exact `100644` tree entry before use. Do not
+dispatch from the mutable development branch. After dispatch, obtain the exact
+run ID with:
 
 ```sh
 gh run list --repo mlr-org/paradox --workflow r-cmd-check.yml \
@@ -131,7 +156,7 @@ gh run list --repo mlr-org/paradox --workflow r-cmd-check.yml \
 ```
 
 Select only the fresh run whose `headSha` is
-`ff3b510bb31404d586c71531771f38715e3db763`. Retain and independently verify
+`582eba86e7a05428f63608272c1c6c6e11a894f4`. Retain and independently verify
 its three platform artifacts and four REST jobs before treating hosted
 portability as accepted.
 

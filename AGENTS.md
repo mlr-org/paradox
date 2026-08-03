@@ -215,29 +215,46 @@ and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
 
 The final portability-validation tooling is
-`refs/paradox-release/portability-tooling-20260803T084137Z`, commit
-`a2af7030a4fe3e1109b8be2200aa61e7566dc0f6`, tree
-`62b9a6ca0e99949361db862546a94d057ff5b0b0`. The workflow correction itself
-landed at `102e68c2f4f073d2573bc81e89172d9f202adbe5`. The active direct-child
-companion is `refs/paradox-release/portability-harness-ff3b510`, commit
-`ff3b510bb31404d586c71531771f38715e3db763`, tree
-`387a8c724dddfcd18a2b21ccdfc940776c2534d6`. It changes only
-`.github/workflows/r-cmd-check.yml`; the rendered workflow SHA-256 is
-`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
-Local tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` binds that companion.
-Structural workflow, renderer, evidence-verifier, release-mode, and actionlint
-checks pass under the final tooling.
+`refs/paradox-release/portability-tooling-20260803T103512Z`, commit
+`812e5abef05c86f743425f6d984fb146c2827434`, tree
+`e99604f05c10db57406773383d2e0a73746a139c`. The active immutable direct-child
+companion is `refs/paradox-release/portability-harness-582eba8`, commit
+`582eba86e7a05428f63608272c1c6c6e11a894f4`, tree
+`e5ba13f476b4997fea4dbaf5d60369a058ad024c`, with local tag
+`paradox-2.0.0-ci-f27776e-harness-582eba8`. Its exact diff is
+`.github/workflows/r-cmd-check.yml` plus
+`scripts/environment/install-hosted-r36-windows.ps1`; the `.github` and
+`scripts` roots are excluded by the candidate's `.Rbuildignore`, so it is
+package-facing-source identical to `f27776e`. The rendered workflow and helper
+SHA-256 values are respectively
+`a7d55d3f3df1543753fbea37424dd3702d8c8de187cb213354f5580db4f35f44`
+and
+`283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b`.
+The helper is exact `100644` Git blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`; both hosted jobs authenticate that
+complete tree entry before executing it. Structural workflow, deterministic
+renderer, release-mode, helper-blob adversary, PowerShell parser, offline
+evidence-verifier, documentation-economy, and actionlint checks pass.
 
-Hosted run `30793059118` executed superseded companion `198e838`: current
-Windows and macOS passed, while exact Windows R 3.6.3 stopped in toolchain
-preflight before building or loading Paradox. R 3.6's top-level `Rfe.exe`
-launcher lost the workflow's multiline `-e` operand; the missing receipts,
-artifact, and aggregate failure are consequences. This is deterministic failed
-harness evidence, so retrying the unchanged run is useless. At the
-pre-publication audit, the candidate and failed companion tags were remote, the
-remote branch was `3a4f2f5`, and the new companion tag was absent. Hosted
-execution remains the sole validation gate: the user must publish the updated
-branch and exact new tag, then dispatch a fresh run.
+Hosted run `30793059118` against `198e838` remains the first deterministic
+failed-harness history: current Windows and macOS passed, while exact Windows
+R 3.6.3 stopped before Paradox because the top-level `Rfe.exe` launcher lost a
+multiline `-e` operand. Hosted run `30803703541` against now-superseded
+`ff3b510` again passed current Windows x86-64 and macOS ARM64. Its old-Windows
+job `91654062556` stopped even earlier at the harness assertion `PATH does not
+select exact R 3.6 x86-64 executables`; the log proves the direct x64 files
+existed but does not identify which `Get-Command` result differed. No R,
+compiler, package build, DLL load, or Paradox test ran. Missing receipts and
+artifact plus aggregate failure are consequences. Do not retry either immutable
+failed companion.
+
+The replacement invokes authenticated absolute R, Rscript, and Rtools paths,
+uses fresh no-BOM R files instead of multiline `-e`, and carries the corrected
+helper in the companion itself. At the last audit, remote branch `paradox_c`
+was `f5da8a9`; candidate, `198e838`, and `ff3b510` tags were remote, while the
+new `582eba8` tag was absent. Hosted execution remains the sole validation
+gate: the user must publish the updated branch and exact new tag, then dispatch
+one fresh run.
 
 All applicable local gates are complete for `f27776e`. The `4e549f3`
 compatibility, memory, benchmark, and hosted results are historical and do not
@@ -3653,15 +3670,18 @@ and macOS retain exact `Status: OK`. An always-run completion job must then
 reject the complete matrix aggregate unless it is exactly `success`. The offline verifier
 independently requires four successful REST jobs (macOS ARM64, current Windows
 x86-64, exact R 3.6.3/Rtools35 Windows x86-64, and completion), all three exact
-platform artifacts, their check logs, and frozen candidate provenance. A
-release-only direct-child companion changes only the workflow to pin and check
-out the immutable candidate and to reduce the ordinary matrix; it must retain
-the separate old-Windows job and both completion layers.
+platform artifacts, their check logs, and frozen companion/candidate
+provenance. A
+release-only direct-child companion may change only the workflow and an exact
+package-excluded harness helper. It checks out itself, proves it has the
+immutable candidate as its sole parent, authenticates the helper's exact Git
+tree entry, and retains the separate old-Windows job and both completion
+layers.
 Create that workflow with
 `scripts/environment/render-portability-release-workflow.R`, never by a
-one-job hand edit: the renderer pins both checkouts credential-free, inserts
-both exact commit assertions, and runs the release structural validator before
-publishing an absent output path.
+one-job hand edit: the renderer pins both companion checkouts credential-free,
+inserts both exact parent/diff/helper assertions, and runs the release
+structural validator before publishing an absent output path.
 
 Profile representative constructor, `check`/`check_dt`/`check_dependencies`,
 `has_deps`, values, domains/params/dependencies, subset/collection, live Shadow

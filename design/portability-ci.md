@@ -534,36 +534,59 @@ argument`. The missing receipts, artifact, and aggregate failure are expected
 consequences of that primary stop. This is deterministic harness evidence;
 retrying `198e838` cannot test a repair.
 
-The corrected old-Windows policy bypasses `Rfe.exe`: every phase selects and
-checks the exact installed `C:\R\bin\x64` applications before launching R.
-Workflow-owned architecture and provenance expressions are written as fresh
-UTF-8-without-BOM files, executed by the direct x86-64 `Rscript.exe`, and
-removed before the phase can pass. The closure phase prepends the same exact
-directory, explicitly selects PowerShell's standard native-argument mode, and
-reauthenticates both applications before the locked installer resolves its
-reviewed two `-e` calls. Their structured arguments therefore reach the real
-Rscript executable rather than the lossy forwarding launcher. Structural
-tests inventory every such installer call, reject any workflow `-e` call,
-require the direct executable path in every phase, bind fresh no-BOM probe
-construction, status capture, cleanup, and exact path reauthentication, and
-adversarially mutate the architecture payload and empty the provenance payload.
+The first direct-x86-64 correction was frozen under tooling `a2af703` and
+companion `ff3b510`. Hosted run `30803703541` executed that exact companion.
+Current Windows x86-64 and macOS ARM64 both passed their full package checks.
+The old-Windows job `91654062556` stopped in toolchain preflight at `PATH does
+not select exact R 3.6 x86-64 executables`. Both literal
+`C:\R\bin\x64\R.exe` and `Rscript.exe` had passed the preceding file checks;
+the retained log does not expose which `Get-Command` result differed. No R
+process, compiler, package build, DLL load, or Paradox test ran. Provenance,
+artifact, and aggregate failures are consequential. This is another
+deterministic harness result; retrying unchanged `ff3b510` cannot test a repair.
 
-The workflow correction landed at
-`102e68c2f4f073d2573bc81e89172d9f202adbe5`. Hardened validation is frozen at
-`refs/paradox-release/portability-tooling-20260803T084137Z`, commit
-`a2af7030a4fe3e1109b8be2200aa61e7566dc0f6`, tree
-`62b9a6ca0e99949361db862546a94d057ff5b0b0`. The active immutable direct-child
-companion is `refs/paradox-release/portability-harness-ff3b510`, commit
-`ff3b510bb31404d586c71531771f38715e3db763`, tree
-`387a8c724dddfcd18a2b21ccdfc940776c2534d6`, with tag
-`paradox-2.0.0-ci-f27776e-harness-ff3b510`. It changes only the workflow; its
-rendered SHA-256 is
-`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
-General and release validation, deterministic rendering, exact committed-byte
-comparison, CI-evidence fixtures, and actionlint pass. The remote branch was
-`3a4f2f5` at the last audit and the new companion tag was absent. Only its
-manual publication and a fresh hosted execution remain; `198e838` must not be
-retried.
+The final old-Windows policy makes name discovery non-authoritative. Every
+phase invokes the exact installed `C:\R\bin\x64` applications directly, and
+the locked installer admits those two paths as mandatory parameters before it
+does any work. Rtools executables are likewise addressed through their exact
+authenticated paths and byte hashes. All workflow and installer R expressions
+are fresh UTF-8-without-BOM files, executed by direct `Rscript.exe`, and removed
+in `finally`; no multiline `-e` operand or PowerShell native-argument mode is
+involved. The ordinary PATH still starts with the reviewed R/Rtools directories
+for R's own child processes, while every harness launch remains explicit.
+Structural tests inventory all such calls, reject name-based R/Rscript/Rtools
+discovery and `-e`, bind construction/status/cleanup, and adversarially mutate
+the architecture, provenance, direct-path, and helper-blob contracts. The full
+helper and all four old-Windows workflow blocks also parse with zero errors
+under official portable PowerShell 7.6.4.
+
+Final validation is frozen at
+`refs/paradox-release/portability-tooling-20260803T103512Z`, commit
+`812e5abef05c86f743425f6d984fb146c2827434`, tree
+`e99604f05c10db57406773383d2e0a73746a139c`. The active immutable companion is
+`refs/paradox-release/portability-harness-582eba8`, commit
+`582eba86e7a05428f63608272c1c6c6e11a894f4`, tree
+`e5ba13f476b4997fea4dbaf5d60369a058ad024c`, with tag
+`paradox-2.0.0-ci-f27776e-harness-582eba8`. It is the candidate's sole child
+and changes exactly `.github/workflows/r-cmd-check.yml` and
+`scripts/environment/install-hosted-r36-windows.ps1`. The candidate excludes
+both top-level roots through `.Rbuildignore`, so the companion is
+package-facing-source identical to `f27776e`. The workflow and helper SHA-256
+values are respectively
+`a7d55d3f3df1543753fbea37424dd3702d8c8de187cb213354f5580db4f35f44`
+and
+`283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b`;
+the helper is exact `100644` Git blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`. Both jobs check out the companion
+at depth two, prove its exact sole parent and two-path diff, and authenticate
+that complete helper tree entry before execution. General/release validation,
+deterministic rendering, helper-blob adversary, exact committed blobs,
+CI-evidence fixtures, documentation economy, and actionlint pass.
+
+At the last remote audit, branch `paradox_c` was `f5da8a9`; candidate and both
+failed companion tags were remote, while the active `582eba8` tag was absent.
+Only manual branch/tag publication and one fresh hosted execution remain.
+Neither `198e838` nor `ff3b510` may be retried.
 
 ## Acceptance
 

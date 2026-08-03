@@ -196,26 +196,36 @@ and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
 
 Final portability-validation tooling is frozen at
-`refs/paradox-release/portability-tooling-20260803T084137Z`, commit
-`a2af7030a4fe3e1109b8be2200aa61e7566dc0f6`, tree
-`62b9a6ca0e99949361db862546a94d057ff5b0b0`; the workflow fix itself landed at
-`102e68c2f4f073d2573bc81e89172d9f202adbe5`. The active direct-child companion
-is `refs/paradox-release/portability-harness-ff3b510`, commit
-`ff3b510bb31404d586c71531771f38715e3db763`, tree
-`387a8c724dddfcd18a2b21ccdfc940776c2534d6`. It changes only the workflow,
-whose rendered SHA-256 is
-`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
-All local structural portability checks pass under that tooling.
+`refs/paradox-release/portability-tooling-20260803T103512Z`, commit
+`812e5abef05c86f743425f6d984fb146c2827434`, tree
+`e99604f05c10db57406773383d2e0a73746a139c`. The active direct-child companion
+is `refs/paradox-release/portability-harness-582eba8`, commit
+`582eba86e7a05428f63608272c1c6c6e11a894f4`, tree
+`e5ba13f476b4997fea4dbaf5d60369a058ad024c`. It changes exactly the workflow
+and old-Windows installer helper below the package-excluded `.github` and
+`scripts` roots. Their SHA-256 values are respectively
+`a7d55d3f3df1543753fbea37424dd3702d8c8de187cb213354f5580db4f35f44`
+and
+`283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b`;
+the helper is exact `100644` Git blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`. The workflow proves the companion
+has candidate `f27776e` as its sole parent, admits only those two paths, and
+authenticates that helper entry before execution. All local structural,
+PowerShell-parse, deterministic-renderer, adversarial, evidence-verifier,
+documentation-economy, and actionlint checks pass.
 
-Hosted run `30793059118` used superseded companion `198e838`. Current Windows
-and macOS passed; exact Windows R 3.6.3 failed in toolchain preflight before
-building or loading Paradox because top-level `Rfe.exe` lost a multiline `-e`
-operand. Missing receipts, artifact upload, and aggregate completion are
-consequential. Retrying that immutable companion cannot test the repair. At the
-pre-publication audit, the candidate and failed companion tags were remote,
-while active tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` was local only.
-Publish the updated branch and that exact tag, then dispatch one fresh hosted
-run. All applicable local gates are complete.
+Hosted run `30793059118` used failed companion `198e838`; current Windows and
+macOS passed, while exact Windows R 3.6.3 stopped before Paradox because
+top-level `Rfe.exe` lost a multiline `-e` operand. Hosted run `30803703541`
+used now-superseded `ff3b510`; current Windows and macOS again passed, while
+old-Windows job `91654062556` stopped at `PATH does not select exact R 3.6
+x86-64 executables` before R, a compiler, or Paradox ran. Missing old-Windows
+receipts/artifact and aggregate completion are consequential. Retrying either
+immutable companion cannot test the final repair. At the last audit, branch
+`paradox_c` was remote at `f5da8a9`, all earlier tags were remote, and active
+tag `paradox-2.0.0-ci-f27776e-harness-582eba8` was local only. Publish the
+updated branch and that exact tag, then dispatch one fresh hosted run. All
+applicable local gates are complete.
 
 ### Historical `4e549f3` acceptance record
 
@@ -1422,7 +1432,11 @@ green gates.
   it exposed the R 3.6 top-level launcher boundary;
 - [x] freeze the direct-x86-64-launcher correction and hardened regression
   tooling at `a2af703`, and locally validate replacement direct-child companion
-  `ff3b510` plus its exact harness tag;
+  `ff3b510`; retain hosted run `30803703541` as failed-harness evidence after
+  its command-discovery assertion stopped before R;
+- [x] remove name discovery from the old-Windows execution boundary, freeze
+  exact-path/helper-tree validation at `812e5ab`, and locally validate final
+  direct-child companion `582eba8` plus its exact harness tag;
 - [x] run and retain every applicable local gate against `f27776e`, including
   downstream, documentation, benchmark, runtime, and memory stages;
 - [ ] complete the hosted Windows x86-64/macOS ARM64 portability run and the
@@ -2066,9 +2080,10 @@ execution.
 After the remote gate and publication handoff complete, the final evidence-
 ledger commit changes only this file and changes the decision from pending to
 accepted. The portability companion changes only
-`.github/workflows/r-cmd-check.yml`. Creating either reopens only its own
-structural and ledger checks. Any package-facing post-freeze change requires a
-new candidate and new source-bound evidence.
+`.github/workflows/r-cmd-check.yml` and the package-excluded old-Windows
+installer helper. Creating either reopens only its own structural and ledger
+checks. Any package-facing post-freeze change requires a new candidate and new
+source-bound evidence.
 
 | Field | Value |
 |---|---|
@@ -2217,7 +2232,7 @@ GCT/Valgrind/rchk, refreshed broad and reverse compatibility, mandatory
 documentation, exact ten-package overlays and eight-head source checks on both
 Paradox axes, and the sealed 82-row benchmark. The remaining mandatory actions
 are the exact hosted Windows x86-64/macOS ARM64 portability run from companion
-tag `paradox-2.0.0-ci-f27776e-harness-ff3b510` and the user-performed
+tag `paradox-2.0.0-ci-f27776e-harness-582eba8` and the user-performed
 publication of the final Paradox refs, hosted workflow dispatch,
 mark-ready/review/merge/release sequence for the eight downstream PRs,
 dependency release ordering, release tag, and final release coordination.

@@ -169,15 +169,22 @@ Completion/manifest/seal/decisions hashes are
 and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
 All applicable local gates are complete. Final portability tooling
-`refs/paradox-release/portability-tooling-20260803T084137Z` at `a2af703`
-validates active companion `refs/paradox-release/portability-harness-ff3b510`
-at `ff3b510`; it changes only the rendered workflow, SHA-256
-`d2a968839175a4867bdfb1f6166fac7cb59f57ad58f61256e6c53e12729ddbf6`.
-Hosted run `30793059118` against superseded `198e838` passed current Windows
-and macOS but stopped the old-Windows job in launcher preflight before Paradox
-was built or loaded. Retrying it cannot test the correction. Fresh hosted
-execution of `ff3b510` is the only remaining validation gate. The following
-`4e549f3` evidence is historical.
+`refs/paradox-release/portability-tooling-20260803T103512Z` at `812e5ab`, tree
+`e99604f05c10db57406773383d2e0a73746a139c`, validates active companion
+`refs/paradox-release/portability-harness-582eba8` at `582eba8`, tree
+`e5ba13f476b4997fea4dbaf5d60369a058ad024c`. Its exact two-file diff contains
+the rendered workflow (SHA-256
+`a7d55d3f3df1543753fbea37424dd3702d8c8de187cb213354f5580db4f35f44`)
+and package-excluded old-Windows helper (SHA-256
+`283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b`,
+exact `100644` Git blob `3b420d542dc5a1ae5506380543159cdea84517fa`).
+Both hosted identity steps prove the exact sole parent, diff, and helper entry.
+Hosted run `30793059118` against `198e838` and run `30803703541` against
+`ff3b510` each passed current Windows and macOS but stopped old Windows before
+Paradox ran: first at the Rfe multiline-argument boundary, then at a harness
+command-discovery assertion. Retrying either cannot test the final repair.
+Fresh hosted execution of `582eba8` is the only remaining validation gate. The
+following `4e549f3` evidence is historical.
 
 ### Historical `4e549f3` validation record
 
