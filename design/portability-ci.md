@@ -512,6 +512,21 @@ tags, dispatch remote workflows, or open PRs. The user performs each remote
 write manually. After publication, agents may read and verify the resulting CI
 run and artifacts.
 
+For active candidate
+`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the locally validated
+direct-child companion is
+`refs/paradox-release/portability-harness-198e838`, commit
+`198e838566579806d6c3bd48e1327c293473257b`, tree
+`0ff93580b05e1e37994d301922f77490b2a5bb81`. It changes only
+`.github/workflows/r-cmd-check.yml`; rendered workflow SHA-256 is
+`5a60156cb79e403dcc38fceeb075d223a4397dab4a74989b36a745ccadfebec0`.
+The exact local tags are `paradox-2.0.0-ci-f27776e` and
+`paradox-2.0.0-ci-f27776e-harness-198e838`. General/release workflow
+validation, deterministic rendering, CI-evidence fixtures, and actionlint all
+pass. Existing remote jobs ran stale SHA `67ec356`; their old-Windows
+`R_HOME` failure is deterministic old-harness evidence and must not be
+restarted. Only a fresh dispatch at the harness tag can close portability.
+
 ## Acceptance
 
 Portability is accepted only when the local R matrix, pinned-header/symbol and

@@ -119,8 +119,118 @@ and
 `742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
 Discovery alone is not acceptance; this fresh donor plus r2 combined run owns
 the active memory conclusion.
-The `4e549f3` compatibility, memory, benchmark, and hosted results are
-historical and do not accept `f27776e`.
+
+Final compatibility and benchmark evidence is owned by the clean,
+package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260803T023640Z`, commit
+`f711c67dadd24fec80779a319d40f7032bed7e78`, tree
+`c6399e5e18a749ad0c647fedd602575a0a45c09e`. The first focused Paradox-1
+attempt stopped before loading a consumer because one harness self-test still
+named the preceding `4e549f3` candidate. That stale exact assertion was fixed
+at `f711c67`; it was a cheap harness preflight failure, not package evidence.
+Fresh Paradox-1 and Paradox-2 preparations then reproduced the same exact
+dependency-library endpoint
+`3828cdaf0c767d89fa30ea595845d3eab9695dfdb80bee909a5b3fabcc31919e`;
+both ten-package overlays pass current and retained independent validation.
+
+The final Paradox-1 coordinator
+`release-candidate-f27776e-final-p1-focused-f711c67-r1` passed all five tasks.
+All eight exact prepared heads—bbotk, mlr3tuning, miesmuschel,
+mlr3pipelines, mlr3mbo, celecx, mlr3fda, and mlr3forecast—built and completed
+their source-package checks successfully. The check completion, results,
+manifest, and seal SHA-256 values are
+`da3ea0f6ce24639cd9af6d1d83d1f32f3eeed138ebeedd5c9f4851d3e90865ca`,
+`2e8595a74aa9df7adbd1cb0998b0a25aa0bcc220dfea91189fc49fe0a29cc83a`,
+`d909980ec907143229a8acced261a6f357fbcf55e059ce03e7a4d20d1ced0e1d`,
+and
+`c45d078095689941c41ca5e73cb532d85b84a14e7904e73f67cd96bbfb13c5c6`.
+Coordinator completion, JSON-summary, and TSV-summary hashes are
+`b9dd1d97fb428ad4a8a1466459eb849df803397a564a6dae061d5f3d88a8ed6c`,
+`c80505e26aa5c2b8d560c50f91c18d1c0522c73fc2b38e063c23d3beee770603`,
+and
+`45c08e627c993d4d07d2e7a234849326d223d651cb865784115fa5ee6de01ebe`.
+
+The final Paradox-2 coordinator
+`release-candidate-f27776e-final-p2-compat-f711c67-r1` passed ten of twelve
+tasks. Its overall nonzero status is intentional factual aggregation: only the
+broad repository and CRAN reverse-dependency tasks are non-green, while every
+harness/preflight, exact-head, and mandatory documentation task passes. All
+eight exact heads again build and check successfully; seven finish with
+`Status: OK`, while mlr3fda has only its reviewed environmental
+`fdasrvf` cross-reference NOTE. Their completion/results/manifest/seal hashes
+are
+`f3a000732a1ff786d0a2bcf4191015d2b065f1fe0dd2b0037fc3dc5e30f38159`,
+`c5fe3fdc8a2d0bed4d7bd4eafcef3a1af28af1ad2e81708c90437ff72aa5299a`,
+`e7c356cfd18cce1c6892c22f0c3c4c278dcf4d0e32fcda18d6f1be0ed22f95af`,
+and
+`6395aac9a706507851191b80227e7063306ce686548ac9cf32f93764aafd5cb8`.
+The broad corpus completes 20 of 28 exact repositories; all eight retained
+non-green rows are reviewed upstream or environmental failures, and the former
+mlr3forecast exclusion is now green. Its completion/rows/manifest/seal hashes
+are
+`6fe7469db2b6e5d8a6b3f5ad1efcd4f3f49a873b188a30a25f7da8e2f8c87b3c`,
+`057be5a172e38ed67bc1f88fcfc6c94c2478fd9e9329c82a95488a32d845079d`,
+`7f8ea5024ad704bc1dac945120cf720eebf53a5d5e555fec8127a9cafe2c5628`,
+and
+`dcd1db9214529ff569387ffc19303c82460b289119670f6cb21ae9e4c8e2f423`.
+
+The reverse run completes every one of 22 rows without a timeout, OOM,
+missing worker, or transient failure: ten pass and twelve retain the exact
+same version/status/classification as the preceding candidate. Seven are known
+intentional breaks in unadapted releases and pass at their prepared PR heads;
+the remaining five are missing optional/external dependencies or
+offline-network tests. Completion/results/waves/manifest/seal hashes are
+`06298c91d4a46060dd886feb598100c49ead1ae6ee7446080261295f33686d32`,
+`3a34f6590c672834d2c216c28eb99b3e3ab7a0bdb0bf8ef264b05301a7b3834f`,
+`969369c94704514b9eacf14d307ee3b47fd312300c960b215586239a7482b0cc`,
+`4c6797d39143311229350c7281219a5bfdf9c2e8af68dc138b827e230a8c9b87`,
+and
+`4a9546bcb5301807350e9f77b9711619e45cd0128b4118da981791ef12a2bfd7`.
+All seven mandatory documentation conclusions pass and 14 of 17 rows pass
+overall; the three advisory exclusions are the two legacy gallery rows and
+the full-book render. Documentation results/manifest/seal hashes are
+`cddf1f4ae76f3a094731fa20ee78169c2f62961f3ab2a16578edb9feec4b0166`,
+`40caee4c34431a00225255516ed388e8c99f8db96f67a429e2ea95816daa963a`,
+and
+`9a45219b40271368bbe4d81e7d692e47af530fcd8c3698a9e3816fd8a30cbb32`.
+Current and retained verifiers accept the exact-head, corpus, reverse, and
+documentation stages. Coordinator completion/JSON-summary/TSV-summary hashes
+are
+`853e059f059cd347ac58358aa0067a677faa3d8f6826f42e3f0a3cdb5e271711`,
+`4534cea0e2158092388a61b8151b1174229b83cef5a597131f27f01cea02e7fe`,
+and
+`5a1c82014f9e79fc1ef316d1eb5e9626c72f2a09810be4d5b096397465b7c294`.
+
+Sealed benchmark
+`.local/benchmarks/release-candidate-f27776e-final-benchmark-f711c67-r1`
+passes all 82 policy rows: 78 ordinary passes, four bounded marginal reviews,
+and zero failures. The marginals are `design_transpose_plain` allocation,
+`shadow_values_live` timing, `collection_values_rich` timing, and
+`collection_values_nested` allocation; all remain within their reviewed
+integrity budgets. Completion/manifest/seal/decision-table SHA-256 values are
+`ce90fc5bd7468955ec57615e89354b82e4e1484a9936a2b51b92c11b7e743c66`,
+`5cfb9e69d23449b8cea85d7abbe9eb59a0f810a7fbc6a9e38b6d1ac5fc2bb571`,
+`4af296b0a895470efb927c6f39f8de32872749029af14a272d4c3d05ccaab524`,
+and
+`e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
+
+The active direct-child portability companion is
+`refs/paradox-release/portability-harness-198e838`, commit
+`198e838566579806d6c3bd48e1327c293473257b`, tree
+`0ff93580b05e1e37994d301922f77490b2a5bb81`. It changes only
+`.github/workflows/r-cmd-check.yml`; the rendered workflow SHA-256 is
+`5a60156cb79e403dcc38fceeb075d223a4397dab4a74989b36a745ccadfebec0`.
+Local tags `paradox-2.0.0-ci-f27776e` and
+`paradox-2.0.0-ci-f27776e-harness-198e838` bind the candidate and companion.
+Structural workflow, renderer, evidence-verifier, release-mode, and actionlint
+checks pass. Hosted execution remains the sole validation gate: the existing
+remote PR still names stale `67ec356`, and its deterministic old-Windows
+`R_HOME` failure cannot test the local fix. Do not restart any old run; the
+user must publish the exact new refs and dispatch a fresh hosted run.
+
+All applicable local gates are complete for `f27776e`. The `4e549f3`
+compatibility, memory, benchmark, and hosted results are historical and do not
+accept `f27776e`.
 
 The superseded immutable candidate was
 `refs/paradox-release/candidate-20260801T092108Z`, commit
@@ -396,7 +506,7 @@ the second began at that exact hash and changed it again to
 Pak had injected run-local Rush provenance and build times, so the P1 endpoint
 was already stale before P2 completed. Do not reuse either run.
 
-The active candidate's direct-child portability companion is
+That superseded candidate's direct-child portability companion is
 `refs/paradox-release/portability-harness-7b4440b`, commit
 `7b4440b1b2e9fb75606da6f4bc8eb3cbf939bf6c`, tree
 `850d8165877f4206294886fe046b995ae414bae0`. It changes only
@@ -3118,19 +3228,21 @@ have caught it before fixing the consumer-facing issue.
 ## Downstream transition worktrees
 
 Remote writes by an agentic process are forbidden. Agents may edit, test, and
-commit in local downstream worktrees, but the user must push branches and open
-or submit PRs manually.
+commit in local downstream worktrees; the user has manually pushed the eight
+retained branches and opened their pull requests.
 
-The heads below are the current local PR handoff, including the final
+The heads below are the exact published PR handoff, including the final
 dormant-value adaptations and current-upstream rebases. bbotk, mlr3tuning,
 mlr3mbo, and mlr3fda were rebuilt on their exact current target heads so the
 proposed PRs remain small; the earlier tested commits remain preserved by
 hash. Dual-version
 validation is complete at the intended development scope, and the exact final
 eight heads now also pass sealed source-package checks on both Paradox axes in
-the candidate-owned ten-package profile described above. The user must perform
-every remote publication action; live remote inspection found every retained
-migration branch absent, so each command uses `push --set-upstream`:
+the candidate-owned ten-package profile described above. All eight PRs are
+open, mergeable drafts at those exact heads. The user must mark them ready,
+review, merge, and coordinate releases; the commands in
+`compat/downstream-pr-handoff.md` are retained only as already-executed
+publication provenance:
 
 - bbotk `codex/public-paramsetcollection-sets` at `09dafa6`: public collection
   state and rooted detached native search-space snapshots remain, with the
@@ -3184,12 +3296,13 @@ migration branch absent, so each command uses `push --set-upstream`:
   and production code are unchanged;
 - mlr3 `codex/paradox2-diagnostics` at `35e30a9` and mlr3fselect
   `codex/paradox2-diagnostics` at `ae8e1d1` are wholly redundant. Close those
-  PRs without replacement; there is no cleanup commit to publish.
+  branches without publication; no corresponding PR is open and there is no
+  cleanup commit to publish.
 
 Merge and release the seven CRAN reverse-dependency adaptations—bbotk,
 mlr3tuning, miesmuschel, mlr3mbo, mlr3pipelines, mlr3fda, and mlr3forecast—before Paradox 2,
 so CRAN and ordinary installations select compatible revisions. Release
-mlr3mbo as at least 1.2.2 before publishing the GitHub-only celecx bridge. The
+mlr3mbo as at least 1.2.2 before merging the GitHub-only celecx bridge. The
 final exact source-package gate covers all eight retained PR heads; the broad
 repository suite is not a substitute for those package build/check rows.
 
@@ -3624,9 +3737,9 @@ At that point the checked-in active `paradox2` row in
 `compat/paradox-evidence-axes.tsv` still named this historical `dbbdcc1`
 ref/commit/tree, and no fresh candidate-run-owned
 `release-refresh-20260720` overlay had been constructed. It now names the exact
-active `4e549f3` ref/commit/tree and the fresh overlays are recorded above. All
-retained overlays and consumer results owned by earlier Paradox-2 candidates
-remain historical.
+active `f27776e` ref/commit/tree and the fresh `f711c67` overlays are recorded
+above. All retained overlays and consumer results owned by earlier Paradox-2
+candidates remain historical.
 Post-freeze tooling admission explicitly includes the package-excluded
 `verification/` root so that reviewed coordinator scheduling changes can drive
 that overlay; package-facing paths remain forbidden, and the tooling checkout
