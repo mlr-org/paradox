@@ -23,7 +23,10 @@ with `--with-keep.source` can otherwise retain package source references. The
 same rule covers generated Shadow/Collection callback adapters and the
 internal-tuning namespace adapter created by
 `ParamSetCollection$flatten()`: package-generated callback state is not exempt
-from the stored-callback invariant. On supported R releases,
+from the stored-callback invariant. The generated retired-API active-binding
+diagnostic installed during legacy migration follows the same rule; its
+session-local provenance token remains intact while its returned closure drops
+package source metadata. On supported R releases,
 `identical(ignore.srcref = TRUE)` does not consistently ignore source metadata
 nested inside a formals-default AST; semantic equality remains unchanged, but
 the implementation and tests do not promise `identical()` between an original

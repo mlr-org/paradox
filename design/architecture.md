@@ -190,11 +190,12 @@ The migration implementation has three layers:
    migration closed on such a promise because its compiled-code policy rejects
    the old accessors and no replacement exists; ordinary callback factories
    can retain such formal promises, so migrate that graph under R 4.0--4.4 or
-   R >= 4.6. Every package-owned callback factory (the `p_fct()`/log-scale
-   `p_int()` transformation factories, the detached Collection/Shadow plan
-   callbacks, the tuning ParamSet renaming trafo, and the retired-binding
-   diagnostics) replaces its already-forced formal cells with direct values,
-   so the package does not create that boundary itself. R >= 4.6 uses public
+   R >= 4.6. Every object-retained generated callback frame (the
+   `p_fct()`/log-scale `p_int()` transformation factories, the detached
+   Collection/Shadow plan callbacks, the tuning ParamSet renaming trafo, the
+   two crate-backed internal-tuning adapters, and the retired-binding
+   diagnostics) stores direct captured values, so the package does not create
+   that boundary itself. R >= 4.6 uses public
    binding/dots accessors and treats a detached `PROMSXP` outside those cells
    as opaque. Because R 3.6 exposes no accessor for an active binding's
    function,
@@ -1199,8 +1200,8 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   R 4.5 fails recursive migration closed on a reached promise because its
   compiled-code policy classifies those accessors as non-API. This includes
   formal promises retained by ordinary factory callback frames, even when
-  forced or unused. Every package-owned callback factory stores its
-  already-forced captures as direct frame values; arbitrary user factories
+  forced or unused. Every object-retained generated callback frame stores its
+  captures as direct frame values; arbitrary user factories
   retain the general rule. R >= 4.6 uses
   only the documented experimental binding/delayed-binding/dots APIs. None of
   the three detached-promise accessors is declared locally or present in an

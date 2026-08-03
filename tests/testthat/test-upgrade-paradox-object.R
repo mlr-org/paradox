@@ -2593,6 +2593,10 @@ test_that("retired-API diagnostics authenticate and stay promise-free", {
   # recursive-migration promise boundary inside every upgraded object.
   binding = paradox:::.upgrade_paradox_retired_binding("values", "paradox")
   frame = environment(binding)
+  expect_setequal(ls(frame, all.names = TRUE), c(
+    "name", "owner_package", "token"
+  ))
+  expect_false(paradox:::.paradox_has_srcref(binding))
   for (cell in c("name", "owner_package", "token")) {
     snapshot = paradox:::.paradox_plain_binding_snapshot(frame, cell)
     expect_true(isTRUE(snapshot$ok), info = cell)
@@ -2614,6 +2618,27 @@ test_that("retired-API diagnostics authenticate and stay promise-free", {
   ))
   expect_error(
     binding(NULL),
+    paste0(
+      "`$values` belonged to the Paradox 1 implementation in package ",
+      "'paradox' and was retired in Paradox 2"
+    ),
+    fixed = TRUE
+  )
+
+  roundtripped = unserialize(serialize(binding, NULL))
+  expect_setequal(ls(environment(roundtripped), all.names = TRUE), c(
+    "name", "owner_package", "token"
+  ))
+  expect_false(paradox:::.paradox_has_srcref(roundtripped))
+  for (cell in c("name", "owner_package", "token")) {
+    snapshot = paradox:::.paradox_plain_binding_snapshot(
+      environment(roundtripped),
+      cell
+    )
+    expect_true(isTRUE(snapshot$ok), info = cell)
+  }
+  expect_error(
+    roundtripped(NULL),
     paste0(
       "`$values` belonged to the Paradox 1 implementation in package ",
       "'paradox' and was retired in Paradox 2"

@@ -139,14 +139,15 @@ test_that("factory-frame promises use the exact R 4.5 migration boundary", {
   expect_identical(param_set$values, values)
 })
 
-test_that("package-owned callback factories store plain frame bindings", {
+test_that("object-retained generated callbacks store plain frame bindings", {
   # The boundary above is documented for arbitrary user factories. The package
-  # must not manufacture it inside its own current objects: every factory
-  # below stores its captures as direct frame values, never as formal promise
-  # cells, so graphs made only of package-manufactured callbacks migrate on
+  # must not manufacture it inside its own current objects: every generated
+  # frame below stores its captures as direct values, never as formal promise
+  # cells, so graphs made only of package-generated callbacks migrate on
   # every supported runtime including exactly R 4.5.
   expect_plain_cells = function(closure, cells) {
     frame = environment(closure)
+    expect_setequal(ls(frame, all.names = TRUE), cells)
     for (cell in cells) {
       snapshot = paradox:::.paradox_plain_binding_snapshot(frame, cell)
       expect_true(isTRUE(snapshot$ok), info = cell)
@@ -156,6 +157,7 @@ test_that("package-owned callback factories store plain frame bindings", {
   # into the walked graph; base-homed callbacks keep the carriers clean.
   base_trafo = eval(quote(function(x, param_set) x), baseenv())
   base_constraint = eval(quote(function(x) TRUE), baseenv())
+  base_in_tune = eval(quote(function(domain, param_vals) param_vals), baseenv())
 
   logscale_set = ps(x = p_int(1, 10, logscale = TRUE))
   logscale_trafo = logscale_set$params$.trafo[[1L]]
@@ -186,13 +188,76 @@ test_that("package-owned callback factories store plain frame bindings", {
   expect_plain_cells(renaming, c("trafo", "pname"))
   expect_identical(renaming(list(b = 2L), NULL), list(a = 2L))
 
-  for (carrier in list(
-    list(logscale_set),
-    list(flattened),
-    list(detached_shadow),
-    list(search_space)
-  )) {
-    expect_identical(upgrade_paradox_object_graph(carrier), carrier)
+  legacy_in_tune = paradox:::param_set_collection_in_tune_fn_factory(
+    base_in_tune,
+    "left",
+    c("left.x")
+  )
+  exact_in_tune = paradox:::param_set_collection_in_tune_fn_exact_factory(
+    base_in_tune,
+    visible_ids = "x",
+    original_ids = "origin",
+    hidden_values = list(hidden = 2L)
+  )
+  expect_plain_cells(
+    legacy_in_tune,
+    c("in_tune_fn", "prefix", "prefixed_set_ids")
+  )
+  expect_plain_cells(
+    exact_in_tune,
+    c("hidden_values", "in_tune_fn", "original_ids", "visible_ids")
+  )
+  expect_identical(
+    legacy_in_tune(NULL, list(left.x = 1L, right = 3L)),
+    list(x = 1L)
+  )
+  expect_identical(
+    exact_in_tune(NULL, list(x = 1L, absent = 3L)),
+    list(hidden = 2L, origin = 1L)
+  )
+
+  root = list(
+    callbacks = list(
+      logscale = logscale_trafo,
+      collection_extra = flattened$extra_trafo,
+      collection_constraint = flattened$constraint,
+      shadow_constraint = detached_shadow$constraint,
+      search_extra = search_space$extra_trafo,
+      renaming = renaming,
+      legacy_in_tune = legacy_in_tune,
+      exact_in_tune = exact_in_tune
+    ),
+    carriers = list(
+      logscale = logscale_set,
+      collection = flattened,
+      shadow = detached_shadow,
+      search = search_space
+    )
+  )
+  expected_cells = list(
+    logscale = c("lower", "upper"),
+    collection_extra = "plan",
+    collection_constraint = "plan",
+    shadow_constraint = "plan",
+    search_extra = "plan",
+    renaming = c("trafo", "pname"),
+    legacy_in_tune = c("in_tune_fn", "prefix", "prefixed_set_ids"),
+    exact_in_tune = c(
+      "hidden_values", "in_tune_fn", "original_ids", "visible_ids"
+    )
+  )
+  roots = list(
+    current = root,
+    serialized = unserialize(serialize(root, NULL))
+  )
+  for (candidate in roots) {
+    for (name in names(expected_cells)) {
+      expect_plain_cells(
+        candidate$callbacks[[name]],
+        expected_cells[[name]]
+      )
+    }
+    expect_identical(upgrade_paradox_object_graph(candidate), candidate)
   }
 })
 

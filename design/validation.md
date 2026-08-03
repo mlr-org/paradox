@@ -830,12 +830,13 @@ families.
   it could force a delayed cell without `R_GetBindingType`; current source must
   contain the exact three reviewed call sites and every call must follow the
   classifier, while the DSO contains one undefined-symbol row. Tests record
-  side effects and cover all three policy branches. Every package-owned
-  callback factory's frame cells -- the `p_fct()` mapping factory's
+  side effects and cover all three policy branches. Every object-retained
+  generated callback's frame cells -- the `p_fct()` mapping factory's
   `levels`/`trafo`, the log-scale `p_int()` factory's `lower`/`upper`, the
   detached Collection/Shadow `plan` carriers, the tuning renaming trafo's
-  `trafo`/`pname`, and the retired-binding diagnostics' `name`/`owner_package`
-  -- must be direct-value binding snapshots after their ordered forcing, so
+  `trafo`/`pname`, the two crate-backed internal-tuning adapters, and the
+  retired-binding diagnostics' `name`/`owner_package` -- must be direct-value
+  binding snapshots before and after serialization, so
   ordinary current Paradox objects remain traversable on R 4.5 without
   weakening the arbitrary-promise rule.
   The same inventory authenticates the independent Domain-rendering policy:

@@ -6,8 +6,9 @@
 recent fully validated candidate was
 `refs/paradox-release/candidate-20260802T183338Z`, commit
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
-`95012f6ae771b04fe91afcf30f8df3b78daa701a`. Current unfrozen source
-`f977660` fixes retained formal-promise factories and recursive migration and
+`95012f6ae771b04fe91afcf30f8df3b78daa701a`. The current unfrozen line began
+at `f977660` with retained formal-promise and recursive-migration fixes and now
+also strips source metadata from generated retired-API diagnostics; it
 therefore supersedes that payload. Its exact nine-task
 `release-core` run passed all harness, differential, API-header, GCC/Clang C23,
 native-release, and supported-runtime rows. The runtime row covers the full
@@ -1015,9 +1016,9 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   R 4.5 compiled-code policy classifies those accessors as non-API, so recursive
   migration fails closed on a reached promise and requests R 4.0--4.4 or
   R >= 4.6. Ordinary factory callback frames can retain such formal promises
-  even when the argument was forced or unused. Every package-owned callback
-  factory replaces its already-forced formal cells with direct values,
-  avoiding that boundary inside current Paradox objects.
+  even when the argument was forced or unused. Every object-retained generated
+  callback frame stores direct captured values, avoiding that boundary inside
+  current Paradox objects.
   R >= 4.6 instead uses only its experimental binding/delayed-binding/dots
   APIs. An R >= 4.5 DSO excludes all three detached-promise accessors. On
   R >= 4.6, a `PROMSXP` reached outside a binding/dots cell is opaque.
@@ -2239,8 +2240,9 @@ cheatsheet, `mbo_config`, and target rows pass.
 ## Release decision
 
 The release decision is reopened. Candidate `f27776e` retains complete
-historical evidence, but current package-facing source `f977660` fixes
-retained callback frames and recursive migration and therefore requires a
+historical evidence, but the current package-facing line beginning at
+`f977660` fixes retained callback frames, recursive migration, and generated
+retired-binding source metadata and therefore requires a
 fresh immutable candidate. The converged source must first pass focused
 compiler/package tests, supported runtimes, and affected downstream packages;
 then the package-bound release gates and a new hosted Windows/macOS companion

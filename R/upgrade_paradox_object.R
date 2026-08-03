@@ -2514,7 +2514,7 @@
   owner_package = force(owner_package)
   token = .paradox_upgrade_retired_token
   force(token)
-  function(value) {
+  .paradox_strip_srcref(function(value) {
     # Retain a per-session provenance token in this closure for interrupted
     # transplant authentication. Do not compare it while serving the retired
     # API diagnostic: ordinary serialization legitimately copies the closure
@@ -2528,7 +2528,7 @@
       ),
       call. = FALSE
     )
-  }
+  })
 }
 
 .upgrade_paradox_is_retired_binding = function(

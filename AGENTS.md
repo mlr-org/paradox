@@ -23,8 +23,9 @@ The most recently fully validated immutable package-facing candidate was
 `refs/paradox-release/candidate-20260802T183338Z`, commit
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
 `95012f6ae771b04fe91afcf30f8df3b78daa701a`. It is now superseded by the
-unfrozen source at `f977660`: that source stores plain values, rather than
-unforced formal promises, in every package-owned retained callback factory and
+unfrozen source line beginning at `f977660`: that line stores plain values,
+rather than
+unforced formal promises, in every object-retained generated callback frame and
 adds the corresponding recursive-migration regressions. No historical
 package-bound acceptance result transfers to those changed R sources. The
 `f27776e` candidate had superseded `4e549f3`
@@ -268,6 +269,8 @@ an all-bits-zero pointer assumption.
 
 The next release candidate must include both the package-facing `f977660`
 callback/migration fixes and the converged old-Windows/warning repairs. It must
+also include source-free retired-API diagnostics and the serialized exact-frame
+regressions recorded below. It must
 receive fresh package-bound validation before a new direct-child portability
 companion is rendered. `582eba8` and all local `f27776e` package-bound results
 are historical; do not relabel them as acceptance of the replacement payload.
@@ -2166,12 +2169,13 @@ operator action.
   limitation of the one-way recursive migration operation on exactly R 4.5,
   not of ordinary ParamSet operations, and the package must not manufacture it
   inside its own current objects:
-  every package-owned callback factory (the `p_fct()`/log-scale `p_int()`
-  transformation factories, the detached Collection/Shadow plan callbacks, the
-  tuning ParamSet renaming trafo, and the retired-binding diagnostics
-  installed by the transplant) replaces its already-forced formal cells with
-  direct values, and the non-forcing binding-snapshot regressions authenticate
-  those frames. Arbitrary user factories retain the general rule.
+  every object-retained generated callback frame (the `p_fct()`/log-scale
+  `p_int()` transformation factories, the detached Collection/Shadow plan
+  callbacks, the tuning ParamSet renaming trafo, the two crate-backed
+  internal-tuning adapters, and the retired-binding diagnostics installed by
+  the transplant) stores direct captured values, and the non-forcing
+  binding-snapshot regressions authenticate the exact frames before and after
+  serialization. Arbitrary user factories retain the general rule.
   Never force, silently skip, or inspect
   those cells through the three symbols that R 4.5's compiled-code policy
   rejects merely to make migration appear successful. R >= 4.6 uses the
