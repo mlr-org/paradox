@@ -31,11 +31,11 @@ value() {
    $(value "$legacy_output" suffix) == -release-refresh-20260720-paradox1 &&
    $(value "$legacy_output" version_major) == 1 &&
    $(value "$profile_output" candidate_ref) == \
-     refs/paradox-release/candidate-20260802T183338Z &&
+     refs/paradox-release/candidate-20260803T131049Z &&
    $(value "$profile_output" candidate_commit) == \
-     f27776ee1eca5d964945aa53d14d0ec7947dccbf &&
+     a0a9ff3e05b535068392e0c20442ad9794f3b824 &&
    $(value "$profile_output" candidate_tree) == \
-     95012f6ae771b04fe91afcf30f8df3b78daa701a &&
+     49079e12a816542fe8d8d6a0a2290a757a558b41 &&
    $(value "$legacy_output" candidate_commit) == \
      cdcc8e616afe243cd7c54e15713c86f818a52626 &&
    $(value "$profile_output" checkout_namespace) == \

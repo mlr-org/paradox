@@ -2,25 +2,57 @@
 
 ## Status
 
-**There is currently no active immutable package-facing candidate. The most
-recent fully validated candidate was
-`refs/paradox-release/candidate-20260802T183338Z`, commit
-`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
-`95012f6ae771b04fe91afcf30f8df3b78daa701a`. The current unfrozen line began
-at `f977660` with retained formal-promise and recursive-migration fixes and now
-also strips source metadata from generated retired-API diagnostics; it
-therefore supersedes that payload. Its exact nine-task
-`release-core` run passed all harness, differential, API-header, GCC/Clang C23,
-native-release, and supported-runtime rows. The runtime row covers the full
-suite on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2, while native
-release covers current R 4.6.1. Fresh bounded-rchk discovery is source-clean,
-fully reviewed, its regenerated policy is checked in, and the fresh combined
-GCT/Valgrind/rchk run passes independent validation. Fresh dual-axis
-compatibility, documentation, and the sealed benchmark are complete under
-package-facing-source-identical tooling, but those package-bound conclusions
-do not transfer to `f977660`. The next candidate must include the current
-package fixes plus the old-Windows bounded-check and old-GCC-warning repairs,
-then receive fresh validation.**
+**The active immutable package-facing candidate is
+`refs/paradox-release/candidate-20260803T131049Z`, commit
+`a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
+`49079e12a816542fe8d8d6a0a2290a757a558b41`. Its complete nine-task
+`release-core` foundation and fresh combined GCT/Valgrind/rchk memory gate
+pass. Fresh dual-axis compatibility, documentation, the sealed benchmark, and
+hosted portability are pending and must not be transferred from the
+superseded `f27776e` candidate.**
+
+Coordinator `.local/verify/runs/release-candidate-a0a9ff3-r1` passed all nine
+tasks in 3,429.2 seconds. Completion, JSON-summary, and TSV-summary SHA-256
+values are
+`f8f8430ab34ce3b84abf83b5229b42b74c74ef9b192a8071fad7ab78ac8831d5`,
+`504484ba4c3cd5213b980f10d75356cad5633c85e42950dde8c7d23379ce4407`,
+and
+`f88a6f10436904435672a9049748dab7153d27118892b7560f4e3ff905cbcadf`.
+It covers all four harness gates, 33 differential cases, API headers, GCC 15.2
+and Clang 22 C23, native release on current R 4.6.1, and complete suites on R
+3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2. Replayable donor
+`release-candidate-a0a9ff3-r1-native-release-a001` passes independent source
+validation; its source-manifest/source-tree/modes-tree/completion/result hashes
+are
+`f9bc153e50a594902ecd67f240f2be274c08b4f9bde19ca79f9a19277b892dc3`,
+`3b6246c007039a4a07a2132d521c64971155ee3feeddcbcdface25d4f309b1aa`,
+`d7231b895a8e41ddce9d7f679b58f96c1e4c062484b97a02fb234cbbb16eccf1`,
+`2a45e572c4f83b1e800927642f554db1d7a5e80aece9c6ca8ed2d7e57ca0101c`,
+and
+`1a2b43a43a03c8b87f9483d5a2b178056c486d678a92027fe84837735e328551`.
+
+Combined run `release-candidate-a0a9ff3-memory-r1` passed all three modes and
+the independent validator. Completion, result, memory-source-tree, modes-tree,
+validator, and source-archive hashes are
+`6e38ed22a4633d9145b5a5176a12f22c097947e3ea56fa8e9990c2e4b9036708`,
+`80b582512c3b0b28c60cd5c0745bacf9545e32da31562b1865565b085f6af370`,
+`577d57005e12ab21ad33cf06ae193790ff73620de81a21cff2f458ace6a74471`,
+`a1bc3685a8456f7e42467c5c92e6ed2db2c18eefeb41f3dd7c9ddf87b7309363`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`0ed1d9bdb8750cd064971c25a0c72e1106eee976b62893ac2c2947f9a9ab9b62`.
+GCT covers 111 routines and four hazards. Valgrind reports zero errors,
+losses, or suppressions over 1,018 passes and ten reviewed skips. Rchk analyzes
+1,305 functions and 201,585 states and exactly matches the reviewed 116-block,
+397-UP/30-PB policy. Raw/semantic bcheck, empty maacheck, and fficheck hashes
+are
+`3afe281aa9aeb59a3ba468b60119b767ece80b0bd56ec38068b2d890bfc068cd`,
+`c5a7396c584257e309d4738bac5dae13934764801c17612a683779834719a5fa`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
+
+### Historical `f27776e` acceptance record
 
 The exact coordinator is
 `.local/verify/runs/release-candidate-f27776e-r1`. Completion, JSON-summary,
@@ -1454,8 +1486,25 @@ green gates.
   direct-child companion `582eba8` plus its exact harness tag;
 - [x] run and retain every applicable local gate against `f27776e`, including
   downstream, documentation, benchmark, runtime, and memory stages;
-- [ ] complete the hosted Windows x86-64/macOS ARM64 portability run and the
-  manual downstream/publication/release handoff.
+- [x] retain hosted run `30807910809` as deterministic old-Windows harness
+  evidence after current Windows/macOS and the old-Windows package execution
+  passed but the obsolete exact-one-NOTE classifier rejected the additional
+  bounded-closure Rd-xref NOTE; do not retry its immutable companion;
+- [x] converge the direct-value callback, recursive migration, retired-binding
+  srcref, old-Windows Rd-xref, and old-GCC initializer fixes and freeze active
+  candidate `a0a9ff3` at
+  `refs/paradox-release/candidate-20260803T131049Z`;
+- [x] pass all nine `release-core` tasks for `a0a9ff3`, including current R,
+  both C23 compilers, and one complete suite on every R minor from 3.6 through
+  4.5;
+- [x] pass and independently validate fresh combined GCT, Valgrind, and
+  bounded-rchk evidence for the exact `a0a9ff3` native donor;
+- [ ] freeze package-facing-source-identical `a0a9ff3` compatibility tooling,
+  construct both fresh axes, run focused Paradox-1 and complete Paradox-2
+  compatibility/documentation, and seal a fresh benchmark;
+- [ ] create, locally validate, manually publish, and execute a new one-path
+  direct-child Windows x86-64/macOS ARM64 portability companion, then complete
+  the manual downstream/publication/release handoff.
 
 ### State and public model
 
@@ -2239,14 +2288,11 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is reopened. Candidate `f27776e` retains complete
-historical evidence, but the current package-facing line beginning at
-`f977660` fixes retained callback frames, recursive migration, and generated
-retired-binding source metadata and therefore requires a
-fresh immutable candidate. The converged source must first pass focused
-compiler/package tests, supported runtimes, and affected downstream packages;
-then the package-bound release gates and a new hosted Windows/macOS companion
-must be run as required by their source identities. The remaining manual work
+The release decision remains open for active candidate `a0a9ff3`. Its exact
+full compiler/runtime/package foundation and combined memory gate are accepted.
+Fresh dual-axis downstream/reverse/documentation evidence, a sealed benchmark,
+and a new direct-child hosted Windows/macOS companion remain required because
+the corresponding `f27776e` results do not transfer. The remaining manual work
 also includes user-performed publication of the final Paradox refs, hosted
 workflow dispatch,
 mark-ready/review/merge/release sequence for the eight downstream PRs,

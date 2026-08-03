@@ -28,18 +28,23 @@ No mlr3 or mlr3fselect diagnostic-only PR remains open.
 ## Current source and candidate
 
 Package-facing source is frozen at
-`refs/paradox-release/candidate-20260802T183338Z`, commit
-`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
-`95012f6ae771b04fe91afcf30f8df3b78daa701a`. The checked-in
+`refs/paradox-release/candidate-20260803T131049Z`, commit
+`a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
+`49079e12a816542fe8d8d6a0a2290a757a558b41`. The checked-in
 `release-refresh-20260720`/`paradox2` compatibility axis now binds that exact
-immutable identity. Final compatibility/benchmark tooling is frozen at
-`refs/paradox-release/validation-tooling-20260803T023640Z`, commit
-`f711c67dadd24fec80779a319d40f7032bed7e78`, tree
-`c6399e5e18a749ad0c647fedd602575a0a45c09e`, and is package-facing-source
-identical to the candidate. The prepared compatibility gates bind the eight
-published PR heads above on both Paradox axes.
+immutable identity. A clean package-facing-source-identical tooling commit must
+be frozen from this update before preparing either fresh axis. The prepared
+compatibility gates will continue to bind the eight published PR heads above
+on both Paradox axes.
 
-## Final retained evidence
+## Active evidence still required
+
+Run the focused eight-head Paradox-1 gate and the complete Paradox-2
+compatibility/documentation DAG against fresh installations and overlays, then
+seal a fresh benchmark. No `f27776e` package-bound result transfers to
+`a0a9ff3`, even though the downstream heads themselves are unchanged.
+
+## Historical `f27776e` retained evidence
 
 Fresh Paradox-1 and Paradox-2 preparations reproduce exact dependency endpoint
 `3828cdaf0c767d89fa30ea595845d3eab9695dfdb80bee909a5b3fabcc31919e`;
@@ -71,7 +76,16 @@ bounded marginals, and zero failures. Exact hashes and row classifications are
 recorded in `AGENTS.md` and `design/release-2.0.0.md`. Older evidence below is
 history and must not be presented as active-candidate proof.
 
-## Manual hosted-portability handoff
+## Active hosted-portability handoff
+
+The `a0a9ff3` candidate requires a new direct child whose sole changed path is
+`.github/workflows/r-cmd-check.yml`, plus fresh candidate and companion tags.
+Create and validate that companion only after local compatibility and benchmark
+evidence converge. Agentic processes must not publish the refs or dispatch the
+workflow; the exact user commands belong here after the local companion is
+frozen.
+
+## Historical `f27776e` hosted-portability handoff
 
 Candidate tag `paradox-2.0.0-ci-f27776e` and failed companion tags
 `paradox-2.0.0-ci-f27776e-harness-198e838` and

@@ -19,16 +19,74 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The most recently fully validated immutable package-facing candidate was
-`refs/paradox-release/candidate-20260802T183338Z`, commit
-`f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
-`95012f6ae771b04fe91afcf30f8df3b78daa701a`. It is now superseded by the
-unfrozen source line beginning at `f977660`: that line stores plain values,
-rather than
-unforced formal promises, in every object-retained generated callback frame and
-adds the corresponding recursive-migration regressions. No historical
-package-bound acceptance result transfers to those changed R sources. The
-`f27776e` candidate had superseded `4e549f3`
+The active immutable package-facing candidate is
+`refs/paradox-release/candidate-20260803T131049Z`, commit
+`a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
+`49079e12a816542fe8d8d6a0a2290a757a558b41`. It includes the direct-value
+generated-callback frames, recursive migration regressions, source-free
+retired-binding diagnostics, the bounded old-Windows Rd-xref policy, and the
+portable C99 upgrade-walker initialization.
+
+Exact coordinator `.local/verify/runs/release-candidate-a0a9ff3-r1` passed all
+nine `release-core` tasks in 3,429.2 seconds: all four harness gates, 33
+differential cases, the API-header matrix, GCC 15.2 and Clang 22 C23 lanes,
+native release on R 4.6.1, and complete supported-runtime stages on R 3.6.3,
+4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2. Completion, JSON-summary, and
+TSV-summary SHA-256 values are
+`f8f8430ab34ce3b84abf83b5229b42b74c74ef9b192a8071fad7ab78ac8831d5`,
+`504484ba4c3cd5213b980f10d75356cad5633c85e42950dde8c7d23379ce4407`,
+and
+`f88a6f10436904435672a9049748dab7153d27118892b7560f4e3ff905cbcadf`.
+Replayable native child
+`release-candidate-a0a9ff3-r1-native-release-a001` passes independent source
+validation. Its source-manifest, source-tree, modes-tree, completion, result,
+and source-archive SHA-256 values are
+`f9bc153e50a594902ecd67f240f2be274c08b4f9bde19ca79f9a19277b892dc3`,
+`3b6246c007039a4a07a2132d521c64971155ee3feeddcbcdface25d4f309b1aa`,
+`d7231b895a8e41ddce9d7f679b58f96c1e4c062484b97a02fb234cbbb16eccf1`,
+`2a45e572c4f83b1e800927642f554db1d7a5e80aece9c6ca8ed2d7e57ca0101c`,
+`1a2b43a43a03c8b87f9483d5a2b178056c486d678a92027fe84837735e328551`,
+and
+`0ed1d9bdb8750cd064971c25a0c72e1106eee976b62893ac2c2947f9a9ab9b62`.
+
+Combined run `release-candidate-a0a9ff3-memory-r1` passed GCT, Valgrind,
+bounded rchk, and independent offline validation. Completion, result,
+memory-source-tree, modes-tree, validator, and source-archive SHA-256 values
+are
+`6e38ed22a4633d9145b5a5176a12f22c097947e3ea56fa8e9990c2e4b9036708`,
+`80b582512c3b0b28c60cd5c0745bacf9545e32da31562b1865565b085f6af370`,
+`577d57005e12ab21ad33cf06ae193790ff73620de81a21cff2f458ace6a74471`,
+`a1bc3685a8456f7e42467c5c92e6ed2db2c18eefeb41f3dd7c9ddf87b7309363`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`0ed1d9bdb8750cd064971c25a0c72e1106eee976b62893ac2c2947f9a9ab9b62`.
+GCT covers all 111 routines and four hazards. Valgrind reports zero errors,
+losses, or suppressions; eight files and 141 blocks produce 1,028 exact
+expectations, comprising 1,018 passes and ten reviewed skips. Rchk analyzes
+1,305 functions and 201,585 states and reproduces the reviewed 116-block,
+397-UP/30-PB policy. Raw bcheck, semantic bcheck, empty maacheck, and fficheck
+SHA-256 values are
+`3afe281aa9aeb59a3ba468b60119b767ece80b0bd56ec38068b2d890bfc068cd`,
+`c5a7396c584257e309d4738bac5dae13934764801c17612a683779834719a5fa`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
+Policy, block-table, and rationale-catalog SHA-256 values are
+`3ca2416f9d0920850431381d35fc0ce00f8d2fe5b4e08fe98d85f86e47dfd806`,
+`5ae729f8d3b07bd471050a81f793a862fda59e1a4457483fb66618e27acc250a`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+
+Fresh dual-axis compatibility, documentation, benchmark, and hosted
+portability conclusions are still pending for this candidate. The checked-in
+`paradox2` axis now names its exact ref/commit/tree; freeze the resulting clean,
+package-facing-source-identical tooling commit before preparing either axis.
+The `f27776e` compatibility/benchmark results and `582eba8` hosted result are
+historical and do not transfer.
+
+### Historical `f27776e` candidate record
+
+The `f27776e` candidate had superseded `4e549f3`
 after the final review batch fixed a deterministic hosted-Windows environment
 reset, one repeated integer-ALTREP row-name length observation, old-R-specific
 test assumptions, and package-owned `p_fct()` transformation promises that R
@@ -3790,10 +3848,10 @@ release pending.
 At that point the checked-in active `paradox2` row in
 `compat/paradox-evidence-axes.tsv` still named this historical `dbbdcc1`
 ref/commit/tree, and no fresh candidate-run-owned
-`release-refresh-20260720` overlay had been constructed. It now names the exact
-active `f27776e` ref/commit/tree and the fresh `f711c67` overlays are recorded
-above. All retained overlays and consumer results owned by earlier Paradox-2
-candidates remain historical.
+`release-refresh-20260720` overlay had been constructed. It now names exact
+active candidate `a0a9ff3`; fresh overlays have not yet been constructed. The
+`f711c67` overlays and all consumer results owned by earlier Paradox-2
+candidates are historical.
 Post-freeze tooling admission explicitly includes the package-excluded
 `verification/` root so that reviewed coordinator scheduling changes can drive
 that overlay; package-facing paths remain forbidden, and the tooling checkout

@@ -8,6 +8,40 @@ file/count matrix.
 ## Current validation status
 
 The active immutable package-facing ref is
+`refs/paradox-release/candidate-20260803T131049Z`, commit
+`a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
+`49079e12a816542fe8d8d6a0a2290a757a558b41`. Coordinator
+`.local/verify/runs/release-candidate-a0a9ff3-r1` passed all nine tasks and
+authenticates execution origin for each row. Its completion, JSON-summary, and
+TSV-summary SHA-256 values are
+`f8f8430ab34ce3b84abf83b5229b42b74c74ef9b192a8071fad7ab78ac8831d5`,
+`504484ba4c3cd5213b980f10d75356cad5633c85e42950dde8c7d23379ce4407`,
+and
+`f88a6f10436904435672a9049748dab7153d27118892b7560f4e3ff905cbcadf`.
+It includes strict native/package/sanitizer checks on current R, both C23
+compilers, all pinned API headers, 33 differential cases, and complete suites
+on R 3.6.3, 4.0.5, 4.1.3, 4.2.3, 4.3.3, 4.4.3, and 4.5.2.
+
+Exact combined-memory run `release-candidate-a0a9ff3-memory-r1` passes GCT,
+Valgrind, bounded rchk, and independent validation. Its completion, result,
+memory-source-tree, modes-tree, validator, and source-archive SHA-256 values
+are
+`6e38ed22a4633d9145b5a5176a12f22c097947e3ea56fa8e9990c2e4b9036708`,
+`80b582512c3b0b28c60cd5c0745bacf9545e32da31562b1865565b085f6af370`,
+`577d57005e12ab21ad33cf06ae193790ff73620de81a21cff2f458ace6a74471`,
+`a1bc3685a8456f7e42467c5c92e6ed2db2c18eefeb41f3dd7c9ddf87b7309363`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`0ed1d9bdb8750cd064971c25a0c72e1106eee976b62893ac2c2947f9a9ab9b62`.
+GCT covers all 111 registered routines and four hazards. Valgrind reports zero
+errors, losses, or suppressions; the analyzer selection has 1,018 passes and
+ten reviewed skips. Rchk reproduces 1,305 functions, 201,585 states, 116
+blocks, 397 UP, and 30 PB. Fresh compatibility, documentation, benchmark, and
+hosted results remain pending.
+
+### Historical `f27776e` validation record
+
+The superseded immutable package-facing ref was
 `refs/paradox-release/candidate-20260802T183338Z`, commit
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
 `95012f6ae771b04fe91afcf30f8df3b78daa701a`. Its coordinator at
@@ -183,8 +217,9 @@ Hosted run `30793059118` against `198e838` and run `30803703541` against
 `ff3b510` each passed current Windows and macOS but stopped old Windows before
 Paradox ran: first at the Rfe multiline-argument boundary, then at a harness
 command-discovery assertion. Retrying either cannot test the final repair.
-Fresh hosted execution of `582eba8` is the only remaining validation gate. The
-following `4e549f3` evidence is historical.
+At that historical point, hosted execution of `582eba8` was the only remaining
+gate. It later became deterministic failed-harness evidence and does not apply
+to `a0a9ff3`. The following `4e549f3` evidence is also historical.
 
 ### Historical `4e549f3` validation record
 
@@ -835,7 +870,8 @@ families.
   `levels`/`trafo`, the log-scale `p_int()` factory's `lower`/`upper`, the
   detached Collection/Shadow `plan` carriers, the tuning renaming trafo's
   `trafo`/`pname`, the two crate-backed internal-tuning adapters, and the
-  retired-binding diagnostics' `name`/`owner_package` -- must be direct-value
+  retired-binding diagnostics' `name`/`owner_package`/`token` -- must be
+  direct-value
   binding snapshots before and after serialization, so
   ordinary current Paradox objects remain traversable on R 4.5 without
   weakening the arbitrary-promise rule.
@@ -1395,12 +1431,12 @@ an argument, the suffixed bridge library and evidence path.
 Ordinarily one final validation-tooling commit is frozen before constructing a
 fresh named overlay, and documentation, full checks, and the benchmark reuse it
 read-only. The checked-in `paradox2` axis now pins exact active candidate
-`f27776e`; the preceding `4e549f3` ownership below is historical. Final
-dual-axis overlays, broad compatibility, documentation,
-eight-head checks, and benchmark are owned by
+`a0a9ff3`; its fresh dual-axis overlays, broad compatibility, documentation,
+eight-head checks, and benchmark are pending. The preceding `f27776e` results
+were owned by
 `refs/paradox-release/validation-tooling-20260803T023640Z` at `f711c67`, tree
-`c6399e5e18a749ad0c647fedd602575a0a45c09e`; its diff from the active
-candidate is package-facing-source identical. Historical tooling
+`c6399e5e18a749ad0c647fedd602575a0a45c09e`; they are historical and do not
+transfer. Historical tooling
 `fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
 `05cc4e5213c5ee73d0bc764c3d102c15e4c57141`, belongs to the historical
 `8797f11` documentation, broad-corpus, source-check, and benchmark stages. The

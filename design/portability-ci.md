@@ -522,6 +522,15 @@ converged in the immutable candidate. Its direct child changes exactly
 the inherited old-Windows installer's exact `100644` tree entry. This keeps the
 parent/diff proof minimal without weakening helper provenance.
 
+Active candidate
+`a0a9ff3e05b535068392e0c20442ad9794f3b824` includes the converged installer,
+bounded Rd-xref policy, and portable old-GCC initializer. Its local
+release-core and combined-memory gates pass, but hosted evidence remains
+pending. Render a fresh direct child only after local compatibility and
+benchmark convergence; that child must change only the workflow and inherit
+the candidate's authenticated installer bytes. No hosted result below
+transfers to `a0a9ff3`.
+
 For now-superseded candidate
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the first locally validated
 direct-child companion was

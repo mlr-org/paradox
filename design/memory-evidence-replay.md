@@ -35,9 +35,52 @@ verify copied modes and source stability. A passed functional native run whose
 manifest disagrees with its copied-tree receipt is not a replayable source
 donor and cannot be repaired in place.
 
-### 2026-08-02 replacement-candidate discovery
+### 2026-08-03 active-candidate acceptance
 
 The active immutable candidate is
+`refs/paradox-release/candidate-20260803T131049Z`, commit
+`a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
+`49079e12a816542fe8d8d6a0a2290a757a558b41`. Replayable release-core donor
+`release-candidate-a0a9ff3-r1-native-release-a001` passes independent source
+validation. Its source-manifest, source-tree, modes-tree, completion, result,
+and source-archive hashes are
+`f9bc153e50a594902ecd67f240f2be274c08b4f9bde19ca79f9a19277b892dc3`,
+`3b6246c007039a4a07a2132d521c64971155ee3feeddcbcdface25d4f309b1aa`,
+`d7231b895a8e41ddce9d7f679b58f96c1e4c062484b97a02fb234cbbb16eccf1`,
+`2a45e572c4f83b1e800927642f554db1d7a5e80aece9c6ca8ed2d7e57ca0101c`,
+`1a2b43a43a03c8b87f9483d5a2b178056c486d678a92027fe84837735e328551`,
+and
+`0ed1d9bdb8750cd064971c25a0c72e1106eee976b62893ac2c2947f9a9ab9b62`.
+
+Combined run `release-candidate-a0a9ff3-memory-r1` passed GCT, Valgrind,
+bounded rchk, and independent replay. Completion, result, memory-source-tree,
+modes-tree, validator, and archive hashes are
+`6e38ed22a4633d9145b5a5176a12f22c097947e3ea56fa8e9990c2e4b9036708`,
+`80b582512c3b0b28c60cd5c0745bacf9545e32da31562b1865565b085f6af370`,
+`577d57005e12ab21ad33cf06ae193790ff73620de81a21cff2f458ace6a74471`,
+`a1bc3685a8456f7e42467c5c92e6ed2db2c18eefeb41f3dd7c9ddf87b7309363`,
+`63b00bf51b22e65c35781589f1bef1a6cd7f4f74f0566e2a6b4cd58d189ad254`,
+and
+`0ed1d9bdb8750cd064971c25a0c72e1106eee976b62893ac2c2947f9a9ab9b62`.
+GCT covers all 111 routines and four hazards. Valgrind has zero errors,
+definite/indirect/possible losses, or suppressions; eight files and 141 blocks
+produce 1,028 expectations, with 1,018 passes and ten reviewed skips. Bcheck
+analyzes 1,305 functions and 201,585 states and exactly matches 116 blocks,
+397 UP, and 30 PB. Raw bcheck, semantic, empty maacheck, and fficheck hashes are
+`3afe281aa9aeb59a3ba468b60119b767ece80b0bd56ec38068b2d890bfc068cd`,
+`c5a7396c584257e309d4738bac5dae13934764801c17612a683779834719a5fa`,
+`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
+and
+`742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
+Policy, blocks, and rationales hash to
+`3ca2416f9d0920850431381d35fc0ce00f8d2fe5b4e08fe98d85f86e47dfd806`,
+`5ae729f8d3b07bd471050a81f793a862fda59e1a4457483fb66618e27acc250a`,
+and
+`c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+
+### Historical 2026-08-02 replacement-candidate discovery
+
+The superseded immutable candidate was
 `refs/paradox-release/candidate-20260802T183338Z`, commit
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, tree
 `95012f6ae771b04fe91afcf30f8df3b78daa701a`. Its replayable release-core
