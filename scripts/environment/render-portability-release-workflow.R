@@ -53,29 +53,68 @@ if (!file.exists(source_argument) || dir.exists(source_argument) ||
 source <- normalizePath(
   source_argument, winslash = "/", mustWork = TRUE
 )
+candidate_blob <- function(relative, label) {
+  result <- suppressWarnings(system2(
+    "git",
+    args = c(
+      "-C", shQuote(root), "ls-tree", candidate_commit, "--",
+      shQuote(relative)
+    ),
+    stdout = TRUE,
+    stderr = TRUE
+  ))
+  status <- attr(result, "status")
+  if (is.null(status)) {
+    status <- 0L
+  }
+  if (status != 0L || length(result) != 1L) {
+    fail("could not derive the exact candidate ", label, " tree entry")
+  }
+  fields <- strsplit(result[[1L]], "\t", fixed = TRUE)[[1L]]
+  metadata <- if (length(fields) == 2L) {
+    strsplit(fields[[1L]], " ", fixed = TRUE)[[1L]]
+  } else {
+    character()
+  }
+  if (length(fields) != 2L || !identical(fields[[2L]], relative) ||
+      length(metadata) != 3L || !identical(metadata[[1L]], "100644") ||
+      !identical(metadata[[2L]], "blob") ||
+      !grepl("^[0-9a-f]{40}$", metadata[[3L]])) {
+    fail("candidate ", label, " is not one exact 100644 Git blob")
+  }
+  metadata[[3L]]
+}
 helper_relative <- "scripts/environment/install-hosted-r36-windows.ps1"
-helper <- file.path(root, helper_relative)
-if (!file.exists(helper) || dir.exists(helper) || is_symbolic(helper)) {
-  fail("old-Windows installer helper is absent, non-regular, or symbolic")
+helper_blob <- candidate_blob(helper_relative, "old-Windows installer")
+lock_relative <- "environment/runtime-r-3.6.3-packages.lock"
+reviewed_lock_blob <- "5e9fb484b63cff6ee51ab2101dcaa37defd0e603"
+reviewed_lock_sha256 <-
+  "9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5"
+lock_blob <- candidate_blob(lock_relative, "old-Windows runtime-lock")
+if (!identical(lock_blob, reviewed_lock_blob)) {
+  fail("candidate runtime-lock Git blob differs from the reviewed blob")
 }
-helper_blob_result <- suppressWarnings(system2(
+lock_blob_copy <- tempfile("paradox-runtime-lock-blob-")
+lock_blob_error <- tempfile("paradox-runtime-lock-error-")
+on.exit(unlink(c(lock_blob_copy, lock_blob_error), force = TRUE), add = TRUE)
+lock_blob_status <- suppressWarnings(system2(
   "git",
-  args = c(
-    "-C", shQuote(root), "hash-object",
-    paste0("--path=", helper_relative), "--", shQuote(helper)
-  ),
-  stdout = TRUE,
-  stderr = TRUE
+  args = c("-C", shQuote(root), "cat-file", "blob", lock_blob),
+  stdout = lock_blob_copy,
+  stderr = lock_blob_error
 ))
-helper_blob_status <- attr(helper_blob_result, "status")
-if (is.null(helper_blob_status)) {
-  helper_blob_status <- 0L
+if (!identical(lock_blob_status, 0L) || !file.exists(lock_blob_copy) ||
+    dir.exists(lock_blob_copy) || is_symbolic(lock_blob_copy)) {
+  fail("could not materialize the exact candidate runtime-lock Git blob")
 }
-if (helper_blob_status != 0L || length(helper_blob_result) != 1L ||
-    !grepl("^[0-9a-f]{40}$", helper_blob_result)) {
-  fail("could not derive the exact old-Windows installer Git blob")
+lock_sha256 <- unname(tools::sha256sum(lock_blob_copy))
+if (length(lock_sha256) != 1L || is.na(lock_sha256) ||
+    !grepl("^[0-9a-f]{64}$", lock_sha256)) {
+  fail("could not derive the exact candidate runtime-lock SHA-256")
 }
-helper_blob <- helper_blob_result[[1L]]
+if (!identical(lock_sha256, reviewed_lock_sha256)) {
+  fail("candidate runtime-lock SHA-256 differs from the reviewed lock")
+}
 
 output_parent_argument <- dirname(output_argument)
 output_name <- basename(output_argument)
@@ -178,7 +217,7 @@ lines <- replace_exact(
   "release matrix job name"
 )
 
-checkout_block <- c(
+checkout_prefix <- c(
   "      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10",
   "        with:",
   "          # Check out the immutable companion whose package-facing source",
@@ -209,7 +248,23 @@ checkout_block <- c(
     "\"$expected_helper_blob\" \"$helper\")\""
   ),
   "          readonly expected_helper_entry",
-  '          test "$helper_entry" = "$expected_helper_entry"',
+  '          test "$helper_entry" = "$expected_helper_entry"'
+)
+lock_identity_block <- c(
+  paste0("          readonly lock=", lock_relative),
+  paste0("          readonly expected_lock_blob=", lock_blob),
+  paste0("          readonly expected_lock_sha256=", lock_sha256),
+  '          lock_entry="$(git ls-tree "$harness" -- "$lock")"',
+  "          readonly lock_entry",
+  paste0(
+    "          expected_lock_entry=\"$(printf ",
+    "'100644 blob %s\\t%s' ",
+    "\"$expected_lock_blob\" \"$lock\")\""
+  ),
+  "          readonly expected_lock_entry",
+  '          test "$lock_entry" = "$expected_lock_entry"'
+)
+companion_identity_block <- c(
   paste0(
     "          changed=\"$(git diff --name-only ",
     "\"$candidate\" \"$harness\")\""
@@ -223,13 +278,57 @@ checkout_block <- c(
   '          test "$changed" = "$expected_changed"',
   '          test -z "$(git status --porcelain=v1 --untracked-files=all)"'
 )
-lines <- replace_exact(
-  lines,
-  "      - uses: actions/checkout@v6",
-  checkout_block,
-  "trigger-ref checkout",
-  count = 2L
+lock_materialization_block <- c(
+  '          lock_tmp="$(mktemp "${lock}.raw.XXXXXX")"',
+  "          readonly lock_tmp",
+  '          trap \'rm -f -- "$lock_tmp"\' EXIT',
+  '          git cat-file blob "$expected_lock_blob" > "$lock_tmp"',
+  '          chmod 0644 "$lock_tmp"',
+  paste0(
+    "          test \"$(git hash-object --no-filters -- ",
+    "\"$lock_tmp\")\" = \"$expected_lock_blob\""
+  ),
+  paste0(
+    "          test \"$(sha256sum -- \"$lock_tmp\" | ",
+    "cut -d ' ' -f 1)\" = \"$expected_lock_sha256\""
+  ),
+  '          mv -f -- "$lock_tmp" "$lock"',
+  "          trap - EXIT",
+  paste0(
+    "          test \"$(git hash-object --no-filters -- ",
+    "\"$lock\")\" = \"$expected_lock_blob\""
+  ),
+  paste0(
+    "          test \"$(sha256sum -- \"$lock\" | ",
+    "cut -d ' ' -f 1)\" = \"$expected_lock_sha256\""
+  )
 )
+checkout_block <- c(checkout_prefix, companion_identity_block)
+old_windows_checkout_block <- c(
+  checkout_prefix,
+  lock_identity_block,
+  companion_identity_block,
+  lock_materialization_block
+)
+checkout_positions <- which(lines == "      - uses: actions/checkout@v6")
+if (!identical(length(checkout_positions), 2L)) {
+  fail("trigger-ref checkout anchor count differs")
+}
+for (index in rev(seq_along(checkout_positions))) {
+  position <- checkout_positions[[index]]
+  replacement <- if (index == 1L) {
+    checkout_block
+  } else {
+    old_windows_checkout_block
+  }
+  before <- if (position > 1L) lines[seq_len(position - 1L)] else character()
+  after <- if (position < length(lines)) {
+    lines[seq.int(position + 1L, length(lines))]
+  } else {
+    character()
+  }
+  lines <- c(before, replacement, after)
+}
 lines <- replace_exact(
   lines,
   "      - uses: r-lib/actions/setup-r@v2",

@@ -38,11 +38,48 @@ candidate_commit <- paste(rep("b", 40L), collapse = "")
 harness_tag <- "paradox-test-harness-aaaaaaaa"
 workflow_ref <- paste0("refs/tags/", harness_tag)
 workflow <- file.path(fixture, "r-cmd-check.yml")
-writeLines(c(
-  "name: fixture",
-  "on: workflow_dispatch",
-  paste0("          readonly candidate=", candidate_commit),
-  paste0("          readonly candidate=", candidate_commit),
+expected_lock_blob <- "5e9fb484b63cff6ee51ab2101dcaa37defd0e603"
+expected_lock_sha256 <-
+  "9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5"
+lock_identity_lines <- c(
+  "          readonly lock=environment/runtime-r-3.6.3-packages.lock",
+  paste0("          readonly expected_lock_blob=", expected_lock_blob),
+  paste0("          readonly expected_lock_sha256=", expected_lock_sha256),
+  '          lock_entry="$(git ls-tree "$harness" -- "$lock")"',
+  "          readonly lock_entry",
+  paste0(
+    "          expected_lock_entry=\"$(printf '100644 blob %s\\t%s' ",
+    "\"$expected_lock_blob\" \"$lock\")\""
+  ),
+  "          readonly expected_lock_entry",
+  '          test "$lock_entry" = "$expected_lock_entry"'
+)
+lock_materialization_lines <- c(
+  '          lock_tmp="$(mktemp "${lock}.raw.XXXXXX")"',
+  "          readonly lock_tmp",
+  '          trap \'rm -f -- "$lock_tmp"\' EXIT',
+  '          git cat-file blob "$expected_lock_blob" > "$lock_tmp"',
+  '          chmod 0644 "$lock_tmp"',
+  paste0(
+    "          test \"$(git hash-object --no-filters -- ",
+    "\"$lock_tmp\")\" = \"$expected_lock_blob\""
+  ),
+  paste0(
+    "          test \"$(sha256sum -- \"$lock_tmp\" | ",
+    "cut -d ' ' -f 1)\" = \"$expected_lock_sha256\""
+  ),
+  '          mv -f -- "$lock_tmp" "$lock"',
+  "          trap - EXIT",
+  paste0(
+    "          test \"$(git hash-object --no-filters -- ",
+    "\"$lock\")\" = \"$expected_lock_blob\""
+  ),
+  paste0(
+    "          test \"$(sha256sum -- \"$lock\" | ",
+    "cut -d ' ' -f 1)\" = \"$expected_lock_sha256\""
+  )
+)
+companion_identity_lines <- c(
   '          changed="$(git diff --name-only "$candidate" "$harness")"',
   "          readonly changed",
   paste0(
@@ -51,22 +88,9 @@ writeLines(c(
   ),
   "          readonly expected_changed",
   '          test "$changed" = "$expected_changed"',
-  '          changed="$(git diff --name-only "$candidate" "$harness")"',
-  "          readonly changed",
-  paste0(
-    "          expected_changed=\"$(printf '%s\\n' ",
-    ".github/workflows/r-cmd-check.yml)\""
-  ),
-  "          readonly expected_changed",
-  '          test "$changed" = "$expected_changed"',
-  "          readonly helper=scripts/environment/install-hosted-r36-windows.ps1",
-  paste0("          readonly expected_helper_blob=", strrep("c", 40L)),
-  paste0(
-    "          expected_helper_entry=\"$(printf ",
-    "'100644 blob %s\\t%s' ",
-    "\"$expected_helper_blob\" \"$helper\")\""
-  ),
-  '          test "$helper_entry" = "$expected_helper_entry"',
+  '          test -z "$(git status --porcelain=v1 --untracked-files=all)"'
+)
+helper_identity_lines <- c(
   "          readonly helper=scripts/environment/install-hosted-r36-windows.ps1",
   paste0("          readonly expected_helper_blob=", strrep("c", 40L)),
   paste0(
@@ -75,6 +99,22 @@ writeLines(c(
     "\"$expected_helper_blob\" \"$helper\")\""
   ),
   '          test "$helper_entry" = "$expected_helper_entry"'
+)
+writeLines(c(
+  "name: fixture",
+  "on: workflow_dispatch",
+  "jobs:",
+  "  r-cmd-check:",
+  paste0("          readonly candidate=", candidate_commit),
+  helper_identity_lines,
+  companion_identity_lines,
+  "  r36-windows:",
+  paste0("          readonly candidate=", candidate_commit),
+  helper_identity_lines,
+  lock_identity_lines,
+  companion_identity_lines,
+  lock_materialization_lines,
+  "  portability-complete:"
 ), workflow)
 workflow_sha256 <- unname(tools::sha256sum(workflow))
 
@@ -639,6 +679,99 @@ if (status(result) == 0L ||
 writeLines(workflow_lines, workflow)
 arguments[[workflow_sha_index]] <- workflow_sha256
 
+old_job_end <- which(workflow_lines == "  portability-complete:")
+lock_scope_start <- which(
+  workflow_lines ==
+    "          readonly lock=environment/runtime-r-3.6.3-packages.lock"
+)
+if (length(old_job_end) != 1L || length(lock_scope_start) != 1L ||
+    lock_scope_start >= old_job_end) {
+  fail("synthetic workflow lacks one bounded old-Windows lock block")
+}
+mutated_workflow <- workflow_lines[-old_job_end]
+mutated_workflow <- append(
+  mutated_workflow,
+  "  portability-complete:",
+  after = lock_scope_start - 1L
+)
+writeLines(mutated_workflow, workflow)
+arguments[[workflow_sha_index]] <- unname(tools::sha256sum(workflow))
+result <- invoke()
+if (status(result) == 0L ||
+    !any(grepl(
+      paste0(
+        "does not authenticate and materialize the exact old-Windows ",
+        "runtime lock"
+      ),
+      result,
+      fixed = TRUE
+    ))) {
+  fail("verifier accepted a runtime-lock block outside the old-Windows job")
+}
+writeLines(workflow_lines, workflow)
+arguments[[workflow_sha_index]] <- workflow_sha256
+
+lock_materialization_positions <- which(
+  workflow_lines ==
+    '          git cat-file blob "$expected_lock_blob" > "$lock_tmp"'
+)
+if (length(lock_materialization_positions) != 1L) {
+  fail("synthetic workflow lacks one exact runtime-lock materialization")
+}
+mutated_workflow <- workflow_lines
+mutated_workflow[[lock_materialization_positions[[1L]]]] <-
+  '          git show "$expected_lock_blob" > "$lock_tmp"'
+writeLines(mutated_workflow, workflow)
+arguments[[workflow_sha_index]] <- unname(tools::sha256sum(workflow))
+result <- invoke()
+if (status(result) == 0L ||
+    !any(grepl(
+      paste0(
+        "does not authenticate and materialize the exact old-Windows ",
+        "runtime lock"
+      ),
+      result,
+      fixed = TRUE
+    ))) {
+  fail("verifier accepted a forged runtime-lock materialization")
+}
+writeLines(workflow_lines, workflow)
+arguments[[workflow_sha_index]] <- workflow_sha256
+
+clean_positions <- which(
+  workflow_lines ==
+    '          test -z "$(git status --porcelain=v1 --untracked-files=all)"'
+)
+if (length(clean_positions) != 2L) {
+  fail("synthetic workflow lacks two exact clean-worktree assertions")
+}
+mutated_workflow <- workflow_lines[-clean_positions[[2L]]]
+materialization_position <- which(
+  mutated_workflow ==
+    '          git cat-file blob "$expected_lock_blob" > "$lock_tmp"'
+)
+mutated_workflow <- append(
+  mutated_workflow,
+  '          test -z "$(git status --porcelain=v1 --untracked-files=all)"',
+  after = materialization_position
+)
+writeLines(mutated_workflow, workflow)
+arguments[[workflow_sha_index]] <- unname(tools::sha256sum(workflow))
+result <- invoke()
+if (status(result) == 0L ||
+    !any(grepl(
+      paste0(
+        "does not authenticate and materialize the exact old-Windows ",
+        "runtime lock"
+      ),
+      result,
+      fixed = TRUE
+    ))) {
+  fail("verifier accepted a post-materialization clean-worktree assertion")
+}
+writeLines(workflow_lines, workflow)
+arguments[[workflow_sha_index]] <- workflow_sha256
+
 old_windows_closure <- file.path(
   fixture,
   "artifacts",
@@ -653,6 +786,35 @@ expect_rejection <- function(fragment, label) {
   }
   invisible(result)
 }
+retained_lock <- file.path(
+  old_windows_closure,
+  "runtime-r-3.6.3-packages.lock"
+)
+retained_lock_receipt <- file.path(old_windows_closure, "lock-sha256.txt")
+retained_lock_bytes <- readBin(
+  retained_lock,
+  what = "raw",
+  n = file.info(retained_lock, extra_cols = FALSE)$size
+)
+line_feed <- as.raw(10L)
+carriage_return <- as.raw(13L)
+crlf_lock_bytes <- unlist(lapply(retained_lock_bytes, function(byte) {
+  if (identical(byte, line_feed)) c(carriage_return, byte) else byte
+}), use.names = FALSE)
+writeBin(crlf_lock_bytes, retained_lock)
+writeLines(
+  unname(tools::sha256sum(retained_lock)),
+  retained_lock_receipt
+)
+expect_rejection(
+  "old-Windows runtime source lock differs from the reviewed lock",
+  "verifier accepted a self-consistent CRLF runtime lock"
+)
+writeBin(retained_lock_bytes, retained_lock)
+writeLines(
+  unname(tools::sha256sum(retained_lock)),
+  retained_lock_receipt
+)
 old_windows_isolation <- file.path(
   fixture,
   "artifacts",

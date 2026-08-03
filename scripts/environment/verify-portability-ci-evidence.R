@@ -789,7 +789,14 @@ verify_portability_ci_evidence <- function(
   if (!identical(sha256_file(workflow_path), workflow_sha256)) {
     fail("executed workflow SHA-256 differs from the expected companion workflow")
   }
-  workflow_lines <- trimws(readLines(workflow_path, warn = FALSE))
+  workflow_raw_lines <- readLines(workflow_path, warn = FALSE)
+  workflow_lines <- trimws(workflow_raw_lines)
+  old_job_start <- which(workflow_raw_lines == "  r36-windows:")
+  old_job_end <- which(workflow_raw_lines == "  portability-complete:")
+  if (length(old_job_start) != 1L || length(old_job_end) != 1L ||
+      old_job_start >= old_job_end) {
+    fail("executed workflow does not contain one bounded old-Windows job")
+  }
   if (sum(workflow_lines == paste0(
       "readonly candidate=", candidate_commit
     )) != 2L) {
@@ -827,6 +834,85 @@ verify_portability_ci_evidence <- function(
       sum(workflow_lines ==
         'test "$helper_entry" = "$expected_helper_entry"') != 2L) {
     fail("executed workflow does not bind one exact installer helper tree entry")
+  }
+
+  expected_lock_blob <-
+    "5e9fb484b63cff6ee51ab2101dcaa37defd0e603"
+  expected_lock_sha256 <-
+    "9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5"
+  required_lock_lines <- c(
+    paste0(
+      "readonly lock=",
+      "environment/runtime-r-3.6.3-packages.lock"
+    ),
+    paste0("readonly expected_lock_blob=", expected_lock_blob),
+    paste0("readonly expected_lock_sha256=", expected_lock_sha256),
+    'lock_entry="$(git ls-tree "$harness" -- "$lock")"',
+    "readonly lock_entry",
+    paste0(
+      "expected_lock_entry=\"$(printf '100644 blob %s\\t%s' ",
+      "\"$expected_lock_blob\" \"$lock\")\""
+    ),
+    "readonly expected_lock_entry",
+    'test "$lock_entry" = "$expected_lock_entry"',
+    'lock_tmp="$(mktemp "${lock}.raw.XXXXXX")"',
+    "readonly lock_tmp",
+    'trap \'rm -f -- "$lock_tmp"\' EXIT',
+    'git cat-file blob "$expected_lock_blob" > "$lock_tmp"',
+    'chmod 0644 "$lock_tmp"',
+    paste0(
+      "test \"$(git hash-object --no-filters -- ",
+      "\"$lock_tmp\")\" = \"$expected_lock_blob\""
+    ),
+    paste0(
+      "test \"$(sha256sum -- \"$lock_tmp\" | ",
+      "cut -d ' ' -f 1)\" = \"$expected_lock_sha256\""
+    ),
+    'mv -f -- "$lock_tmp" "$lock"',
+    "trap - EXIT",
+    paste0(
+      "test \"$(git hash-object --no-filters -- ",
+      "\"$lock\")\" = \"$expected_lock_blob\""
+    ),
+    paste0(
+      "test \"$(sha256sum -- \"$lock\" | ",
+      "cut -d ' ' -f 1)\" = \"$expected_lock_sha256\""
+    )
+  )
+  lock_line_counts <- vapply(
+    required_lock_lines,
+    function(line) sum(workflow_lines == line),
+    integer(1L)
+  )
+  if (any(lock_line_counts != 1L)) {
+    fail(
+      "executed workflow does not authenticate and materialize the exact ",
+      "old-Windows runtime lock"
+    )
+  }
+  lock_line_positions <- match(required_lock_lines, workflow_lines)
+  candidate_positions <- which(workflow_lines == paste0(
+    "readonly candidate=", candidate_commit
+  ))
+  clean_positions <- which(workflow_lines ==
+    'test -z "$(git status --porcelain=v1 --untracked-files=all)"')
+  old_clean_positions <- clean_positions[
+    clean_positions > candidate_positions[[2L]] &
+      clean_positions < lock_line_positions[[9L]]
+  ]
+  if (is.unsorted(lock_line_positions, strictly = TRUE) ||
+      length(candidate_positions) != 2L ||
+      lock_line_positions[[1L]] <= candidate_positions[[2L]] ||
+      candidate_positions[[2L]] <= old_job_start ||
+      candidate_positions[[2L]] >= old_job_end ||
+      any(lock_line_positions <= old_job_start) ||
+      any(lock_line_positions >= old_job_end) ||
+      length(old_clean_positions) != 1L ||
+      old_clean_positions[[1L]] <= lock_line_positions[[8L]]) {
+    fail(
+      "executed workflow does not authenticate and materialize the exact ",
+      "old-Windows runtime lock"
+    )
   }
 
   run <- read_json(run_path, "retained REST run metadata")
