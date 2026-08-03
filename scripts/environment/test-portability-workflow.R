@@ -6,6 +6,21 @@ count_fixed <- function(needle, haystack) {
   matches <- gregexpr(needle, haystack, fixed = TRUE)[[1L]]
   if (identical(matches, -1L)) 0L else length(matches)
 }
+contains_contiguous <- function(haystack, needle) {
+  if (!length(needle)) {
+    return(TRUE)
+  }
+  if (length(needle) > length(haystack)) {
+    return(FALSE)
+  }
+  starts <- seq_len(length(haystack) - length(needle) + 1L)
+  any(vapply(starts, function(start) {
+    identical(
+      haystack[start + seq_along(needle) - 1L],
+      needle
+    )
+  }, logical(1L)))
+}
 arguments <- commandArgs(trailingOnly = TRUE)
 if (length(arguments) > 5L) {
   fail(paste0(
@@ -295,6 +310,45 @@ old_check <- old_step_by_name("Build, smoke, and check on R 3.6 Windows")
 toolchain_lines <- trimws(strsplit(
   toolchain$run, "\n", fixed = TRUE
 )[[1L]])
+expected_toolchain_r_admission <- c(
+  "$resolvedR = (",
+  "Get-Command R.exe -CommandType Application -ErrorAction Stop",
+  ").Source",
+  "$resolvedRScript = (",
+  "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop",
+  ").Source",
+  "if (-not [String]::Equals(",
+  "[IO.Path]::GetFullPath($resolvedR),",
+  "[IO.Path]::GetFullPath($rExe),",
+  "[StringComparison]::OrdinalIgnoreCase",
+  ") -or -not [String]::Equals(",
+  "[IO.Path]::GetFullPath($resolvedRScript),",
+  "[IO.Path]::GetFullPath($rScriptExe),",
+  "[StringComparison]::OrdinalIgnoreCase",
+  ")) {",
+  'throw "PATH does not select exact R 3.6 x86-64 executables"',
+  "}"
+)
+expected_architecture_payload <- c(
+  "$rArchitectureCode = @(",
+  "'stopifnot(',",
+  "'  identical(as.character(getRversion()), \"3.6.3\"),',",
+  "'  identical(.Platform$OS.type, \"windows\"),',",
+  "'  grepl(\"^(x86_64|x64)$\", tolower(R.version$arch))',",
+  "')',",
+  "'cat(R.version$version.string, \"\\n\", R.version$platform, \"\\n\")'",
+  ")"
+)
+expected_architecture_execution <- c(
+  "try {",
+  "& $rScriptExe --vanilla $rArchitectureScript",
+  "$rArchitectureStatus = $LASTEXITCODE",
+  "} finally {",
+  "Remove-Item -LiteralPath $rArchitectureScript -Force",
+  "}",
+  "if ($rArchitectureStatus -ne 0 -or",
+  "(Test-Path -LiteralPath $rArchitectureScript)) {"
+)
 if (sum(toolchain_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
     sum(toolchain_lines ==
       "Get-Command R.exe -CommandType Application -ErrorAction Stop") != 1L ||
@@ -304,6 +358,12 @@ if (sum(toolchain_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
     sum(toolchain_lines == "$rArchitectureScript = Join-Path `") != 1L ||
     sum(toolchain_lines ==
       "& $rScriptExe --vanilla $rArchitectureScript") != 1L ||
+    !contains_contiguous(
+      toolchain_lines,
+      expected_toolchain_r_admission
+    ) ||
+    !contains_contiguous(toolchain_lines, expected_architecture_payload) ||
+    !contains_contiguous(toolchain_lines, expected_architecture_execution) ||
     !grepl("[IO.File]::WriteAllLines(", toolchain$run, fixed = TRUE) ||
     !grepl("Text.UTF8Encoding($false)", toolchain$run, fixed = TRUE) ||
     !grepl(
@@ -328,6 +388,28 @@ closure_lines <- trimws(strsplit(closure$run, "\n", fixed = TRUE)[[1L]])
 old_check_lines <- trimws(strsplit(
   old_check$run, "\n", fixed = TRUE
 )[[1L]])
+expected_closure_r_admission <- c(
+  "$resolvedR = (",
+  "Get-Command R.exe -CommandType Application -ErrorAction Stop",
+  ").Source",
+  "$resolvedRScript = (",
+  "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop",
+  ").Source",
+  "if (-not [String]::Equals(",
+  "[IO.Path]::GetFullPath($resolvedR),",
+  "[IO.Path]::GetFullPath((Join-Path $rBin \"R.exe\")),",
+  "[StringComparison]::OrdinalIgnoreCase",
+  ") -or -not [String]::Equals(",
+  "[IO.Path]::GetFullPath($resolvedRScript),",
+  "[IO.Path]::GetFullPath((Join-Path $rBin \"Rscript.exe\")),",
+  "[StringComparison]::OrdinalIgnoreCase",
+  ")) {",
+  paste0(
+    'throw "closure phase does not select exact R 3.6 ',
+    'x86-64 executables"'
+  ),
+  "}"
+)
 if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
     sum(closure_lines ==
       '$PSNativeCommandArgumentPassing = "Standard"') != 1L ||
@@ -339,6 +421,7 @@ if (sum(closure_lines == '$rBin = "C:\\R\\bin\\x64"') != 1L ||
     sum(closure_lines ==
       "Get-Command Rscript.exe -CommandType Application -ErrorAction Stop") !=
       1L ||
+    !contains_contiguous(closure_lines, expected_closure_r_admission) ||
     sum(old_check_lines ==
       '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
     sum(old_check_lines == "& $rScriptExe --vanilla `") != 1L ||
@@ -864,11 +947,34 @@ old_upload <- old_step_by_name("Upload old-Windows evidence")
 old_provenance_lines <- trimws(strsplit(
   old_provenance$run, "\n", fixed = TRUE
 )[[1L]])
+expected_platform_payload <- c(
+  "[IO.File]::WriteAllText(",
+  "$rPlatformScript,",
+  "'cat(R.version$platform)',",
+  "$encoding",
+  ")"
+)
+expected_platform_execution <- c(
+  "try {",
+  "$rPlatformOutput = @(",
+  "& $rScriptExe --vanilla $rPlatformScript",
+  ")",
+  "$rPlatformStatus = $LASTEXITCODE",
+  "} finally {",
+  "Remove-Item -LiteralPath $rPlatformScript -Force",
+  "}",
+  '$rPlatform = ($rPlatformOutput -join "`n").Trim()',
+  "if ($rPlatformStatus -ne 0 -or",
+  "(Test-Path -LiteralPath $rPlatformScript) -or",
+  "-not $rPlatform) {"
+)
 if (sum(old_provenance_lines ==
       '$rScriptExe = "C:\\R\\bin\\x64\\Rscript.exe"') != 1L ||
     sum(old_provenance_lines == "$rPlatformScript = Join-Path `") != 1L ||
     sum(old_provenance_lines ==
       "& $rScriptExe --vanilla $rPlatformScript") != 1L ||
+    !contains_contiguous(old_provenance_lines, expected_platform_payload) ||
+    !contains_contiguous(old_provenance_lines, expected_platform_execution) ||
     !grepl("[IO.File]::WriteAllText(", old_provenance$run, fixed = TRUE) ||
     !grepl("Text.UTF8Encoding($false)", old_provenance$run, fixed = TRUE) ||
     !grepl(

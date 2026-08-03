@@ -206,38 +206,38 @@ if (invoke(
   fail("release renderer accepted an old-Windows phase without isolation")
 }
 
-empty_architecture_source <- file.path(
-  scratch, "empty-architecture-source.yml"
+mutated_architecture_source <- file.path(
+  scratch, "mutated-architecture-source.yml"
 )
-empty_architecture_lines <- readLines(source, warn = FALSE)
-empty_architecture_position <- which(empty_architecture_lines ==
-  "            & $rScriptExe --vanilla $rArchitectureScript")
-if (length(empty_architecture_position) != 1L) {
-  fail("general workflow has no exact old-Windows architecture invocation")
+mutated_architecture_lines <- readLines(source, warn = FALSE)
+mutated_architecture_position <- which(mutated_architecture_lines ==
+  "            'stopifnot(',")
+if (length(mutated_architecture_position) != 1L) {
+  fail("general workflow has no exact old-Windows architecture payload")
 }
-empty_architecture_lines[[empty_architecture_position]] <-
-  "            & Rscript.exe --vanilla -e ''"
-writeLines(empty_architecture_lines, empty_architecture_source)
-empty_architecture_output <- file.path(
-  scratch, "empty-architecture-output.yml"
+mutated_architecture_lines[[mutated_architecture_position]] <-
+  "            '',"
+writeLines(mutated_architecture_lines, mutated_architecture_source)
+mutated_architecture_output <- file.path(
+  scratch, "mutated-architecture-output.yml"
 )
 if (invoke(
-      empty_architecture_output,
-      input = empty_architecture_source
+      mutated_architecture_output,
+      input = mutated_architecture_source
     )$status == 0L ||
-    file.exists(empty_architecture_output)) {
-  fail("release renderer accepted an empty old-Windows architecture probe")
+    file.exists(mutated_architecture_output)) {
+  fail("release renderer accepted a mutated old-Windows architecture payload")
 }
 
 empty_platform_source <- file.path(scratch, "empty-platform-source.yml")
 empty_platform_lines <- readLines(source, warn = FALSE)
 empty_platform_position <- which(empty_platform_lines ==
-  "              & $rScriptExe --vanilla $rPlatformScript")
+  "            'cat(R.version$platform)',")
 if (length(empty_platform_position) != 1L) {
-  fail("general workflow has no exact old-Windows platform invocation")
+  fail("general workflow has no exact old-Windows platform payload")
 }
 empty_platform_lines[[empty_platform_position]] <-
-  "              & Rscript.exe --vanilla -e ''"
+  "            '',"
 writeLines(empty_platform_lines, empty_platform_source)
 empty_platform_output <- file.path(scratch, "empty-platform-output.yml")
 if (invoke(empty_platform_output, input = empty_platform_source)$status == 0L ||
