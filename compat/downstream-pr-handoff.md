@@ -32,17 +32,49 @@ Package-facing source is frozen at
 `a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
 `49079e12a816542fe8d8d6a0a2290a757a558b41`. The checked-in
 `release-refresh-20260720`/`paradox2` compatibility axis now binds that exact
-immutable identity. A clean package-facing-source-identical tooling commit must
-be frozen from this update before preparing either fresh axis. The prepared
-compatibility gates will continue to bind the eight published PR heads above
-on both Paradox axes.
+immutable identity. Final compatibility evidence is owned by clean,
+package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260803T151943Z`, commit
+`f7b3eff651ad747015a4d3372304f296eac661f7`, tree
+`7749375e12300c6aa4258a76206ce082b96bd09f`. Both axes bind the eight
+published PR heads above without changing them.
 
-## Active evidence still required
+## Active compatibility conclusion
 
-Run the focused eight-head Paradox-1 gate and the complete Paradox-2
-compatibility/documentation DAG against fresh installations and overlays, then
-seal a fresh benchmark. No `f27776e` package-bound result transfers to
-`a0a9ff3`, even though the downstream heads themselves are unchanged.
+Fresh Paradox-1 and Paradox-2 preparation reproduced exact dependency endpoint
+`3828cdaf0c767d89fa30ea595845d3eab9695dfdb80bee909a5b3fabcc31919e`;
+both ten-package overlays pass their current and retained validators. All eight
+prepared heads build and complete source-package checks on both axes. Seven
+finish with `Status: OK`; mlr3fda has only the reviewed environmental `fdasrvf`
+cross-reference NOTE.
+
+Paradox-1 coordinator
+`release-candidate-a0a9ff3-final-p1-focused-f7b3eff-r1` passes all five tasks.
+Paradox-2 coordinator
+`release-candidate-a0a9ff3-final-p2-compat-f7b3eff-r1` passes ten of twelve;
+its overall nonzero status is the intentional factual aggregate of the broad
+repository and CRAN reverse-dependency rows, not a harness or candidate
+failure. The broad corpus completes 20 of 28 exact repositories, with the
+eight non-green rows retaining reviewed upstream or environmental
+classifications. The reverse run completes all 22 rows without timeout, OOM,
+missing worker, or transient failure: ten pass and twelve retain reviewed
+non-green outcomes. All seven mandatory documentation rows pass, and 14 of 17
+rows pass overall. Current and retained verifiers accept the exact-head,
+corpus, reverse, and documentation evidence.
+
+Seven reverse-dependency failures are unadapted released versions of bbotk,
+mlr3tuning, miesmuschel, mlr3pipelines, mlr3mbo, mlr3fda, and mlr3forecast.
+Each corresponding prepared PR head in the table above passes the exact dual-
+axis source-package gate. Hosted reverse-dependency run `30807900759` likewise
+contains no transient infrastructure failure and matches those prepared fixes;
+do not retry unchanged released versions as though they were candidate bugs.
+The five remaining non-green reverse rows are reviewed optional/external-
+dependency or offline-network outcomes.
+
+Exact hashes and row classifications are recorded in `AGENTS.md` and
+`design/release-2.0.0.md`. No `f27776e` package-bound result was transferred to
+`a0a9ff3`; the new executions own these conclusions even though the downstream
+heads are unchanged.
 
 ## Historical `f27776e` retained evidence
 
@@ -78,12 +110,86 @@ history and must not be presented as active-candidate proof.
 
 ## Active hosted-portability handoff
 
-The `a0a9ff3` candidate requires a new direct child whose sole changed path is
-`.github/workflows/r-cmd-check.yml`, plus fresh candidate and companion tags.
-Create and validate that companion only after local compatibility and benchmark
-evidence converge. Agentic processes must not publish the refs or dispatch the
-workflow; the exact user commands belong here after the local companion is
-frozen.
+The local immutable direct child is
+`refs/paradox-release/portability-harness-da5a500`, commit
+`da5a500936d00f7bc4c44989258d5bc385082252`, tree
+`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, with local tag
+`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole parent is `a0a9ff3`; its
+sole changed path is `.github/workflows/r-cmd-check.yml`, whose SHA-256 is
+`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`.
+It inherits the authenticated installer as exact `100644` blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`. Structural, release-mode,
+renderer, helper-blob, evidence-verifier, documentation-economy, and actionlint
+validation pass locally. Hosted execution is pending.
+
+Agents must not run any command below. After reviewing the local refs, the user
+may publish the current branch plus the two new tags atomically and dispatch
+the immutable companion. The lease below intentionally binds the currently
+observed remote `paradox_c` head; if any assertion fails, stop and audit rather
+than weakening or deleting it.
+
+```sh
+repo=/home/mewse/paradox_neo
+candidate=a0a9ff3e05b535068392e0c20442ad9794f3b824
+companion=da5a500936d00f7bc4c44989258d5bc385082252
+remote_head=dfc1a2f8fbf52c569563b48842b2f45be480a5c9
+candidate_tag=paradox-2.0.0-ci-a0a9ff3
+companion_tag=paradox-2.0.0-ci-a0a9ff3-harness-da5a500
+
+test -z "$(git -C "$repo" status --porcelain=v1 --untracked-files=all)"
+test "$(git -C "$repo" symbolic-ref --short HEAD)" = paradox_c
+test "$(git -C "$repo" rev-parse refs/paradox-release/candidate-20260803T131049Z)" = "$candidate"
+test "$(git -C "$repo" rev-parse "refs/tags/$candidate_tag")" = "$candidate"
+test "$(git -C "$repo" rev-parse refs/paradox-release/portability-harness-da5a500)" = "$companion"
+test "$(git -C "$repo" rev-parse "refs/tags/$companion_tag")" = "$companion"
+test "$(git -C "$repo" rev-list --parents -n 1 "$companion")" = \
+  "$companion $candidate"
+test "$(git -C "$repo" rev-parse "$companion^{tree}")" = \
+  ad699de13d8f2df1b08530db4cf3a6a08d3a7693
+test "$(git -C "$repo" diff --name-only "$candidate" "$companion")" = \
+  .github/workflows/r-cmd-check.yml
+test "$(git -C "$repo" show "$companion":.github/workflows/r-cmd-check.yml | \
+  sha256sum | cut -d' ' -f1)" = \
+  6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18
+test "$(git -C "$repo" ls-tree "$companion" -- \
+  scripts/environment/install-hosted-r36-windows.ps1)" = \
+  "$(printf '100644 blob %s\t%s' \
+    3b420d542dc5a1ae5506380543159cdea84517fa \
+    scripts/environment/install-hosted-r36-windows.ps1)"
+test "$(git -C "$repo" show \
+  "$companion":scripts/environment/install-hosted-r36-windows.ps1 | \
+  sha256sum | cut -d' ' -f1)" = \
+  283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b
+git -C "$repo" merge-base --is-ancestor "$candidate" refs/heads/paradox_c
+git -C "$repo" merge-base --is-ancestor "$remote_head" refs/heads/paradox_c
+test -z "$(git -C "$repo" diff --name-only "$candidate" refs/heads/paradox_c | \
+  grep -Ev '^(AGENTS\.md|compat/|design/|scripts/)' || true)"
+test "$(git -C "$repo" ls-remote --heads origin refs/heads/paradox_c | cut -f1)" = \
+  "$remote_head"
+test -z "$(git -C "$repo" ls-remote --tags origin \
+  "refs/tags/$candidate_tag" "refs/tags/$companion_tag")"
+
+git -C "$repo" push --atomic \
+  --force-with-lease="refs/heads/paradox_c:$remote_head" origin \
+  refs/heads/paradox_c:refs/heads/paradox_c \
+  "refs/tags/$candidate_tag:refs/tags/$candidate_tag" \
+  "refs/tags/$companion_tag:refs/tags/$companion_tag"
+gh workflow run r-cmd-check.yml --repo mlr-org/paradox \
+  --ref "$companion_tag"
+```
+
+Then locate the fresh run without polling partial logs:
+
+```sh
+gh run list --repo mlr-org/paradox --workflow r-cmd-check.yml \
+  --event workflow_dispatch --limit 5 \
+  --json databaseId,headSha,status,conclusion,url
+```
+
+Select only the fresh run whose `headSha` is
+`da5a500936d00f7bc4c44989258d5bc385082252`. Retain and independently verify
+its platform artifacts and REST job inventory before accepting hosted
+portability.
 
 ## Historical `f27776e` hosted-portability handoff
 
@@ -94,85 +200,17 @@ Candidate tag `paradox-2.0.0-ci-f27776e` and failed companion tags
 argument boundary. Run `30803703541` passed the complete current-Windows and
 macOS jobs but stopped old-Windows job `91654062556` at the harness's
 `Get-Command`/PATH assertion before launching R. Do not restart either run.
-At the last audit, remote branch `paradox_c` was `f5da8a9` and final companion
-tag `paradox-2.0.0-ci-f27776e-harness-582eba8` was absent. After reviewing the
-refs, the user can publish the updated branch and only the new tag atomically,
-then dispatch a fresh run with:
-
-```sh
-test -z "$(git -C /home/mewse/paradox_neo status --porcelain)"
-test "$(git -C /home/mewse/paradox_neo symbolic-ref --short HEAD)" = paradox_c
-git -C /home/mewse/paradox_neo merge-base --is-ancestor \
-  812e5abef05c86f743425f6d984fb146c2827434 refs/heads/paradox_c
-test "$(git -C /home/mewse/paradox_neo diff --name-only \
-  812e5abef05c86f743425f6d984fb146c2827434 refs/heads/paradox_c)" = \
-  "$(printf '%s\n' \
-    AGENTS.md \
-    compat/downstream-pr-handoff.md \
-    design/portability-ci.md \
-    design/release-2.0.0.md \
-    design/validation.md)"
-test "$(git -C /home/mewse/paradox_neo rev-parse refs/tags/paradox-2.0.0-ci-f27776e)" = \
-  f27776ee1eca5d964945aa53d14d0ec7947dccbf
-test "$(git -C /home/mewse/paradox_neo ls-remote --tags origin \
-  refs/tags/paradox-2.0.0-ci-f27776e | cut -f1)" = \
-  f27776ee1eca5d964945aa53d14d0ec7947dccbf
-test "$(git -C /home/mewse/paradox_neo rev-parse refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8)" = \
-  582eba86e7a05428f63608272c1c6c6e11a894f4
-test "$(git -C /home/mewse/paradox_neo rev-list --parents -n 1 \
-  582eba86e7a05428f63608272c1c6c6e11a894f4)" = \
-  "582eba86e7a05428f63608272c1c6c6e11a894f4 f27776ee1eca5d964945aa53d14d0ec7947dccbf"
-test "$(git -C /home/mewse/paradox_neo diff --name-only \
-  f27776ee1eca5d964945aa53d14d0ec7947dccbf \
-  582eba86e7a05428f63608272c1c6c6e11a894f4)" = \
-  "$(printf '%s\n' \
-    .github/workflows/r-cmd-check.yml \
-    scripts/environment/install-hosted-r36-windows.ps1)"
-test "$(git -C /home/mewse/paradox_neo ls-tree \
-  582eba86e7a05428f63608272c1c6c6e11a894f4 -- \
-  scripts/environment/install-hosted-r36-windows.ps1)" = \
-  "$(printf '100644 blob %s\t%s' \
-    3b420d542dc5a1ae5506380543159cdea84517fa \
-    scripts/environment/install-hosted-r36-windows.ps1)"
-test "$(git -C /home/mewse/paradox_neo show \
-  582eba86e7a05428f63608272c1c6c6e11a894f4:.github/workflows/r-cmd-check.yml | \
-  sha256sum | cut -d' ' -f1)" = \
-  a7d55d3f3df1543753fbea37424dd3702d8c8de187cb213354f5580db4f35f44
-test "$(git -C /home/mewse/paradox_neo show \
-  582eba86e7a05428f63608272c1c6c6e11a894f4:scripts/environment/install-hosted-r36-windows.ps1 | \
-  sha256sum | cut -d' ' -f1)" = \
-  283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b
-test "$(git -C /home/mewse/paradox_neo ls-remote --heads origin \
-  refs/heads/paradox_c | cut -f1)" = \
-  f5da8a9da00472438b3886e31c8ec8f079d5bfea
-test -z "$(git -C /home/mewse/paradox_neo ls-remote --tags origin \
-  refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8)"
-git -C /home/mewse/paradox_neo push --atomic origin \
-  refs/heads/paradox_c:refs/heads/paradox_c \
-  refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8:refs/tags/paradox-2.0.0-ci-f27776e-harness-582eba8
-gh workflow run r-cmd-check.yml --repo mlr-org/paradox \
-  --ref paradox-2.0.0-ci-f27776e-harness-582eba8
-```
-
-The replacement harness tag points to direct child
+The final historical harness tag points to direct child
 `582eba86e7a05428f63608272c1c6c6e11a894f4`, tree
 `e5ba13f476b4997fea4dbaf5d60369a058ad024c`. Its two changed paths are excluded
 from package builds. The workflow checks out that immutable companion, proves
 its sole parent is candidate `f27776e`, admits only the two reviewed changes,
 and authenticates the helper's exact `100644` tree entry before use. Do not
-dispatch from the mutable development branch. After dispatch, obtain the exact
-run ID with:
-
-```sh
-gh run list --repo mlr-org/paradox --workflow r-cmd-check.yml \
-  --event workflow_dispatch --limit 5 \
-  --json databaseId,headSha,status,conclusion,url
-```
-
-Select only the fresh run whose `headSha` is
-`582eba86e7a05428f63608272c1c6c6e11a894f4`. Retain and independently verify
-its three platform artifacts and four REST jobs before treating hosted
-portability as accepted.
+dispatch from the mutable development branch. Its old-Windows check failure is
+deterministic failed-harness history. Do not execute any obsolete `f27776e`,
+`582eba8`, `198e838`, or `ff3b510` publication, dispatch, or retry command from
+an older revision of this document; only the `a0a9ff3`/`da5a500` handoff above
+is current.
 
 ### Exact Paradox 1 owner conclusion
 

@@ -36,8 +36,144 @@ and
 GCT covers all 111 registered routines and four hazards. Valgrind reports zero
 errors, losses, or suppressions; the analyzer selection has 1,018 passes and
 ten reviewed skips. Rchk reproduces 1,305 functions, 201,585 states, 116
-blocks, 397 UP, and 30 PB. Fresh compatibility, documentation, benchmark, and
-hosted results remain pending.
+blocks, 397 UP, and 30 PB. Fresh compatibility, mandatory documentation,
+exact-head checks, and the independently sealed benchmark complete every
+applicable local gate. A fresh direct-child portability companion passes local
+validation; hosted execution and the manual remote/downstream/publication
+handoff remain pending.
+
+Final local compatibility and benchmark execution is owned by clean,
+package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260803T151943Z`, commit
+`f7b3eff651ad747015a4d3372304f296eac661f7`, tree
+`7749375e12300c6aa4258a76206ce082b96bd09f`. Fresh Paradox-1 and Paradox-2
+preparations reproduce exact dependency-library endpoint
+`3828cdaf0c767d89fa30ea595845d3eab9695dfdb80bee909a5b3fabcc31919e`,
+and both ten-package overlays pass current and retained validation.
+
+Paradox-1 coordinator
+`release-candidate-a0a9ff3-final-p1-focused-f7b3eff-r1` passes all five tasks.
+All eight exact heads build/check successfully; seven finish with `Status: OK`
+and mlr3fda has only its reviewed environmental `fdasrvf` cross-reference
+NOTE. Coordinator completion/JSON-summary/TSV-summary hashes are
+`c75fa0511601d1d653049b11ab4f87d28e3ecaa887dc88d0e9c8ddf0c8b66307`,
+`7ecf4785b81c7b069deebcd1aba6c1faebea9dc8f94aa6c18734f95ce4e0f301`,
+and
+`246afeb23349366de384675283add74aa3e27cf64bbcc392774597b6f41d1dce`.
+Exact-check completion/results/manifest/seal hashes are
+`baf78a4eb90771c75b9b3661eaf28f287f8726ebe991e362268aa8a14ccdb87f`,
+`48f1b58e8e9f655ffebf77a6b2598bfb01d4104089c881351bf80a2b45c5e564`,
+`18ee1912763654a534a54ec95970b495dfcce8cd7fbb82e39f71dea8170c7545`,
+and
+`e93e7c97c290cab2d01cbb7235bbc1f657504335a428916a4a821907e97ea352`.
+
+Paradox-2 coordinator
+`release-candidate-a0a9ff3-final-p2-compat-f7b3eff-r1` passes ten of twelve
+tasks. Its overall nonzero is intentional factual aggregation: only broad
+repository and CRAN reverse-dependency semantic tasks are non-green; every
+harness, preflight, overlay, exact-head, and mandatory-documentation task
+passes. Coordinator completion/JSON-summary/TSV-summary hashes are
+`efa95075775c5edfa997c85f2fadc7544fc2658f5a89ac3911ae267f6e41cecd`,
+`3a80d8d950a9cdad45810bb90ee43a827290e6a5749561a8c91773925a22d5eb`,
+and
+`b38b9e54e0e12cf7cb1d979cb6fadc195a822e827f9363dd23de4773db0217bf`.
+All eight exact heads again build/check successfully; exact-check completion,
+results, manifest, and seal hashes are
+`4070d28e5b718d2f015840f9176bcf6940ebbc715f1e54d5101481d394b5ee11`,
+`577220d884db6c79e1ff8451fe1ec419ba859ecce6a879433512858d71797f69`,
+`642e03e2ffda3c7a79a2f91fd64ddf656dfdeebd29d18e78e8ecc5a9c060b664`,
+and
+`bd20d9d3131c50dbf7ca980381f7e03ae86d479c69756546a67ed0a713388f9b`.
+
+The broad corpus completes 20 of 28 exact repositories. All eight non-green
+rows are reviewed upstream/environmental outcomes rather than Paradox defects.
+Completion/rows/manifest/seal hashes are
+`190fa978c27655774353b961a81bbcb343585062b7c33cdf40dcd7b30338a9bb`,
+`c8cff5a0352b9e096dc246907d739bd7cf05139fc0241fdc1b2695b94f71ddf3`,
+`fea401a5addc39a3e1f1d397202498b030113a7cd0086867c1377c86cd26fb8c`,
+and
+`f9a1d04f5ed72bb73d5901652074de57bd5762017496913fb28e75a0be11a5cf`.
+The retained mlr3extralearners source is exact commit
+`f596c7313cdf280075f033de90f42cf4f310c098`, tree
+`ab14db5b52cd449076aef3b3ffe6c48609b9fa5d`, archive SHA-256
+`f60ff43922d5d8e1c93a83752c8c3d4eac899a302ec31424a764d6867b704ac1`.
+A diagnostic focused execution under the same pinned worker, exact libraries,
+isolated environment, and repository child selected only
+`tests/testthat/test_prioritylasso_classif_priority_lasso.R`: all 19
+expectations passed without a crash. The process exited with status 1 only when
+`teardown.R` attempted to download `uv` in the networkless/no-Python worker.
+This confirms the known environmental boundary but is not sealed evidence.
+The exact mlr3resampling source at commit
+`3da4ef08f8b98ba3b28478a68d0ad73d4114a186`, tree
+`749e43088064ba3cad0f1a109f6142e9abb0e3fa`, archive SHA-256
+`dc224b5dd11730c51908154feca04372fdb96deffb06ade17faec965bebb8e0d`,
+and the same dependency endpoint as the preceding candidate timed out at 3,600
+seconds after 80 passing expectations and 26 successful blocks along the same
+known `FutureLaunchError` trajectory. It is a reviewed environmental timeout;
+rerunning it would not add useful Paradox evidence.
+
+The reverse run completes every one of 22 rows without timeout, OOM, missing
+worker, interruption, or transient failure: ten pass and twelve reproduce the
+same reviewed unadapted-release or external/environmental outcomes.
+Completion/results/acceptance/waves/manifest/seal hashes are
+`104e087a3ab599c9952193642803334cdb211ffcbd0ccb008a66fdbebaeca86c`,
+`cfcf6f133dc1e68d593af6fc21399c255bbde6224d16d623328c1d72544cf32c`,
+`b70cb6cfe7088f8c90c8ff056bd42e2658c8cda3b2899aab632d97fc289f6d3f`,
+`4cbac7fb16ac3298d53462ba78086f584faa3e45c27588042ac5eaa7d24c234d`,
+`d288e297416ed42d463bee39343625fe72111b296db6363619289c078afba83e`,
+and
+`341405a5e995dbdbc7d9391da73168e4d16c8cfd0632543dce34713c0e38c55b`.
+Current and retained verifiers accept both broad stages. Their nonzero
+semantic status remains factual and must not be called green.
+
+All seven mandatory documentation conclusions pass and 14 of 17 rows pass
+overall; the two legacy-gallery rows and full-book render remain advisory
+exclusions. Results/manifest/seal hashes are
+`8a0532d1303d8b5486e1361c07a0925e5c32897068e47e8af1b5373196d12de4`,
+`d6033fdc4681d9112316046ffc3d11874001cdecbd65b2a453aada9c955aff91`,
+and
+`688e5aa0c4b9776faa0f5dd567f4c1878f9cf3bd68da309fb06b1e159c070c34`.
+
+First benchmark
+`.local/benchmarks/release-candidate-a0a9ff3-final-benchmark-f7b3eff-r1`
+is diagnostic only: 78 rows pass, three are bounded marginals, and the
+`shadow_values_live` median ratio 5.724 narrowly exceeds its 5.5 integrity
+budget while its upper-quartile ratio remains within budget. Because it failed,
+it has no manifest or seal. Completion and decision-table hashes are
+`7f2d62b2370acde29101068d54472868b1446cc3c4db6c1c0fe18ae5e8e5c47b`
+and
+`229c6d991453cd1d5586bb5baabeb04afc9d77771aed1f94e468a2d6d6570e41`.
+The installed candidate DSO is byte-identical to the accepted `f27776e` DSO
+(`704f2b07e5ab3852b0f0c51d088d76b27901f5f6aa5e31ef2ad2fcd210e17faf`).
+Four fresh-process 1,000-sample A/B and B/A diagnostic blocks measured
+`a0a9ff3`/`f27776e` median ratios 1.0694, 1.0128, 0.9633, and 1.0939; the sign
+reverses with order and all allocations are identical. Adjacent Shadow rows
+moved together in r1. These unsealed diagnostics bound the result to temporary
+power-state/scheduling variation and justify exactly one complete,
+unchanged-policy rerun without relabeling or discarding r1.
+Fresh independent run
+`.local/benchmarks/release-candidate-a0a9ff3-final-benchmark-f7b3eff-r2`
+passes all 82 rows with 79 passes, three bounded marginals, and zero failures.
+The marginals are `design_transpose_plain` allocation, `shadow_values_live`
+timing, and `collection_values_nested` allocation. Current and retained
+validators independently accept it. Completion/manifest/seal/decision hashes
+are
+`f2a9898d2b107999da63417ccd8255f114665b804f72953ced2d7397cf2b6010`,
+`50b2dc99c6609d21af923ec8c8b6daaa87dc5c3a25723ecc00aa8da3cb5aa2ad`,
+`b56eb4b02f9bc60b30e5a8cfaf992b78b03f95be2b62a146b9639f3734b1a016`,
+and
+`a45d9ed8a91e7344616428b9e6235f7c1b2412ba80ea973622148d7d4067c0cc`.
+
+The active local portability companion is exact direct child
+`refs/paradox-release/portability-harness-da5a500`, commit
+`da5a500936d00f7bc4c44989258d5bc385082252`, tree
+`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, tagged locally as
+`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole diff is the
+package-excluded workflow, SHA-256
+`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`;
+the inherited helper remains exact `100644` Git blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`. The local release validator and
+actionlint pass. Hosted execution is the remaining portability gate.
 
 ### Historical `f27776e` validation record
 
@@ -204,7 +340,8 @@ and
 `e72a59f826d749231da330f5ffbc2d6bddc0ee703d8c1750858227f8af7610cd`.
 All applicable local gates are complete. Final portability tooling
 `refs/paradox-release/portability-tooling-20260803T103512Z` at `812e5ab`, tree
-`e99604f05c10db57406773383d2e0a73746a139c`, validates active companion
+`e99604f05c10db57406773383d2e0a73746a139c`, validates the then-active
+companion
 `refs/paradox-release/portability-harness-582eba8` at `582eba8`, tree
 `e5ba13f476b4997fea4dbaf5d60369a058ad024c`. Its exact two-file diff contains
 the rendered workflow (SHA-256
@@ -1431,9 +1568,10 @@ an argument, the suffixed bridge library and evidence path.
 Ordinarily one final validation-tooling commit is frozen before constructing a
 fresh named overlay, and documentation, full checks, and the benchmark reuse it
 read-only. The checked-in `paradox2` axis now pins exact active candidate
-`a0a9ff3`; its fresh dual-axis overlays, broad compatibility, documentation,
-eight-head checks, and benchmark are pending. The preceding `f27776e` results
-were owned by
+`a0a9ff3`. Its fresh dual-axis overlays, broad compatibility, documentation,
+eight-head checks, and independently sealed benchmark are complete under
+tooling `f7b3eff`; the exact evidence is recorded in the current validation
+status above. The preceding `f27776e` results were owned by
 `refs/paradox-release/validation-tooling-20260803T023640Z` at `f711c67`, tree
 `c6399e5e18a749ad0c647fedd602575a0a45c09e`; they are historical and do not
 transfer. Historical tooling

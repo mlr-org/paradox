@@ -522,14 +522,40 @@ converged in the immutable candidate. Its direct child changes exactly
 the inherited old-Windows installer's exact `100644` tree entry. This keeps the
 parent/diff proof minimal without weakening helper provenance.
 
-Active candidate
-`a0a9ff3e05b535068392e0c20442ad9794f3b824` includes the converged installer,
-bounded Rd-xref policy, and portable old-GCC initializer. Its local
-release-core and combined-memory gates pass, but hosted evidence remains
-pending. Render a fresh direct child only after local compatibility and
-benchmark convergence; that child must change only the workflow and inherit
-the candidate's authenticated installer bytes. No hosted result below
-transfers to `a0a9ff3`.
+The active immutable candidate is
+`refs/paradox-release/candidate-20260803T131049Z`, commit
+`a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
+`49079e12a816542fe8d8d6a0a2290a757a558b41`. It includes the converged
+installer, bounded R 3.6 Rd-xref policy, and portable old-GCC initializer. Its
+local release-core, combined-memory, dual-axis compatibility, and mandatory
+documentation gates pass at their stated boundaries.
+
+The locally frozen direct child is
+`refs/paradox-release/portability-harness-da5a500`, commit
+`da5a500936d00f7bc4c44989258d5bc385082252`, tree
+`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, with local tag
+`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole parent is `a0a9ff3` and
+its sole changed path is `.github/workflows/r-cmd-check.yml`; that rendered
+workflow's SHA-256 is
+`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`.
+The inherited old-Windows installer remains exact `100644` Git blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`. General and release-mode
+structural validation, deterministic renderer tests, helper-blob adversary,
+offline evidence-verifier fixtures, documentation-economy checks, and
+actionlint all pass locally. Hosted execution remains pending; the only
+current manual publication and dispatch procedure is recorded in
+`compat/downstream-pr-handoff.md`. Agents must not publish or dispatch it.
+
+Hosted branch run `30807900755`, at remote head
+`dfc1a2f8fbf52c569563b48842b2f45be480a5c9`, passed all current Linux,
+Windows, and macOS jobs. Only exact R 3.6.3/Rtools35 job `91667437793` failed,
+with the aggregate job failing consequently. That result predates the active
+candidate's repair: R 3.6 now disables only the redundant Rd-cross-reference
+check so the bounded closure retains exactly its intended missing-Suggests
+NOTE, and the upgrade walker now uses the portable C99 scalar initializer.
+Retrying the old branch or any superseded companion cannot execute those
+repairs. No hosted result below transfers to `a0a9ff3`; only a fresh run whose
+head is `da5a500936d00f7bc4c44989258d5bc385082252` can close hosted portability.
 
 For now-superseded candidate
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the first locally validated
@@ -606,8 +632,10 @@ Hosted run `30807910809` later proved that companion's current Windows/macOS
 rows and exact old-Windows build/install/load/smoke path. Its old-Windows check
 failed only because the bounded closure produced the expected missing-Suggests
 NOTE plus a redundant Rd-cross-reference NOTE. `582eba8` is therefore also
-immutable failed-harness history and must not be retried. A fresh candidate
-and single-workflow-path companion are required.
+immutable failed-harness history and must not be retried. The active replacement
+is the `a0a9ff3`/`da5a500` candidate-companion pair above; obsolete `f27776e`,
+`582eba8`, `198e838`, or `ff3b510` publication and dispatch commands must not be
+executed.
 
 ## Acceptance
 

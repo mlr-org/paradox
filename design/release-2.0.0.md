@@ -7,9 +7,13 @@
 `a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
 `49079e12a816542fe8d8d6a0a2290a757a558b41`. Its complete nine-task
 `release-core` foundation and fresh combined GCT/Valgrind/rchk memory gate
-pass. Fresh dual-axis compatibility, documentation, the sealed benchmark, and
-hosted portability are pending and must not be transferred from the
-superseded `f27776e` candidate.**
+pass. Fresh dual-axis compatibility, mandatory documentation, exact-head
+checks, and the independently sealed benchmark also complete every applicable
+local gate. The broad-corpus and reverse-dependency coordinators retain their
+reviewed semantic nonzero statuses as factual evidence; they are not relabeled
+green. A new direct-child portability companion passes local validation.
+Hosted portability and the manual remote/downstream/publication handoff remain
+pending.**
 
 Coordinator `.local/verify/runs/release-candidate-a0a9ff3-r1` passed all nine
 tasks in 3,429.2 seconds. Completion, JSON-summary, and TSV-summary SHA-256
@@ -51,6 +55,146 @@ are
 `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`,
 and
 `742b60254990e82b45b4e33ead0b911946ade3f1751fb99f3401d90959bb6c88`.
+
+### Final `a0a9ff3` compatibility, performance, and portability handoff
+
+Final local compatibility and benchmark execution is owned by clean,
+package-facing-source-identical tooling ref
+`refs/paradox-release/validation-tooling-20260803T151943Z`, commit
+`f7b3eff651ad747015a4d3372304f296eac661f7`, tree
+`7749375e12300c6aa4258a76206ce082b96bd09f`. Fresh Paradox-1 and Paradox-2
+preparations reproduce the same exact dependency-library endpoint
+`3828cdaf0c767d89fa30ea595845d3eab9695dfdb80bee909a5b3fabcc31919e`;
+both ten-package overlays pass current and retained validation.
+
+Paradox-1 coordinator
+`release-candidate-a0a9ff3-final-p1-focused-f7b3eff-r1` passed all five tasks.
+All eight exact prepared heads built and completed their source-package checks;
+seven have final `Status: OK`, and mlr3fda has only the reviewed environmental
+`fdasrvf` cross-reference NOTE. Exact-check completion/results/manifest/seal
+SHA-256 values are
+`baf78a4eb90771c75b9b3661eaf28f287f8726ebe991e362268aa8a14ccdb87f`,
+`48f1b58e8e9f655ffebf77a6b2598bfb01d4104089c881351bf80a2b45c5e564`,
+`18ee1912763654a534a54ec95970b495dfcce8cd7fbb82e39f71dea8170c7545`,
+and
+`e93e7c97c290cab2d01cbb7235bbc1f657504335a428916a4a821907e97ea352`.
+Coordinator completion/JSON-summary/TSV-summary hashes are
+`c75fa0511601d1d653049b11ab4f87d28e3ecaa887dc88d0e9c8ddf0c8b66307`,
+`7ecf4785b81c7b069deebcd1aba6c1faebea9dc8f94aa6c18734f95ce4e0f301`,
+and
+`246afeb23349366de384675283add74aa3e27cf64bbcc392774597b6f41d1dce`.
+
+Paradox-2 coordinator
+`release-candidate-a0a9ff3-final-p2-compat-f7b3eff-r1` passed ten of twelve
+tasks. Its overall nonzero status is the intended factual aggregation: only the
+broad repository corpus and CRAN reverse-dependency tasks are non-green, while
+every harness, preflight, overlay, exact-head, and mandatory-documentation task
+passes. All eight prepared heads again build/check successfully; seven end in
+`Status: OK`, and mlr3fda retains only the reviewed `fdasrvf` NOTE. Exact-check
+completion/results/manifest/seal hashes are
+`4070d28e5b718d2f015840f9176bcf6940ebbc715f1e54d5101481d394b5ee11`,
+`577220d884db6c79e1ff8451fe1ec419ba859ecce6a879433512858d71797f69`,
+`642e03e2ffda3c7a79a2f91fd64ddf656dfdeebd29d18e78e8ecc5a9c060b664`,
+and
+`bd20d9d3131c50dbf7ca980381f7e03ae86d479c69756546a67ed0a713388f9b`.
+Coordinator completion/JSON-summary/TSV-summary hashes are
+`efa95075775c5edfa997c85f2fadc7544fc2658f5a89ac3911ae267f6e41cecd`,
+`3a80d8d950a9cdad45810bb90ee43a827290e6a5749561a8c91773925a22d5eb`,
+and
+`b38b9e54e0e12cf7cb1d979cb6fadc195a822e827f9363dd23de4773db0217bf`.
+
+The broad corpus completes 20 of 28 exact repositories. Its eight non-green
+rows are retained reviewed upstream/environmental results rather than Paradox
+defects. Completion/rows/manifest/seal hashes are
+`190fa978c27655774353b961a81bbcb343585062b7c33cdf40dcd7b30338a9bb`,
+`c8cff5a0352b9e096dc246907d739bd7cf05139fc0241fdc1b2695b94f71ddf3`,
+`fea401a5addc39a3e1f1d397202498b030113a7cd0086867c1377c86cd26fb8c`,
+and
+`f9a1d04f5ed72bb73d5901652074de57bd5762017496913fb28e75a0be11a5cf`.
+The retained mlr3extralearners row is exact commit
+`f596c7313cdf280075f033de90f42cf4f310c098`, tree
+`ab14db5b52cd449076aef3b3ffe6c48609b9fa5d`, source-archive SHA-256
+`f60ff43922d5d8e1c93a83752c8c3d4eac899a302ec31424a764d6867b704ac1`.
+A diagnostic focused execution in the same pinned worker and exact candidate,
+dependency-library, and isolated-environment boundary selected only
+`tests/testthat/test_prioritylasso_classif_priority_lasso.R` through the same
+repository child: all 19 expectations passed without a crash. Its process
+exited with status 1 only in `teardown.R` while trying to download `uv` in the
+networkless/no-Python worker, confirming the already reviewed environmental
+boundary; this diagnostic execution is not sealed evidence. The exact
+mlr3resampling row at commit
+`3da4ef08f8b98ba3b28478a68d0ad73d4114a186`, tree
+`749e43088064ba3cad0f1a109f6142e9abb0e3fa`, source-archive SHA-256
+`dc224b5dd11730c51908154feca04372fdb96deffb06ade17faec965bebb8e0d`,
+and the same dependency endpoint as the preceding candidate timed out at 3,600
+seconds after 80 passing expectations and 26 successful blocks along the same
+known `FutureLaunchError` trajectory. That is a reviewed environmental timeout,
+not a useful retry or a Paradox regression.
+
+The reverse run completed all 22 exact rows without timeout, OOM, missing
+worker, interruption, or transient failure: ten pass and twelve retain the
+same reviewed unadapted-release or external/environmental outcomes. Its
+completion/results/acceptance/waves/manifest/seal hashes are
+`104e087a3ab599c9952193642803334cdb211ffcbd0ccb008a66fdbebaeca86c`,
+`cfcf6f133dc1e68d593af6fc21399c255bbde6224d16d623328c1d72544cf32c`,
+`b70cb6cfe7088f8c90c8ff056bd42e2658c8cda3b2899aab632d97fc289f6d3f`,
+`4cbac7fb16ac3298d53462ba78086f584faa3e45c27588042ac5eaa7d24c234d`,
+`d288e297416ed42d463bee39343625fe72111b296db6363619289c078afba83e`,
+and
+`341405a5e995dbdbc7d9391da73168e4d16c8cfd0632543dce34713c0e38c55b`.
+Current and retained verifiers accept both broad stages.
+
+All seven mandatory documentation conclusions pass, and 14 of 17 rows pass
+overall. The three advisory exclusions remain the two legacy-gallery rows and
+the full-book render. Results/manifest/seal hashes are
+`8a0532d1303d8b5486e1361c07a0925e5c32897068e47e8af1b5373196d12de4`,
+`d6033fdc4681d9112316046ffc3d11874001cdecbd65b2a453aada9c955aff91`,
+and
+`688e5aa0c4b9776faa0f5dd567f4c1878f9cf3bd68da309fb06b1e159c070c34`.
+
+First benchmark
+`.local/benchmarks/release-candidate-a0a9ff3-final-benchmark-f7b3eff-r1`
+is diagnostic evidence only. It recorded 78 passes, three bounded marginals,
+and one `shadow_values_live` median-time failure: its 5.724 ratio narrowly
+exceeded the 5.5 integrity budget while its upper-quartile ratio remained
+within budget. It has no manifest or seal. Completion and decision-table
+SHA-256 values are
+`7f2d62b2370acde29101068d54472868b1446cc3c4db6c1c0fe18ae5e8e5c47b`
+and
+`229c6d991453cd1d5586bb5baabeb04afc9d77771aed1f94e468a2d6d6570e41`.
+The installed candidate DSO is byte-identical to the accepted `f27776e` DSO
+(`704f2b07e5ab3852b0f0c51d088d76b27901f5f6aa5e31ef2ad2fcd210e17faf`).
+Four fresh-process 1,000-sample A/B and B/A diagnostic blocks measured
+`a0a9ff3`/`f27776e` median ratios 1.0694, 1.0128, 0.9633, and 1.0939, with
+identical allocations and an order-dependent sign. All adjacent Shadow rows
+moved together in r1. This bounds r1 to power-state/scheduling noise and
+justifies one complete unchanged-policy rerun while retaining r1; the focused
+diagnostics are not sealed release evidence.
+Fresh independent run
+`.local/benchmarks/release-candidate-a0a9ff3-final-benchmark-f7b3eff-r2`
+passes all 82 policy rows with 79 passes, three bounded marginal reviews, and
+zero failures. The marginals are `design_transpose_plain` allocation,
+`shadow_values_live` timing, and `collection_values_nested` allocation.
+Current and retained independent validators accept the sealed stage;
+completion/manifest/seal/decision-table hashes are
+`f2a9898d2b107999da63417ccd8255f114665b804f72953ced2d7397cf2b6010`,
+`50b2dc99c6609d21af923ec8c8b6daaa87dc5c3a25723ecc00aa8da3cb5aa2ad`,
+`b56eb4b02f9bc60b30e5a8cfaf992b78b03f95be2b62a146b9639f3734b1a016`,
+and
+`a45d9ed8a91e7344616428b9e6235f7c1b2412ba80ea973622148d7d4067c0cc`.
+
+The active locally validated direct-child companion is
+`refs/paradox-release/portability-harness-da5a500`, commit
+`da5a500936d00f7bc4c44989258d5bc385082252`, tree
+`ad699de13d8f2df1b08530db4cf3a6a08d3a7693`, with local tag
+`paradox-2.0.0-ci-a0a9ff3-harness-da5a500`. Its sole parent is exact candidate
+`a0a9ff3`; its only changed path is `.github/workflows/r-cmd-check.yml`,
+SHA-256
+`6e09fa7d068886c05c0d1643b49fe8f48cbd7dec49a7e1ee757c0649088ebb18`.
+The inherited old-Windows helper remains exact `100644` blob
+`3b420d542dc5a1ae5506380543159cdea84517fa`. The local release validator and
+actionlint pass. All applicable local gates are complete; hosted execution and
+the manual remote/downstream/publication handoff remain.
 
 ### Historical `f27776e` acceptance record
 
@@ -271,8 +415,9 @@ is useless. The replacement sets documented R 3.6 switch
 exact one-NOTE contract while complete local/current checks own documentation.
 The hosted old-GCC log also exposed `-Wmissing-braces` at the upgrade-walker
 zero initializer; the replacement uses a C99 designated scalar initializer.
-Current source is unfrozen and requires a new candidate and direct-child
-companion after focused gates converge.
+At that historical point the replacement source was unfrozen and required a
+new candidate and direct-child companion after focused gates converged; active
+candidate `a0a9ff3` and companion `da5a500` now close those local obligations.
 
 ### Historical `4e549f3` acceptance record
 
@@ -1499,12 +1644,15 @@ green gates.
   4.5;
 - [x] pass and independently validate fresh combined GCT, Valgrind, and
   bounded-rchk evidence for the exact `a0a9ff3` native donor;
-- [ ] freeze package-facing-source-identical `a0a9ff3` compatibility tooling,
-  construct both fresh axes, run focused Paradox-1 and complete Paradox-2
-  compatibility/documentation, and seal a fresh benchmark;
-- [ ] create, locally validate, manually publish, and execute a new one-path
-  direct-child Windows x86-64/macOS ARM64 portability companion, then complete
-  the manual downstream/publication/release handoff.
+- [x] freeze package-facing-source-identical `a0a9ff3` compatibility tooling
+  at `f7b3eff`, construct both fresh axes, run focused Paradox-1 and complete
+  Paradox-2 compatibility/documentation, retain the factual 20-of-28 corpus
+  and 10-of-22 reverse conclusions, and independently seal benchmark r2 with
+  79 passes, three bounded marginals, and zero failures;
+- [x] create and locally validate exact one-path direct-child Windows
+  x86-64/macOS ARM64 portability companion `da5a500`;
+- [ ] manually publish and execute companion `da5a500`, then complete the
+  manual downstream/publication/release handoff.
 
 ### State and public model
 
@@ -2288,15 +2436,16 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision remains open for active candidate `a0a9ff3`. Its exact
-full compiler/runtime/package foundation and combined memory gate are accepted.
-Fresh dual-axis downstream/reverse/documentation evidence, a sealed benchmark,
-and a new direct-child hosted Windows/macOS companion remain required because
-the corresponding `f27776e` results do not transfer. The remaining manual work
-also includes user-performed publication of the final Paradox refs, hosted
-workflow dispatch,
-mark-ready/review/merge/release sequence for the eight downstream PRs,
-dependency release ordering, release tag, and final release coordination.
+The release decision remains open for active candidate `a0a9ff3`, but every
+applicable local gate is complete. Its exact compiler/runtime/package and
+memory foundation, fresh dual-axis compatibility and documentation results,
+reviewed factual broad/reverse aggregates, exact-head checks, and independently
+sealed benchmark are accepted. Direct-child companion `da5a500` passes local
+validation; only its hosted Windows/macOS execution and manual coordination
+remain. That work includes user-performed publication of the final Paradox
+refs, hosted workflow dispatch, mark-ready/review/merge/release sequencing for
+the eight downstream PRs, dependency release ordering, the release tag, and
+final release coordination.
 
 ## Historical rejected or superseded refs
 
