@@ -41,8 +41,9 @@ exact-head checks, and the independently sealed benchmark complete every
 applicable local gate. The first hosted companion for this candidate completed
 every job, but its old-Windows artifact failed offline byte validation after
 checkout converted the reviewed runtime lock to CRLF. A replacement
-direct-child portability companion passes local validation; its hosted
-execution and the manual remote/downstream/publication handoff remain pending.
+direct-child portability companion passes local validation, hosted execution,
+and retained offline validation. Hosted portability is complete; the manual
+downstream/publication/release handoff remains.
 
 Final local compatibility and benchmark execution is owned by clean,
 package-facing-source-identical tooling ref
@@ -199,7 +200,47 @@ package-excluded workflow, SHA-256
 The old-Windows identity step authenticates and installs the exact raw
 candidate lock blob before the unchanged helper reads it; local structural,
 deterministic-renderer, adversarial, offline-verifier, and actionlint checks
-pass. Hosted execution of `00a24cb` is the remaining portability gate.
+pass. Hosted run `30941929181`, attempt 1, completed successfully at exact head
+`00a24cb3a094f08e486e4271d673a13f18df0a90`. Its four exact jobs all completed
+with conclusion `success`: `92102264745`,
+`windows-latest / x86_64 (release)`; `92102264822`,
+`macos-15 / arm64 (release)`; `92102264982`,
+`windows-latest / x86_64 (R 3.6.3 / Rtools35)`; and `92110378655`,
+`Verify required check jobs`.
+
+The three retained artifacts are ID `8906413634`,
+`paradox-2.0.0-portability-windows-latest-x86_64`, 4,529,716 bytes, SHA-256
+`29f0dc248acf9b2fa24e00015ee29f8e7a1d76707179dd9f9a5271f9e24803b1`;
+ID `8905968872`, `paradox-2.0.0-portability-macos-15-arm64`, 5,956,865
+bytes, SHA-256
+`94f7f9331e1d0fc7e835368d16ed192d085b9d6786355bf5c13840f6090effbf`;
+and ID `8905625056`,
+`paradox-2.0.0-portability-windows-r3.6.3-x86_64`, 3,377,151 bytes,
+SHA-256
+`d030690af4a9d6a5083a411f5901eeac938f8ab287164c3c7690cce43a359b82`.
+The old-Windows artifact retains the exact 7,776-byte candidate lock with
+SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`.
+
+Accepted evidence is
+`.local/ci/r-cmd-check-30941929181-r1`. The current verifier and an
+independently relocated retained verifier both pass, and the accepted
+directory passes a post-promotion verifier replay. The exact
+`verifier-acceptance.log` receipt SHA-256 is
+`2c987700bb09171b23e8625bda2a7f63d5a6deba8c2bf7f5f38ed7331e8d1405`;
+its six checksum manifests cover 1,357 exact members. SHA-256 values for
+`ARCHIVE-SHA256SUMS`, `ARTIFACT-SHA256SUMS`, `EVIDENCE-SHA256SUMS`,
+`JOB-LOG-SHA256SUMS`, `METADATA-SHA256SUMS`, and `VERIFIER-SHA256SUMS`
+are respectively
+`72ca72c623fc88ef7483f1612b2a64bc9b52a4fc23523e5c073bd7a3b508264c`,
+`a634ff28dd9e575a0410a5f256245812b0580f7bf7146ac96c528b5f63b5097f`,
+`f7afbe507a2a300d6ec76415aa40e8ff6c79d4100edfc8ed9c3481dacf3dab9c`,
+`14a1e22aeff184bc813c37b64406ddfdfb5307391b83069255eed55b74eece7a`,
+`1d5f2d7f2b90399d2344dbb2d8f92a385e730449d0370f9f8bae7c5b0e1a2c6b`,
+and
+`5d1d9944e4c4963f4b535b5e169d516ce02459fd93ff0bad3fd612a8969557af`.
+Hosted portability is complete. The manual downstream/publication/release
+handoff remains.
 
 ### Historical `f27776e` validation record
 

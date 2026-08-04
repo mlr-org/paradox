@@ -247,11 +247,45 @@ blob and SHA-256 before use. Local structural, deterministic-renderer,
 release-mode, helper/lock adversary, PowerShell parser, offline-verifier,
 documentation-economy, and actionlint checks pass.
 
-Every applicable local package gate for exact candidate `a0a9ff3` remains
-complete. Fresh hosted execution and independent artifact verification of
-`00a24cb` remain, as do the user's manual remote and downstream publication
-actions. No historical `f27776e`, `582eba8`, or `da5a500` result transfers to
-that final hosted conclusion.
+Hosted run `30941929181`, attempt 1, executed exact companion `00a24cb` and
+completed all four required REST jobs successfully: current Windows x86-64
+`92102264745`, macOS ARM64 `92102264822`, exact Windows R 3.6.3/Rtools35
+`92102264982`, and aggregate completion `92110378655`. Its three exact
+artifacts are current Windows ID `8906413634`, 4,529,716 bytes, SHA-256
+`29f0dc248acf9b2fa24e00015ee29f8e7a1d76707179dd9f9a5271f9e24803b1`;
+macOS ID `8905968872`, 5,956,865 bytes, SHA-256
+`94f7f9331e1d0fc7e835368d16ed192d085b9d6786355bf5c13840f6090effbf`;
+and old Windows ID `8905625056`, 3,377,151 bytes, SHA-256
+`d030690af4a9d6a5083a411f5901eeac938f8ab287164c3c7690cce43a359b82`.
+Current Windows and macOS have clean `Status: OK` checks; old Windows has only
+the exact bounded missing-Suggests NOTE. Its retained 7,776-byte lock and
+`lock-sha256.txt` reproduce reviewed SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`.
+
+Complete evidence is retained at
+`.local/ci/r-cmd-check-30941929181-r1`. The deterministic acceptance receipt
+records 1,357 members named by the six manifests and has SHA-256
+`2c987700bb09171b23e8625bda2a7f63d5a6deba8c2bf7f5f38ed7331e8d1405`.
+Archive, artifact, evidence, job-log, metadata, and verifier manifest SHA-256
+values are respectively
+`72ca72c623fc88ef7483f1612b2a64bc9b52a4fc23523e5c073bd7a3b508264c`,
+`a634ff28dd9e575a0410a5f256245812b0580f7bf7146ac96c528b5f63b5097f`,
+`f7afbe507a2a300d6ec76415aa40e8ff6c79d4100edfc8ed9c3481dacf3dab9c`,
+`14a1e22aeff184bc813c37b64406ddfdfb5307391b83069255eed55b74eece7a`,
+`1d5f2d7f2b90399d2344dbb2d8f92a385e730449d0370f9f8bae7c5b0e1a2c6b`,
+and
+`5d1d9944e4c4963f4b535b5e169d516ce02459fd93ff0bad3fd612a8969557af`.
+The current verifier, an independently relocated execution of the byte-exact
+retained verifier, and the post-promotion replay against that final directory
+all pass with identical seven-line output. At evidence capture, before this
+final ledger update, remote branch `paradox_c` was exact
+`a29372cb2cedf9fea797f965117e7c7d233a6dd3`; remote tag
+`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb` is exact
+`00a24cb3a094f08e486e4271d673a13f18df0a90`. Every applicable
+local and hosted portability gate for candidate `a0a9ff3` is therefore
+complete. Manual branch-only publication of this final ledger, downstream
+merges, dependency/release ordering, and final release publication remain; no
+historical `f27776e`, `582eba8`, or `da5a500` result supplied this acceptance.
 
 ### Historical `f27776e` candidate record
 

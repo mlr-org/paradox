@@ -108,122 +108,144 @@ bounded marginals, and zero failures. Exact hashes and row classifications are
 recorded in `AGENTS.md` and `design/release-2.0.0.md`. Older evidence below is
 history and must not be presented as active-candidate proof.
 
-## Active hosted-portability handoff
+## Accepted hosted-portability evidence
 
-The replacement immutable direct child is
-`refs/paradox-release/portability-harness-00a24cb`, commit
-`00a24cb3a094f08e486e4271d673a13f18df0a90`, tree
-`96fc9ad4fc7d9607f9222bfa2f50b3a19a0ff0b0`, with local tag
-`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb`. Its sole parent is `a0a9ff3`; its
-sole changed path is `.github/workflows/r-cmd-check.yml`, whose SHA-256 is
+At evidence capture, before the final ledger commit, the user-published remote
+branch `paradox_c` was exact commit
+`a29372cb2cedf9fea797f965117e7c7d233a6dd3`; the immutable tag
+`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb` at exact commit
+`00a24cb3a094f08e486e4271d673a13f18df0a90` was also remote. The tagged commit
+is a direct child of candidate `a0a9ff3e05b535068392e0c20442ad9794f3b824`, has tree
+`96fc9ad4fc7d9607f9222bfa2f50b3a19a0ff0b0`, and changes only the
+package-excluded `.github/workflows/r-cmd-check.yml`. The executed workflow's
+SHA-256 is
 `bb17199b4c6621bcc427961e499e9fc88e00407e48b73789de0447c9c57f1e40`.
 It inherits the authenticated installer as exact `100644` blob
 `3b420d542dc5a1ae5506380543159cdea84517fa` and the reviewed R 3.6 source
 lock as exact `100644` blob `5e9fb484b63cff6ee51ab2101dcaa37defd0e603`.
-Structural, release-mode, deterministic-renderer, exact-lock-materialization,
-evidence-verifier, documentation-economy, and actionlint validation pass
-locally.
 
-The candidate tag and superseded `da5a500` companion tag are already remote,
-and the last observed remote `paradox_c` head is exactly
-`8f1654e3d1c91e395823c912a1727a91b7f6fb4f`. Agents must not run any command
-below. After reviewing the local refs, the user may publish the current branch
-and only the new `00a24cb` tag atomically, then dispatch that immutable tag.
-The exact reviewed local branch is frozen at coordination ref
-`refs/paradox-release/handoff-00a24cb`. The branch-ref, lease, and remote-tag
-assertions deliberately fail if either local or remote state has moved; do not
-weaken or delete them.
+Hosted run `30941929181`, attempt 1, executed that exact tag and completed
+successfully. Its four successful jobs are:
+
+| Job | REST job ID |
+|---|---:|
+| macOS 15 ARM64 release | `92102264822` |
+| current Windows x86-64 release | `92102264745` |
+| exact Windows R 3.6.3/Rtools35 x86-64 | `92102264982` |
+| required-job completion gate | `92110378655` |
+
+At evidence capture, the three remote artifacts were unexpired. Their retained
+identities are:
+
+| Artifact | REST artifact ID | Size (bytes) | REST/raw-ZIP SHA-256 |
+|---|---:|---:|---|
+| `paradox-2.0.0-portability-macos-15-arm64` | `8905968872` | `5956865` | `94f7f9331e1d0fc7e835368d16ed192d085b9d6786355bf5c13840f6090effbf` |
+| `paradox-2.0.0-portability-windows-latest-x86_64` | `8906413634` | `4529716` | `29f0dc248acf9b2fa24e00015ee29f8e7a1d76707179dd9f9a5271f9e24803b1` |
+| `paradox-2.0.0-portability-windows-r3.6.3-x86_64` | `8905625056` | `3377151` | `d030690af4a9d6a5083a411f5901eeac938f8ab287164c3c7690cce43a359b82` |
+
+The complete REST metadata, four raw job logs, three original ZIP archives,
+safe exact extractions, executed workflow, current verifier, deterministic
+receipt, and manifests are accepted under
+`.local/ci/r-cmd-check-30941929181-r1`. The six manifest SHA-256 values are:
+
+| Manifest | SHA-256 |
+|---|---|
+| `ARCHIVE-SHA256SUMS` | `72ca72c623fc88ef7483f1612b2a64bc9b52a4fc23523e5c073bd7a3b508264c` |
+| `ARTIFACT-SHA256SUMS` | `a634ff28dd9e575a0410a5f256245812b0580f7bf7146ac96c528b5f63b5097f` |
+| `EVIDENCE-SHA256SUMS` | `f7afbe507a2a300d6ec76415aa40e8ff6c79d4100edfc8ed9c3481dacf3dab9c` |
+| `JOB-LOG-SHA256SUMS` | `14a1e22aeff184bc813c37b64406ddfdfb5307391b83069255eed55b74eece7a` |
+| `METADATA-SHA256SUMS` | `1d5f2d7f2b90399d2344dbb2d8f92a385e730449d0370f9f8bae7c5b0e1a2c6b` |
+| `VERIFIER-SHA256SUMS` | `5d1d9944e4c4963f4b535b5e169d516ce02459fd93ff0bad3fd612a8969557af` |
+
+The deterministic receipt covers six manifests and 1,357 members; its
+SHA-256 is
+`2c987700bb09171b23e8625bda2a7f63d5a6deba8c2bf7f5f38ed7331e8d1405`.
+The current verifier, an independently relocated retained verifier, and a
+post-promotion verifier replay all exited zero and produced that exact
+byte-identical receipt. The old-Windows artifact contains the exact reviewed
+LF lock with SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`;
+its `lock-sha256.txt` content is that digest and the receipt file itself has
+SHA-256
+`f44ba51e34ef8e2ae760056ce8dc473ab08ad07d698e18caefb7397edd3e814b`.
+
+The first retention staging attempt is preserved at
+`.local/ci/r-cmd-check-30941929181-r1.staging-failed-a001`. Its absent-target
+guard mishandled `Sys.readlink()` returning `NA`, so it failed before artifact
+extraction or promotion. It was never reused and is diagnostic harness history,
+not accepted evidence.
+
+Hosted portability is complete. There is no remaining companion push, tag
+creation, workflow dispatch, retry, or evidence-retention action for
+`00a24cb`; do not rerun or republish this immutable companion. Only the final
+documentation ledger still needs a branch-only publication.
+
+### Remaining manual coordination
+
+Agents must not execute the remote write below. After reviewing the final
+documentation commit and local release-record ref, the user may publish that
+branch-only ledger update with an exact lease. This command intentionally does
+not publish a tag or dispatch a workflow:
 
 ```sh
+(
+set -eu
 repo=/home/mewse/paradox_neo
-branch_ref=refs/paradox-release/handoff-00a24cb
-candidate=a0a9ff3e05b535068392e0c20442ad9794f3b824
-old_companion=da5a500936d00f7bc4c44989258d5bc385082252
+record_ref=refs/paradox-release/release-record-00a24cb
+old_remote=a29372cb2cedf9fea797f965117e7c7d233a6dd3
 companion=00a24cb3a094f08e486e4271d673a13f18df0a90
-remote_head=8f1654e3d1c91e395823c912a1727a91b7f6fb4f
-candidate_tag=paradox-2.0.0-ci-a0a9ff3
-old_companion_tag=paradox-2.0.0-ci-a0a9ff3-harness-da5a500
 companion_tag=paradox-2.0.0-ci-a0a9ff3-harness-00a24cb
 
 test -z "$(git -C "$repo" status --porcelain=v1 --untracked-files=all)"
 test "$(git -C "$repo" symbolic-ref --short HEAD)" = paradox_c
-branch_head="$(git -C "$repo" rev-parse "$branch_ref")"
-readonly branch_head
-test "$(git -C "$repo" rev-parse refs/heads/paradox_c)" = "$branch_head"
-test "$(git -C "$repo" rev-parse refs/paradox-release/candidate-20260803T131049Z)" = "$candidate"
-test "$(git -C "$repo" rev-parse "refs/tags/$candidate_tag")" = "$candidate"
-test "$(git -C "$repo" rev-parse refs/paradox-release/portability-harness-da5a500)" = "$old_companion"
-test "$(git -C "$repo" rev-parse "refs/tags/$old_companion_tag")" = "$old_companion"
-test "$(git -C "$repo" rev-parse refs/paradox-release/portability-harness-00a24cb)" = "$companion"
+record_head="$(git -C "$repo" rev-parse --verify "$record_ref^{commit}")"
+readonly record_head
+test "$(git -C "$repo" rev-parse refs/heads/paradox_c)" = "$record_head"
+test "$(git -C "$repo" rev-list --parents -n 1 "$record_head")" = \
+  "$record_head $old_remote"
+expected_paths="$(printf '%s\n' \
+  AGENTS.md \
+  compat/downstream-pr-handoff.md \
+  design/portability-ci.md \
+  design/release-2.0.0.md \
+  design/validation.md)"
+readonly expected_paths
+test "$(git -C "$repo" diff --name-only "$old_remote" "$record_head")" = \
+  "$expected_paths"
 test "$(git -C "$repo" rev-parse "refs/tags/$companion_tag")" = "$companion"
-test "$(git -C "$repo" rev-list --parents -n 1 "$companion")" = \
-  "$companion $candidate"
-test "$(git -C "$repo" rev-parse "$companion^{tree}")" = \
-  96fc9ad4fc7d9607f9222bfa2f50b3a19a0ff0b0
-test "$(git -C "$repo" diff --name-only "$candidate" "$companion")" = \
-  .github/workflows/r-cmd-check.yml
-test "$(git -C "$repo" show "$companion":.github/workflows/r-cmd-check.yml | \
-  sha256sum | cut -d' ' -f1)" = \
-  bb17199b4c6621bcc427961e499e9fc88e00407e48b73789de0447c9c57f1e40
-test "$(git -C "$repo" ls-tree "$companion" -- \
-  scripts/environment/install-hosted-r36-windows.ps1)" = \
-  "$(printf '100644 blob %s\t%s' \
-    3b420d542dc5a1ae5506380543159cdea84517fa \
-    scripts/environment/install-hosted-r36-windows.ps1)"
-test "$(git -C "$repo" show \
-  "$companion":scripts/environment/install-hosted-r36-windows.ps1 | \
-  sha256sum | cut -d' ' -f1)" = \
-  283e3450e47337f3fc121d6e103c1c0a0ad66ab4cab63b8c42caa57ab174381b
-test "$(git -C "$repo" ls-tree "$companion" -- \
-  environment/runtime-r-3.6.3-packages.lock)" = \
-  "$(printf '100644 blob %s\t%s' \
-    5e9fb484b63cff6ee51ab2101dcaa37defd0e603 \
-    environment/runtime-r-3.6.3-packages.lock)"
-test "$(git -C "$repo" show \
-  "$companion":environment/runtime-r-3.6.3-packages.lock | \
-  sha256sum | cut -d' ' -f1)" = \
-  9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5
-git -C "$repo" merge-base --is-ancestor "$candidate" refs/heads/paradox_c
-git -C "$repo" merge-base --is-ancestor "$remote_head" refs/heads/paradox_c
-test -z "$(git -C "$repo" diff --name-only "$candidate" refs/heads/paradox_c | \
-  grep -Ev '^(AGENTS\.md|compat/|design/|scripts/)' || true)"
-test "$(git -C "$repo" ls-remote --heads origin refs/heads/paradox_c | cut -f1)" = \
-  "$remote_head"
+test "$(git -C "$repo" ls-remote --heads origin \
+  refs/heads/paradox_c | cut -f1)" = "$old_remote"
 test "$(git -C "$repo" ls-remote --tags origin \
-  "refs/tags/$candidate_tag" | cut -f1)" = "$candidate"
-test "$(git -C "$repo" ls-remote --tags origin \
-  "refs/tags/$old_companion_tag" | cut -f1)" = "$old_companion"
-test -z "$(git -C "$repo" ls-remote --tags origin \
-  "refs/tags/$companion_tag")"
+  "refs/tags/$companion_tag" | cut -f1)" = "$companion"
 
-git -C "$repo" push --atomic \
-  --force-with-lease="refs/heads/paradox_c:$remote_head" origin \
-  refs/heads/paradox_c:refs/heads/paradox_c \
-  "refs/tags/$companion_tag:refs/tags/$companion_tag"
-gh workflow run r-cmd-check.yml --repo mlr-org/paradox \
-  --ref "$companion_tag"
+git -C "$repo" push \
+  --force-with-lease="refs/heads/paradox_c:$old_remote" origin \
+  "${record_ref}:refs/heads/paradox_c"
+)
 ```
 
-Then locate the fresh run without polling partial logs:
+After that branch-only publication, only downstream and release coordination
+remains:
 
-```sh
-gh run list --repo mlr-org/paradox --workflow r-cmd-check.yml \
-  --event workflow_dispatch --limit 5 \
-  --json databaseId,headSha,status,conclusion,url
-```
-
-Select only the fresh run whose `headSha` is
-`00a24cb3a094f08e486e4271d673a13f18df0a90`. Retain and independently verify
-its platform artifacts and REST job inventory before accepting hosted
-portability.
+1. Mark the eight exact downstream PR heads in the opening table ready,
+   review them, and merge their compatible changes without force-pushing the
+   sealed heads.
+2. Publish the compatible downstream releases in dependency order. In
+   particular, publish mlr3mbo as at least 1.2.2 before merging/publishing
+   celecx; retain the package-specific qualifications in the opening table.
+3. Coordinate the Paradox 2 release/publication after those downstream
+   versions are available. No additional hosted-portability execution is part
+   of that handoff.
 
 ### Archived `da5a500` hosted diagnostic
 
-Candidate tag `paradox-2.0.0-ci-a0a9ff3` and companion tag
-`paradox-2.0.0-ci-a0a9ff3-harness-da5a500` are already remote at the exact
-commits asserted above. Hosted run `30853585319` at head `da5a500` reported all
-four required jobs green, including current Windows, macOS ARM64, exact Windows
-R 3.6.3/Rtools35, and the completion gate. The complete REST metadata, job
+Candidate tag `paradox-2.0.0-ci-a0a9ff3` is already remote at exact commit
+`a0a9ff3e05b535068392e0c20442ad9794f3b824`; companion tag
+`paradox-2.0.0-ci-a0a9ff3-harness-da5a500` is already remote at exact commit
+`da5a500936d00f7bc4c44989258d5bc385082252`. Hosted run `30853585319` at
+that companion head reported all four required jobs green, including current
+Windows, macOS ARM64, exact Windows R 3.6.3/Rtools35, and the completion gate.
+The complete REST metadata, job
 logs, raw artifact archives, extracted artifacts, and manifests are retained
 under `.local/ci/r-cmd-check-30853585319-r1`.
 
@@ -256,8 +278,8 @@ and authenticates the helper's exact `100644` tree entry before use. Do not
 dispatch from the mutable development branch. Its old-Windows check failure is
 deterministic failed-harness history. Do not execute any obsolete `f27776e`,
 `582eba8`, `198e838`, or `ff3b510` publication, dispatch, or retry command from
-an older revision of this document; only the `a0a9ff3`/`00a24cb` handoff above
-is current.
+an older revision of this document. The accepted `a0a9ff3`/`00a24cb` evidence
+record above is current, and no hosted dispatch remains.
 
 ### Exact Paradox 1 owner conclusion
 

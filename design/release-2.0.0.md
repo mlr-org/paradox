@@ -14,8 +14,9 @@ reviewed semantic nonzero statuses as factual evidence; they are not relabeled
 green. The first hosted companion for this candidate completed every job
 successfully, but its retained old-Windows evidence failed closed because
 checkout line-ending conversion changed the reviewed runtime-lock bytes. A
-replacement direct-child companion passes local validation. Its hosted
-execution and the manual remote/downstream/publication handoff remain pending.**
+replacement direct-child companion passes local validation and its hosted run
+and retained offline evidence are accepted. Hosted portability is complete;
+the manual downstream/publication/release handoff remains.**
 
 Coordinator `.local/verify/runs/release-candidate-a0a9ff3-r1` passed all nine
 tasks in 3,429.2 seconds. Completion, JSON-summary, and TSV-summary SHA-256
@@ -220,9 +221,52 @@ package-excluded `.github/workflows/r-cmd-check.yml`, SHA-256
 The old-Windows identity step now authenticates and installs the exact raw
 candidate lock blob before the unchanged helper consumes it. Local structural,
 deterministic-renderer, adversarial, offline-verifier, and actionlint checks
-pass. All applicable package-facing local gates remain complete; hosted
-execution of `00a24cb` and the manual remote/downstream/publication handoff
-remain.
+pass. Hosted run `30941929181`, attempt 1, completed successfully at exact head
+`00a24cb3a094f08e486e4271d673a13f18df0a90`. Its four exact jobs all completed
+with conclusion `success`: `92102264745`,
+`windows-latest / x86_64 (release)`; `92102264822`,
+`macos-15 / arm64 (release)`; `92102264982`,
+`windows-latest / x86_64 (R 3.6.3 / Rtools35)`; and `92110378655`,
+`Verify required check jobs`.
+
+The three retained artifacts are ID `8906413634`,
+`paradox-2.0.0-portability-windows-latest-x86_64`, 4,529,716 bytes, SHA-256
+`29f0dc248acf9b2fa24e00015ee29f8e7a1d76707179dd9f9a5271f9e24803b1`;
+ID `8905968872`, `paradox-2.0.0-portability-macos-15-arm64`, 5,956,865
+bytes, SHA-256
+`94f7f9331e1d0fc7e835368d16ed192d085b9d6786355bf5c13840f6090effbf`;
+and ID `8905625056`,
+`paradox-2.0.0-portability-windows-r3.6.3-x86_64`, 3,377,151 bytes,
+SHA-256
+`d030690af4a9d6a5083a411f5901eeac938f8ab287164c3c7690cce43a359b82`.
+The old-Windows artifact retains the exact 7,776-byte candidate lock with
+SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`.
+
+Accepted evidence is
+`.local/ci/r-cmd-check-30941929181-r1`. The current verifier and an
+independently relocated retained verifier both pass, and the accepted
+directory passes a post-promotion verifier replay. The exact
+`verifier-acceptance.log` receipt SHA-256 is
+`2c987700bb09171b23e8625bda2a7f63d5a6deba8c2bf7f5f38ed7331e8d1405`;
+its six checksum manifests cover 1,357 exact members. SHA-256 values for
+`ARCHIVE-SHA256SUMS`, `ARTIFACT-SHA256SUMS`, `EVIDENCE-SHA256SUMS`,
+`JOB-LOG-SHA256SUMS`, `METADATA-SHA256SUMS`, and `VERIFIER-SHA256SUMS`
+are respectively
+`72ca72c623fc88ef7483f1612b2a64bc9b52a4fc23523e5c073bd7a3b508264c`,
+`a634ff28dd9e575a0410a5f256245812b0580f7bf7146ac96c528b5f63b5097f`,
+`f7afbe507a2a300d6ec76415aa40e8ff6c79d4100edfc8ed9c3481dacf3dab9c`,
+`14a1e22aeff184bc813c37b64406ddfdfb5307391b83069255eed55b74eece7a`,
+`1d5f2d7f2b90399d2344dbb2d8f92a385e730449d0370f9f8bae7c5b0e1a2c6b`,
+and
+`5d1d9944e4c4963f4b535b5e169d516ce02459fd93ff0bad3fd612a8969557af`.
+The earlier
+`.local/ci/r-cmd-check-30941929181-r1.staging-failed-a001` attempt stopped in
+its absent-target guard before extraction or promotion because the guard did
+not handle `Sys.readlink()` returning `NA`. It was never reused and is retained
+only as failed harness diagnostic material, not as accepted evidence.
+Hosted portability is complete. The manual downstream/publication/release
+handoff remains.
 
 ### Historical `f27776e` acceptance record
 
@@ -1687,8 +1731,9 @@ green gates.
 - [x] freeze package-facing-source-identical portability repair tooling at
   `3f48d33` and locally validate replacement exact one-path direct child
   `00a24cb` plus tag `paradox-2.0.0-ci-a0a9ff3-harness-00a24cb`;
-- [ ] manually publish and execute companion `00a24cb`, then complete the
-  manual downstream/publication/release handoff.
+- [x] manually publish and execute companion `00a24cb`; hosted run
+  `30941929181` and its retained offline evidence pass;
+- [ ] complete the manual downstream/publication/release handoff.
 
 ### State and public model
 
@@ -2480,11 +2525,11 @@ sealed benchmark are accepted. Hosted run `30853585319` completed every job
 against direct child `da5a500`, but its CRLF-converted retained runtime lock
 failed the offline byte-identity gate; it is rejected harness evidence and
 must not be retried unchanged. Replacement direct-child companion `00a24cb`
-passes local validation; only its hosted Windows/macOS execution and manual
-coordination remain. That work includes user-performed publication of the
-final Paradox refs, hosted workflow dispatch, mark-ready/review/merge/release
-sequencing for the eight downstream PRs, dependency release ordering, the
-release tag, and final release coordination.
+passes local validation, and hosted run `30941929181` plus retained offline
+evidence are accepted. Hosted portability is complete; only manual downstream
+and publication coordination remains. That work includes
+mark-ready/review/merge/release sequencing for the eight downstream PRs,
+dependency release ordering, the release tag, and final release coordination.
 
 ## Historical rejected or superseded refs
 

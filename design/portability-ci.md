@@ -574,9 +574,44 @@ authenticates and materializes the reviewed runtime-lock blob before use.
 General/release structural validation, deterministic renderer tests,
 helper/lock adversaries, offline evidence-verifier fixtures,
 documentation-economy checks, PowerShell parsing, and actionlint pass locally.
-Fresh hosted execution and independent artifact verification remain pending;
-the manual procedure is recorded in `compat/downstream-pr-handoff.md`. Agents
-must not publish or dispatch it.
+
+Hosted run `30941929181`, attempt 1, executed that exact `00a24cb` companion and
+completed all four required REST jobs successfully: current Windows x86-64
+`92102264745`, macOS ARM64 `92102264822`, exact Windows R 3.6.3/Rtools35
+`92102264982`, and aggregate completion `92110378655`. Its exact artifacts are
+current Windows ID `8906413634`, 4,529,716 bytes, SHA-256
+`29f0dc248acf9b2fa24e00015ee29f8e7a1d76707179dd9f9a5271f9e24803b1`;
+macOS ID `8905968872`, 5,956,865 bytes, SHA-256
+`94f7f9331e1d0fc7e835368d16ed192d085b9d6786355bf5c13840f6090effbf`;
+and old Windows ID `8905625056`, 3,377,151 bytes, SHA-256
+`d030690af4a9d6a5083a411f5901eeac938f8ab287164c3c7690cce43a359b82`.
+Current Windows and macOS finish with clean `Status: OK`; old Windows retains
+only the exact bounded missing-Suggests NOTE. Its 7,776-byte runtime lock and
+`lock-sha256.txt` both authenticate reviewed SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`.
+
+Complete evidence is retained at
+`.local/ci/r-cmd-check-30941929181-r1`. Its deterministic receipt covers 1,357
+manifest members and has SHA-256
+`2c987700bb09171b23e8625bda2a7f63d5a6deba8c2bf7f5f38ed7331e8d1405`.
+Archive, artifact, evidence, job-log, metadata, and verifier manifest SHA-256
+values are respectively
+`72ca72c623fc88ef7483f1612b2a64bc9b52a4fc23523e5c073bd7a3b508264c`,
+`a634ff28dd9e575a0410a5f256245812b0580f7bf7146ac96c528b5f63b5097f`,
+`f7afbe507a2a300d6ec76415aa40e8ff6c79d4100edfc8ed9c3481dacf3dab9c`,
+`14a1e22aeff184bc813c37b64406ddfdfb5307391b83069255eed55b74eece7a`,
+`1d5f2d7f2b90399d2344dbb2d8f92a385e730449d0370f9f8bae7c5b0e1a2c6b`,
+and
+`5d1d9944e4c4963f4b535b5e169d516ce02459fd93ff0bad3fd612a8969557af`.
+The current verifier, an independently relocated execution of the byte-exact
+retained verifier, and the post-promotion replay against the final evidence
+directory all pass with identical seven-line output. At evidence capture,
+before the final ledger update, the user-published remote branch `paradox_c`
+was exact `a29372cb2cedf9fea797f965117e7c7d233a6dd3`; remote tag
+`paradox-2.0.0-ci-a0a9ff3-harness-00a24cb` is exact
+`00a24cb3a094f08e486e4271d673a13f18df0a90`. Hosted portability for candidate
+`a0a9ff3` is complete; branch-only publication of the final ledger, downstream
+merges, and final release publication remain manual.
 
 Hosted branch run `30807900755`, at remote head
 `dfc1a2f8fbf52c569563b48842b2f45be480a5c9`, passed all current Linux,
@@ -586,9 +621,9 @@ candidate's repair: R 3.6 now disables only the redundant Rd-cross-reference
 check so the bounded closure retains exactly its intended missing-Suggests
 NOTE, and the upgrade walker now uses the portable C99 scalar initializer.
 Retrying the old branch or any superseded companion cannot execute those
-repairs. No hosted result below transfers to `a0a9ff3`; only a fresh run of the
-active `00a24cb` companion whose independent artifact verifier passes can close
-hosted portability.
+repairs. No hosted result below transfers to `a0a9ff3`; fresh run `30941929181`
+of active companion `00a24cb`, recorded above, independently verifies the exact
+artifacts and closes hosted portability.
 
 For now-superseded candidate
 `f27776ee1eca5d964945aa53d14d0ec7947dccbf`, the first locally validated
@@ -680,3 +715,9 @@ inventory is four successful REST jobs and three platform artifacts: current
 Windows, old Windows, macOS, and the aggregate completion job. Any source change
 affecting C, registration, R wrappers, tests, build configuration, or
 portability harness reopens the corresponding rows.
+
+Active pair `a0a9ff3`/`00a24cb` satisfies this contract through hosted run
+`30941929181` and retained evidence
+`.local/ci/r-cmd-check-30941929181-r1`. Current, independently relocated
+retained, and post-promotion verifier executions agree exactly, so the hosted
+portability gate is accepted without transferring any superseded result.
