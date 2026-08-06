@@ -36,6 +36,7 @@ independent copy of a `ParamSet`, the `$clone(deep = TRUE)` method needs
 to be used:
 
 ``` r
+
 library("paradox")
 
 ps1 = ps(a = p_int(init = 1))
@@ -49,10 +50,12 @@ print(ps1) # the same for ps2 and ps3
 ```
 
 ``` r
+
 ps1$values$a = 2
 ```
 
 ``` r
+
 print(ps1) # ps1 value of 'a' was changed
 #> <ParamSet(1)>
 #>        id    class lower upper nlevels        default  value
@@ -100,6 +103,7 @@ R objects that can in principle be handled and manipulated, they should
 not be changed after construction.
 
 ``` r
+
 library("paradox")
 param_set = ps(
   parA = p_lgl(init = FALSE),
@@ -164,6 +168,7 @@ A list of all fields can be found in
 [`?ParamSet`](https://paradox.mlr-org.com/dev/reference/ParamSet.md).
 
 ``` r
+
 param_set$lower
 #> parA parB parC parD parE 
 #>   NA    0    0   NA   NA
@@ -179,6 +184,7 @@ It is also possible to get all information of a `ParamSet` as
 [`as.data.table()`](https://rdrr.io/pkg/data.table/man/as.data.table.html).
 
 ``` r
+
 as.data.table(param_set)
 #>        id    class lower upper      levels nlevels is_bounded special_vals
 #>    <char>   <char> <num> <num>      <list>   <num>     <lgcl>       <list>
@@ -210,6 +216,7 @@ parameter (and thus plays well with the `"checkmate::assert()"`
 function). `assert()` will throw an error whenever a value does not fit.
 
 ``` r
+
 param_set$test(list(parA = FALSE, parB = 0))
 #> [1] TRUE
 param_set$test(list(parA = "FALSE"))
@@ -236,6 +243,7 @@ return a new, cloned `ParamSet` object, and do not modify the original
 `ParamSet`.
 
 ``` r
+
 ps1 = ParamSet$new(list(x = p_int(), y = p_dbl()))
 ps2 = ParamSet$new(list(z = p_fct(levels = c("a", "b", "c"))))
 ps_all = c(ps1, ps2)
@@ -264,6 +272,7 @@ aggregate information about them, using the variety of methods provided
 by `data.table`.
 
 ``` r
+
 as.data.table(ps_all)
 #>        id    class lower upper levels nlevels is_bounded special_vals
 #>    <char>   <char> <num> <num> <list>   <num>     <lgcl>       <list>
@@ -289,6 +298,7 @@ parameter constraints. When trying to set parameter values, e.g. for
 needs to be used.
 
 ``` r
+
 ps1$values = list(x = 1, y = 1.5)
 ps1$values$y = 2.5
 print(ps1$values)
@@ -302,6 +312,7 @@ print(ps1$values)
 The parameter constraints are automatically checked:
 
 ``` r
+
 ps1$values$x = 1.5
 #> Error in `self$assert()`:
 #> ! Assertion on 'xs' failed: x: Must be of type 'single integerish value', not 'double'.
@@ -343,6 +354,7 @@ The following example makes parameter `D` depend on parameter `A` being
 `FALSE` as well, because `D` does not take any value if `A` is `TRUE`.
 
 ``` r
+
 p = ps(
   A = p_lgl(init = FALSE),
   B = p_int(lower = 0, upper = 10, depends = D %in% c("x", "y")),
@@ -355,6 +367,7 @@ Note that the `depends` argument is limited to operators `==` and
 `%in%`, so `D = p_fct(..., depends = !A)` would not work.
 
 ``` r
+
 p$check(list(A = FALSE, D = "x", B = 1), check_strict = TRUE)  # OK: all dependencies met
 #> [1] TRUE
 p$check(list(A = FALSE, D = "z", B = 1), check_strict = TRUE)  # B's dependency is not met
@@ -378,6 +391,7 @@ done when the `$deps` field is changed this way. Therefore it is advised
 to be cautious.
 
 ``` r
+
 p$deps
 #> Index: <id>
 #>        id     on                  cond
@@ -395,6 +409,7 @@ creates a `ParamSet` consisting of multiple copies of the parameter,
 which can then (optionally) be added to another `ParamSet`.
 
 ``` r
+
 ps2d = ps_replicate(ps(x = p_dbl(lower = 0, upper = 1)), 2)
 print(ps2d)
 #> <ParamSet(2)>
@@ -416,6 +431,7 @@ Assembling a vector from repeated parameters is aided by the parameter’s
 can be tagged as belonging to a group of repeated parameters.
 
 ``` r
+
 ps2d = ps_replicate(ps(x = p_dbl(0, 1), y = p_int(0, 10)), 2, tag_params = TRUE)
 ps2d$values = list(rep1.x = 0.2, rep2.x = 0.4, rep1.y = 3, rep2.y = 4)
 ps2d$tags
@@ -473,6 +489,7 @@ resolution can be given for all numeric parameters, or for specific
 named parameters through the `param_resolutions` parameter.
 
 ``` r
+
 ps_small = ps(A = p_dbl(0, 1), B = p_dbl(0, 1))
 design = generate_design_grid(ps_small, 2)
 print(design)
@@ -486,6 +503,7 @@ print(design)
 ```
 
 ``` r
+
 generate_design_grid(ps_small, param_resolutions = c(A = 3, B = 2))
 #> <Design> with 6 rows:
 #>        A     B
@@ -516,6 +534,7 @@ can be used to sample using the [Sobol
 sequence](https://en.wikipedia.org/wiki/Sobol_sequence).
 
 ``` r
+
 pvrand = generate_design_random(ps_small, 500)
 pvlhs = generate_design_lhs(ps_small, 500)
 pvsobol = generate_design_sobol(ps_small, 500)
@@ -548,6 +567,7 @@ random-function). These are initialized with a one-dimensional
 `ParamSet`, and can then be used to sample values.
 
 ``` r
+
 sampA = Sampler1DCateg$new(ps(x = p_fct(letters)))
 sampA$sample(5)
 #> <Design> with 5 rows:
@@ -573,6 +593,7 @@ depends on the `Lgl` parameter `A` being `TRUE`. `A` is sampled to be
 0 and 10. In the cases where `A` is `FALSE`, `B` is set to `NA`.
 
 ``` r
+
 p = ps(
   A = p_lgl(),
   B = p_int(0, 10, depends = A == TRUE)
@@ -609,6 +630,7 @@ are not 1D. However, `SamplerJointIndep` currently can not handle
 `ParamSet`s with dependencies.
 
 ``` r
+
 sampJ = SamplerJointIndep$new(
   list(Sampler1DUnif$new(ps(x = p_dbl(0, 1))),
     Sampler1DUnif$new(ps(y = p_dbl(0, 1))))
@@ -663,6 +685,7 @@ to `TRUE` (the default). The following, for example, creates a parameter
 that is exponentially distributed:
 
 ``` r
+
 psexp = ps(par = p_dbl(0, 1, trafo = function(x) -log(x)))
 
 design = generate_design_random(psexp, 3)
@@ -692,6 +715,7 @@ design$transpose()  # trafo is TRUE
 Compare this to `$transpose()` without transformation:
 
 ``` r
+
 design$transpose(trafo = FALSE)
 #> [[1]]
 #> [[1]]$par
@@ -711,6 +735,7 @@ design$transpose(trafo = FALSE)
 Another way to get tihs effect, using `$extra_trafo`, would be:
 
 ``` r
+
 psexp = ps(par = p_dbl(0, 1))
 psexp$extra_trafo = function(x, param_set) {
   x$par = -log(x$par)
@@ -745,6 +770,7 @@ quantiles or something completely different. This method would probably
 use the following `ParamSet`:
 
 ``` r
+
 methodPS = ps(fun = p_uty(custom_check = function(x) checkmate::checkFunction(x, nargs = 1)))
 
 print(methodPS)
@@ -758,6 +784,7 @@ If one wanted to sample this method, using one of four functions, a way
 to do this would be:
 
 ``` r
+
 samplingPS = ps(
   fun = p_fct(c("mean", "median", "min", "max"),
     trafo = function(x) get(x, mode = "function"))
@@ -765,6 +792,7 @@ samplingPS = ps(
 ```
 
 ``` r
+
 design = generate_design_random(samplingPS, 2)
 print(design)
 #> <Design> with 2 rows:
@@ -779,6 +807,7 @@ column. To get a single value as a *function*, the `$transpose` function
 is used.
 
 ``` r
+
 xvals = design$transpose()
 print(xvals[[1]])
 #> $fun
@@ -789,6 +818,7 @@ We can now check that it fits the requirements set by `methodPS`, and
 that `fun` it is in fact a function:
 
 ``` r
+
 methodPS$check(xvals[[1]])
 #> [1] TRUE
 xvals[[1]]$fun(1:10)
@@ -803,6 +833,7 @@ non-`character` vector), it constructs a `Domain` that does the trafo
 automatically. A way to perform the above would therefore be:
 
 ``` r
+
 samplingPS = ps(
   fun = p_fct(list("mean" = mean, "median" = median, "min" = min, "max" = max))
 )
@@ -812,7 +843,7 @@ generate_design_random(samplingPS, 1)$transpose()
 #> [[1]]$fun
 #> function (x, ...) 
 #> UseMethod("mean")
-#> <bytecode: 0x560f91b35220>
+#> <bytecode: 0x5649e5cceac8>
 #> <environment: namespace:base>
 ```
 
@@ -827,6 +858,7 @@ therefore use an `extra_trafo` here, given as a function to the
 [`ps()`](https://paradox.mlr-org.com/dev/reference/ps.md) call.
 
 ``` r
+
 samplingPS2 = ps(quantile = p_dbl(0, 1),
   .extra_trafo = function(x, param_set) {
     # x$quantile is a `numeric(1)` between 0 and 1.
@@ -837,6 +869,7 @@ samplingPS2 = ps(quantile = p_dbl(0, 1),
 ```
 
 ``` r
+
 design = generate_design_random(samplingPS2, 2)
 print(design)
 #> <Design> with 2 rows:
@@ -852,12 +885,13 @@ that it fits the requirement set by `methodPS`, and that it is a
 function.
 
 ``` r
+
 xvals = design$transpose()
 print(xvals[[1]])
 #> $fun
 #> function (input) 
 #> quantile(input, x$quantile)
-#> <environment: 0x560f94b23828>
+#> <environment: 0x5649e7f18420>
 methodPS$check(xvals[[1]])
 #> [1] TRUE
 xvals[[1]]$fun(1:10)
@@ -892,6 +926,7 @@ An empty `"ParamSet` – not yet very useful – can be constructed using
 just the `"ps"` call:
 
 ``` r
+
 search_space = ps()
 print(search_space)
 #> <ParamSet(0)>
@@ -903,6 +938,7 @@ possible search space for the `"classif.svm"` learner could for example
 be:
 
 ``` r
+
 search_space = ps(
   cost = p_dbl(lower = 0.1, upper = 10),
   kernel = p_fct(levels = c("polynomial", "radial"))
@@ -918,13 +954,13 @@ print(search_space)
 There are five domain constructors that produce a parameters when given
 to `ps`:
 
-| Constructor |             Description              |            Is bounded?             |
-|:-----------:|:------------------------------------:|:----------------------------------:|
-|   `p_dbl`   |   Real valued parameter (“double”)   | When `upper` and `lower` are given |
-|   `p_int`   |          Integer parameter           | When `upper` and `lower` are given |
-|   `p_fct`   | Discrete valued parameter (“factor”) |               Always               |
-|   `p_lgl`   |     Logical / Boolean parameter      |               Always               |
-|   `p_uty`   |          Untyped parameter           |               Never                |
+| Constructor | Description | Is bounded? |
+|:--:|:--:|:--:|
+| `p_dbl` | Real valued parameter (“double”) | When `upper` and `lower` are given |
+| `p_int` | Integer parameter | When `upper` and `lower` are given |
+| `p_fct` | Discrete valued parameter (“factor”) | Always |
+| `p_lgl` | Logical / Boolean parameter | Always |
+| `p_uty` | Untyped parameter | Never |
 
 These domain constructors each take some of the following arguments:
 
@@ -953,6 +989,7 @@ just `0.1`). This way of defining a `ParamSet` is more concise than the
 equivalent definition above. Preferred:
 
 ``` r
+
 search_space = ps(cost = p_dbl(0.1, 10), kernel = p_fct(c("polynomial", "radial")))
 ```
 
@@ -974,7 +1011,13 @@ would be 9 rows, or if the resolution was 4 in this example there would
 be 8 rows in the resulting table.
 
 ``` r
+
 library("data.table")
+#> 
+#> Attaching package: 'data.table'
+#> The following object is masked from 'package:base':
+#> 
+#>     %notin%
 rbindlist(generate_design_grid(search_space, 3)$transpose())
 #>     cost     kernel
 #>    <num>     <char>
@@ -996,6 +1039,7 @@ tune `cost` on a logarithmic scale by sampling on the linear scale
 `[-1, 1]` and computing `10^x` from that value.
 
 ``` r
+
 search_space = ps(
   cost = p_dbl(-1, 1, trafo = function(x) 10^x),
   kernel = p_fct(c("polynomial", "radial"))
@@ -1021,6 +1065,7 @@ evaluation and modify them with interactions. It is even possible to add
 or remove parameters. (The following is a bit of a silly example.)
 
 ``` r
+
 search_space = ps(
   cost = p_dbl(-1, 1, trafo = function(x) 10^x),
   kernel = p_fct(c("polynomial", "radial")),
@@ -1059,6 +1104,7 @@ each target class. The trafo that would tune `class.weights` for the
 `tsk("spam")` dataset could be:
 
 ``` r
+
 search_space = ps(
   class.weights = p_dbl(0.1, 0.9, trafo = function(x) c(spam = x, nonspam = 1 - x))
 )
@@ -1098,6 +1144,7 @@ tried for the `cost` parameter, even when doing random search, then the
 following search space would achieve that:
 
 ``` r
+
 search_space = ps(
   cost = p_fct(c(0.1, 3, 10)),
   kernel = p_fct(c("polynomial", "radial"))
@@ -1116,6 +1163,7 @@ rbindlist(generate_design_grid(search_space, 3)$transpose())
 This is equivalent to the following:
 
 ``` r
+
 search_space = ps(
   cost = p_fct(c("0.1", "3", "10"),
     trafo = function(x) list(`0.1` = 0.1, `3` = 3, `10` = 10)[[x]]),
@@ -1141,6 +1189,7 @@ This may seem silly, but makes sense when considering that factorial
 tuning parameters are always `character` values:
 
 ``` r
+
 search_space = ps(
   cost = p_fct(c(0.1, 3, 10)),
   kernel = p_fct(c("polynomial", "radial"))
@@ -1163,6 +1212,7 @@ named if there is no easy way for
 names:
 
 ``` r
+
 search_space = ps(
   class.weights = p_fct(
     list(
@@ -1197,6 +1247,7 @@ of these chained by `&&`. To tune the `degree` parameter, one would need
 to do the following:
 
 ``` r
+
 search_space = ps(
   cost = p_dbl(-1, 1, trafo = function(x) 10^x),
   kernel = p_fct(c("polynomial", "radial")),
@@ -1234,6 +1285,7 @@ resulting `ParamSet` used for tuning can be retrieved using the
 `$search_space()` method.
 
 ``` r
+
 library("mlr3learners")
 learner = lrn("classif.svm")
 learner$param_set$values$kernel = "polynomial" # for example
@@ -1253,6 +1305,7 @@ because their ranges are already bounded. An example is the logical
 `shrinking` hyperparameter:
 
 ``` r
+
 learner$param_set$values$shrinking = to_tune()
 
 print(learner$param_set$search_space())
@@ -1274,6 +1327,7 @@ name or [`as.character()`](https://rdrr.io/r/base/character.html) of the
 respective value, here `"val2"`!
 
 ``` r
+
 learner$param_set$values$type = "C-classification" # needs to be set because of a bug in paradox
 learner$param_set$values$cost = to_tune(c(val1 = 0.3, val2 = 0.7))
 learner$param_set$values$shrinking = to_tune(p_lgl(depends = cost == "val2"))
@@ -1290,6 +1344,7 @@ that. (Here we reset `cost` and `shrinking` to `NULL` for the sake of
 clarity of the generated output.)
 
 ``` r
+
 learner$param_set$values$cost = NULL
 learner$param_set$values$shrinking = NULL
 learner$param_set$values$kernel = to_tune(c("polynomial", "radial"))
@@ -1308,6 +1363,7 @@ that is being tuned. Suppose the `class.weights` hyperparameter should
 be tuned along two dimensions:
 
 ``` r
+
 learner$param_set$values$class.weights = to_tune(
   ps(spam = p_dbl(0.1, 0.9), nonspam = p_dbl(0.1, 0.9),
     .extra_trafo = function(x, param_set) list(c(spam = x$spam, nonspam = x$nonspam))

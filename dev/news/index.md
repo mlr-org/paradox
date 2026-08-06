@@ -2,12 +2,20 @@
 
 ## paradox 1.0.1-9000
 
+- Fix: `rd_info()` now truncates long level lists with `"..."` instead
+  of `"[...]"`. The latter was interpreted as a markdown link by
+  roxygen2, so packages documenting a `ParamSet` with more than 10
+  levels got a “Could not resolve link to topic” warning and a broken
+  `\link{...}` in the generated manual page.
+
 - `ParamSetCollection$flatten()` now detaches `$extra_trafo` completely
   from original ParamSetCollection.
+
 - Option to postfix, instead of prefix, in `ParamSetCollection`,
   [`c()`](https://rdrr.io/r/base/c.html)/[`ps_union()`](https://paradox.mlr-org.com/dev/reference/ps_union.md),
   and
   [`ps_replicate()`](https://paradox.mlr-org.com/dev/reference/ps_replicate.md).
+
 - Add `presence` argument with options `"all"`, `"required"`, and
   `"none"` (default) to `ParamSet$check()`, `$test()`, `$assert()`,
   `$check_dt()`, `$test_dt()`, and `$assert_dt()` to optionally check

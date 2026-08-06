@@ -8,6 +8,7 @@ Universal Parameter Space Description and Tools.
 ## Installation
 
 ``` r
+
 remotes::install_github("mlr-org/paradox")
 ```
 
@@ -22,6 +23,7 @@ Create a simple ParamSet using all supported Parameter Types:
 - further types are only possible by using transformations.
 
 ``` r
+
 pset = ps(
   z = p_int(lower = 1, upper = 3),
   x = p_dbl(lower = -10, upper = 10),
@@ -33,6 +35,7 @@ pset = ps(
 Draw random samples / create random design:
 
 ``` r
+
 generate_design_random(pset, 3)
 #> <Design> with 3 rows:
 #>    z         x  flag methods
@@ -44,6 +47,7 @@ generate_design_random(pset, 3)
 Generate LHS Design:
 
 ``` r
+
 requireNamespace("lhs")
 #> Loading required namespace: lhs
 generate_design_lhs(pset, 3)
@@ -57,6 +61,7 @@ generate_design_lhs(pset, 3)
 Generate Grid Design:
 
 ``` r
+
 generate_design_grid(pset, resolution = 2)
 #> <Design> with 24 rows:
 #>     z   x  flag methods
@@ -73,6 +78,7 @@ generate_design_grid(pset, resolution = 2)
 Properties of the parameters within the `ParamSet`:
 
 ``` r
+
 pset$ids()
 #> [1] "z"       "x"       "flag"    "methods"
 pset$levels
@@ -108,6 +114,7 @@ Check that a parameter satisfies all conditions of a `ParamSet`, using
 description on mismatch), and `$assert()` (throws error on mismatch):
 
 ``` r
+
 pset$test(list(z = 1, x = 1))
 #> [1] TRUE
 pset$test(list(z = -1, x = 1))
@@ -133,6 +140,7 @@ Alternatively, `logscale = TRUE` can be set; in this case, `lower` and
 `upper` represent the values *after* the transformation.
 
 ``` r
+
 pset = ps(
   z = p_int(lower = -3, upper = 3),
   x = p_dbl(lower = 2^-3, upper = 2^3, logscale = TRUE)
