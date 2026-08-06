@@ -1246,7 +1246,9 @@ rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
   if (all(lengths(params$levels) == 0L)) {
     remove_named(params, "levels")
   } else {
-    set(params, j = "levels", value = map_chr(params$levels, str_collapse, n = 10L))
+    # `str_collapse()`'s default marker `"[...]"` must not be used here: the table ends up in a
+    # manual page, where roxygen2's markdown parser reads it as a link to a topic named `...`.
+    set(params, j = "levels", value = map_chr(params$levels, str_collapse, n = 10L, ellipsis = "..."))
   }
   setnames(params, "storage_type", "type")
   x = c("", knitr::kable(params, col.names = capitalize(names(params))))
