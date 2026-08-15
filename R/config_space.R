@@ -185,3 +185,212 @@ build_bool = function(ConfigSpace, id, default, meta, old_cs_version) {
   build_cat(ConfigSpace, id, c("TRUE", "FALSE"), default, meta, old_cs_version)
 }
 
+#' @title Convert a ConfigSpace ConfigurationSpace to a paradox ParamSet
+#'
+#' @description
+#' Translates a Python `ConfigSpace.ConfigurationSpace` (via \CRANpkg{reticulate}) into a [ParamSet].
+#' This is the inverse of [paramset_to_configspace()] and uses the same type mapping.
+#'
+#' Supported hyperparameter mappings:
+#' * `UniformFloatHyperparameter` / `Float`: `p_dbl()` (with `logscale = TRUE` if `log = True`)
+#' * `UniformIntegerHyperparameter` / `Integer`: `p_int()` (with `logscale = TRUE` if `log = True`)
+#' * `CategoricalHyperparameter` / `Categorical`: `p_fct()`,
+#' or `p_lgl()` if the choices are exactly `c("TRUE", "FALSE")`
+#' * `OrdinalHyperparameter`: `p_int(lower = 1, upper = length(sequence))` with a `trafo`
+#' mapping the integer index to the corresponding sequence value.
+#' Paradox has no ordinal type,
+#' but this encoding preserves the ordering for numeric optimizers (unlike `p_fct()`, whose levels are unordered).
+#'
+#' Dependencies are translated as follows:
+#' * `EqualsCondition` -> `depends = parent == value`
+#' * `InCondition` -> `depends = parent %in% values`
+#' * `AndConjunction` of the above -> multiple `depends` entries on the same child (paradox combines them with AND)
+#' * `OrConjunction` (and other unsupported conjunctions) -> dropped with a warning, since paradox cannot express disjunctions
+#'
+#' Forbidden clauses are not representable in paradox and cause an error.
+#'
+#' Hyperparameter `meta` dictionaries written by [paramset_to_configspace()] are inspected for a `tags` entry,
+#' which is restored as the parameter's `tags`.
+#'
+#' The function auto-detects old ConfigSpace API (ConfigSpace < 0.6.0) vs. new ConfigSpace API (ConfigSpace >= 0.6.0).
+#'
+#' @param config_space (`ConfigSpace.ConfigurationSpace`)\cr
+#'   The Python ConfigurationSpace object to convert.
+#'
+#' @return A [ParamSet] representing the given configuration space.
+#'
+#' @examples
+#' \dontrun{
+#'   ConfigSpace = reticulate::import("ConfigSpace")
+#'   cs = ConfigSpace$ConfigurationSpace(name = "demo")
+#'   cs$add(ConfigSpace$Float("lr", bounds = c(1e-5, 1), default = 0.01, log = TRUE))
+#'   cs$add(ConfigSpace$Integer("n", bounds = c(10L, 500L), default = 100L))
+#'   cs$add(ConfigSpace$Categorical("crit", items = c("gini", "entropy"), default = "gini"))
+#'   param_set = configspace_to_paramset(cs)
+#' }
+#' @export
+configspace_to_paramset = function(config_space) {
+  assert_python_packages("ConfigSpace")
+  if (!inherits(config_space, "ConfigSpace.configuration_space.ConfigurationSpace")) {
+    stopf("'config_space' must be a Python ConfigSpace.ConfigurationSpace, not '%s'.", class(config_space)[[1L]])
+  }
+
+  # collect hyperparameters
+  hps = config_space$get_hyperparameters()
+  hp_names = config_space$get_hyperparameter_names()
+  hps = set_names(hps, hp_names)
+
+  args = map(hps, domain_from_hyperparameter)
+
+  # forbidden clauses are not expressible in paradox
+  forbiddens = reticulate::py_to_r(config_space$get_forbiddens())
+  if (length(forbiddens) > 0L) {
+    error_config("ConfigurationSpace contains %i forbidden clause(s); paradox cannot represent forbidden clauses.",
+      length(forbiddens))
+  }
+
+  # remember sequences of ordinal parents so conditions on them (which reference
+  # string values) can be translated to the integer index representation.
+  ordinal_sequences = discard(map(hps, function(hp) {
+    if ("OrdinalHyperparameter" %in% sub(".*\\.", "", class(hp))) {
+      as.character(py_attr(hp, "sequence"))
+    } else {
+      NULL
+    }
+  }), is.null)
+
+  param_set = invoke(ps, .args = args)
+
+  # add dependencies
+  conditions = config_space$get_conditions()
+  walk(conditions, add_condition_to_paramset, param_set = param_set, ordinal_sequences = ordinal_sequences)
+
+  param_set
+}
+
+py_attr = function(obj, name) {
+  reticulate::py_to_r(reticulate::py_get_attr(obj, name))
+}
+
+# build a paradox Domain object from a single ConfigSpace hyperparameter
+domain_from_hyperparameter = function(hp) {
+  # match by trailing class name (e.g. "UniformFloatHyperparameter") so the same code
+  # handles both the new ConfigSpace API (class strings include the submodule, e.g.
+  # "ConfigSpace.hyperparameters.uniform_float.UniformFloatHyperparameter") and the
+  # old API (class strings like "ConfigSpace.hyperparameters.UniformFloatHyperparameter").
+  short_cls = sub(".*\\.", "", class(hp))
+  meta = py_attr(hp, "meta")
+  if (is.null(meta)) meta = list()
+  tags = as.character(meta$tags)
+
+  if (any(c("UniformFloatHyperparameter", "NormalFloatHyperparameter", "BetaFloatHyperparameter") %in% short_cls)) {
+    log = isTRUE(py_attr(hp, "log"))
+    default = py_attr(hp, "default_value")
+    # paradox stores `default` in transformed space when logscale = TRUE,
+    # while ConfigSpace stores it in linear space.
+    if (log && !is.null(default)) default = log(default)
+    p_dbl(
+      lower = py_attr(hp, "lower"),
+      upper = py_attr(hp, "upper"),
+      default = default,
+      logscale = log,
+      tags = tags
+    )
+  } else if (any(c("UniformIntegerHyperparameter", "NormalIntegerHyperparameter", "BetaIntegerHyperparameter") %in% short_cls)) {
+    log = isTRUE(py_attr(hp, "log"))
+    default = as.integer(py_attr(hp, "default_value"))
+    # see note above; for integers paradox also expects the default in log space.
+    if (log && !is.null(default)) default = log(default)
+    p_int(
+      lower = as.integer(py_attr(hp, "lower")),
+      upper = as.integer(py_attr(hp, "upper")),
+      default = default,
+      logscale = log,
+      tags = tags
+    )
+  } else if ("CategoricalHyperparameter" %in% short_cls) {
+    choices = as.character(py_attr(hp, "choices"))
+    default = py_attr(hp, "default_value")
+    if (setequal(choices, c("TRUE", "FALSE"))) {
+      p_lgl(default = as.logical(default), tags = tags)
+    } else {
+      p_fct(levels = choices, default = as.character(default), tags = tags)
+    }
+  } else if ("OrdinalHyperparameter" %in% short_cls) {
+    sequence = as.character(py_attr(hp, "sequence"))
+    default = py_attr(hp, "default_value")
+    default_index = if (!is.null(default)) match(as.character(default), sequence) else NULL
+    p_int(
+      lower = 1L,
+      upper = length(sequence),
+      default = default_index,
+      trafo = crate(function(x) sequence[x], sequence),
+      tags = tags
+    )
+  } else if (any(c("Constant", "UnParametrizedHyperparameter") %in% short_cls)) {
+    value = py_attr(hp, "value")
+    p_fct(levels = as.character(value), default = as.character(value), tags = tags)
+  } else {
+    error_config("Unsupported ConfigSpace hyperparameter class '%s' for parameter '%s'.",
+      class(hp)[[1L]], py_attr(hp, "name"))
+  }
+}
+
+# add a single (possibly conjunctive) ConfigSpace condition to a paradox ParamSet
+add_condition_to_paramset = function(param_set, cond, ordinal_sequences = list()) {
+  short_cls = sub(".*\\.", "", class(cond))
+
+  if ("AndConjunction" %in% short_cls) {
+    components = py_attr(cond, "components")
+    walk(components, add_condition_to_paramset, param_set = param_set, ordinal_sequences = ordinal_sequences)
+    return(invisible(param_set))
+  }
+
+  if ("OrConjunction" %in% short_cls) {
+    error_config("ConfigurationSpace contains an OrConjunction condition; paradox cannot represent disjunctions.")
+  }
+
+  if ("EqualsCondition" %in% short_cls) {
+    child = py_attr(cond, "child")$name
+    parent = py_attr(cond, "parent")$name
+    value = py_attr(cond, "value")
+    value = coerce_dependency_value(param_set, parent, value, ordinal_sequences)
+    param_set$add_dep(child, on = parent, cond = CondEqual$new(value))
+    return(invisible(param_set))
+  }
+
+  if ("InCondition" %in% short_cls) {
+    child = py_attr(cond, "child")$name
+    parent = py_attr(cond, "parent")$name
+    values = py_attr(cond, "values")
+    values = map(values, coerce_dependency_value, param_set = param_set, parent = parent,
+      ordinal_sequences = ordinal_sequences)
+    if (length(values) > 0L && !is.list(values[[1L]])) values = unlist(values)
+    param_set$add_dep(child, on = parent, cond = CondAnyOf$new(values))
+    return(invisible(param_set))
+  }
+
+  error_config("Unsupported condition class '%s'; only EqualsCondition, InCondition, and AndConjunction are supported.",
+    class(cond)[[1L]])
+}
+
+# coerce a categorical-comparison value into the type of the paradox parent parameter.
+# ordinal parents are represented as integers in paradox; translate the string value
+# from the original ConfigSpace condition to the matching sequence index.
+coerce_dependency_value = function(param_set, parent, value, ordinal_sequences = list()) {
+  if (parent %in% names(ordinal_sequences)) {
+    return(match(as.character(value), ordinal_sequences[[parent]]))
+  }
+  parent_class = param_set$class[[parent]]
+  if (identical(parent_class, "ParamLgl")) {
+    return(as.logical(value))
+  }
+  if (identical(parent_class, "ParamInt")) {
+    return(as.integer(value))
+  }
+  if (identical(parent_class, "ParamDbl")) {
+    return(as.numeric(value))
+  }
+  as.character(value)
+}
+
