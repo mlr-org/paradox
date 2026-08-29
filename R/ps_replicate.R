@@ -2,7 +2,7 @@
 #'
 #' @description
 #' Repeat a [`ParamSet`] a given number of times and thus create a larger [`ParamSet`].
-#' By default, the resulting parameters are prefixed with the string `"repX.", where `X` counts up from 1.
+#' By default, the resulting parameters are prefixed with the string `"repX."`, where `X` counts up from 1.
 #' It is also possible to tag parameters by their original name and by their prefix, making grouped retrieval e.g. using `$get_values()` easier.
 #'
 #' @param set ([`ParamSet`])\cr

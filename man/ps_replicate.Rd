@@ -39,7 +39,8 @@ Whether to add a tag of the form \code{"param_<id>"} to each parameter in the re
 }
 \description{
 Repeat a \code{\link{ParamSet}} a given number of times and thus create a larger \code{\link{ParamSet}}.
-By default, the resulting parameters are prefixed with the string \verb{"repX.", where }X\verb{counts up from 1. It is also possible to tag parameters by their original name and by their prefix, making grouped retrieval e.g. using}$get_values()` easier.
+By default, the resulting parameters are prefixed with the string \code{"repX."}, where \code{X} counts up from 1.
+It is also possible to tag parameters by their original name and by their prefix, making grouped retrieval e.g. using \verb{$get_values()} easier.
 }
 \examples{
 pset = ps(
