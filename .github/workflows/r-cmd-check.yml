@@ -17,7 +17,7 @@ jobs:
   r-cmd-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}${{ matrix.config.no_tests && ' – noTests' || '' }}
+    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -31,23 +31,47 @@ jobs:
           - {os: macos-15,        arch: arm64,  r: 'release'}
           # setup-r installs the Rtools version appropriate for release R.
           - {os: windows-latest,  arch: x86_64, r: 'release'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'devel'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'release'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'release', depends_only: true}
-          # Keep one older hosted-toolchain source check in addition to current
-          # R. The authenticated repository-local gate, not this convenience
-          # row, proves the declared R 3.6 minimum with exact R 3.6.3 execution
-          # and compilation against pinned R 3.6.0 headers.
-          - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true, no_tests: true}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          # Check out the immutable companion whose package-facing source
+          # is proved below to equal the exact frozen candidate.
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
 
-      - uses: r-lib/actions/setup-r@v2
+      - name: Verify frozen harness checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly candidate=75f85f5be79a0da2dba268b0a7562839f7f9177c
+          readonly harness="${GITHUB_SHA:?}"
+          head="$(git rev-parse HEAD)"
+          readonly head
+          parents="$(git rev-list --parents -n 1 "$harness")"
+          readonly parents
+          test "$head" = "$harness"
+          test "$parents" = "$harness $candidate"
+          readonly helper=scripts/environment/install-hosted-r36-windows.ps1
+          readonly expected_helper_blob=3b420d542dc5a1ae5506380543159cdea84517fa
+          helper_entry="$(git ls-tree "$harness" -- "$helper")"
+          readonly helper_entry
+          expected_helper_entry="$(printf '100644 blob %s\t%s' "$expected_helper_blob" "$helper")"
+          readonly expected_helper_entry
+          test "$helper_entry" = "$expected_helper_entry"
+          changed="$(git diff --name-only "$candidate" "$harness")"
+          readonly changed
+          expected_changed="$(printf '%s\n' .github/workflows/r-cmd-check.yml)"
+          readonly expected_changed
+          test "$changed" = "$expected_changed"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
           r-version: ${{ matrix.config.r }}
 
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
           extra-packages: any::rcmdcheck
           needs: check
@@ -100,9 +124,9 @@ jobs:
         env:
           # An empty value becomes NA in R 4.6 and crashes R CMD check when it
           # evaluates R_cdo_tests. Always provide a legal logical spelling.
-          _R_CHECK_DEPENDS_ONLY_: ${{ matrix.config.depends_only && 'TRUE' || 'FALSE' }}
-          NOT_CRAN: ${{ matrix.config.depends_only && 'FALSE' || 'TRUE' }}
-          PARADOX_CHECK_NO_TESTS: ${{ matrix.config.no_tests && 'TRUE' || 'FALSE' }}
+          _R_CHECK_DEPENDS_ONLY_: 'FALSE'
+          NOT_CRAN: 'TRUE'
+          PARADOX_CHECK_NO_TESTS: 'FALSE'
         run: |
           options(crayon.enabled = TRUE)
           if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") {
@@ -146,6 +170,35 @@ jobs:
             stop("R CMD check did not finish cleanly with one final `Status: OK`")
           }
 
+      - name: Retain run provenance
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e ci-evidence
+          mkdir ci-evidence
+          {
+            printf 'workflow_sha=%s\n' "$GITHUB_SHA"
+            printf 'workflow_ref=%s\n' "$GITHUB_REF"
+            printf 'checked_out_sha=%s\n' "$(git rev-parse HEAD)"
+            printf 'runner_os=%s\n' "$RUNNER_OS"
+            printf 'runner_arch=%s\n' "$RUNNER_ARCH"
+            # The single-quoted text is R code, not shell.
+            # shellcheck disable=SC2016
+            printf 'r_platform=%s\n' "$(Rscript --vanilla -e 'cat(R.version$platform)')"
+          } > ci-evidence/provenance.txt
+
+      - name: Upload check evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: paradox-2.0.0-portability-${{ matrix.config.os }}-${{ matrix.config.arch }}
+          path: |
+            ci-evidence/provenance.txt
+            check
+          if-no-files-found: error
+          retention-days: 30
+
   r36-windows:
     name: windows-latest / x86_64 (R 3.6.3 / Rtools35)
     runs-on: windows-latest
@@ -158,7 +211,58 @@ jobs:
       PARADOX_R36_ISOLATION: C:\p36-isolation
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          # Check out the immutable companion whose package-facing source
+          # is proved below to equal the exact frozen candidate.
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Verify frozen harness checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly candidate=75f85f5be79a0da2dba268b0a7562839f7f9177c
+          readonly harness="${GITHUB_SHA:?}"
+          head="$(git rev-parse HEAD)"
+          readonly head
+          parents="$(git rev-list --parents -n 1 "$harness")"
+          readonly parents
+          test "$head" = "$harness"
+          test "$parents" = "$harness $candidate"
+          readonly helper=scripts/environment/install-hosted-r36-windows.ps1
+          readonly expected_helper_blob=3b420d542dc5a1ae5506380543159cdea84517fa
+          helper_entry="$(git ls-tree "$harness" -- "$helper")"
+          readonly helper_entry
+          expected_helper_entry="$(printf '100644 blob %s\t%s' "$expected_helper_blob" "$helper")"
+          readonly expected_helper_entry
+          test "$helper_entry" = "$expected_helper_entry"
+          readonly lock=environment/runtime-r-3.6.3-packages.lock
+          readonly expected_lock_blob=5e9fb484b63cff6ee51ab2101dcaa37defd0e603
+          readonly expected_lock_sha256=9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5
+          lock_entry="$(git ls-tree "$harness" -- "$lock")"
+          readonly lock_entry
+          expected_lock_entry="$(printf '100644 blob %s\t%s' "$expected_lock_blob" "$lock")"
+          readonly expected_lock_entry
+          test "$lock_entry" = "$expected_lock_entry"
+          changed="$(git diff --name-only "$candidate" "$harness")"
+          readonly changed
+          expected_changed="$(printf '%s\n' .github/workflows/r-cmd-check.yml)"
+          readonly expected_changed
+          test "$changed" = "$expected_changed"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          lock_tmp="$(mktemp "${lock}.raw.XXXXXX")"
+          readonly lock_tmp
+          trap 'rm -f -- "$lock_tmp"' EXIT
+          git cat-file blob "$expected_lock_blob" > "$lock_tmp"
+          chmod 0644 "$lock_tmp"
+          test "$(git hash-object --no-filters -- "$lock_tmp")" = "$expected_lock_blob"
+          test "$(sha256sum -- "$lock_tmp" | cut -d ' ' -f 1)" = "$expected_lock_sha256"
+          mv -f -- "$lock_tmp" "$lock"
+          trap - EXIT
+          test "$(git hash-object --no-filters -- "$lock")" = "$expected_lock_blob"
+          test "$(sha256sum -- "$lock" | cut -d ' ' -f 1)" = "$expected_lock_sha256"
 
       - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
