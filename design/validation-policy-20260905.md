@@ -87,8 +87,9 @@ needed. Record findings, changes, benchmarks, and verification below.
   It neither allocates nor classifies rows. Remove the old duplicate
   class/storage, ID-uniqueness, logical/factor-level and special-list scan and
   its unused selected-row mode. Remove the unused plain-table snapshot helper.
-- Reader masks: ID-only for dependency design mapping and mutation/value-write
-  ownership; IDs/classes/defaults for `get_values`; IDs/defaults for trafo;
+- Reader masks: IDs plus the `storage_type` column for dependency design
+  mapping (its fixed-value classification and typed missing patches index
+  that column by row), ID-only for mutation/value-write ownership; IDs/classes/defaults for `get_values`; IDs/defaults for trafo;
   IDs/classes for raw values; classes/bounds/levels for uniform sampling;
   classes/bounds/tolerance/levels/storage for quantiles. Whole-table copiers
   (`params`, `domains`, subset, collection flatten, Shadow refresh) still

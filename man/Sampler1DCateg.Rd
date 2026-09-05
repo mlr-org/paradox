@@ -5,6 +5,8 @@
 \title{Sampler1DCateg Class}
 \description{
 Sampling from a discrete distribution, for a \code{\link{ParamSet}} containing a single \code{\link[=p_fct]{p_fct()}} or \code{\link[=p_lgl]{p_lgl()}}.
+A zero-level factor accepts \code{numeric()} probabilities and can be sampled
+for zero rows; a positive-row request fails before entering the RNG.
 }
 \seealso{
 Other Sampler:

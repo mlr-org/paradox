@@ -186,13 +186,39 @@ static int contains_id(SEXP ids, SEXP sought) {
   return FALSE;
 }
 
+/* Below this product of related and parameter rows the linear scan beats
+ * building the hashed index; both branches decide identically for the
+ * ASCII identifiers admitted here. */
+#define RELATED_IDS_LINEAR_LIMIT ((R_xlen_t) 1024)
+
 static int validate_related_ids(SEXP params_ids, SEXP related_ids,
     int require_unique, R_xlen_t *work_since_interrupt) {
-  for (R_xlen_t index = 0; index < XLENGTH(related_ids); ++index) {
-    paradox_account_work(work_since_interrupt);
-    SEXP id = STRING_ELT(related_ids, index);
-    if (!supported_ascii(id) || !contains_id(params_ids, id)) {
+  const R_xlen_t related_count = XLENGTH(related_ids);
+  const R_xlen_t param_count = XLENGTH(params_ids);
+  if (related_count == 0) return TRUE;
+  if (param_count <= RELATED_IDS_LINEAR_LIMIT / related_count) {
+    for (R_xlen_t index = 0; index < related_count; ++index) {
+      paradox_account_work(work_since_interrupt);
+      SEXP id = STRING_ELT(related_ids, index);
+      if (!supported_ascii(id) || !contains_id(params_ids, id)) {
+        return FALSE;
+      }
+    }
+  } else {
+    paradox_domain_id_map_t parameter_ids;
+    if (paradox_domain_id_map_init(params_ids, &parameter_ids) !=
+        PARADOX_DOMAIN_ID_MAP_OK) {
       return FALSE;
+    }
+    for (R_xlen_t index = 0; index < related_count; ++index) {
+      paradox_account_work(work_since_interrupt);
+      SEXP id = STRING_ELT(related_ids, index);
+      R_xlen_t row = R_XLEN_T_MAX;
+      if (!supported_ascii(id) || !paradox_domain_id_map_find(
+          &parameter_ids, id, &row, work_since_interrupt
+        )) {
+        return FALSE;
+      }
     }
   }
   return !require_unique || Rf_any_duplicated(related_ids, FALSE) == 0;
@@ -1127,6 +1153,9 @@ static SEXP param_set_collection_construct_impl(SEXP sets,
   const int tag_sets = checked_flag(tag_sets_sexp, "tag_sets");
   const int tag_params = checked_flag(tag_params_sexp, "tag_params");
   const int postfix = checked_flag(postfix_sexp, "postfix_names");
+  /* `setNames(sets, ids)` on a referenced list of 64 or more sets is a base
+   * wrapper ALTREP; own one ordinary copy before the builder's shell gate. */
+  sets = PROTECT(paradox_materialize_public_list_shell(sets));
   /* Sizing only: the builder owns the `sets` shape diagnostics, and it rejects
    * anything this fallback length could not describe. */
   const R_xlen_t child_count =
@@ -1139,7 +1168,7 @@ static SEXP param_set_collection_construct_impl(SEXP sets,
     sets, edge_tag_sets, edge_tag_params, R_NilValue, postfix,
     "`sets` names", R_NilValue, capture_hook
   ));
-  UNPROTECT(3);
+  UNPROTECT(4);
   return result;
 }
 

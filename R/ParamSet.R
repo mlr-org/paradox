@@ -601,7 +601,10 @@ param_set_from_subset_bundle = function(bundle) {
 #' from the ParamSet family is additive only: Paradox core methods, active
 #' bindings, and private capsule state may not be replaced.
 #' Interpreted outer list and internal table shells and their structural
-#' metadata are ordinary non-ALTREP/non-S4 objects. Documented public table
+#' metadata are ordinary non-ALTREP/non-S4 objects, except that a documented
+#' public list input whose top-level shell is an ALTREP plain list (base R's
+#' `names<-` wrapper for a referenced list of 64 or more elements, for
+#' example) is materialized exactly once before it is interpreted. Documented public table
 #' inputs share one structural classifier. A well-formed ordinary class vector
 #' ends in `"data.frame"` or `c("data.table", "data.frame")`; leading additive
 #' classes are representation-only and are never dispatched. The classifier
@@ -666,8 +669,11 @@ ParamSet = R6Class("ParamSet",
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
     #' @param params (named `list()`)\cr
-    #'   Ordinary non-ALTREP/non-S4 list of [`Domain`] objects, named with their
-    #'   respective ID. Its names/list metadata is interpreted structure.
+    #'   Ordinary non-S4 list of [`Domain`] objects, named with their
+    #'   respective ID. Its names/list metadata is interpreted structure. A
+    #'   top-level ALTREP plain list, such as the wrapper base R returns from
+    #'   `setNames()` on a referenced list of 64 or more elements, is
+    #'   materialized exactly once before it is interpreted.
     #' @param allow_dangling_dependencies (`logical(1)`)\cr
     #'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
     #'   `depends = y == 0` if `y` is not present would usually throw an error, but if dangling
@@ -819,8 +825,9 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Perform transformation specified by the `trafo` of [`Domain`] objects, as well as the `$extra_trafo` field.
     #' @param x (named `list()` | `data.frame`)\cr
-    #'   The value(s) to be transformed. A non-table outer list remains ordinary
-    #'   non-ALTREP/non-S4. A data.frame uses the shared suffix-aware public-table
+    #'   The value(s) to be transformed. A non-table outer list is an ordinary
+    #'   non-S4 list; a top-level ALTREP plain list is materialized exactly
+    #'   once. A data.frame uses the shared suffix-aware public-table
     #'   boundary: row-name structure is validated, but its row count is not
     #'   compared with columns because transformation treats columns as named
     #'   parameter values rather than rows. An allowed top-level VECSXP ALTREP
@@ -901,9 +908,9 @@ ParamSet = R6Class("ParamSet",
     #' Activity is default-aware and store-blind: recorded defaults may activate
     #' an absent parent, but stored `$values` are never consulted.
     #' @param x (named `list()`)\cr
-    #'   The value to test. Its outer shell must be an ordinary
-    #'   non-ALTREP/non-S4 list; admitted semantic atomic leaves may be stable
-    #'   ALTREP.
+    #'   The value to test. Its outer shell must be an ordinary non-S4 list; a
+    #'   top-level ALTREP plain list is materialized once, and admitted
+    #'   semantic atomic leaves may be stable ALTREP.
     #' @param assert_value (`logical(1)`)\cr
     #'   Whether to verify that `x` satisfies the bounds and types given by this `ParamSet`.
     #'   Should be `TRUE` unless this was already checked before.
@@ -964,7 +971,8 @@ ParamSet = R6Class("ParamSet",
     #' by some algorithm from a search space param set in optimization.
     #'
     #' @param xs (named `list()`).
-    #'   The outer container must be an ordinary non-ALTREP list. An S3-classed
+    #'   The outer container must be an ordinary list; a top-level ALTREP
+    #'   plain list is materialized once. An S3-classed
     #'   list carrying only `names` and `class` is accepted as representation
     #'   metadata and its class is discarded; no S3 method is dispatched. S4
     #'   shells remain unsupported.
@@ -1006,8 +1014,9 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' \pkg{checkmate}-like check-function that checks only parameter
-    #' dependencies. `xs` must be an ordinary non-ALTREP/non-S4 base list with complete, unique
-    #' names; classed list containers are not admitted by this dependency-only
+    #' dependencies. `xs` must be an ordinary non-S4 base list with complete, unique
+    #' names (a top-level ALTREP plain list is materialized once); classed
+    #' list containers are not admitted by this dependency-only
     #' boundary. Unknown parameter IDs are diagnosed even when the set has no
     #' dependencies. A dependent value or its parent supplied as a
     #' [`TuneToken`] is skipped, matching `$check()` dependency semantics.
@@ -1249,7 +1258,8 @@ ParamSet = R6Class("ParamSet",
     #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
     #'
     #' @param values (`named list`)
-    #'   Optional ordinary non-ALTREP named list, or ordinary non-ALTREP
+    #'   Optional ordinary named list (a top-level ALTREP plain list is
+    #'   materialized once), or ordinary non-ALTREP
     #'   S3-classed named list carrying only
     #'   `names` and `class`, of exact-shape [`TuneToken`] objects to convert in
     #'   place of `$values`. The outer class is discarded and no subsetting

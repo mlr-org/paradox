@@ -92,6 +92,9 @@ Whether the origin currently has a constraint.}
     \item \href{#method-ParamSetShadow-get_domain}{\code{ParamSetShadow$get_domain()}}
     \item \href{#method-ParamSetShadow-subset}{\code{ParamSetShadow$subset()}}
     \item \href{#method-ParamSetShadow-subspaces}{\code{ParamSetShadow$subspaces()}}
+    \item \href{#method-ParamSetShadow-disable_internal_tuning}{\code{ParamSetShadow$disable_internal_tuning()}}
+    \item \href{#method-ParamSetShadow-convert_internal_search_space}{\code{ParamSetShadow$convert_internal_search_space()}}
+    \item \href{#method-ParamSetShadow-flatten}{\code{ParamSetShadow$flatten()}}
     \item \href{#method-ParamSetShadow-clone}{\code{ParamSetShadow$clone()}}
   }
 }
@@ -103,9 +106,6 @@ Whether the origin currently has a constraint.}
   <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check'><code>ParamSet$check()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dependencies"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dependencies'><code>ParamSet$check_dependencies()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dt'><code>ParamSet$check_dt()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="convert_internal_search_space"><a href='../../paradox/html/ParamSet.html#method-ParamSet-convert_internal_search_space'><code>ParamSet$convert_internal_search_space()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="disable_internal_tuning"><a href='../../paradox/html/ParamSet.html#method-ParamSet-disable_internal_tuning'><code>ParamSet$disable_internal_tuning()</code></a></span></li>
-  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="flatten"><a href='../../paradox/html/ParamSet.html#method-ParamSet-flatten'><code>ParamSet$flatten()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href='../../paradox/html/ParamSet.html#method-ParamSet-format'><code>ParamSet$format()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_values'><code>ParamSet$get_values()</code></a></span></li>
   <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids"><a href='../../paradox/html/ParamSet.html#method-ParamSet-ids'><code>ParamSet$ids()</code></a></span></li>
@@ -241,6 +241,62 @@ attribute-free, non-missing logical scalars.}
       \item{\code{ids}}{(\code{character()})\cr
 IDs for which to create \code{ParamSet}s. Defaults to all IDs.}
     }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSetShadow-disable_internal_tuning"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetShadow-disable_internal_tuning}{}}}
+\subsection{\code{ParamSetShadow$disable_internal_tuning()}}{
+  Set the origin values that disable internal tuning for visible
+parameters. Hidden control parameters remain writable through the
+authenticated origin without becoming part of the Shadow schema.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetShadow$disable_internal_tuning(ids)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{ids}}{(\code{character()})\cr
+The ids of the parameters for which to disable internal tuning.}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSetShadow-convert_internal_search_space"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetShadow-convert_internal_search_space}{}}}
+\subsection{\code{ParamSetShadow$convert_internal_search_space()}}{
+  Convert the internal search space using the exact ultimate owner
+context, including values hidden by this view.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetShadow$convert_internal_search_space(search_space)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{search_space}}{(\code{\link{ParamSet}})\cr
+The internal search space.}
+    }
+    \if{html}{\out{</div>}}
+  }
+}
+
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSetShadow-flatten"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetShadow-flatten}{}}}
+\subsection{\code{ParamSetShadow$flatten()}}{
+  Create a detached ParamSet whose internal-tuning callbacks use exact
+graph translations and a snapshot of hidden origin values.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetShadow$flatten()}
     \if{html}{\out{</div>}}
   }
 }

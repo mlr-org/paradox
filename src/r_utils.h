@@ -343,6 +343,18 @@ attribute_hidden int paradox_public_row_names_count(
  * rooted immediately by the caller. */
 attribute_hidden SEXP paradox_materialize_public_table_shell(SEXP table);
 
+/* Materialize a top-level ALTREP plain list once. Base R answers `names<-`
+ * (and every other attribute setter) on a referenced list of 64 or more
+ * elements with a wrapper ALTREP, so `setNames(x, ids)` is an ordinary public
+ * spelling of a named list. A well-behaved ALTREP list supplies one Length and
+ * one Elt per element; both are observed exactly once, into an ordinary
+ * carrier that roots every returned element before any gate interprets it.
+ * Only a plain list wearing at most a names attribute is materialized; S4,
+ * classed, and otherwise attributed shells, and every ordinary list, are
+ * returned unchanged so the operation-specific gate keeps its diagnostic. The
+ * result is unprotected and must be rooted immediately by the caller. */
+attribute_hidden SEXP paradox_materialize_public_list_shell(SEXP list);
+
 /* Install the public self-reference on an owned table. Set normalize_columns
  * only when a producer may have kept names on its columns. Fresh unnamed
  * numeric/character/list carriers need no metadata inspection. */

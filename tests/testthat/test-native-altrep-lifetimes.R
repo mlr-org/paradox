@@ -175,12 +175,13 @@ test_that("Domain vectors materialize once and constructor shells stay structura
     callback_after = 0L
   )
   callbacks_before = callbacks
-  expect_error(
-    .Call(altrep2_symbol("param_set_construct"), domains, FALSE),
-    "ordinary named list",
-    fixed = TRUE
-  )
-  expect_identical(callbacks, callbacks_before)
+  # A top-level ALTREP list is materialized exactly once, before the
+  # constructor interprets any Domain: both elements come from the captured
+  # generation, and the one Elt callback cannot splice the later one in.
+  constructed = .Call(altrep2_symbol("param_set_construct"), domains, FALSE)
+  expect_identical(callbacks, callbacks_before + 1L)
+  expect_identical(constructed$params$lower, c(0, 10))
+  expect_identical(constructed$params$upper, c(1, 20))
 })
 
 test_that("constructor rejects ALTREP nested structure before observation", {
@@ -303,6 +304,10 @@ test_that("check rejects structural ALTREP before selecting capsule state", {
     },
     callback_after = 0L
   )
+  # The ALTREP point is materialized exactly once, before the capsule is
+  # selected. Its Elt callback is ordinary supported reentry: the check then
+  # runs against the post-callback generation, which admits the captured
+  # value, and the later provider generation is never observed.
   expect_identical(.Call(
     altrep2_symbol("param_set_check_builtin"),
     altrep2_private(point_set),
@@ -312,9 +317,9 @@ test_that("check rejects structural ALTREP before selecting capsule state", {
     FALSE,
     "none",
     TRUE
-  ), "Must be an ordinary named list")
-  expect_identical(point_callbacks, 0L)
-  expect_identical(altrep2_state(point_set)$.params$upper, 1L)
+  ), TRUE)
+  expect_identical(point_callbacks, 1L)
+  expect_identical(altrep2_state(point_set)$.params$upper, 2)
 
   name_callbacks = 0L
   hostile_names = native_stateful_altrep(
@@ -464,7 +469,10 @@ test_that("Design columns materialize while trafo shells stay structural", {
     },
     callback_after = 0L
   )
-  expect_error(
+  # The ALTREP point is materialized exactly once, before the transformation
+  # selects its capsule; the extra_trafo installed by that Elt callback is the
+  # one applied to the captured value.
+  expect_identical(
     .Call(
       altrep2_symbol("param_set_trafo"),
       altrep2_private(point_set),
@@ -472,13 +480,12 @@ test_that("Design columns materialize while trafo shells stay structural", {
       point,
       point_set
     ),
-    "ordinary named list",
-    fixed = TRUE
+    list(x = 1, source = "new")
   )
-  expect_identical(point_callbacks, 0L)
+  expect_identical(point_callbacks, 1L)
   expect_identical(
     point_set$trafo(list(x = 1)),
-    list(x = 1, source = "old")
+    list(x = 1, source = "new")
   )
 })
 
@@ -876,8 +883,10 @@ test_that("value merge alone snapshots shells while preserving opaque leaves", {
     structure(list(payload = new.env()), names = "payload"),
     elt_switch_after = 1L
   )
-  expect_identical(utility$check(point), "Must be an ordinary named list")
-  expect_null(seen)
+  # The ALTREP point is materialized once; the opaque leaf keeps its identity
+  # and the later provider generation is never observed.
+  expect_identical(utility$check(point), TRUE)
+  expect_identical(seen, marker)
   expect_identical(
     .Call(altrep2_symbol("design_transpose"), list(payload = list(marker)), FALSE)[[1L]]$payload,
     marker
@@ -983,7 +992,7 @@ test_that("materialized and rejected inputs remain safe under forced collection"
   gctorture(previous)
 
   expect_identical(quantiles, c(2.5, 7.5))
-  expect_identical(checked, "Must be an ordinary named list")
+  expect_identical(checked, TRUE)
 })
 
 test_that("the domain_check() internal flag is observed exactly once", {

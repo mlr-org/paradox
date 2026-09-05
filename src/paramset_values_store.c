@@ -335,7 +335,13 @@ static void load_base_param_state(SEXP private_environment, SEXP self,
   UNPROTECT(2);
 }
 
-static SEXP ordered_values(SEXP ids, SEXP values,
+/*
+ * Reorder a write's values into parameter order. `sources` names, for every
+ * input value, the root input entry it descends from; the same match that
+ * orders the values carries each source along, so the result is one list
+ * holding the ordered values and their ordered sources.
+ */
+static SEXP ordered_values(SEXP ids, SEXP values, SEXP sources,
     R_xlen_t *work_since_interrupt) {
   if (TYPEOF(values) != VECSXP) {
     Rf_error("Internal error: unstable ParamSet value write plan");
@@ -347,7 +353,8 @@ static SEXP ordered_values(SEXP ids, SEXP values,
       TYPEOF(value_names) != STRSXP || ALTREP(value_names) ||
       Rf_isS4(value_names) || Rf_isObject(value_names) ||
       !paradox_api_has_no_attributes(value_names) ||
-      XLENGTH(value_names) != original_size || original_size > INT_MAX) {
+      XLENGTH(value_names) != original_size || original_size > INT_MAX ||
+      TYPEOF(sources) != STRSXP || XLENGTH(sources) != original_size) {
     UNPROTECT(1);
     Rf_error("Internal error: unstable ParamSet value write plan");
   }
@@ -372,7 +379,13 @@ static SEXP ordered_values(SEXP ids, SEXP values,
       ++output_size;
     }
   }
+  SEXP pair = PROTECT(Rf_allocVector(VECSXP, 2));
   SEXP result = PROTECT(Rf_allocVector(VECSXP, output_size));
+  SET_VECTOR_ELT(pair, 0, result);
+  UNPROTECT(1);
+  SEXP result_sources = PROTECT(Rf_allocVector(STRSXP, output_size));
+  SET_VECTOR_ELT(pair, 1, result_sources);
+  UNPROTECT(1);
   SEXP result_names = PROTECT(Rf_allocVector(STRSXP, output_size));
   R_xlen_t output = 0;
   for (R_xlen_t row = 0; row < id_size; ++row) {
@@ -390,6 +403,7 @@ static SEXP ordered_values(SEXP ids, SEXP values,
         output,
         STRING_ELT(value_names, source)
       );
+      SET_STRING_ELT(result_sources, output, STRING_ELT(sources, source));
       ++output;
     }
   }
@@ -399,7 +413,7 @@ static SEXP ordered_values(SEXP ids, SEXP values,
   }
   Rf_setAttrib(result, R_NamesSymbol, result_names);
   UNPROTECT(4);
-  return result;
+  return pair;
 }
 
 SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
@@ -537,22 +551,45 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
     UNPROTECT(protected_count);
     Rf_error("Merged ParamSet values are too large");
   }
+  /*
+   * Two hashed matches replace one linear name search per stored value and
+   * per update. The combined update names list `...` before `.values`, so a
+   * first match keeps the documented precedence; the names were proved
+   * unique and disjoint above, so at most one update can match anyway.
+   * Rf_match(table, x): `current_update` maps each stored value to its
+   * update, `update_current` each update to the stored value it replaces.
+   */
+  SEXP update_names = PROTECT(Rf_allocVector(STRSXP, update_size));
+  ++protected_count;
+  for (R_xlen_t update = 0; update < update_size; ++update) {
+    SET_STRING_ELT(
+      update_names,
+      update,
+      update_name(dot_names, value_names, dot_size, update)
+    );
+  }
+  SEXP current_name_table = PROTECT(
+    current_names == R_NilValue
+      ? Rf_allocVector(STRSXP, 0)
+      : current_names
+  );
+  ++protected_count;
+  SEXP current_update = PROTECT(Rf_match(update_names, current_name_table, 0));
+  ++protected_count;
+  SEXP update_current = PROTECT(Rf_match(current_name_table, update_names, 0));
+  ++protected_count;
+  if (TYPEOF(current_update) != INTSXP ||
+      XLENGTH(current_update) != current_size ||
+      TYPEOF(update_current) != INTSXP ||
+      XLENGTH(update_current) != update_size) {
+    UNPROTECT(protected_count);
+    Rf_error("Internal error: invalid ParamSet value merge match");
+  }
   R_xlen_t output_size = 0;
   for (R_xlen_t index = 0; index < current_size; ++index) {
     paradox_account_work(&work_since_interrupt);
-    const R_xlen_t update = find_name(
-      dot_names,
-      STRING_ELT(current_names, index),
-      &work_since_interrupt
-    );
-    const R_xlen_t second_update = update >= 0 ? -1 : find_name(
-      value_names,
-      STRING_ELT(current_names, index),
-      &work_since_interrupt
-    );
-    const R_xlen_t combined = update >= 0
-      ? update
-      : second_update >= 0 ? dot_size + second_update : -1;
+    const int matched = INTEGER_ELT(current_update, index);
+    const R_xlen_t combined = matched > 0 ? (R_xlen_t) matched - 1 : -1;
     if (combined < 0 ||
         update_value(dots, values, dot_size, combined) != R_NilValue) {
       ++output_size;
@@ -561,11 +598,7 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
   for (R_xlen_t update = 0; update < update_size; ++update) {
     paradox_account_work(&work_since_interrupt);
     if (update_value(dots, values, dot_size, update) != R_NilValue &&
-        find_name(
-          current_names,
-          update_name(dot_names, value_names, dot_size, update),
-          &work_since_interrupt
-        ) < 0) {
+        INTEGER_ELT(update_current, update) == 0) {
       ++output_size;
     }
   }
@@ -575,21 +608,8 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
   R_xlen_t output = 0;
   for (R_xlen_t index = 0; index < current_size; ++index) {
     paradox_account_work(&work_since_interrupt);
-    R_xlen_t update = find_name(
-      dot_names,
-      STRING_ELT(current_names, index),
-      &work_since_interrupt
-    );
-    if (update < 0) {
-      const R_xlen_t value_update = find_name(
-        value_names,
-        STRING_ELT(current_names, index),
-        &work_since_interrupt
-      );
-      if (value_update >= 0) {
-        update = dot_size + value_update;
-      }
-    }
+    const int matched = INTEGER_ELT(current_update, index);
+    const R_xlen_t update = matched > 0 ? (R_xlen_t) matched - 1 : -1;
     SEXP replacement = update >= 0
       ? update_value(dots, values, dot_size, update)
       : VECTOR_ELT(current, index);
@@ -609,13 +629,10 @@ SEXP paradox_param_set_values_merge(SEXP dots, SEXP values,
   }
   for (R_xlen_t update = 0; update < update_size; ++update) {
     paradox_account_work(&work_since_interrupt);
-    SEXP name = update_name(dot_names, value_names, dot_size, update);
+    SEXP name = STRING_ELT(update_names, update);
     SEXP replacement = update_value(dots, values, dot_size, update);
-    if (replacement != R_NilValue && find_name(
-        current_names,
-        name,
-        &work_since_interrupt
-      ) < 0) {
+    if (replacement != R_NilValue &&
+        INTEGER_ELT(update_current, update) == 0) {
       if (output >= output_size) {
         UNPROTECT(protected_count + 2);
         Rf_error("Internal error: values merge exceeded its capacity");
@@ -988,8 +1005,13 @@ static SEXP snapshot_store_translation(SEXP translation, SEXP set_names,
   return result;
 }
 
+/*
+ * Route a collection write to its children. `sources` names the root input
+ * entry behind every value; each child's assignment carries its slice of
+ * those sources, so no later stage has to rediscover them by name.
+ */
 static SEXP param_set_collection_store_plan(SEXP private_environment,
-    SEXP self, SEXP sets, SEXP values) {
+    SEXP self, SEXP sets, SEXP values, SEXP sources) {
   R_xlen_t work_since_interrupt = 0;
   int protected_count = 0;
   SEXP set_names = R_NilValue;
@@ -1021,6 +1043,10 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
   if (original_value_count > INT_MAX) {
     UNPROTECT(protected_count);
     Rf_error("ParamSetCollection values exceed supported size");
+  }
+  if (TYPEOF(sources) != STRSXP || XLENGTH(sources) != original_value_count) {
+    UNPROTECT(protected_count);
+    Rf_error("Internal error: malformed collection value source map");
   }
 
   SEXP current_sets = PROTECT(VECTOR_ELT(state, PARADOX_CORE_SETS));
@@ -1134,6 +1160,8 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
   ++protected_count;
   SEXP assignments = PROTECT(Rf_allocVector(VECSXP, child_count));
   ++protected_count;
+  SEXP assignment_sources = PROTECT(Rf_allocVector(VECSXP, child_count));
+  ++protected_count;
   /*
    * Preserve exact child order, including empty complete-replacement plans.
    * The write engine consumes this plan depth-first and lets the later graph
@@ -1156,6 +1184,9 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
     Rf_setAttrib(assignment, R_NamesSymbol, assignment_names);
     SET_VECTOR_ELT(assignments, child, assignment);
     UNPROTECT(2);
+    SEXP child_sources = PROTECT(Rf_allocVector(STRSXP, counts[child]));
+    SET_VECTOR_ELT(assignment_sources, child, child_sources);
+    UNPROTECT(1);
   }
 
   for (R_xlen_t index = 0; index < value_count; ++index) {
@@ -1190,6 +1221,11 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
         destination,
         STRING_ELT(originals, row)
       );
+      SET_STRING_ELT(
+        VECTOR_ELT(assignment_sources, child),
+        destination,
+        STRING_ELT(sources, index)
+      );
       ++filled[child];
     }
   }
@@ -1200,10 +1236,11 @@ static SEXP param_set_collection_store_plan(SEXP private_environment,
     }
   }
 
-  SEXP plan = PROTECT(Rf_allocVector(VECSXP, 2));
+  SEXP plan = PROTECT(Rf_allocVector(VECSXP, 3));
   ++protected_count;
   SET_VECTOR_ELT(plan, 0, order);
   SET_VECTOR_ELT(plan, 1, assignments);
+  SET_VECTOR_ELT(plan, 2, assignment_sources);
   UNPROTECT(protected_count);
   return plan;
 }
@@ -1766,35 +1803,6 @@ static void retain_write_target(value_write_transaction_t *transaction,
   };
 }
 
-static SEXP ordered_value_sources(SEXP stored, SEXP input, SEXP sources,
-    R_xlen_t *work_since_interrupt) {
-  SEXP stored_names = Rf_getAttrib(stored, R_NamesSymbol);
-  SEXP input_names = Rf_getAttrib(input, R_NamesSymbol);
-  const R_xlen_t size = XLENGTH(stored);
-  if (TYPEOF(stored_names) != STRSXP || XLENGTH(stored_names) != size ||
-      TYPEOF(input_names) != STRSXP ||
-      XLENGTH(input_names) != XLENGTH(input) ||
-      TYPEOF(sources) != STRSXP || XLENGTH(sources) != XLENGTH(input)) {
-    Rf_error("Internal error: malformed ParamSet value source map");
-  }
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
-    paradox_account_work(work_since_interrupt);
-    const R_xlen_t input_index = find_name(
-      input_names,
-      STRING_ELT(stored_names, index),
-      work_since_interrupt
-    );
-    if (input_index < 0 || input_index >= XLENGTH(input)) {
-      UNPROTECT(1);
-      Rf_error("Internal error: stored ParamSet value has no source");
-    }
-    SET_STRING_ELT(result, index, STRING_ELT(sources, input_index));
-  }
-  UNPROTECT(1);
-  return result;
-}
-
 static void process_base_write(value_write_transaction_t *transaction,
     const value_write_task_t *task, SEXP private_environment, SEXP core) {
   if (paradox_core_from_private(private_environment) != core) {
@@ -1806,19 +1814,14 @@ static void process_base_write(value_write_transaction_t *transaction,
     task->self,
     &state
   );
-  SEXP stored = PROTECT(ordered_values(
+  SEXP ordered = PROTECT(ordered_values(
     state.ids,
-    task->values,
-    transaction->work_since_interrupt
-  ));
-  SEXP sources = PROTECT(ordered_value_sources(
-    stored,
     task->values,
     task->sources,
     transaction->work_since_interrupt
   ));
   if (paradox_core_from_private(private_environment) != core) {
-    UNPROTECT(2);
+    UNPROTECT(1);
     Rf_error("ParamSet value target changed while being planned");
   }
   retain_write_target(
@@ -1826,80 +1829,10 @@ static void process_base_write(value_write_transaction_t *transaction,
     task->self,
     private_environment,
     core,
-    stored,
-    sources
+    VECTOR_ELT(ordered, 0),
+    VECTOR_ELT(ordered, 1)
   );
-  UNPROTECT(2);
-}
-
-static R_xlen_t collection_source_row(SEXP translation_ids,
-    SEXP original_ids, SEXP owners, R_xlen_t child, SEXP local_name,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t rows = XLENGTH(translation_ids);
-  for (R_xlen_t row = 0; row < rows; ++row) {
-    paradox_account_work(work_since_interrupt);
-    if (INTEGER_ELT(owners, row) == (int) (child + 1) &&
-        paradox_domain_strings_equal(
-          STRING_ELT(original_ids, row),
-          local_name
-        )) {
-      return row;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
-
-static SEXP collection_child_sources(SEXP assignment, R_xlen_t child,
-    SEXP translation, SEXP parent_values, SEXP parent_sources,
-    R_xlen_t *work_since_interrupt) {
-  SEXP assignment_names = Rf_getAttrib(assignment, R_NamesSymbol);
-  SEXP parent_names = Rf_getAttrib(parent_values, R_NamesSymbol);
-  SEXP translation_ids = VECTOR_ELT(translation, 0);
-  SEXP original_ids = VECTOR_ELT(translation, 1);
-  SEXP owners = VECTOR_ELT(translation, 2);
-  const R_xlen_t size = XLENGTH(assignment);
-  if (TYPEOF(assignment_names) != STRSXP ||
-      XLENGTH(assignment_names) != size ||
-      TYPEOF(parent_sources) != STRSXP ||
-      XLENGTH(parent_sources) != XLENGTH(parent_values) ||
-      TYPEOF(translation_ids) != STRSXP ||
-      TYPEOF(original_ids) != STRSXP || TYPEOF(owners) != INTSXP ||
-      XLENGTH(original_ids) != XLENGTH(translation_ids) ||
-      XLENGTH(owners) != XLENGTH(translation_ids)) {
-    Rf_error("Internal error: malformed collection value source map");
-  }
-
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
-    const R_xlen_t translation_row = collection_source_row(
-      translation_ids,
-      original_ids,
-      owners,
-      child,
-      STRING_ELT(assignment_names, index),
-      work_since_interrupt
-    );
-    if (translation_row == R_XLEN_T_MAX) {
-      UNPROTECT(1);
-      Rf_error("Internal error: collection child value is not translated");
-    }
-    const R_xlen_t parent_index = find_name(
-      parent_names,
-      STRING_ELT(translation_ids, translation_row),
-      work_since_interrupt
-    );
-    if (parent_index < 0 || parent_index >= XLENGTH(parent_values)) {
-      UNPROTECT(1);
-      Rf_error("Internal error: collection child value has no source");
-    }
-    SET_STRING_ELT(
-      result,
-      index,
-      STRING_ELT(parent_sources, parent_index)
-    );
-  }
   UNPROTECT(1);
-  return result;
 }
 
 static void process_collection_write(value_write_transaction_t *transaction,
@@ -1909,25 +1842,28 @@ static void process_collection_write(value_write_transaction_t *transaction,
     Rf_error("Corrupt ParamSetCollection value transaction capsule");
   }
   SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
-  SEXP translation = VECTOR_ELT(state, PARADOX_CORE_TRANSLATION);
   SEXP plan = PROTECT(param_set_collection_store_plan(
     private_environment,
     task->self,
     sets,
-    task->values
+    task->values,
+    task->sources
   ));
   if (paradox_core_from_private(private_environment) != core) {
     UNPROTECT(1);
     Rf_error("ParamSetCollection changed while planning value assignment");
   }
-  if (TYPEOF(plan) != VECSXP || XLENGTH(plan) != 2) {
+  if (TYPEOF(plan) != VECSXP || XLENGTH(plan) != 3) {
     UNPROTECT(1);
     Rf_error("Internal error: malformed collection value plan");
   }
   SEXP order = VECTOR_ELT(plan, 0);
   SEXP assignments = VECTOR_ELT(plan, 1);
+  SEXP assignment_sources = VECTOR_ELT(plan, 2);
   if (TYPEOF(order) != INTSXP || TYPEOF(assignments) != VECSXP ||
-      XLENGTH(order) != XLENGTH(assignments)) {
+      TYPEOF(assignment_sources) != VECSXP ||
+      XLENGTH(order) != XLENGTH(assignments) ||
+      XLENGTH(order) != XLENGTH(assignment_sources)) {
     UNPROTECT(1);
     Rf_error("Internal error: malformed collection value plan entries");
   }
@@ -1944,18 +1880,13 @@ static void process_collection_write(value_write_transaction_t *transaction,
     const R_xlen_t child = (R_xlen_t) one_based_child - 1;
     SEXP child_self = VECTOR_ELT(sets, child);
     SEXP assignment = VECTOR_ELT(assignments, plan_index);
-    if (TYPEOF(child_self) != ENVSXP || TYPEOF(assignment) != VECSXP) {
+    SEXP sources = VECTOR_ELT(assignment_sources, plan_index);
+    if (TYPEOF(child_self) != ENVSXP || TYPEOF(assignment) != VECSXP ||
+        TYPEOF(sources) != STRSXP ||
+        XLENGTH(sources) != XLENGTH(assignment)) {
       UNPROTECT(1);
       Rf_error("Corrupt ParamSetCollection value plan child");
     }
-    SEXP sources = PROTECT(collection_child_sources(
-      assignment,
-      child,
-      translation,
-      task->values,
-      task->sources,
-      transaction->work_since_interrupt
-    ));
     push_write_task(
       transaction,
       child_self,
@@ -1965,7 +1896,6 @@ static void process_collection_write(value_write_transaction_t *transaction,
       sources,
       task->path
     );
-    UNPROTECT(1);
   }
   UNPROTECT(1);
 }
@@ -2341,14 +2271,18 @@ static SEXP apply_sanitized_values(value_write_transaction_t *transaction,
       UNPROTECT(1);
       Rf_error("Internal error: malformed sanitized ParamSet target map");
     }
+    /* Rf_match(table, x): every source's position among the sanitized
+     * names, in one hashed pass rather than one scan per value. A missing
+     * (NA) source marks a value with no root input entry; it is kept as is. */
+    SEXP matches = PROTECT(Rf_match(stable_names, target->sources, 0));
+    if (TYPEOF(matches) != INTSXP || XLENGTH(matches) != input_size) {
+      UNPROTECT(2);
+      Rf_error("Internal error: invalid sanitized ParamSet source match");
+    }
     R_xlen_t output_size = 0;
     for (R_xlen_t index = 0; index < input_size; ++index) {
-      SEXP source = STRING_ELT(target->sources, index);
-      if (source == NA_STRING || find_name(
-          stable_names,
-          source,
-          transaction->work_since_interrupt
-        ) >= 0) {
+      if (STRING_ELT(target->sources, index) == NA_STRING ||
+          INTEGER_ELT(matches, index) > 0) {
         ++output_size;
       }
     }
@@ -2359,22 +2293,19 @@ static SEXP apply_sanitized_values(value_write_transaction_t *transaction,
       SEXP source = STRING_ELT(target->sources, index);
       SEXP value = VECTOR_ELT(target->values, index);
       if (source != NA_STRING) {
-        const R_xlen_t source_index = find_name(
-          stable_names,
-          source,
-          transaction->work_since_interrupt
-        );
-        if (source_index < 0) {
+        const int matched = INTEGER_ELT(matches, index);
+        if (matched <= 0) {
           continue;
         }
+        const R_xlen_t source_index = (R_xlen_t) matched - 1;
         if (source_index >= XLENGTH(stable)) {
-          UNPROTECT(3);
+          UNPROTECT(4);
           Rf_error("Internal error: invalid sanitized ParamSet value source");
         }
         value = VECTOR_ELT(stable, source_index);
       }
       if (output >= output_size) {
-        UNPROTECT(3);
+        UNPROTECT(4);
         Rf_error("Internal error: sanitized ParamSet target overflow");
       }
       SET_VECTOR_ELT(values, output, value);
@@ -2382,13 +2313,13 @@ static SEXP apply_sanitized_values(value_write_transaction_t *transaction,
       ++output;
     }
     if (output != output_size) {
-      UNPROTECT(3);
+      UNPROTECT(4);
       Rf_error("Internal error: incomplete sanitized ParamSet target");
     }
     Rf_setAttrib(values, R_NamesSymbol, names);
     target->values = values;
     value_transaction_retain(transaction, values);
-    UNPROTECT(2);
+    UNPROTECT(3);
   }
   UNPROTECT(1);
   return stable;
@@ -2505,6 +2436,9 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
     SEXP values, int validate, SEXP internal_tuning_receipts,
     SEXP expected_root_core, SEXP expected_policy) {
   (void) initialize_value_core_symbol();
+  /* `setNames(values, ids)` on a referenced list of 64 or more values is a
+   * base wrapper ALTREP; own one ordinary copy before the plain-list gate. */
+  values = PROTECT(paradox_materialize_public_list_shell(values));
   R_xlen_t work_since_interrupt = 0;
   PROTECT_INDEX roots_index;
   SEXP roots;
@@ -2548,7 +2482,7 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
   );
   if (transaction.root_kind != PARADOX_CORE_BASE &&
       paradox_core_state_epoch_value() != planning_epoch) {
-    UNPROTECT(2);
+    UNPROTECT(3);
     Rf_error("ParamSet value transaction graph changed while being planned");
   }
   validate_target_generations(&transaction);
@@ -2592,7 +2526,7 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
   if (!validate) {
     result = unvalidated_transaction_result(&transaction, stable_values);
   }
-  UNPROTECT(2);
+  UNPROTECT(3);
   return result;
 }
 

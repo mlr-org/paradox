@@ -88,6 +88,18 @@ enum node_root_slot {
   NODE_ROOT_COUNT
 };
 
+/* Most operations resolve no local name at all, so neither index is built
+ * until the first lookup. The record lives in operation-local scratch behind
+ * a pointer so a lookup through a borrowed const node can fill it in. */
+typedef struct {
+  id_map_t local_ids;
+  int local_ids_ready;
+  id_map_t stored_value_ids;
+  int stored_value_ids_ready;
+  id_map_t translation_ids;
+  int translation_ids_ready;
+} node_lazy_index_t;
+
 typedef struct {
   SEXP roots;
   SEXP self;
@@ -126,6 +138,9 @@ typedef struct {
   int subtree_contributes;
   int postfix;
   int semantic;
+  /* Lazily built identifier indexes over this node's own parameter IDs and
+   * stored value names; see `node_lazy_index_t`. */
+  node_lazy_index_t *lazy;
 } check_node_t;
 
 typedef struct {
@@ -137,7 +152,9 @@ typedef struct {
 
 typedef struct {
   check_graph_t graph;
+  /* Specs are loaded on first use per row; see `plan_spec()`. */
   value_spec_t *specs;
+  unsigned char *spec_ready;
   id_map_t root_ids;
   R_xlen_t parameter_count;
   SEXP root_params;
@@ -399,15 +416,69 @@ static int find_id(const id_map_t *map, SEXP id, R_xlen_t *row,
   return paradox_domain_id_map_find(map, id, row, work_since_interrupt);
 }
 
+/* A node's identifier column is immutable for the plan's lifetime, so the
+ * index is built on the first lookup and reused by every later one. */
 static R_xlen_t local_param_row(const check_node_t *node, SEXP id,
     R_xlen_t *work_since_interrupt) {
-  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
-    paradox_account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(
-        STRING_ELT(node->checked_params.ids, row), id
-      )) return row;
+  node_lazy_index_t *lazy = node->lazy;
+  if (!lazy->local_ids_ready) {
+    initialize_id_map(node->checked_params.ids, &lazy->local_ids);
+    lazy->local_ids_ready = TRUE;
   }
-  return R_XLEN_T_MAX;
+  R_xlen_t row = R_XLEN_T_MAX;
+  return find_id(&lazy->local_ids, id, &row, work_since_interrupt)
+    ? row
+    : R_XLEN_T_MAX;
+}
+
+/* Row of a collection node's translation table by exposed ID, or
+ * R_XLEN_T_MAX. Exposed IDs are unique by construction of the flatten. */
+static R_xlen_t local_translation_row(const check_node_t *node, SEXP id,
+    R_xlen_t *work_since_interrupt) {
+  node_lazy_index_t *lazy = node->lazy;
+  if (!lazy->translation_ids_ready) {
+    switch (paradox_domain_id_map_init(
+        VECTOR_ELT(node->translation, 0),
+        &lazy->translation_ids
+      )) {
+    case PARADOX_DOMAIN_ID_MAP_OK:
+      break;
+    case PARADOX_DOMAIN_ID_MAP_DUPLICATE:
+      Rf_error("Corrupt ParamSetCollection translation: duplicate exposed identifier");
+    default:
+      Rf_error("ParamSet contains too many parameters");
+    }
+    lazy->translation_ids_ready = TRUE;
+  }
+  R_xlen_t row = R_XLEN_T_MAX;
+  return find_id(&lazy->translation_ids, id, &row, work_since_interrupt)
+    ? row
+    : R_XLEN_T_MAX;
+}
+
+/* Position of a stored value by name, or R_XLEN_T_MAX. Stored value names
+ * are unique by construction of every value write. */
+static R_xlen_t local_stored_value_row(const check_node_t *node, SEXP id,
+    R_xlen_t *work_since_interrupt) {
+  node_lazy_index_t *lazy = node->lazy;
+  if (!lazy->stored_value_ids_ready) {
+    switch (paradox_domain_id_map_init(
+        node->checked_values.names,
+        &lazy->stored_value_ids
+      )) {
+    case PARADOX_DOMAIN_ID_MAP_OK:
+      break;
+    case PARADOX_DOMAIN_ID_MAP_DUPLICATE:
+      Rf_error("Corrupt ParamSet state: duplicate stored value name");
+    default:
+      Rf_error("ParamSet contains too many stored values");
+    }
+    lazy->stored_value_ids_ready = TRUE;
+  }
+  R_xlen_t row = R_XLEN_T_MAX;
+  return find_id(&lazy->stored_value_ids, id, &row, work_since_interrupt)
+    ? row
+    : R_XLEN_T_MAX;
 }
 
 /* A dependency parent that names nothing in its own node is resolved outward
@@ -491,6 +562,10 @@ static void reserve_graph(check_graph_t *graph) {
   graph->capacity = capacity;
 }
 
+/* Collections with at most this many children compare their affixing names
+ * pairwise; wider graphs hash them once. Both decide identically. */
+#define EXACT_SETS_LINEAR_LIMIT ((R_xlen_t) 32)
+
 static int exact_sets(SEXP sets, SEXP *names,
     R_xlen_t *work_since_interrupt) {
   if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
@@ -509,7 +584,9 @@ static int exact_sets(SEXP sets, SEXP *names,
     UNPROTECT(1);
     return FALSE;
   }
-  for (R_xlen_t right = 0; right < XLENGTH(sets); ++right) {
+  const R_xlen_t set_count = XLENGTH(sets);
+  R_xlen_t affixed_count = 0;
+  for (R_xlen_t right = 0; right < set_count; ++right) {
     paradox_account_work(work_since_interrupt);
     SEXP right_name = STRING_ELT(observed_names, right);
     if (right_name == NA_STRING || Rf_getCharCE(right_name) == CE_BYTES) {
@@ -517,6 +594,10 @@ static int exact_sets(SEXP sets, SEXP *names,
       return FALSE;
     }
     if (CHAR(right_name)[0] == '\0') continue;
+    ++affixed_count;
+    /* Small graphs compare in place; wide ones hash the affixing names once
+     * below instead of paying a product of the set count. */
+    if (set_count > EXACT_SETS_LINEAR_LIMIT) continue;
     for (R_xlen_t left = 0; left < right; ++left) {
       if (paradox_domain_strings_equal(
           STRING_ELT(observed_names, left), right_name
@@ -524,6 +605,21 @@ static int exact_sets(SEXP sets, SEXP *names,
         UNPROTECT(1);
         return FALSE;
       }
+    }
+  }
+  if (set_count > EXACT_SETS_LINEAR_LIMIT && affixed_count > 1) {
+    SEXP affixed = PROTECT(Rf_allocVector(STRSXP, affixed_count));
+    R_xlen_t output = 0;
+    for (R_xlen_t index = 0; index < set_count; ++index) {
+      SEXP name = STRING_ELT(observed_names, index);
+      if (CHAR(name)[0] == '\0') continue;
+      SET_STRING_ELT(affixed, output++, name);
+    }
+    const int duplicated = paradox_domain_strings_have_duplicates(affixed);
+    UNPROTECT(1);
+    if (duplicated) {
+      UNPROTECT(1);
+      return FALSE;
     }
   }
   *names = observed_names;
@@ -836,6 +932,18 @@ static void validate_node_schema(check_node_t *node,
   }
 }
 
+/* Below this product of child and translation rows, two nested linear scans
+ * beat building the hashed indexes. Both branches decide identically. */
+#define CHILD_ROOT_IDS_LINEAR_LIMIT ((R_xlen_t) 1024)
+
+/*
+ * Root spellings of a child's parameters: child row -> its translation row
+ * (the one whose owner is this child and whose original ID is the child's
+ * ID) -> the exposed ID -> the parent's row -> the parent's root spelling.
+ * The translation table is keyed by exposed ID, so its rows are not in child
+ * order; the general case indexes the owner's original IDs once instead of
+ * scanning every translation row for every child row.
+ */
 static SEXP child_root_ids(const check_graph_t *graph, R_xlen_t parent_index,
     R_xlen_t child_position, const paradox_domain_params_t *child_params,
     R_xlen_t *work_since_interrupt) {
@@ -845,53 +953,109 @@ static SEXP child_root_ids(const check_graph_t *graph, R_xlen_t parent_index,
   SEXP originals = VECTOR_ELT(translation, 1);
   SEXP owners = VECTOR_ELT(translation, 2);
   const R_xlen_t owner = child_position + 1;
+  const R_xlen_t rows = XLENGTH(exposed);
+  const R_xlen_t child_rows = child_params->row_count;
   R_xlen_t owner_rows = 0;
-  for (R_xlen_t row = 0; row < XLENGTH(exposed); ++row) {
+  for (R_xlen_t row = 0; row < rows; ++row) {
     if (INTEGER_ELT(owners, row) == owner) ++owner_rows;
   }
-  if (owner_rows != child_params->row_count) {
+  if (owner_rows != child_rows) {
     Rf_error("Corrupt ParamSetCollection translation: child schema size mismatch");
   }
 
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, child_params->row_count));
-  for (R_xlen_t child_row = 0;
-      child_row < child_params->row_count; ++child_row) {
-    paradox_account_work(work_since_interrupt);
-    SEXP child_id = STRING_ELT(child_params->ids, child_row);
-    R_xlen_t match = R_XLEN_T_MAX;
-    for (R_xlen_t row = 0; row < XLENGTH(exposed); ++row) {
-      if (INTEGER_ELT(owners, row) == owner &&
-          paradox_domain_strings_equal(
-            STRING_ELT(originals, row), child_id
-          )) {
-        if (match != R_XLEN_T_MAX) {
-          UNPROTECT(1);
-          Rf_error("Corrupt ParamSetCollection translation: duplicate child identifier");
+  SEXP result = PROTECT(Rf_allocVector(STRSXP, child_rows));
+  if (child_rows == 0) {
+    UNPROTECT(1);
+    return result;
+  }
+  if (rows <= CHILD_ROOT_IDS_LINEAR_LIMIT / child_rows) {
+    for (R_xlen_t child_row = 0; child_row < child_rows; ++child_row) {
+      paradox_account_work(work_since_interrupt);
+      SEXP child_id = STRING_ELT(child_params->ids, child_row);
+      R_xlen_t match = R_XLEN_T_MAX;
+      for (R_xlen_t row = 0; row < rows; ++row) {
+        if (INTEGER_ELT(owners, row) == owner &&
+            paradox_domain_strings_equal(
+              STRING_ELT(originals, row), child_id
+            )) {
+          if (match != R_XLEN_T_MAX) {
+            UNPROTECT(1);
+            Rf_error("Corrupt ParamSetCollection translation: duplicate child identifier");
+          }
+          match = row;
         }
-        match = row;
       }
+      if (match == R_XLEN_T_MAX) {
+        UNPROTECT(1);
+        Rf_error("Corrupt ParamSetCollection translation: missing child identifier");
+      }
+      R_xlen_t parent_row = R_XLEN_T_MAX;
+      for (R_xlen_t row = 0; row < parent->checked_params.row_count; ++row) {
+        if (paradox_domain_strings_equal(
+            STRING_ELT(parent->checked_params.ids, row),
+            STRING_ELT(exposed, match)
+          )) {
+          parent_row = row;
+          break;
+        }
+      }
+      if (parent_row == R_XLEN_T_MAX) {
+        UNPROTECT(1);
+        Rf_error("Corrupt ParamSetCollection translation: exposed identifier is unknown");
+      }
+      SET_STRING_ELT(result, child_row, STRING_ELT(parent->root_ids, parent_row));
     }
-    if (match == R_XLEN_T_MAX) {
-      UNPROTECT(1);
+    UNPROTECT(1);
+    return result;
+  }
+
+  SEXP owner_originals = PROTECT(Rf_allocVector(STRSXP, owner_rows));
+  R_xlen_t *owner_translation_rows = paradox_temporary_alloc(
+    owner_rows,
+    sizeof(*owner_translation_rows)
+  );
+  R_xlen_t selected = 0;
+  for (R_xlen_t row = 0; row < rows; ++row) {
+    if (INTEGER_ELT(owners, row) != owner) continue;
+    SET_STRING_ELT(owner_originals, selected, STRING_ELT(originals, row));
+    owner_translation_rows[selected] = row;
+    ++selected;
+  }
+  id_map_t owner_ids;
+  switch (paradox_domain_id_map_init(owner_originals, &owner_ids)) {
+  case PARADOX_DOMAIN_ID_MAP_OK:
+    break;
+  case PARADOX_DOMAIN_ID_MAP_DUPLICATE:
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSetCollection translation: duplicate child identifier");
+  default:
+    UNPROTECT(2);
+    Rf_error("ParamSet contains too many parameters");
+  }
+  for (R_xlen_t child_row = 0; child_row < child_rows; ++child_row) {
+    paradox_account_work(work_since_interrupt);
+    R_xlen_t selected_row = R_XLEN_T_MAX;
+    if (!find_id(
+        &owner_ids,
+        STRING_ELT(child_params->ids, child_row),
+        &selected_row,
+        work_since_interrupt
+      )) {
+      UNPROTECT(2);
       Rf_error("Corrupt ParamSetCollection translation: missing child identifier");
     }
-    R_xlen_t parent_row = R_XLEN_T_MAX;
-    for (R_xlen_t row = 0; row < parent->checked_params.row_count; ++row) {
-      if (paradox_domain_strings_equal(
-          STRING_ELT(parent->checked_params.ids, row),
-          STRING_ELT(exposed, match)
-        )) {
-        parent_row = row;
-        break;
-      }
-    }
+    const R_xlen_t parent_row = local_param_row(
+      parent,
+      STRING_ELT(exposed, owner_translation_rows[selected_row]),
+      work_since_interrupt
+    );
     if (parent_row == R_XLEN_T_MAX) {
-      UNPROTECT(1);
+      UNPROTECT(2);
       Rf_error("Corrupt ParamSetCollection translation: exposed identifier is unknown");
     }
     SET_STRING_ELT(result, child_row, STRING_ELT(parent->root_ids, parent_row));
   }
-  UNPROTECT(1);
+  UNPROTECT(2);
   return result;
 }
 
@@ -900,7 +1064,7 @@ static void initialize_node(SEXP self, SEXP private_environment,
     check_graph_t *graph,
     check_node_t *node, SEXP *root_plan, PROTECT_INDEX root_plan_index,
     R_xlen_t *work_since_interrupt, SEXP selected_core,
-    int heal, int retain_receipt) {
+    int heal, int retain_receipt, int admit_schema) {
   node->roots = append_node_roots(
     root_plan, root_plan_index, self, private_environment
   );
@@ -916,6 +1080,10 @@ static void initialize_node(SEXP self, SEXP private_environment,
   node->subtree_contributes = FALSE;
   node->postfix = FALSE;
   node->semantic = semantic;
+  node->lazy = paradox_temporary_alloc(1, sizeof(*node->lazy));
+  node->lazy->local_ids_ready = FALSE;
+  node->lazy->stored_value_ids_ready = FALSE;
+  node->lazy->translation_ids_ready = FALSE;
 
   if (TYPEOF(self) != ENVSXP || TYPEOF(private_environment) != ENVSXP) {
     Rf_error("Corrupt ParamSet graph: node shell is not an environment");
@@ -1108,7 +1276,18 @@ static void initialize_node(SEXP self, SEXP private_environment,
   if (node->extra_trafo != R_NilValue && !Rf_isFunction(node->extra_trafo)) {
     Rf_error("Corrupt ParamSet state: extra_trafo must be a function or NULL");
   }
-  validate_node_schema(node, work_since_interrupt);
+  /*
+   * Semantic admission of the private tag, stored-value, transformation, and
+   * dependency tables belongs to the read-only migration preflight, which
+   * certifies whole serialized graphs, and to ObjectTuneToken candidate
+   * admission, whose content is a public argument. An ordinary operation
+   * interprets only the rows it consumes: the activity mapping resolves each
+   * dependency it enforces, stored values and tags are looked up by name
+   * where they are read, and the transformation engine admits its own table.
+   * Replaying the complete scan here made every check and value write
+   * quadratic in the parameter count.
+   */
+  if (admit_schema) validate_node_schema(node, work_since_interrupt);
 
   if (parent == R_XLEN_T_MAX ||
       graph->nodes[parent].kind == PARADOX_CORE_SHADOW) {
@@ -1252,7 +1431,7 @@ static void build_graph(SEXP private_environment, SEXP self,
   initialize_node(
     self, private_environment, R_XLEN_T_MAX, R_XLEN_T_MAX, TRUE, graph,
     &graph->nodes[0], root_plan, root_plan_index, &work_since_interrupt,
-    selected_root_core, heal, retain_receipt
+    selected_root_core, heal, retain_receipt, !heal
   );
   graph->count = 1;
   graph->path[0] = 0;
@@ -1301,7 +1480,7 @@ static void build_graph(SEXP private_environment, SEXP self,
         node->kind == PARADOX_CORE_COLLECTION ? node->semantic : FALSE,
         graph,
         &graph->nodes[child_index], root_plan, root_plan_index,
-        &work_since_interrupt, R_NilValue, heal, retain_receipt
+        &work_since_interrupt, R_NilValue, heal, retain_receipt, !heal
       );
       UNPROTECT(2);
       ++graph->nodes[node_index].next_child;
@@ -1572,17 +1751,13 @@ static R_xlen_t internal_tuning_terminal(
       Rf_error("Corrupt ParamSet graph: unsupported internal-tuning node");
     }
 
-    SEXP exposed = VECTOR_ELT(node->translation, 0);
     SEXP originals = VECTOR_ELT(node->translation, 1);
     SEXP owners = VECTOR_ELT(node->translation, 2);
-    R_xlen_t translation_row = R_XLEN_T_MAX;
-    for (R_xlen_t row = 0; row < XLENGTH(exposed); ++row) {
-      paradox_account_work(work_since_interrupt);
-      if (paradox_domain_strings_equal(STRING_ELT(exposed, row), *id)) {
-        translation_row = row;
-        break;
-      }
-    }
+    const R_xlen_t translation_row = local_translation_row(
+      node,
+      *id,
+      work_since_interrupt
+    );
     if (translation_row == R_XLEN_T_MAX) {
       Rf_error("Corrupt ParamSetCollection internal-tuning translation");
     }
@@ -1597,25 +1772,6 @@ static R_xlen_t internal_tuning_terminal(
       (R_xlen_t) owner - 1
     );
   }
-}
-
-static int internal_tuning_row_has_tag(
-    const check_node_t *root, R_xlen_t parameter_row, const char *tag,
-    R_xlen_t *work_since_interrupt) {
-  SEXP id = STRING_ELT(root->checked_params.ids, parameter_row);
-  for (R_xlen_t row = 0; row < root->checked_tags.row_count; ++row) {
-    paradox_account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(
-          STRING_ELT(root->checked_tags.ids, row),
-          id
-        ) && paradox_domain_string_is(
-          STRING_ELT(root->checked_tags.values, row),
-          tag
-        )) {
-      return TRUE;
-    }
-  }
-  return FALSE;
 }
 
 SEXP paradox_param_set_internal_tuning_snapshot(
@@ -1700,6 +1856,31 @@ SEXP paradox_param_set_internal_tuning_snapshot(
   SEXP internal_tuning = PROTECT(Rf_allocVector(LGLSXP, size));
   SEXP root_cargo = VECTOR_ELT(root->params, PARADOX_DOMAIN_CARGO);
 
+  /* One pass over the root tag rows marks every internally tuned parameter,
+   * instead of rescanning the whole tag table once per selected ID. A tag
+   * row naming no parameter is inert here, exactly as in the linear scan. */
+  const R_xlen_t root_row_count = root->checked_params.row_count;
+  unsigned char *tuned = paradox_temporary_alloc(
+    root_row_count == 0 ? 1 : root_row_count,
+    sizeof(*tuned)
+  );
+  memset(tuned, 0, (size_t) (root_row_count == 0 ? 1 : root_row_count));
+  for (R_xlen_t row = 0; row < root->checked_tags.row_count; ++row) {
+    paradox_account_work(&work_since_interrupt);
+    if (!paradox_domain_string_is(
+        STRING_ELT(root->checked_tags.values, row),
+        "internal_tuning"
+      )) {
+      continue;
+    }
+    const R_xlen_t tagged_row = local_param_row(
+      root,
+      STRING_ELT(root->checked_tags.ids, row),
+      &work_since_interrupt
+    );
+    if (tagged_row != R_XLEN_T_MAX) tuned[tagged_row] = 1U;
+  }
+
   for (R_xlen_t index = 0; index < size; ++index) {
     SEXP exposed_id = STRING_ELT(stable_ids, index);
     const R_xlen_t root_row = local_param_row(
@@ -1720,16 +1901,7 @@ SEXP paradox_param_set_internal_tuning_snapshot(
     terminal_nodes[index] = terminal;
     SET_STRING_ELT(original_ids, index, original_id);
     SET_VECTOR_ELT(cargo, index, VECTOR_ELT(root_cargo, root_row));
-    SET_LOGICAL_ELT(
-      internal_tuning,
-      index,
-      internal_tuning_row_has_tag(
-        root,
-        root_row,
-        "internal_tuning",
-        &work_since_interrupt
-      )
-    );
+    SET_LOGICAL_ELT(internal_tuning, index, tuned[root_row] != 0U);
 
     R_xlen_t route = 0;
     while (route < route_count && route_nodes[route] != terminal) ++route;
@@ -1781,21 +1953,21 @@ SEXP paradox_param_set_internal_tuning_snapshot(
       PROTECT(root_values);
     } else {
       R_xlen_t stored_count = 0;
+      R_xlen_t *stored_rows = paradox_temporary_alloc(
+        size == 0 ? 1 : size,
+        sizeof(*stored_rows)
+      );
       for (R_xlen_t row = 0; row < size; ++row) {
+        paradox_account_work(&work_since_interrupt);
         const check_node_t *terminal = &graph.nodes[terminal_nodes[row]];
-        SEXP local_id = STRING_ELT(original_ids, row);
-        for (R_xlen_t stored = 0;
-            stored < terminal->checked_values.size;
-            ++stored) {
-          paradox_account_work(&work_since_interrupt);
-          if (paradox_domain_strings_equal(
-              STRING_ELT(terminal->checked_values.names, stored),
-              local_id
-            )) {
-            ++stored_count;
-            break;
-          }
-        }
+        stored_rows[row] = terminal->checked_values.size == 0
+          ? R_XLEN_T_MAX
+          : local_stored_value_row(
+              terminal,
+              STRING_ELT(original_ids, row),
+              &work_since_interrupt
+            );
+        if (stored_rows[row] != R_XLEN_T_MAX) ++stored_count;
       }
       root_values = PROTECT(Rf_allocVector(VECSXP, stored_count));
       SEXP root_value_names = PROTECT(Rf_allocVector(
@@ -1804,35 +1976,24 @@ SEXP paradox_param_set_internal_tuning_snapshot(
       ));
       R_xlen_t output = 0;
       for (R_xlen_t row = 0; row < size; ++row) {
+        const R_xlen_t stored = stored_rows[row];
+        if (stored == R_XLEN_T_MAX) continue;
         const check_node_t *terminal = &graph.nodes[terminal_nodes[row]];
-        SEXP local_id = STRING_ELT(original_ids, row);
-        for (R_xlen_t stored = 0;
-            stored < terminal->checked_values.size;
-            ++stored) {
-          paradox_account_work(&work_since_interrupt);
-          if (!paradox_domain_strings_equal(
-              STRING_ELT(terminal->checked_values.names, stored),
-              local_id
-            )) {
-            continue;
-          }
-          if (output >= stored_count) {
-            UNPROTECT(9);
-            Rf_error("Internal error: root-value snapshot overflow");
-          }
-          SET_VECTOR_ELT(
-            root_values,
-            output,
-            VECTOR_ELT(terminal->checked_values.values, stored)
-          );
-          SET_STRING_ELT(
-            root_value_names,
-            output,
-            STRING_ELT(stable_ids, row)
-          );
-          ++output;
-          break;
+        if (output >= stored_count) {
+          UNPROTECT(9);
+          Rf_error("Internal error: root-value snapshot overflow");
         }
+        SET_VECTOR_ELT(
+          root_values,
+          output,
+          VECTOR_ELT(terminal->checked_values.values, stored)
+        );
+        SET_STRING_ELT(
+          root_value_names,
+          output,
+          STRING_ELT(stable_ids, row)
+        );
+        ++output;
       }
       if (output != stored_count) {
         UNPROTECT(9);
@@ -1863,19 +2024,16 @@ SEXP paradox_param_set_internal_tuning_snapshot(
     for (R_xlen_t stored = 0; stored < stored_count; ++stored) {
       paradox_account_work(&work_since_interrupt);
       SEXP stored_name = STRING_ELT(node->checked_values.names, stored);
-      int typed = TRUE;
-      for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
-        if (paradox_domain_strings_equal(
-            STRING_ELT(node->checked_params.ids, row),
-            stored_name
-          )) {
-          typed = !paradox_domain_string_is(
-            STRING_ELT(node->checked_params.classes, row),
-            "ParamUty"
-          );
-          break;
-        }
-      }
+      const R_xlen_t row = local_param_row(
+        node,
+        stored_name,
+        &work_since_interrupt
+      );
+      const int typed = row == R_XLEN_T_MAX ||
+        !paradox_domain_string_is(
+          STRING_ELT(node->checked_params.classes, row),
+          "ParamUty"
+        );
       SEXP detached = PROTECT(paradox_detach_stored_value_leaf(
         VECTOR_ELT(node->checked_values.values, stored),
         typed
@@ -2194,10 +2352,44 @@ static void initialize_check_plan(check_plan_t *plan) {
     plan->parameter_count == 0 ? 1 : plan->parameter_count,
     sizeof(*plan->specs)
   );
-  for (R_xlen_t row = 0; row < plan->parameter_count; ++row) {
-    plan->specs[row] = load_spec(plan->root_params, row);
-  }
+  plan->spec_ready = paradox_temporary_alloc(
+    plan->parameter_count == 0 ? 1 : plan->parameter_count,
+    sizeof(*plan->spec_ready)
+  );
+  memset(
+    plan->spec_ready,
+    0,
+    (size_t) (plan->parameter_count == 0 ? 1 : plan->parameter_count)
+  );
   initialize_id_map(root->checked_params.ids, &plan->root_ids);
+}
+
+/*
+ * A row's spec is interpreted the first time an operation touches that row.
+ * Checking one value against a wide space no longer classifies every other
+ * parameter first. The spec array lives in operation-local scratch and is
+ * filled through the borrowed (logically const) plan pointer.
+ */
+static const value_spec_t *plan_spec(const check_plan_t *plan,
+    R_xlen_t row) {
+  if (!plan->spec_ready[row]) {
+    plan->specs[row] = load_spec(plan->root_params, row);
+    plan->spec_ready[row] = 1U;
+  }
+  return &plan->specs[row];
+}
+
+/* A point covering at least half of the parameters touches nearly every
+ * spec. Loading the remainder in one pass over the table keeps its columns
+ * cache-resident instead of interleaving each load with value ownership. */
+static void preload_specs(const check_plan_t *plan, R_xlen_t point_size) {
+  if (point_size < (plan->parameter_count + 1) / 2) return;
+  for (R_xlen_t row = 0; row < plan->parameter_count; ++row) {
+    if (!plan->spec_ready[row]) {
+      plan->specs[row] = load_spec(plan->root_params, row);
+      plan->spec_ready[row] = 1U;
+    }
+  }
 }
 
 static void build_check_plan(SEXP private_environment, SEXP self,
@@ -2233,7 +2425,8 @@ static void build_exact_base_check_plan(SEXP private_environment, SEXP self,
     &work_since_interrupt,
     selected_core,
     TRUE,
-    FALSE
+    FALSE,
+    TRUE
   );
   plan->graph.count = 1;
   plan->graph.path[0] = 0;
@@ -2385,7 +2578,7 @@ static token_param_set_admission_t admit_token_param_set_base(
   for (R_xlen_t row = 0;
       row < candidate_plan.parameter_count && bounded; ++row) {
     paradox_account_work(work_since_interrupt);
-    const value_spec_t *candidate = &candidate_plan.specs[row];
+    const value_spec_t *candidate = plan_spec(&candidate_plan, row);
     bounded = candidate->kind == VALUE_FCT ||
       candidate->kind == VALUE_LGL ||
       ((candidate->kind == VALUE_DBL || candidate->kind == VALUE_INT) &&
@@ -3311,7 +3504,18 @@ static int ordinary_names_vector(SEXP value, R_xlen_t expected,
     XLENGTH(value) == expected;
 }
 
+static SEXP snapshot_named_list_impl(SEXP values);
+
+/* Every public point enters here. A base `names<-` wrapper ALTREP over a
+ * plain list is materialized once before the ordinary-shell gate. */
 static SEXP snapshot_named_list(SEXP values) {
+  values = PROTECT(paradox_materialize_public_list_shell(values));
+  SEXP result = PROTECT(snapshot_named_list_impl(values));
+  UNPROTECT(2);
+  return result;
+}
+
+static SEXP snapshot_named_list_impl(SEXP values) {
   if (TYPEOF(values) != VECSXP) {
     return check_message(
       "Must be a list, not '%s'",
@@ -3387,7 +3591,16 @@ static SEXP snapshot_named_list(SEXP values) {
  * The returned ordinary named list is the sole authority for both names and
  * leaves after this function returns.
  */
+static SEXP snapshot_search_space_value_carrier_impl(SEXP values);
+
 static SEXP snapshot_search_space_value_carrier(SEXP values) {
+  values = PROTECT(paradox_materialize_public_list_shell(values));
+  SEXP result = PROTECT(snapshot_search_space_value_carrier_impl(values));
+  UNPROTECT(2);
+  return result;
+}
+
+static SEXP snapshot_search_space_value_carrier_impl(SEXP values) {
   static const char *const allowed_attributes[] = {"names", "class"};
   if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isS4(values) ||
       !paradox_api_has_only_attributes(values, allowed_attributes, 2)) {
@@ -3794,6 +4007,7 @@ static SEXP initialize_point(SEXP stable_values, const check_plan_t *plan,
     point->param_rows[index] = row;
     point->value_for_param[row] = index;
   }
+  preload_specs(plan, point->size);
   if (!values_are_stable) {
     /*
      * Name admission above is callback-free and complete before a semantic
@@ -3804,7 +4018,7 @@ static SEXP initialize_point(SEXP stable_values, const check_plan_t *plan,
       SEXP value = PROTECT(VECTOR_ELT(point->values, index));
       SEXP stable = PROTECT(snapshot_value_for_spec(
         value,
-        &plan->specs[point->param_rows[index]]
+        plan_spec(plan, point->param_rows[index])
       ));
       SET_VECTOR_ELT(point->values, index, stable);
       UNPROTECT(2);
@@ -4290,11 +4504,34 @@ static SEXP check_presence(check_plan_t *plan, const point_t *point,
   R_xlen_t plain_count = 0;
   R_xlen_t active_count = 0;
   R_xlen_t work_since_interrupt = 0;
+  /* One pass over the tag rows marks every required parameter, instead of
+   * rescanning the whole tag table for each absent parameter. A tag row that
+   * names no parameter is inert here, exactly as in the per-row scan. */
+  unsigned char *required = NULL;
+  if (presence == PRESENCE_REQUIRED) {
+    required = paradox_temporary_alloc(
+      count == 0 ? 1 : count, sizeof(*required)
+    );
+    memset(required, 0, (size_t) (count == 0 ? 1 : count));
+    SEXP tag_ids = VECTOR_ELT(plan->root_tags, 0);
+    SEXP tag_values = VECTOR_ELT(plan->root_tags, 1);
+    for (R_xlen_t tag_row = 0; tag_row < XLENGTH(tag_ids); ++tag_row) {
+      paradox_account_work(&work_since_interrupt);
+      R_xlen_t tagged = R_XLEN_T_MAX;
+      if (paradox_domain_string_is(STRING_ELT(tag_values, tag_row), "required") &&
+          find_id(
+            &plan->root_ids,
+            STRING_ELT(tag_ids, tag_row),
+            &tagged,
+            &work_since_interrupt
+          )) {
+        required[tagged] = 1U;
+      }
+    }
+  }
   for (R_xlen_t row = 0; row < count; ++row) {
     if (point->value_for_param[row] != R_XLEN_T_MAX) continue;
-    SEXP id = STRING_ELT(plan->root_ids.ids, row);
-    if (presence == PRESENCE_REQUIRED &&
-        !has_tag(plan, id, "required", &work_since_interrupt)) continue;
+    if (presence == PRESENCE_REQUIRED && !required[row]) continue;
     if (!plan->has_dependency[row]) {
       plain_missing[row] = 1;
       ++plain_count;
@@ -4587,11 +4824,11 @@ static SEXP validate_initialized_point(check_plan_t *plan,
     if (token_claim != TOKEN_CLAIM_EXACT) {
       UNPROTECT(protected_count);
       return utf8_message_1(
-        "", plan->specs[point->param_rows[index]].id,
+        "", plan_spec(plan, point->param_rows[index])->id,
         ": tune token invalid: malformed token"
       );
     }
-    const value_spec_t *spec = &plan->specs[point->param_rows[index]];
+    const value_spec_t *spec = plan_spec(plan, point->param_rows[index]);
     const int internal =
       token_kind == TOKEN_SNAPSHOT_INTERNAL_FULL ||
       token_kind == TOKEN_SNAPSHOT_INTERNAL_RANGE;
@@ -4643,7 +4880,7 @@ static SEXP validate_initialized_point(check_plan_t *plan,
   for (R_xlen_t index = 0; index < point->size; ++index) {
     paradox_account_work(&work_since_interrupt);
     const R_xlen_t row = point->param_rows[index];
-    const value_spec_t *spec = &plan->specs[row];
+    const value_spec_t *spec = plan_spec(plan, row);
     SEXP value = VECTOR_ELT(point->values, index);
     SEXP failure = R_NilValue;
     if (!semantic_leaf_is_tune_token(value)) {
@@ -4754,7 +4991,7 @@ static void stabilize_table_list_columns(
       /* initialize_point() owns the ordinary unavailable-ID diagnostic. */
       continue;
     }
-    const value_spec_t *spec = &plan->specs[parameter];
+    const value_spec_t *spec = plan_spec(plan, parameter);
     for (R_xlen_t row = 0; row < XLENGTH(values); ++row) {
       paradox_account_work(&work_since_interrupt);
       SEXP value = PROTECT(VECTOR_ELT(values, row));
@@ -5111,7 +5348,7 @@ SEXP paradox_param_set_check_builtin(SEXP private_environment, SEXP self,
 SEXP paradox_param_set_check_dependencies_builtin(
     SEXP private_environment, SEXP self, SEXP values) {
   static const char *const allowed_attributes[] = {"names"};
-  if (TYPEOF(values) != VECSXP || ALTREP(values) || Rf_isS4(values) ||
+  if (TYPEOF(values) != VECSXP || Rf_isS4(values) ||
       Rf_isObject(values) ||
       !paradox_api_has_only_attributes(values, allowed_attributes, 1)) {
     return Rf_mkString("Must be an ordinary named list");

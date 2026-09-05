@@ -41,6 +41,9 @@ hazards that Paradox 2 is intended to remove.
   automatically diagnosed or repaired by unrelated reads.
   Public argument checks and detached results are unchanged. After unsupported
   private edits, unrelated operations no longer promise a corruption diagnostic.
+  Every reader's column mask covers exactly the columns it indexes; the Design
+  dependency plan admits the `storage_type` column its fixed-value
+  classification reads by row.
 * Invalid `aggr`, `in_tune_fn`, and `disable_in_tune` constructor arguments
   are diagnosed by argument name, uniformly for all five Domain constructors,
   including the Paradox-1 internal-tuning pairing messages (tag required,
@@ -395,6 +398,18 @@ hazards that Paradox 2 is intended to remove.
   wide-getter, Condition, facade, and sampler optimizations above. These are
   operation-local ownership/lookup improvements, not persistent validation
   caches or weaker graph admission.
+* Name resolution inside the check engine, value transactions, collection
+  routing, Shadow value splits, internal-tuning snapshots, and collection
+  construction uses hashed identifier indexes (or R's own `match()`) above a
+  small size threshold instead of nested linear scans, parameter specs are
+  loaded per used row, and ordinary checks no longer replay the private
+  tag/value/transformation/dependency semantic scan (retained for migration
+  preflight and ObjectTuneToken admission). With 500 parameters a full
+  `$values <-` drops from about 8.4 ms to 0.5 ms, a collection `$check()` from
+  9.7 ms to 0.35 ms, a collection `$values <-` from 21 ms to 0.75 ms, and
+  `set_values()` on a stored collection from 44 ms to 1.2 ms; five-parameter
+  workloads are unchanged. Paired A/B/B/A measurements are recorded in
+  `design/graph-lookups-20260905.md`.
 * Collection parameter reads now pass the already admitted, rooted core
   directly to the shared params loader. This removes a temporary environment
   allocation and redundant capsule lookup and avoids requiring the
@@ -522,11 +537,20 @@ hazards that Paradox 2 is intended to remove.
 
 ## Public model and migration
 
-* Ordinary non-ALTREP named configuration lists may retain an outer S3 class
+* Ordinary named configuration lists may retain an outer S3 class
   when assigned through `$values`; Paradox ignores and removes that container
   class instead of using it for dispatch. Checked and unchecked direct
-  assignment reject an outer ALTREP before observation and canonicalize an
-  accepted empty shell to native `list()`. Unchecked assignment does not check
+  assignment canonicalize an accepted empty shell to native `list()`. A
+  top-level ALTREP plain list -- in particular the wrapper base R returns from
+  `setNames()` or any attribute setter on a referenced list of 64 or more
+  elements -- is materialized exactly once (one Length, one Elt per element)
+  before any capsule is selected, at every documented public list boundary:
+  `ParamSet$new()`, `$values <-`, `set_values(.values=)`, `$check()`,
+  `$test()`, `$assert()`, `$check_dependencies()`, `$test_constraint()`, list
+  `$trafo()`, `$tags <-`, `$search_space(values=)`, and
+  `ParamSetCollection$new()`. Paradox 1 accepted these inputs and earlier
+  Paradox 2 development builds rejected them once a list reached 64 elements.
+  Unchecked assignment does not check
   values, but it does classify each leaf's class shape exactly as every reader
   does, so it can no longer commit a value -- an `NA` class label, say -- that
   makes every later read of the same object report corrupt state. This keeps
@@ -534,9 +558,7 @@ hazards that Paradox 2 is intended to remove.
   extension engine. Explicit
   `$search_space(values=)` has the same ordinary-or-representation-only-S3
   named-list boundary and selects tokens natively without `[` dispatch;
-  ALTREP, S4/list-like, or otherwise attributed containers reject. Only
-  `set_values(.values=)` has the documented one-snapshot outer-list ALTREP
-  boundary.
+  S4/list-like or otherwise attributed containers reject.
 * Names attached to scalar Domain bounds, tolerances, tags, and constructor
   flags by ordinary R indexing are treated as representation metadata and
   removed from the canonical Domain row.

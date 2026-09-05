@@ -443,6 +443,57 @@ SEXP paradox_materialize_public_table_shell(SEXP table) {
   return result;
 }
 
+SEXP paradox_materialize_public_list_shell(SEXP list) {
+  static const char *const allowed[] = {"names"};
+  if (TYPEOF(list) != VECSXP || !ALTREP(list) || Rf_isS4(list) ||
+      Rf_isObject(list) ||
+      !paradox_api_has_only_attributes(list, allowed, 1)) {
+    return list;
+  }
+  /*
+   * One Length observation sizes both carriers; a names attribute is read
+   * raw from the wrapper itself. Its own representation may be a stable
+   * ALTREP (a deferred string, for example), so the names are copied
+   * element-wise into an ordinary vector before the element pass. Every
+   * element is observed exactly once and rooted in the result as it is
+   * captured, so a reentrant Elt method can neither leave an unrooted pointer
+   * nor make a later gate re-observe the wrapper.
+   */
+  PROTECT(list);
+  const R_xlen_t count = XLENGTH(list);
+  SEXP source_names = PROTECT(paradox_api_raw_attribute(list, R_NamesSymbol));
+  const int named = source_names != R_NilValue;
+  if (named && (TYPEOF(source_names) != STRSXP || Rf_isS4(source_names) ||
+      Rf_isObject(source_names) ||
+      !paradox_api_has_no_attributes(source_names) ||
+      XLENGTH(source_names) != count)) {
+    UNPROTECT(2);
+    return list;
+  }
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
+  if (named) {
+    SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, count));
+    for (R_xlen_t index = 0; index < count; ++index) {
+      if (index != 0 && index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+        R_CheckUserInterrupt();
+      }
+      SET_STRING_ELT(stable_names, index, STRING_ELT(source_names, index));
+    }
+    Rf_setAttrib(result, R_NamesSymbol, stable_names);
+    UNPROTECT(1);
+  }
+  for (R_xlen_t index = 0; index < count; ++index) {
+    if (index != 0 && index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+      R_CheckUserInterrupt();
+    }
+    SEXP value = PROTECT(VECTOR_ELT(list, index));
+    SET_VECTOR_ELT(result, index, value);
+    UNPROTECT(1);
+  }
+  UNPROTECT(3);
+  return result;
+}
+
 static SEXP argument_class(SEXP value) {
   if (!Rf_isObject(value)) {
     return R_NilValue;

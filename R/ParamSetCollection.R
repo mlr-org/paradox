@@ -450,7 +450,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'
     #' @param sets (named `list()` of [ParamSet])\cr
     #'   The outer set list, names, and list metadata must be ordinary
-    #'   non-ALTREP/non-S4. ParamSet objects are not cloned.
+    #'   non-S4; a top-level ALTREP plain list is materialized exactly once.
+    #'   ParamSet objects are not cloned.
     #'   Names are used as "set_id" for the naming scheme of delegated parameters.
     #'   A name is therefore part of every parameter ID it contributes and must
     #'   keep that ID inside the ID grammar: a prefix must itself match

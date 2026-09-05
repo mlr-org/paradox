@@ -877,6 +877,8 @@ SEXP paradox_param_set_trafo(SEXP private_environment, SEXP self,
   PROTECT(private_environment);
   PROTECT(self);
   x = PROTECT(paradox_materialize_public_table_shell(x));
+  /* A plain named list may equally be a base `names<-` wrapper ALTREP. */
+  x = PROTECT(paradox_materialize_public_list_shell(x));
   PROTECT(param_set_argument);
   R_xlen_t work_since_interrupt = 0;
   SEXP frozen_row = PROTECT(snapshot_row(x, &work_since_interrupt));
@@ -890,7 +892,7 @@ SEXP paradox_param_set_trafo(SEXP private_environment, SEXP self,
     &work_since_interrupt
   ));
   SEXP transformed = PROTECT(VECTOR_ELT(result, 0));
-  UNPROTECT(8);
+  UNPROTECT(9);
   return transformed;
 }
 

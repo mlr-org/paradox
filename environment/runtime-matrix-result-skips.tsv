@@ -22,6 +22,7 @@ runtime	file	test	reason
 3.6.3	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-regression-metadata-altrep.R	structural ALTREP attribute values reject as ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+3.6.3	test-regression-wrapper-altrep-inputs.R	an ALTREP list input is observed exactly once per element	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-upgrade-paradox-object-graph.R	authentic Paradox 1 shells upgrade everywhere by identity	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 3.6.3	test-upgrade-paradox-object-graph.R	legacy shells inside a current capsule are upgraded in place	Reason: R < 4.0 cannot safely inspect active-binding functions
@@ -77,6 +78,7 @@ runtime	file	test	reason
 4.0.5	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-regression-metadata-altrep.R	structural ALTREP attribute values reject as ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-regression-wrapper-altrep-inputs.R	an ALTREP list input is observed exactly once per element	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.0.5	test-upgrade-paradox-object.R	legacy interpreted structural lists reject ALTREP inertly	Reason: R < 4.3 cannot construct list ALTREP test fixtures
@@ -104,6 +106,7 @@ runtime	file	test	reason
 4.1.3	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-regression-metadata-altrep.R	structural ALTREP attribute values reject as ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.1.3	test-regression-wrapper-altrep-inputs.R	an ALTREP list input is observed exactly once per element	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.1.3	test-upgrade-paradox-object.R	legacy interpreted structural lists reject ALTREP inertly	Reason: R < 4.3 cannot construct list ALTREP test fixtures
@@ -132,6 +135,7 @@ runtime	file	test	reason
 4.2.3	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-native-snapshot-atomicity.R	ALTREP table row-name reentry cannot precede spine capture	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-regression-metadata-altrep.R	structural ALTREP attribute values reject as ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.2.3	test-regression-wrapper-altrep-inputs.R	an ALTREP list input is observed exactly once per element	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-upgrade-paradox-object-graph.R	graph discovery rejects structural ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-upgrade-paradox-object.R	legacy callback carrier shells reject ALTREP	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.2.3	test-upgrade-paradox-object.R	legacy interpreted structural lists reject ALTREP inertly	Reason: R < 4.3 cannot construct list ALTREP test fixtures

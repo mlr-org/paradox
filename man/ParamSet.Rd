@@ -28,7 +28,10 @@ detached from capsule state. Mutating a returned table, list-column, or
 from the ParamSet family is additive only: Paradox core methods, active
 bindings, and private capsule state may not be replaced.
 Interpreted outer list and internal table shells and their structural
-metadata are ordinary non-ALTREP/non-S4 objects. Documented public table
+metadata are ordinary non-ALTREP/non-S4 objects, except that a documented
+public list input whose top-level shell is an ALTREP plain list (base R's
+\verb{names<-} wrapper for a referenced list of 64 or more elements, for
+example) is materialized exactly once before it is interpreted. Documented public table
 inputs share one structural classifier. A well-formed ordinary class vector
 ends in \code{"data.frame"} or \code{c("data.table", "data.frame")}; leading additive
 classes are representation-only and are never dispatched. The classifier
@@ -297,8 +300,11 @@ Named with param IDs.}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{params}}{(named \code{list()})\cr
-Ordinary non-ALTREP/non-S4 list of \code{\link{Domain}} objects, named with their
-respective ID. Its names/list metadata is interpreted structure.}
+Ordinary non-S4 list of \code{\link{Domain}} objects, named with their
+respective ID. Its names/list metadata is interpreted structure. A
+top-level ALTREP plain list, such as the wrapper base R returns from
+\code{setNames()} on a referenced list of 64 or more elements, is
+materialized exactly once before it is interpreted.}
       \item{\code{allow_dangling_dependencies}}{(\code{logical(1)})\cr
 Whether dependencies depending on parameters that are not present should be allowed. A parameter \code{x} having
 \code{depends = y == 0} if \code{y} is not present would usually throw an error, but if dangling
@@ -436,8 +442,9 @@ replace all values. Default is TRUE.}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{x}}{(named \code{list()} | \code{data.frame})\cr
-The value(s) to be transformed. A non-table outer list remains ordinary
-non-ALTREP/non-S4. A data.frame uses the shared suffix-aware public-table
+The value(s) to be transformed. A non-table outer list is an ordinary
+non-S4 list; a top-level ALTREP plain list is materialized exactly
+once. A data.frame uses the shared suffix-aware public-table
 boundary: row-name structure is validated, but its row count is not
 compared with columns because transformation treats columns as named
 parameter values rather than rows. An allowed top-level VECSXP ALTREP
@@ -545,9 +552,9 @@ an absent parent, but stored \verb{$values} are never consulted.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{x}}{(named \code{list()})\cr
-The value to test. Its outer shell must be an ordinary
-non-ALTREP/non-S4 list; admitted semantic atomic leaves may be stable
-ALTREP.}
+The value to test. Its outer shell must be an ordinary non-S4 list; a
+top-level ALTREP plain list is materialized once, and admitted
+semantic atomic leaves may be stable ALTREP.}
       \item{\code{assert_value}}{(\code{logical(1)})\cr
 Whether to verify that \code{x} satisfies the bounds and types given by this \code{ParamSet}.
 Should be \code{TRUE} unless this was already checked before.}
@@ -629,7 +636,8 @@ by some algorithm from a search space param set in optimization.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{xs}}{(named \code{list()}).
-The outer container must be an ordinary non-ALTREP list. An S3-classed
+The outer container must be an ordinary list; a top-level ALTREP
+plain list is materialized once. An S3-classed
 list carrying only \code{names} and \code{class} is accepted as representation
 metadata and its class is discarded; no S3 method is dispatched. S4
 shells remain unsupported.}
@@ -668,8 +676,9 @@ diagnostic.
 \if{latex}{\out{\hypertarget{method-ParamSet-check_dependencies}{}}}
 \subsection{\code{ParamSet$check_dependencies()}}{
   \pkg{checkmate}-like check-function that checks only parameter
-dependencies. \code{xs} must be an ordinary non-ALTREP/non-S4 base list with complete, unique
-names; classed list containers are not admitted by this dependency-only
+dependencies. \code{xs} must be an ordinary non-S4 base list with complete, unique
+names (a top-level ALTREP plain list is materialized once); classed
+list containers are not admitted by this dependency-only
 boundary. Unknown parameter IDs are diagnosed even when the set has no
 dependencies. A dependent value or its parent supplied as a
 \code{\link{TuneToken}} is skipped, matching \verb{$check()} dependency semantics.
@@ -1050,7 +1059,8 @@ a \code{ParamSet} but e.g. a \code{\link{ParamSetCollection}}.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{values}}{(\verb{named list})
-Optional ordinary non-ALTREP named list, or ordinary non-ALTREP
+Optional ordinary named list (a top-level ALTREP plain list is
+materialized once), or ordinary non-ALTREP
 S3-classed named list carrying only
 \code{names} and \code{class}, of exact-shape \code{\link{TuneToken}} objects to convert in
 place of \verb{$values}. The outer class is discarded and no subsetting

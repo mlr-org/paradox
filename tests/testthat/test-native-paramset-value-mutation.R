@@ -326,18 +326,18 @@ test_that("value transactions reject structural ALTREP list shells", {
   )
   param_set = ps(x = p_int(0L, 2L))
 
-  expect_error(
-    { param_set$values = values },
-    "ParamSet values must be supplied as a plain named list",
-    fixed = TRUE
-  )
-  expect_error(
-    native_value_store(param_set, values),
-    "ParamSet values must be supplied as a plain named list",
-    fixed = TRUE
-  )
-  expect_identical(callbacks, 0L)
-  expect_identical(param_set$values, setNames(list(), character()))
+  # A top-level ALTREP list is materialized exactly once, before either
+  # transaction selects its capsule. The one Elt callback is ordinary
+  # supported reentry, and the captured element is what gets stored.
+  param_set$values = values
+  expect_identical(callbacks, 1L)
+  expect_identical(param_set$values, list(x = 1L))
+  param_set$values = list()
+  native_stateful_altrep_rearm(values, 0L)
+  native_value_store(param_set, values)
+  expect_identical(callbacks, 2L)
+  expect_identical(param_set$values, list(x = 1L))
+  param_set$values = list()
 
   hostile_names = native_stateful_altrep(
     "x",

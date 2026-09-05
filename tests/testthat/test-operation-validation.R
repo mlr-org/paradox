@@ -72,6 +72,29 @@ test_that("nested carriers are checked where their contents are read", {
   }
 })
 
+test_that("Design planning admits the storage_type column it indexes", {
+  # Fixed-value classification and typed missing patches read `storage_type`
+  # by parameter row. The plan's reader mask must therefore cover that column:
+  # a private edit that shortens or retypes it is rejected before indexing
+  # rather than read out of bounds.
+  data = data.table::data.table(x = 0.5, y = 2L, f = "a")
+  for (replacement in list(character(), "numeric", new.env(parent = emptyenv()),
+    NULL, 1:3, list("numeric", "integer", "character"))) {
+    set = operation_space()
+    set$values = list(x = 0.5)
+    operation_replace(set, "storage_type", replacement)
+    expect_error(
+      Design$new(set, data.table::copy(data), remove_dupl = FALSE),
+      "Corrupt ParamSet",
+      info = typeof(replacement)
+    )
+  }
+  set = operation_space()
+  set$values = list(x = 0.5)
+  design = Design$new(set, data.table::copy(data), remove_dupl = FALSE)
+  expect_identical(design$data$x, 0.5)
+})
+
 test_that("shared native readers retain the column shells they consume", {
   all_columns = names(paradox:::param_set_core_state(
     operation_space()$.__enclos_env__$private)$.params)

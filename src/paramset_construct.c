@@ -710,7 +710,23 @@ static void copy_permanent_value(SEXP destination, R_xlen_t row,
   }
 }
 
+static SEXP param_set_construct_impl(SEXP domains,
+    SEXP allow_dangling_dependencies);
+
 SEXP paradox_param_set_construct(SEXP domains,
+    SEXP allow_dangling_dependencies) {
+  /* `setNames(domains, ids)` on a referenced list of 64 or more Domains is
+   * a wrapper ALTREP; own one ordinary copy before the shell gate below. */
+  domains = PROTECT(paradox_materialize_public_list_shell(domains));
+  SEXP result = PROTECT(param_set_construct_impl(
+    domains,
+    allow_dangling_dependencies
+  ));
+  UNPROTECT(2);
+  return result;
+}
+
+static SEXP param_set_construct_impl(SEXP domains,
     SEXP allow_dangling_dependencies) {
   if (!paradox_param_set_assert_values_is_exact(
       allow_dangling_dependencies

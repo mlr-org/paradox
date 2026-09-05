@@ -19,6 +19,8 @@ Number of points to sample.}
 Generate a space-filling design using a Sobol sequence. Dependent
 parameters whose constraints are unsatisfied generate \code{NA} entries in
 their respective columns.
+The returned \code{\link{Design}} retains the exact \code{param_set} reference supplied by
+the caller.
 
 Uses \link[spacefillr:generate_sobol_set]{spacefillr::generate_sobol_set}.
 

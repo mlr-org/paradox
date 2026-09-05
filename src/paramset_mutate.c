@@ -491,7 +491,24 @@ static void tags_name_repeated(SEXP id) {
   paradox_error_from_scalar_string(message);
 }
 
+static SEXP param_set_set_tags_impl(SEXP private_environment, SEXP self,
+    SEXP tags);
+
 SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
+    SEXP tags) {
+  /* `setNames(tags, ids)` on a referenced list of 64 or more entries is a
+   * base wrapper ALTREP; own one ordinary copy before the list gate below. */
+  tags = PROTECT(paradox_materialize_public_list_shell(tags));
+  SEXP result = PROTECT(param_set_set_tags_impl(
+    private_environment,
+    self,
+    tags
+  ));
+  UNPROTECT(2);
+  return result;
+}
+
+static SEXP param_set_set_tags_impl(SEXP private_environment, SEXP self,
     SEXP tags) {
   R_xlen_t work_since_interrupt = 0;
   paradox_core_kind_t kind;

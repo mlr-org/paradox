@@ -402,7 +402,17 @@ Condition/TuneToken/capsule shell, ParamSet constructor `params` list,
 transformation input/result shell, Domain cargo container/interpreted cargo
 entry, row, dimnames, class/name vector, and other list metadata object is
 ordinary non-ALTREP and non-S4, except for the top-level shell of a documented
-public table input. One shared classifier serves `check_dt`,
+public table input and the top-level shell of a documented public plain-list
+input. The latter -- `ParamSet$new(params)`, `$values <-`,
+`set_values(.values=)`, `$check()`/`$test()`/`$assert()`,
+`$check_dependencies()`, `$test_constraint()`, list `$trafo()`, `$tags <-`,
+`$search_space(values=)`, and `ParamSetCollection$new(sets)` -- materializes a
+top-level ALTREP plain list (base R's `names<-` wrapper for a referenced list
+of 64 or more elements, or any stable provider) exactly once, one Length and
+one Elt per element, into an ordinary rooted carrier before any capsule is
+selected; a callback run by that materialization is ordinary supported
+reentry and the operation proceeds on the post-callback generation with the
+captured elements. One shared classifier serves `check_dt`,
 `test_constraint_dt`, `qunif`, data-frame `trafo`, Design transpose, and Design
 dependency planning. It recognizes a well-formed ordinary class vector ending
 in `"data.frame"` or `c("data.table", "data.frame")` and then enforces the
@@ -894,13 +904,13 @@ logical cannot evade the terminal barrier.
 
 Direct `$values <-` selects and authenticates the exact public
 `assert_values` policy inside the same native transaction; malformed policy
-shapes never enter either store. Its checked and unchecked branches both reject an outer ALTREP shell
-before observing its length, names, or elements. The Paradox-1 clear-values
+shapes never enter either store. Its checked and unchecked branches both
+materialize an outer ALTREP plain-list shell exactly once, before selecting
+any capsule, and then observe only that ordinary copy. The Paradox-1 clear-values
 spellings—`NULL`, an ordinary attribute-free zero-length atomic/expression
 vector, or an accepted empty base/S3-representation list—are canonicalized to
-a named native `list()` by the store operation. `set_values(.values=)` is the
-sole general-list ALTREP exception and
-owns its one native shell snapshot; it does not weaken direct assignment.
+a named native `list()` by the store operation. `set_values(.values=)`
+owns its one native shell snapshot in the same way.
 Checked storage validates every supplied Domain/custom-check/token entry but
 does not reject dependency-inactive entries. Those entries remain in the raw
 store as dormant values; activity is evaluated only by filtered reads, explicit

@@ -448,9 +448,13 @@ static void load_param_state(SEXP param_set, SEXP private,
     Rf_error("Unknown ParamSet node kind in Design dependency operation");
   }
 
+  /* Fixed-value classification and typed missing patches index the
+   * `storage_type` column by parameter row, so that column's shell is part
+   * of this operation's contract even though the mask carries nothing else. */
   if (!paradox_domain_read_params(
       snapshot->params,
-      0U, &snapshot->params_data) || !paradox_domain_validate_dependencies(
+      1U << PARADOX_DOMAIN_STORAGE_TYPE,
+      &snapshot->params_data) || !paradox_domain_validate_dependencies(
       snapshot->dependencies,
       &snapshot->dependencies_data,
       work_since_interrupt

@@ -1,5 +1,17 @@
 # Paired performance benchmarks
 
+## September 2026 hashed graph lookups
+
+`graph-lookups-20260905.R LIBRARY OUTPUT.tsv` measures BASE, Collection and
+Shadow checks, value writes, `set_values()`, transformations, construction and
+Design planning at 5, 64 and 500 parameters, plus a 100-child collection, in
+the same three-block bench::mark format as the graph-validation runner. Run in
+baseline/candidate/candidate/baseline order with one CPU/numeric thread and no
+concurrent builds/tests; summarize with `summarize-getters-20260905.R`.
+`PARADOX_BENCH_ITERATIONS` lowers the 200 samples per block. The review,
+changes, and results belong to
+[`design/graph-lookups-20260905.md`](../design/graph-lookups-20260905.md).
+
 ## September 2026 graph/value validation
 
 `graph-validation-20260905.R LIBRARY OUTPUT.tsv` measures 51 focused BASE,

@@ -681,24 +681,50 @@ static int base_is_current(SEXP origin, SEXP origin_private,
 
 static SEXP split_values(const paradox_domain_values_t *source,
     SEXP visible_ids, R_xlen_t *work_since_interrupt) {
+  /*
+   * Rf_match(table, x): each visible ID's position among the stored names
+   * selects the visible values in visible order; each stored name's absence
+   * from the visible IDs selects the hidden values in stored order. Two
+   * hashed passes replace four products of the two name sets.
+   */
+  const R_xlen_t visible_id_count = XLENGTH(visible_ids);
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  if (source->size == 0 || visible_id_count == 0) {
+    SEXP visible_values = PROTECT(Rf_allocVector(VECSXP, 0));
+    SEXP visible_names = PROTECT(Rf_allocVector(STRSXP, 0));
+    Rf_setAttrib(visible_values, R_NamesSymbol, visible_names);
+    SET_VECTOR_ELT(result, 0, visible_values);
+    UNPROTECT(2);
+    SEXP hidden_values = PROTECT(Rf_allocVector(VECSXP, source->size));
+    SEXP hidden_names = PROTECT(Rf_allocVector(STRSXP, source->size));
+    for (R_xlen_t index = 0; index < source->size; ++index) {
+      paradox_account_work(work_since_interrupt);
+      SET_VECTOR_ELT(hidden_values, index, VECTOR_ELT(source->values, index));
+      SET_STRING_ELT(hidden_names, index, STRING_ELT(source->names, index));
+    }
+    Rf_setAttrib(hidden_values, R_NamesSymbol, hidden_names);
+    SET_VECTOR_ELT(result, 1, hidden_values);
+    UNPROTECT(3);
+    return result;
+  }
+  SEXP visible_rows = PROTECT(Rf_match(source->names, visible_ids, 0));
+  SEXP stored_visibility = PROTECT(Rf_match(visible_ids, source->names, 0));
+  if (TYPEOF(visible_rows) != INTSXP ||
+      XLENGTH(visible_rows) != visible_id_count ||
+      TYPEOF(stored_visibility) != INTSXP ||
+      XLENGTH(stored_visibility) != source->size) {
+    UNPROTECT(3);
+    Rf_error("Internal error: invalid ParamSetShadow value match");
+  }
   R_xlen_t visible_count = 0;
-  for (R_xlen_t visible = 0; visible < XLENGTH(visible_ids); ++visible) {
-    visible_count += paradox_domain_string_in(
-      source->names,
-      STRING_ELT(visible_ids, visible),
-      work_since_interrupt
-    );
+  for (R_xlen_t visible = 0; visible < visible_id_count; ++visible) {
+    visible_count += INTEGER_ELT(visible_rows, visible) > 0;
   }
   R_xlen_t hidden_count = 0;
   for (R_xlen_t index = 0; index < source->size; ++index) {
-    hidden_count += !paradox_domain_string_in(
-      visible_ids,
-      STRING_ELT(source->names, index),
-      work_since_interrupt
-    );
+    hidden_count += INTEGER_ELT(stored_visibility, index) == 0;
   }
 
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
   SEXP visible_values = PROTECT(Rf_allocVector(VECSXP, visible_count));
   SEXP visible_names = PROTECT(Rf_allocVector(STRSXP, visible_count));
   SEXP hidden_values = PROTECT(Rf_allocVector(VECSXP, hidden_count));
@@ -709,40 +735,51 @@ static SEXP split_values(const paradox_domain_values_t *source,
   SET_VECTOR_ELT(result, 1, hidden_values);
 
   R_xlen_t visible_output = 0;
-  for (R_xlen_t visible = 0; visible < XLENGTH(visible_ids); ++visible) {
-    SEXP id = STRING_ELT(visible_ids, visible);
-    for (R_xlen_t index = 0; index < source->size; ++index) {
-      paradox_account_work(work_since_interrupt);
-      SEXP candidate = STRING_ELT(source->names, index);
-      if (candidate == id || paradox_domain_strings_equal(candidate, id)) {
-        SET_VECTOR_ELT(
-          visible_values,
-          visible_output,
-          VECTOR_ELT(source->values, index)
-        );
-        SET_STRING_ELT(visible_names, visible_output, id);
-        ++visible_output;
-        break;
-      }
+  for (R_xlen_t visible = 0; visible < visible_id_count; ++visible) {
+    paradox_account_work(work_since_interrupt);
+    const int matched = INTEGER_ELT(visible_rows, visible);
+    if (matched <= 0) continue;
+    const R_xlen_t index = (R_xlen_t) matched - 1;
+    if (index >= source->size || visible_output >= visible_count) {
+      UNPROTECT(7);
+      Rf_error("Internal error: incomplete ParamSetShadow value snapshot");
     }
+    SET_VECTOR_ELT(
+      visible_values,
+      visible_output,
+      VECTOR_ELT(source->values, index)
+    );
+    SET_STRING_ELT(
+      visible_names,
+      visible_output,
+      STRING_ELT(visible_ids, visible)
+    );
+    ++visible_output;
   }
   R_xlen_t hidden_output = 0;
   for (R_xlen_t index = 0; index < source->size; ++index) {
-    SEXP id = STRING_ELT(source->names, index);
-    if (!paradox_domain_string_in(visible_ids, id, work_since_interrupt)) {
-      SET_VECTOR_ELT(hidden_values, hidden_output, VECTOR_ELT(
-        source->values,
-        index
-      ));
-      SET_STRING_ELT(hidden_names, hidden_output, id);
-      ++hidden_output;
+    paradox_account_work(work_since_interrupt);
+    if (INTEGER_ELT(stored_visibility, index) != 0) continue;
+    if (hidden_output >= hidden_count) {
+      UNPROTECT(7);
+      Rf_error("Internal error: incomplete ParamSetShadow value snapshot");
     }
+    SET_VECTOR_ELT(hidden_values, hidden_output, VECTOR_ELT(
+      source->values,
+      index
+    ));
+    SET_STRING_ELT(
+      hidden_names,
+      hidden_output,
+      STRING_ELT(source->names, index)
+    );
+    ++hidden_output;
   }
   if (visible_output != visible_count || hidden_output != hidden_count) {
-    UNPROTECT(5);
+    UNPROTECT(7);
     Rf_error("Internal error: incomplete ParamSetShadow value snapshot");
   }
-  UNPROTECT(5);
+  UNPROTECT(7);
   return result;
 }
 
