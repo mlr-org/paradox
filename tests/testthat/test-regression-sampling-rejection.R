@@ -55,7 +55,9 @@ test_that("truncated draws include the closed endpoints", {
 test_that("default normal scale stays finite for wide finite intervals", {
   sampler = Sampler1DNormal$new(ps(x = p_dbl(-1e308, 1e308)))
   expect_identical(unname(sampler$mean), 0)
-  expect_identical(unname(sampler$sd), 5e307)
+  # Computing the scale and parsing its huge decimal spelling can differ by
+  # an ULP across platforms. Scale the comparison to avoid overflow as well.
+  expect_equal(unname(sampler$sd) / 5e307, 1, tolerance = 4 * .Machine$double.eps)
   set.seed(9032)
   values = sampler$sample(32L)$data$x
   expect_true(all(is.finite(values)))
