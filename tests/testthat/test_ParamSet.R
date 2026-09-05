@@ -581,6 +581,17 @@ test_that("rd_info.ParamSet reports untyped defaults against the right rows", {
   expect_match(grep("^\\|aa ", plain, value = TRUE), "\"ADEF\"")
 })
 
+test_that("rd_info.ParamSet truncates long level lists without markdown links", {
+  skip_if_not_installed("knitr")
+
+  ps = ps(a = p_fct(levels = letters[1:20]))
+  info = rd_info(ps)
+
+  # `"[...]"` would be parsed as a markdown link to a topic named `...` by roxygen2 (#429)
+  expect_false(any(grepl("[...]", info, fixed = TRUE)))
+  expect_true(any(grepl("a, b, c, d, e, f, g, h, i, j, ...", info, fixed = TRUE)))
+})
+
 
 test_that("ParamSet$values convert nums to ints for ParamInt", {
   pp = ParamInt$new("x")
