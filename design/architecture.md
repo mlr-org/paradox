@@ -744,8 +744,8 @@ empty, and a positive request fails before `sample()`.
 Grid generation is output-sensitive rather than a fast materialization of the
 nominal Cartesian product followed by repair. One registered operation freezes
 the complete BASE/COLLECTION/SHADOW parameter, raw-value, and dependency
-generation. It maps each requested built-in axis once, deduplicates monotone
-realized values while retaining their earliest nominal level, and turns an
+generation. It maps each requested built-in axis once, deduplicates realized
+values while retaining their earliest nominal level, and turns an
 ordinary fixed value into one axis choice. Dependency-free grids fill the
 compact mixed-radix product directly. Dependency-bearing grids use the same
 owned edge mapping, Condition admission, incoming ranges, and cycle detection
@@ -757,6 +757,31 @@ choice's earliest nominal-level tuple reproduces the historical
 full-product/normalize/first-unique row order without constructing that product.
 The optional `upper_limit` is checked against complete realized leaves, not an
 intermediate expansion.
+
+The compatibility quantile arithmetic is not strictly monotone in floating
+point: narrow finite intervals can revisit a value after a different one.
+Adjacent deduplication remains the ordinary fast path, but a decrease in a
+numeric axis triggers first-occurrence classification with the existing native
+R matcher. Compacting both values and earliest nominal levels preserves the
+same complete-product/first-unique row order without changing the mapping
+formula, introducing another numeric hash implementation, or retaining
+duplicate output rows.
+
+Dependency ordering uses Kahn's algorithm with outgoing edge lists and a
+binary min-heap of ready parameters. Its priority is schema position for
+Design masking, and realized branch count followed by schema position for
+grids. A FIFO would change ordering when a newly ready node precedes a queued
+one. Every parallel predicate contributes its own indegree; dangling parents
+do not delay ordering and remain unsatisfied predicates during evaluation.
+Dependency-free, unweighted ordering returns schema order directly. Wide
+graphs reuse the common encoding-aware ID index to resolve edge endpoints;
+graphs with fewer than 32 parameters or eight dependencies retain linear
+lookup to avoid indexing overhead. All plans and queue storage are
+operation-local, and no schema validity or generation check is cached away.
+Design column mapping first compares corresponding schema/table names, using
+the shared encoding-aware equality rule. Generated schema-ordered tables thus
+need no full name scan; explicitly reordered tables retain the normal search
+and every name is still checked.
 
 Axis order retains its established control-sensitive contract. With a global
 `resolution`, canonical ParamSet order is authoritative and named

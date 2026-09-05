@@ -753,6 +753,18 @@ hazards that Paradox 2 is intended to remove.
   Valid fixed cross-storage, `NULL`, and S4 special values retain their identity
   as list-column values; a fixed TuneToken now raises an informative error
   instead of being treated as a concrete grid value.
+  Narrow floating-point axes also deduplicate nonadjacent repeated values
+  caused by rounding, preserving first-occurrence order and avoiding false
+  `upper_limit` failures.
+* Design/grid dependency planning now uses indexed outgoing edges and a
+  stable priority queue; wide graphs reuse the native parameter-ID index.
+  This removes repeated full-schema/edge scans without changing dependency
+  semantics or grid row order.
+* Truncated `Sampler1DRfun` sampling discards `NA` and `NaN` draws instead of
+  counting them as accepted values. Rejection-heavy sampling fills one bounded
+  result buffer while preserving batch sizes, draw order, and RNG state.
+  `Sampler1DNormal` also keeps its default standard deviation finite when the
+  difference between two finite bounds would overflow.
 * ParamSet quantile and grid kernels now consume canonical plain capsule tables
   on every supported R release, including R 3.6/4.3/4.5. Zero-axis grids retain a
   typed empty result; this includes zero-level factor Domains, whose empty

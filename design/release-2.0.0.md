@@ -2,6 +2,15 @@
 
 ## Status
 
+Implementation review reopened in September 2026 at the user's request.
+[`review-20260905.md`](review-20260905.md) owns the new changes and their
+development checks. They preserve the public contract but change package
+bytes, so the edited working source needs a new freeze and source-bound
+release verification. The completed gates recorded below belong only to the
+unchanged `a0a9ff3` candidate, not to this development revision.
+
+### Last accepted immutable candidate
+
 **The active immutable package-facing candidate is
 `refs/paradox-release/candidate-20260803T131049Z`, commit
 `a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree

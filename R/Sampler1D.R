@@ -154,16 +154,28 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
       super$as_dt_col(s, storage_type, id)
     },
 
-    # extreme naive rejection sampling to enable trunc sampling from finite, restricted support
+    # Preserve draw order and the historical fixed batch size. Allocate the
+    # result only when more than one batch is needed, and fill it in place.
     sample_truncated = function(n, rfun, lower, upper) {
-      r = numeric(0L)
-      for (i in 1:1000) {
+      result = NULL
+      accepted = 0L
+      for (i in seq_len(1000L)) {
         s = rfun(n = 2 * n)
-        s = s[s >= lower & s <= upper]
-        r = c(r, s)
-        if (length(r) >= n) {
-          return(r[1:n])
+        # Logical subsetting would retain NA/NaN as if they were accepted
+        # draws. `which()` keeps only known in-range values.
+        s = s[which(s >= lower & s <= upper)]
+        count = length(s)
+        if (count == 0L) next
+        remaining = n - accepted
+        if (count >= remaining) {
+          s = s[seq_len(remaining)]
+          if (accepted == 0L) return(s)
+          count = remaining
         }
+        if (is.null(result)) result = numeric(n)
+        result[seq.int(from = accepted + 1L, length.out = count)] = s
+        accepted = accepted + count
+        if (accepted == n) return(result)
       }
       stopf("Tried rejection sampling 1000x. Giving up.")
     }
@@ -268,6 +280,12 @@ Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
       self$mean = mean
       if (is.null(sd)) {
         sd = (param$upper - param$lower) / 4
+        # A finite interval can be wider than the largest double, even though
+        # a quarter of its width is representable. Keep ordinary arithmetic
+        # unchanged and scale before subtracting only in that case.
+        if (is.infinite(sd)) {
+          sd = param$upper / 4 - param$lower / 4
+        }
       }
       self$sd = sd
     }

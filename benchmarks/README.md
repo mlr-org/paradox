@@ -1,5 +1,25 @@
 # Paired performance benchmarks
 
+## September 2026 implementation review
+
+`benchmarks/review-20260905.R` is a small installed-library comparison for the
+reopened review in `design/review-20260905.md`. It covers stable dependency
+planning, dependent/independent grids, reordered Design columns, ordinary
+numeric axes, rejection sampling, and normal-sampler construction. Run it in
+fresh baseline/candidate processes in both orders, with the same compiler
+flags, one CPU affinity, and no concurrent tests. It neither installs packages
+nor modifies the CPU governor. The report records the chosen snapshots,
+measurements, allocation tradeoffs, and verification scope; these development
+comparisons do not replace the sealed release gate below.
+
+```sh
+. scripts/activate
+taskset -c 6 Rscript --vanilla benchmarks/review-20260905.R \
+  .local/review-20260905/baseline-library .local/review-20260905/example-baseline.tsv
+```
+
+Select an available CPU on your machine rather than assuming CPU 6 is allowed.
+
 ## Final pre-release development batch
 
 The bounded implementation plan recorded before source changes is

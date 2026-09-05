@@ -1,5 +1,26 @@
 # Paradox 2 C rewrite: maintainer and agent notes
 
+## September 2026 development review
+
+The user reopened implementation review after the accepted `a0a9ff3` candidate.
+The scoped plan and new development results are in
+[`design/review-20260905.md`](design/review-20260905.md). The current working
+source changes dependency planning, numeric grid-axis deduplication, and
+ordinary rejection/normal sampling. The installed-test coordinator also passes
+its effective dependency-library search path to isolated workers, including
+when dependencies were supplied only through `R_LIBS_USER`.
+The public capsule, callback, ownership,
+serialization, and old-R contracts are unchanged. Small paired benchmarks are
+required for every potentially performance-affecting change in this review.
+The sealed results below still prove only their exact immutable candidate;
+they do not make the edited working source release-ready. Freeze and verify a
+new candidate before publication. Do not amend or relabel the old evidence.
+The review's final installed R 4.6.1 suite passes 10,421 expectations with one
+expected old-R-only skip and no failures/warnings (116 files, eight isolated
+workers). Focused R 3.6.3 tests, strict compiler checks, and small paired
+benchmarks also pass as detailed in the review; these are development checks,
+not fresh full-release or downstream acceptance.
+
 ## Authority
 
 The first public Paradox 2 release is a contract reset, not a continuation of

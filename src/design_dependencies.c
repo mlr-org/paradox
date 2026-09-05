@@ -575,11 +575,18 @@ static void map_design_columns(dependency_snapshot_t *snapshot,
   for (R_xlen_t parameter = 0;
       parameter < snapshot->parameter_count;
       ++parameter) {
-    R_xlen_t column = paradox_domain_find_string(
-      snapshot->data_names,
-      STRING_ELT(snapshot->params_data.ids, parameter),
-      work_since_interrupt
-    );
+    paradox_account_work(work_since_interrupt);
+    SEXP id = STRING_ELT(snapshot->params_data.ids, parameter);
+    /* Generated designs normally retain schema order. Prove the matching
+     * name directly before searching explicitly reordered user columns. */
+    R_xlen_t column = parameter;
+    if (!paradox_domain_strings_equal(
+        STRING_ELT(snapshot->data_names, parameter), id
+      )) {
+      column = paradox_domain_find_string(
+        snapshot->data_names, id, work_since_interrupt
+      );
+    }
     if (column == R_XLEN_T_MAX) {
       Rf_error("Design$data column names do not match the ParamSet");
     }

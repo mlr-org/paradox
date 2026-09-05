@@ -24,6 +24,10 @@ the design below is implemented. The one explicitly bounded final performance
 batch was specified before implementation in
 `design/final-performance-implementation-plan.md`; it preserves every contract
 here and is now closed at commits `81cbccf` and `387c1cd`.
+The user subsequently reopened implementation review in September 2026;
+`design/review-20260905.md` records that separate development scope and its
+small-benchmark requirement. Its internal algorithm changes preserve this
+public contract and require a new source-bound candidate before release.
 
 It also spends that break now on one strict structural-object boundary. Exotic
 ALTREP/S4 shells and duplicate R/native admission have no known maintained

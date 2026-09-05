@@ -397,6 +397,10 @@ run_parallel_tests <- function(files, jobs) {
       TEXMFHOME = file.path(task_tex, "home"),
       TEXMFCACHE = file.path(task_tex, "cache"),
       VARTEXFONTS = file.path(task_tex, "fonts"),
+      # Changing R_LIBS_USER to the isolated candidate must not discard a
+      # dependency library selected only through the coordinator's user path.
+      # Propagate its effective ordered search path, not just raw envvars.
+      R_LIBS = paste(.libPaths(), collapse = .Platform$path.sep),
       R_LIBS_USER = library_path,
       R_ENVIRON_USER = "/dev/null",
       R_PROFILE_USER = "/dev/null",

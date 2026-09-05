@@ -170,19 +170,28 @@ for fixture_index in 1 2; do
     '})' > "$fixture_file"
 done
 
+CONCURRENCY_LIBRARY="$TEST_ROOT/candidate-library"
+mkdir -p "$CONCURRENCY_LIBRARY"
+cp -a "$LIBRARY/paradox" "$CONCURRENCY_LIBRARY/paradox"
+
 run_concurrency_fixture() {
   local suffix=$1 marker="$TEST_ROOT/concurrency-$1.marker"
+  local candidate_library="$LIBRARY"
+  # Repeat with a candidate-only library and dependencies selected solely by
+  # R_LIBS_USER. Workers replace that variable for their isolated candidate;
+  # the coordinator must propagate its effective dependency search path.
+  [[ "$suffix" != b ]] || candidate_library="$CONCURRENCY_LIBRARY"
   env -i \
     "HOME=$TEST_ROOT/home" \
     "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
     "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
-    "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+    "R_LIBS_USER=$LIBRARY" "R_LIBS=" "R_LIBS_SITE=" \
     "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
     "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
     "LC_ALL=C.UTF-8" "TZ=UTC" \
     "PARADOX_NATIVE_TEST_JOBS=2" \
     "PARADOX_NATIVE_CONCURRENCY_MARKER=$marker" \
-    "$RSCRIPT" --vanilla "$RUNNER" "$CONCURRENCY_SOURCE" "$LIBRARY" \
+    "$RSCRIPT" --vanilla "$RUNNER" "$CONCURRENCY_SOURCE" "$candidate_library" \
     focused "$TEST_ROOT/concurrency-$suffix.tsv" \
     > "$TEST_ROOT/concurrency-$suffix.log" 2>&1
   [[ "$(wc -l < "$marker")" -eq 2 ]] || {

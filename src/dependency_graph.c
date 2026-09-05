@@ -4,6 +4,51 @@
 
 #include "r_utils.h"
 
+/* Kahn's algorithm needs a priority queue, rather than a FIFO: a newly ready
+ * parameter may precede one that was already ready. Grid planning additionally
+ * prioritizes smaller realized axes, retaining parameter order for ties. */
+static int ready_precedes(R_xlen_t left, R_xlen_t right,
+    const R_xlen_t *branch_factors) {
+  if (branch_factors != NULL &&
+      branch_factors[left] != branch_factors[right]) {
+    return branch_factors[left] < branch_factors[right];
+  }
+  return left < right;
+}
+
+static void ready_push(R_xlen_t *heap, R_xlen_t *size,
+    R_xlen_t parameter, const R_xlen_t *branch_factors) {
+  R_xlen_t position = (*size)++;
+  while (position != 0) {
+    const R_xlen_t parent = (position - 1) / 2;
+    if (!ready_precedes(parameter, heap[parent], branch_factors)) break;
+    heap[position] = heap[parent];
+    position = parent;
+  }
+  heap[position] = parameter;
+}
+
+static R_xlen_t ready_pop(R_xlen_t *heap, R_xlen_t *size,
+    const R_xlen_t *branch_factors) {
+  const R_xlen_t result = heap[0];
+  const R_xlen_t last = heap[--(*size)];
+  R_xlen_t position = 0;
+  /* This bound both identifies internal heap nodes and keeps 2 * position + 1
+   * representable without assuming a narrower parameter-count limit. */
+  while (position < *size / 2) {
+    R_xlen_t child = 2 * position + 1;
+    if (child + 1 < *size &&
+        ready_precedes(heap[child + 1], heap[child], branch_factors)) {
+      ++child;
+    }
+    if (!ready_precedes(heap[child], last, branch_factors)) break;
+    heap[position] = heap[child];
+    position = child;
+  }
+  heap[position] = last;
+  return result;
+}
+
 void paradox_dependency_graph_topological_order(
     const paradox_dependency_graph_plan_t *plan,
     const R_xlen_t *branch_factors, R_xlen_t *result,
@@ -16,17 +61,37 @@ void paradox_dependency_graph_topological_order(
 
   const R_xlen_t parameter_count = plan->parameter_count;
   const R_xlen_t dependency_count = plan->dependency_count;
+  if (dependency_count == 0 && branch_factors == NULL) {
+    for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+      paradox_account_work(work_since_interrupt);
+      result[parameter] = parameter;
+    }
+    return;
+  }
+
+  /* Each edge is linked into its parent's outgoing list once. The incoming
+   * ranges retained by the plan serve condition evaluation; these temporary
+   * outgoing links serve ordering and count parallel predicates separately. */
   R_xlen_t *indegree = paradox_temporary_alloc(
     parameter_count == 0 ? 1 : parameter_count,
     sizeof(*indegree)
   );
-  unsigned char *emitted = paradox_temporary_alloc(
+  R_xlen_t *first_edge = paradox_temporary_alloc(
     parameter_count == 0 ? 1 : parameter_count,
-    sizeof(*emitted)
+    sizeof(*first_edge)
+  );
+  R_xlen_t *next_edge = paradox_temporary_alloc(
+    dependency_count == 0 ? 1 : dependency_count,
+    sizeof(*next_edge)
+  );
+  R_xlen_t *ready = paradox_temporary_alloc(
+    parameter_count == 0 ? 1 : parameter_count,
+    sizeof(*ready)
   );
   for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    paradox_account_work(work_since_interrupt);
     indegree[parameter] = 0;
-    emitted[parameter] = FALSE;
+    first_edge[parameter] = R_XLEN_T_MAX;
   }
   for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
     paradox_account_work(work_since_interrupt);
@@ -41,37 +106,37 @@ void paradox_dependency_graph_topological_order(
         Rf_error("ParamSet dependency graph is too large");
       }
       ++indegree[child];
+      next_edge[edge] = first_edge[parent];
+      first_edge[parent] = edge;
     }
   }
 
-  for (R_xlen_t output = 0; output < parameter_count; ++output) {
-    R_xlen_t selected = R_XLEN_T_MAX;
-    for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
-      paradox_account_work(work_since_interrupt);
-      if (emitted[parameter] || indegree[parameter] != 0) {
-        continue;
-      }
-      if (selected == R_XLEN_T_MAX || (branch_factors != NULL &&
-          branch_factors[parameter] < branch_factors[selected])) {
-        selected = parameter;
-      }
+  R_xlen_t ready_count = 0;
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    paradox_account_work(work_since_interrupt);
+    if (indegree[parameter] == 0) {
+      ready_push(ready, &ready_count, parameter, branch_factors);
     }
-    if (selected == R_XLEN_T_MAX) {
+  }
+  for (R_xlen_t output = 0; output < parameter_count; ++output) {
+    paradox_account_work(work_since_interrupt);
+    if (ready_count == 0) {
       Rf_error("ParamSet dependency graph contains a cycle");
     }
 
-    emitted[selected] = TRUE;
+    const R_xlen_t selected = ready_pop(ready, &ready_count, branch_factors);
     result[output] = selected;
-    for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
+    for (R_xlen_t edge = first_edge[selected]; edge != R_XLEN_T_MAX;
+        edge = next_edge[edge]) {
       paradox_account_work(work_since_interrupt);
-      if (plan->edges[edge].parent != selected) {
-        continue;
-      }
       const R_xlen_t child = plan->edges[edge].child;
       if (child >= parameter_count || indegree[child] == 0) {
         Rf_error("Corrupt ParamSet dependency topology");
       }
       --indegree[child];
+      if (indegree[child] == 0) {
+        ready_push(ready, &ready_count, child, branch_factors);
+      }
     }
   }
 }
@@ -103,18 +168,36 @@ void paradox_dependency_graph_plan_build(SEXP parameter_ids,
     plan->incoming_count[parameter] = 0;
   }
 
+  /* Tiny graphs need no index allocation. For wider graphs, resolve both
+   * endpoints through the common encoding-aware ID map rather than scanning
+   * the schema twice per edge. Its keys belong to the caller's rooted snapshot. */
+  const int indexed = parameter_count >= 32 && dependency_count >= 8;
+  paradox_domain_id_map_t id_map;
+  if (indexed && paradox_domain_id_map_init(parameter_ids, &id_map) !=
+      PARADOX_DOMAIN_ID_MAP_OK) {
+    Rf_error("Corrupt or oversized ParamSet dependency identifiers");
+  }
   for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
     paradox_account_work(work_since_interrupt);
-    const R_xlen_t child = paradox_domain_find_string(
-      parameter_ids,
-      STRING_ELT(dependencies->ids, edge),
-      work_since_interrupt
-    );
-    const R_xlen_t parent = paradox_domain_find_string(
-      parameter_ids,
-      STRING_ELT(dependencies->on, edge),
-      work_since_interrupt
-    );
+    R_xlen_t child = R_XLEN_T_MAX;
+    R_xlen_t parent = R_XLEN_T_MAX;
+    if (indexed) {
+      (void) paradox_domain_id_map_find(
+        &id_map, STRING_ELT(dependencies->ids, edge),
+        &child, work_since_interrupt
+      );
+      (void) paradox_domain_id_map_find(
+        &id_map, STRING_ELT(dependencies->on, edge),
+        &parent, work_since_interrupt
+      );
+    } else {
+      child = paradox_domain_find_string(
+        parameter_ids, STRING_ELT(dependencies->ids, edge), work_since_interrupt
+      );
+      parent = paradox_domain_find_string(
+        parameter_ids, STRING_ELT(dependencies->on, edge), work_since_interrupt
+      );
+    }
     if (child == R_XLEN_T_MAX) {
       Rf_error("Design dependencies refer to an unknown child parameter");
     }

@@ -1295,10 +1295,9 @@ static void grow_axis_builder(grid_axis_builder_t *builder,
 
 static int same_realized_double(double left, double right) {
   if (left == right) return TRUE;
-  if (R_IsNA(left) || R_IsNA(right)) {
-    return R_IsNA(left) && R_IsNA(right);
-  }
-  return R_IsNaN(left) && R_IsNaN(right);
+  /* Unequal ordinary numbers need no out-of-line R missing-value checks.
+   * Only two NaNs need the R-specific NA-versus-NaN distinction. */
+  return ISNAN(left) && ISNAN(right) && R_IsNA(left) == R_IsNA(right);
 }
 
 static int axis_builder_contains_last(const grid_axis_builder_t *builder,
@@ -1324,10 +1323,9 @@ static void append_axis_value(grid_axis_builder_t *builder,
     qunif_kind_t kind, grid_scalar_t value, int first_level,
     int maximum_size) {
   /*
-   * Every built-in quantile map is monotone in its unit argument. Equal
-   * realized values are consequently adjacent, including integer rounding,
-   * fixed numeric bounds, signed zero, and the NaN interior of (-Inf, Inf).
-   * Comparing only the last retained value keeps axis construction O(r).
+   * Adjacent equal values are the common case. Floating-point arithmetic can
+   * make numeric mappings briefly decrease, so build_realized_axis detects
+   * that case and deduplicates the complete realized vector afterward.
    */
   if (axis_builder_contains_last(builder, kind, value)) return;
   grow_axis_builder(builder, maximum_size);
@@ -1372,6 +1370,7 @@ static void build_realized_axis(grid_axis_t *axis, int resolution,
     int *warn_integer_range, R_xlen_t *work_since_interrupt) {
   grid_axis_builder_t builder;
   initialize_axis_builder(&builder, resolution);
+  int decreased = FALSE;
   for (R_xlen_t level = 0;
       level < (R_xlen_t) resolution;
       ++level) {
@@ -1385,6 +1384,10 @@ static void build_realized_axis(grid_axis_t *axis, int resolution,
         axis->spec.lower,
         axis->spec.upper
       );
+      if (builder.size != 0 &&
+          value.real < builder.values[builder.size - 1].real) {
+        decreased = TRUE;
+      }
       break;
     case QUNIF_KIND_INT:
       if (!paradox_qunif_integer_value(
@@ -1395,6 +1398,10 @@ static void build_realized_axis(grid_axis_t *axis, int resolution,
           )) {
         value.integer = NA_INTEGER;
         *warn_integer_range = TRUE;
+      }
+      if (builder.size != 0 &&
+          value.integer < builder.values[builder.size - 1].integer) {
+        decreased = TRUE;
       }
       break;
     case QUNIF_KIND_FCT: {
@@ -1422,14 +1429,43 @@ static void build_realized_axis(grid_axis_t *axis, int resolution,
       resolution
     );
   }
-  axis->values = realized_axis_vector(
+  SEXP values = PROTECT(realized_axis_vector(
     &builder,
     axis->spec.kind,
     work_since_interrupt
-  );
+  ));
+  if (decreased) {
+    /* The native base-R matcher supplies exact numeric duplicate semantics
+     * (including signed zero and missing values) without another hash engine.
+     * Keep the first nominal level with each retained value for row ordering.
+     * This path is used only when rounding disproves adjacency. */
+    SEXP first = PROTECT(Rf_match(values, values, 0));
+    int kept = 0;
+    for (int index = 0; index < builder.size; ++index) {
+      paradox_account_work(work_since_interrupt);
+      if (INTEGER_ELT(first, index) != index + 1) continue;
+      builder.values[kept] = builder.values[index];
+      builder.first_levels[kept] = builder.first_levels[index];
+      ++kept;
+    }
+    if (kept != builder.size) {
+      builder.size = kept;
+      axis->values = realized_axis_vector(
+        &builder,
+        axis->spec.kind,
+        work_since_interrupt
+      );
+    } else {
+      axis->values = values;
+    }
+    UNPROTECT(1);
+  } else {
+    axis->values = values;
+  }
   axis->count = builder.size;
   axis->first_levels = builder.first_levels;
   axis->fixed = FALSE;
+  UNPROTECT(1);
 }
 
 static SEXP fixed_axis_vector(SEXP value, SEXPTYPE storage_type) {
