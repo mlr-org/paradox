@@ -145,18 +145,15 @@ test_that("empty and additive-subclass capsule Domains stay supported", {
   expect_identical(object$label, "kept")
 })
 
-test_that("closed and corrupt Domain capsule state errors without fallback", {
+test_that("Domain snapshots do not revalidate private class labels", {
   object = ps(x = p_int())
   private = object$.__enclos_env__$private
   params = paradox:::param_set_core_state(private)$.params
   params$cls[[1L]] = "ThirdPartyParam"
   paradox:::param_set_core_replace(private, params = params)
 
-  expect_error(object$domains, "Corrupt ParamSet Domain capsule state")
-  expect_error(
-    native_domains_call(object),
-    "Corrupt ParamSet Domain capsule state"
-  )
+  expect_identical(object$domains$x$cls, "ThirdPartyParam")
+  expect_identical(native_domains_call(object)$x$cls, "ThirdPartyParam")
 })
 
 test_that("ParamSetShadow Domains refresh live values and dependencies", {

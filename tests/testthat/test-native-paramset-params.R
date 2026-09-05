@@ -364,6 +364,14 @@ test_that("params rejects malformed capsules deterministically without replay", 
 
   unknown_condition = malformed$dependency_condition
   malformed$dependency_condition = NULL
+  unknown_class = malformed$params_class
+  malformed$params_class = NULL
+
+  # Copying this private label is safe; its meaning is not read by a snapshot.
+  expect_identical(unknown_class$params$cls[[1L]], "ThirdPartyParam")
+  expect_identical(
+    params_contract_native(unknown_class)$cls[[1L]], "ThirdPartyParam"
+  )
 
   for (name in names(malformed)) {
     expect_error(

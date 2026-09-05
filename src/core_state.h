@@ -27,6 +27,9 @@ typedef enum {
   PARADOX_CORE_FIELD_COUNT
 } paradox_core_field_t;
 
+/* Intern the fixed payload labels at DLL initialization. */
+attribute_hidden void paradox_core_intern_field_names(void);
+
 /* `.edges` records the derivation inputs a COLLECTION or SHADOW capsule needs
  * to recompute its own derived schema from its current children. It is
  * `NULL` for BASE, whose schema is owned rather than derived.

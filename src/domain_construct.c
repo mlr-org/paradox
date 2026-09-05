@@ -91,17 +91,6 @@ static int checkmate_list(SEXP value) {
     !Rf_isS4(value) && !Rf_isObject(value);
 }
 
-/*
- * Duplicate detection over a canonical string vector. `Rf_any_duplicated()`
- * builds a hash table, which is real per-row cost for the vectors admitted
- * here -- tags and levels are usually empty or a single element. Answering
- * those two lengths directly is exactly the same predicate with no allocation.
- */
-static int strings_have_duplicates(SEXP values) {
-  if (XLENGTH(values) < 2) return FALSE;
-  return Rf_any_duplicated(values, FALSE) != 0;
-}
-
 static int unique_nonmissing_strings(SEXP values, int require_names) {
   if (TYPEOF(values) != STRSXP || ALTREP(values) || Rf_isS4(values)) {
     return FALSE;
@@ -122,7 +111,7 @@ static int unique_nonmissing_strings(SEXP values, int require_names) {
     }
   }
   if (valid) {
-    valid = !strings_have_duplicates(values);
+    valid = !paradox_domain_strings_have_duplicates(values);
   }
   UNPROTECT(1);
   return valid;
@@ -1201,7 +1190,7 @@ static int admit_builtin_domain_schema_core(
         REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS);
       }
     }
-    if (strings_have_duplicates(tags)) {
+    if (paradox_domain_strings_have_duplicates(tags)) {
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_TAGS_DUPLICATE);
     }
   }
@@ -1288,7 +1277,7 @@ static int admit_builtin_domain_schema_core(
         TYPEOF(levels) == STRSXP &&
         !ALTREP(levels) && !Rf_isS4(levels) && !Rf_isObject(levels) &&
         paradox_api_has_no_attributes(levels) && XLENGTH(levels) != 0 &&
-        strings_have_duplicates(levels)) {
+        paradox_domain_strings_have_duplicates(levels)) {
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_LEVELS_DUPLICATE);
     }
     if (!levels_are_canonical(resolved_kind, levels) ||
@@ -2094,12 +2083,9 @@ SEXP paradox_domain_construct(
         grouping = VECTOR_ELT(roots, ROOT_GROUPING);
         storage_type = VECTOR_ELT(roots, ROOT_STORAGE);
       }
-      kind = domain_kind(cls, storage_type);
-      if (kind != PARADOX_BUILTIN_DOMAIN_DBL ||
-          !cargo_is_canonical(cargo, tags, kind, NULL)) {
-        UNPROTECT(1);
-        Rf_error("Internal error while constructing logscale Domain state");
-      }
+      /* Both generated representations are double-valued. The new cargo and
+       * selector scalars are owned here; do not readmit our own construction. */
+      kind = PARADOX_BUILTIN_DOMAIN_DBL;
     }
   }
   if (XLENGTH(special_vals) != 0 && trafo != R_NilValue) {

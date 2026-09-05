@@ -77,11 +77,13 @@ printf '%s\n' \
 printf '%s\n' \
   'test_that("successful sibling", {' \
   '  cat("completed\n", file = Sys.getenv("PARADOX_NATIVE_SIBLING_MARKER"))' \
-  '  expect_true(TRUE)' \
+  '  expect_true(startsWith(Sys.getenv("HOME"), "/") && dir.exists(path.expand("~")))' \
   '})' \
   > "$TEST_ROOT/source/tests/testthat/test-native-batch-003.R"
 
 set +e
+(
+cd "$TEST_ROOT"
 env -i \
   "HOME=$TEST_ROOT/home" \
   "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
@@ -93,7 +95,8 @@ env -i \
   "PARADOX_NATIVE_TEST_JOBS=3" \
   "PARADOX_NATIVE_SIBLING_MARKER=$TEST_ROOT/sibling.marker" \
   "$RSCRIPT" --vanilla "$RUNNER" "$TEST_ROOT/source" "$LIBRARY" focused \
-  "$TEST_ROOT/ledger.tsv" > "$TEST_ROOT/runner.log" 2>&1
+  ledger.tsv
+) > "$TEST_ROOT/runner.log" 2>&1
 runner_status=$?
 set -e
 [[ "$runner_status" -ne 0 ]] || {

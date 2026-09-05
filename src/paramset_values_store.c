@@ -305,7 +305,7 @@ static int disjoint_names(SEXP left, SEXP right,
 }
 
 static void load_base_param_state(SEXP private_environment, SEXP self,
-    value_param_state_t *state, R_xlen_t *work_since_interrupt) {
+    value_param_state_t *state) {
   if (paradox_core_kind(paradox_core_from_private(private_environment)) !=
         PARADOX_CORE_BASE ||
       TYPEOF(private_environment) != ENVSXP ||
@@ -321,18 +321,11 @@ static void load_base_param_state(SEXP private_environment, SEXP self,
     ".values"
   ));
   paradox_domain_params_t checked;
-  R_xlen_t unused_row = 0;
   const int valid = state->params != R_UnboundValue &&
     current_values != R_UnboundValue &&
-    paradox_params_supported_table_attributes(state->params) &&
-    paradox_domain_validate_params(
+    paradox_domain_read_params(
       state->params,
-      R_NilValue,
-      TRUE,
-      &checked,
-      &unused_row,
-      work_since_interrupt
-    ) && checked.row_count <= INT_MAX;
+      0U, &checked);
   if (!valid) {
     UNPROTECT(2);
     Rf_error("Corrupt ParamSet value-store state");
@@ -1811,8 +1804,7 @@ static void process_base_write(value_write_transaction_t *transaction,
   load_base_param_state(
     private_environment,
     task->self,
-    &state,
-    transaction->work_since_interrupt
+    &state
   );
   SEXP stored = PROTECT(ordered_values(
     state.ids,
@@ -1991,6 +1983,7 @@ static SEXP current_node_values(SEXP self, SEXP private_environment,
     paradox_collection_graph_build(
       private_environment,
       self,
+      PARADOX_GRAPH_VALUES,
       &graph,
       &roots,
       roots_index,
@@ -1998,6 +1991,7 @@ static SEXP current_node_values(SEXP self, SEXP private_environment,
     );
     values = PROTECT(paradox_collection_values_from_graph(
       &graph,
+      FALSE,
       work_since_interrupt
     ));
     /* The raw result now owns its list shell and every selected leaf.  The
@@ -2046,15 +2040,10 @@ static void process_shadow_write(value_write_transaction_t *transaction,
   SEXP params = VECTOR_ELT(state, PARADOX_CORE_PARAMS);
   SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
   paradox_domain_params_t checked_params;
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
         params,
-        R_NilValue,
-        TRUE,
-        &checked_params,
-        &unused_row,
-        transaction->work_since_interrupt
-      ) || TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isObject(sets) ||
+        0U, &checked_params) || TYPEOF(sets) != VECSXP ||
+      ALTREP(sets) || Rf_isObject(sets) ||
       Rf_isS4(sets) || !paradox_api_has_no_attributes(sets) ||
       XLENGTH(sets) != 1 || TYPEOF(VECTOR_ELT(sets, 0)) != ENVSXP ||
       Rf_isS4(VECTOR_ELT(sets, 0))) {

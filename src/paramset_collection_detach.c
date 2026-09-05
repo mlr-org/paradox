@@ -723,6 +723,7 @@ SEXP paradox_param_set_collection_detach_plan(SEXP private_environment,
   paradox_collection_graph_build(
     private_environment,
     self,
+    PARADOX_GRAPH_ALL,
     &graph,
     &graph_roots,
     graph_roots_index,

@@ -1249,6 +1249,10 @@ int paradox_bounded_metadata_has_tag(
   return bounded && query.valid && query.count == count;
 }
 
+static inline SEXP snapshot_ordinary_vector_payload(
+  SEXP source, int require_attribute_free
+);
+
 SEXP paradox_snapshot_semantic_vector(SEXP value) {
   if (value == R_NilValue) {
     return value;
@@ -1278,6 +1282,19 @@ SEXP paradox_snapshot_semantic_vector(SEXP value) {
       &source_attribute_count
     )) {
     Rf_error("Semantic vector metadata is not bounded");
+  }
+  /* Canonical capsule columns and most unnamed semantic inputs have no
+   * attributes to capture. Reuse the same owned-payload copier as typed
+   * values, including its post-allocation representation/metadata receipt.
+   * Reuse the required metadata capture above, so named inputs do not pay
+   * for an extra attribute scan. Keep interrupt-sized inputs on the element
+   * path below; this shortcut never removes a long-vector interrupt poll. */
+  if (source_attribute_count == 0 && !source_object && !ALTREP(value) &&
+      size <= PARADOX_INTERRUPT_CHECK_INTERVAL) {
+    PROTECT(value);
+    SEXP result = snapshot_ordinary_vector_payload(value, TRUE);
+    UNPROTECT(1);
+    return result;
   }
   /*
    * Names identify the meaning of semantic elements. Allocate both
@@ -3788,12 +3805,11 @@ static void own_all_data_table_columns(SEXP table) {
   UNPROTECT(1);
 }
 
-SEXP paradox_prepare_data_table(SEXP table, int growable) {
-  (void) growable;
+SEXP paradox_prepare_data_table(SEXP table, int normalize_columns) {
   /* Public facade columns must not retain names that data.table may later
    * remove by reference. Own only those unusual columns before normalization;
    * canonical unnamed columns remain shared with the detached facade shell. */
-  own_named_data_table_columns(table);
+  if (normalize_columns) own_named_data_table_columns(table);
   /* data.table's public object representation uses an external pointer whose
    * protected external pointer identifies the owning table and whose tag
    * identifies its names vector. Constructing the same representation solely
@@ -3876,7 +3892,9 @@ SEXP paradox_finalize_data_table(SEXP table) {
    * it before installing the independently owned result reference. */
   Rf_setAttrib(shell, selfref_symbol, R_NilValue);
   own_all_data_table_columns(shell);
-  SEXP result = PROTECT(paradox_prepare_data_table(shell, TRUE));
+  /* own_all_data_table_columns just removed the column names; these newly
+   * owned columns have not escaped. Do not scan their metadata again. */
+  SEXP result = PROTECT(paradox_prepare_data_table(shell, FALSE));
   SEXP result_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
   Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
   Rf_setAttrib(result, R_NamesSymbol, result_names);

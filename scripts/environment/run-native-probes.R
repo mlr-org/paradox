@@ -913,6 +913,11 @@ main <- function() {
       result <- .Call(symbol("param_set_property"), state_of(set)$.params, 0L)
       check(identical(result, c(x = 3)), "property vector differs")
     },
+    direct_param_set_get_property = function() {
+      set <- ps(x = p_int(0L, 2L))
+      result <- .Call(symbol("param_set_get_property"), private_of(set), set, 5L)
+      check(identical(result, c(x = 0L)), "capsule property vector differs")
+    },
     direct_param_set_qunif_builtin = function() {
       set <- ps(x = p_int(0L, 10L), y = p_dbl(0, 1))
       private <- private_of(set)

@@ -29,6 +29,17 @@ The user subsequently reopened implementation review in September 2026;
 small-benchmark requirement. Its internal algorithm changes preserve this
 public contract and require a new source-bound candidate before release.
 
+The subsequent user-approved validation policy in
+[`validation-policy-20260905.md`](validation-policy-20260905.md) takes
+precedence over blanket corruption-detection requirements below. Public
+arguments remain checked and all well-formed R objects must be handled without
+unsafe native access, even after private R-level mutation. Private semantic
+validity after such mutation is not promised; operations check only what they
+use. Unexposed package-owned intermediates are trusted rather than repeatedly
+admitted. Native-invalid representations and nonconforming ALTREP providers
+are outside the input model. Necessary GC roots, supported reentrancy,
+safe indexing/arithmetic, and graph-cycle handling remain mandatory.
+
 It also spends that break now on one strict structural-object boundary. Exotic
 ALTREP/S4 shells and duplicate R/native admission have no known maintained
 consumer and impose dispatch, multi-observation, and dual-authority costs. They
@@ -169,13 +180,14 @@ the host's `uintptr_t` width, so a capsule duplicated by an ordinary R
 attribute assignment does not inherit the proof. The address slot is the one
 place R guarantees to reset on unserialize.
 
-A `SHADOW`, and therefore every `COLLECTION` graph that reaches one, remains
-unstamped. No finite fingerprint in that one address word could exactly
-authenticate arbitrary same-pointer rewrites of the ordinary signature list.
-Those graphs instead reauthenticate the complete signature against the
-authoritative origin graph on every entry. Thus the stamp proves only that
-nothing was installed in a graph with no mutable signature carrier; it never
-records that a caller or a node may be trusted.
+A `SHADOW` uses the state epoch, so every public value or schema change makes
+its projection eligible for refresh. A `COLLECTION` reaching a Shadow remains
+unstamped: its schema-only epoch cannot certify a value-dependent projection.
+An unchanged Shadow no longer reauthenticates private signature contents on
+every read. This follows the September operation-specific policy, not a
+probabilistic private-integrity guarantee. A stamp proves public freshness;
+each operation still guards the selected storage needed for safe native
+access. Cold generation receipts and callback transaction checks remain.
 
 The protected eleven-field payload is the complete capsule/model state, subject
 only to the public `assert_values` shell policy described above. A SHADOW core

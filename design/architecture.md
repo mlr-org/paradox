@@ -6,6 +6,11 @@ architecture. It replaces the superseded compatibility-first design. Git
 history contains that design and its measurements; none of its R6-surface or
 fallback mechanisms are current requirements.
 
+The September 2026 [validation policy](validation-policy-20260905.md) takes
+precedence over older blanket private-state diagnostics below. Constructors
+admit public arguments; native readers select a generation and guard only the
+storage they actually index. Unused private semantics are not revalidated.
+
 The first public 2.0 release deliberately establishes the strict structural
 boundary described below. Exotic ALTREP/S4 shells are not retained as a
 temporary compatibility layer: no maintained consumer needs them, and doing so
@@ -20,7 +25,7 @@ public R constructor/method/active binding
                     |
             registered .Call operation
                     |
-       validate + snapshot capsule graph once
+       select + guard required capsule state
                     |
         BASE / COLLECTION / SHADOW planning
                     |
@@ -80,15 +85,29 @@ COLLECTION; the origin schema slice plus the retained hidden ID set for SHADOW.
 Both derived kinds also record a `tag_override`, the node's own answer for the
 IDs a `$tags<-` assignment named, which survives re-derivation without writing
 through to the sets.
+The eleven fixed payload labels are interned at DLL initialization. Explicit
+capsule construction/inspection checks them, using identity with a byte
+fallback. Ordinary private lookup needs only the closed tag and safe carrier
+shape, because native field access is positional. This does not cache mutable
+validity; every operation still guards its selected columns and indices.
 COLLECTION flattens and SHADOW projections are refreshed lazily at one native
 entry gate that walks the graph in post-order, so an ancestor of a set that
 grew re-derives instead of going stale. Two session-global epochs (schema and
-state) plus a per-capsule stamp in the address slot make an unchanged
-SHADOW-free graph a single comparison; a cache refresh advances neither epoch.
-Only a COLLECTION whose complete subtree is proven SHADOW-free is stamped.
-SHADOW and Shadow-bearing COLLECTION graphs remain unstamped and compare every
-mutable Shadow signature exactly against its authoritative origin graph on
-each entry; a finite address-word fingerprint would not be an exact proof.
+state) plus a per-capsule stamp in the address slot avoid repeated refresh of
+unchanged nodes; a cache refresh advances neither epoch. A SHADOW observes the
+state epoch, including public value changes. A COLLECTION is stamped with the
+schema epoch only when its subtree is SHADOW-free. Shadow-bearing Collections
+remain unstamped so value-dependent child projections cannot go stale. Stamps
+certify public freshness, never safety or semantic validity of private fields.
+Cold/mutating operations retain their required generation receipts. The
+[completion pass](graph-validation-20260905.md) records this policy change.
+
+One graph walker admits explicit value, dependency, and full-schema views.
+Readers check the column and edge extents they use, not unused translations or
+parent/child semantic equality. Stored value names are mapped once, with an
+allocation-free matching-order case and the shared R matcher otherwise.
+Outward Collection emission detaches in that same pass; private intermediates
+are not re-admitted. Dependency counts do not evaluate Conditions.
 
 The documented public `assert_values` field is the sole stateful R-shell policy
 outside that model. It selects checked versus unchecked native value-store
@@ -353,6 +372,24 @@ owner-only operation such as `$clone()` could execute the legacy private
 layout before an inherited Paradox gateway is reached.
 
 ## Canonical state
+
+Canonical state is a producer invariant, not a requirement to replay complete
+semantic validation on every private read. `paradox_domain_read_params()` is
+the allocation-free fixed-layout reader: its mask declares the columns the
+consumer will index, and it checks their types, ordinary representations, and
+lengths. ID-only readers do not inspect bounds, levels, defaults, or cargo.
+Whole-table copiers request all column shells and guard nested fields while
+detaching them. The value checker guards factor/special-value carrier types at
+spec construction; samplers and quantile mappers guard the bounds and factor
+indices they use. Public Domain admission remains the semantic owner.
+
+Static property getters use the shared named-column selector (also supporting
+raw table kernels), but admit only the selected result/name carriers. `$lower`
+does not classify rows or check factor uniqueness; `$is_number` does not read
+bounds; scalar `all_*` reductions stop after a false result. Detached outward
+ownership is unchanged. Parameters' private row names and display metadata do
+not determine native row counts. Internally constructed value lists and R's
+own matching results are consumed without a second admission pass.
 
 The `.params`, `.tags`, `.deps`, `.trafos`, and `.translation` stores are exact
 plain base `data.frame`s with canonical column types, ordinary non-ALTREP
@@ -1150,7 +1187,7 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   `src/paramset_domain_common.[ch]`: closed Domain construction, the sole shared
   built-in row-rule owner, the exact public sixteen-column structural adapter,
   operation-mask/closure handoff, compact indexed-root terminal-generation
-  receipt, canonical capsule table/kind validation, and the exact dependency
+  receipt, masked private column-shell admission, and the exact dependency
   validator that can expose admitted RHS pointers to its rooted caller.
   `paramset_domain_common` also owns the cross-unit helper
   vocabulary — the canonical 16-column schema enum and name table, encoding-
@@ -1180,6 +1217,16 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   static facade builder. It accepts an already admitted core directly, so
   collection reads do not allocate a temporary environment or repeat the
   private-to-core lookup;
+- `src/properties.c`: one static-property kernel over a parameter table and a
+  thin capsule-gated entry for R6 active bindings. The latter refreshes the
+  selected BASE/COLLECTION/SHADOW generation and roots its parameter table
+  itself through extraction, independently of the replaceable parent field;
+  it does not hand the payload back to R just to select `.params`. Scalar
+  `all_*` reductions share the vector-flag loop without allocating the vector
+  or its names, and stop on the first false result. Dimension reads select only
+  IDs. Detached columns admit only their required column shells and
+  independently root their selected source, IDs, and (when typed ownership
+  needs them) classes through outward allocation;
 - `src/upgrade_graph.[ch]`: non-forcing, pointer-memoized iterative discovery
   for the recursive legacy migration boundary. Its precomputed search/built-in
   boundary identities live in one indexed ordinary `VECSXP` for the complete
@@ -1442,9 +1489,10 @@ and established Paradox/checkmate message fragments through the shared native
 failure formatter. Byte-identical wording for every checkmate edge case,
 `conditionCall()`, internal implementation frames, exotic unsupported object
 semantics, and behavior after private corruption are not contracts. Corrupt
-current state receives a deterministic `Corrupt ... capsule/state/graph` error
-before unsafe access. Direct native calls with malformed objects are
-adversarial test inputs and must never crash. Malformed exact-token or Domain
+current state is guarded before unsafe access; unrelated private semantic
+damage need not be diagnosed. Direct native calls with malformed but
+well-formed R objects must not crash. Invalid native representations and
+nonconforming ALTREP providers are outside that guarantee. Malformed exact-token or Domain
 structure is likewise a hard public-boundary error; the returned check
 diagnostic is reserved for ordinary structurally admitted value infeasibility.
 
@@ -1456,6 +1504,17 @@ are checked before allocation or indexing. Portable scalar C99 is the baseline;
 installation, while a separate current-R GCC >= 15 / Clang `--use-C23` gate
 proves forward compatibility without replacing any strict GNU C99 lane.
 Architecture-specific code is not required for performance.
+
+The September static-getter pass is measured in
+[`getter-performance-20260905.md`](getter-performance-20260905.md). Shared
+parameter admission uses the existing closed-kind classifier and a bounded
+duplicate predicate for at most eight short native-ASCII strings; all other
+encodings and sizes retain R's C matching implementation. Attribute-free
+ordinary semantic vectors up to one interrupt interval reuse the existing
+owned-payload copier and its post-allocation receipt. Named, attributed,
+ALTREP, and longer semantic vectors keep their established capture path.
+These are representation-specific primitives under one semantic contract,
+not an R fallback, a property cache, or permission to lend mutable columns.
 
 ## Forbidden architecture regressions
 

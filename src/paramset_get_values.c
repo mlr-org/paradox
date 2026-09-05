@@ -31,6 +31,7 @@ typedef struct {
   SEXP tags;
   SEXP values;
   SEXP dependencies;
+  SEXP defaults;
   paradox_domain_params_t params_data;
   paradox_domain_tags_t tags_data;
   paradox_domain_values_t values_data;
@@ -52,6 +53,12 @@ enum get_values_root_slot {
   GET_VALUES_ROOT_TAGS,
   GET_VALUES_ROOT_VALUES,
   GET_VALUES_ROOT_DEPENDENCIES,
+  GET_VALUES_ROOT_PARAM_IDS,
+  GET_VALUES_ROOT_PARAM_CLASSES,
+  GET_VALUES_ROOT_DEFAULTS,
+  GET_VALUES_ROOT_VALUE_NAMES,
+  GET_VALUES_ROOT_TAG_IDS,
+  GET_VALUES_ROOT_TAG_VALUES,
   GET_VALUES_ROOT_COUNT
 };
 
@@ -272,7 +279,7 @@ static int map_tags_and_required(get_values_snapshot_t *snapshot,
 
 static void admit_values(SEXP values, paradox_domain_values_t *validated,
     R_xlen_t *work_since_interrupt) {
-  if (!paradox_domain_validate_values(
+  if (!paradox_domain_read_values(
       values,
       validated,
       work_since_interrupt
@@ -330,6 +337,7 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     paradox_collection_graph_build(
       private_environment,
       self,
+      PARADOX_GRAPH_VALUES | PARADOX_GRAPH_DEPENDENCIES,
       &graph,
       &graph_roots,
       graph_roots_index,
@@ -350,15 +358,15 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
 
     SEXP values = PROTECT(paradox_collection_values_from_graph(
       &graph,
+      FALSE,
       work_since_interrupt
     ));
     snapshot->values = values;
     SET_VECTOR_ELT(roots, GET_VALUES_ROOT_VALUES, snapshot->values);
-    admit_values(
-      snapshot->values,
-      &snapshot->values_data,
-      work_since_interrupt
-    );
+    snapshot->values_data = (paradox_domain_values_t) {
+      values, Rf_getAttrib(values, R_NamesSymbol), XLENGTH(values)
+    };
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_VALUE_NAMES, snapshot->values_data.names);
     UNPROTECT(1);
 
     SEXP dependencies = PROTECT(paradox_collection_dependencies_from_graph(
@@ -391,6 +399,7 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
       &snapshot->values_data,
       work_since_interrupt
     );
+    SET_VECTOR_ELT(roots, GET_VALUES_ROOT_VALUE_NAMES, snapshot->values_data.names);
     snapshot->dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
     SET_VECTOR_ELT(
       roots,
@@ -399,17 +408,16 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     );
   }
 
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       snapshot->params,
-      R_NilValue,
-      TRUE,
-      &snapshot->params_data,
-      &unused_row,
-      work_since_interrupt
-  )) {
+      (1U << PARADOX_DOMAIN_CLS) | (1U << PARADOX_DOMAIN_DEFAULT),
+      &snapshot->params_data)) {
     Rf_error("Corrupt ParamSet capsule: invalid `.params` field");
   }
+  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_PARAM_IDS, snapshot->params_data.ids);
+  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_PARAM_CLASSES, snapshot->params_data.classes);
+  snapshot->defaults = VECTOR_ELT(snapshot->params, PARADOX_DOMAIN_DEFAULT);
+  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_DEFAULTS, snapshot->defaults);
   snapshot->parameter_ids = build_id_index(
     snapshot->params_data.ids,
     work_since_interrupt
@@ -421,6 +429,8 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     )) {
     Rf_error("Corrupt ParamSet capsule: invalid `.tags` field");
   }
+  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_TAG_IDS, snapshot->tags_data.ids);
+  SET_VECTOR_ELT(roots, GET_VALUES_ROOT_TAG_VALUES, snapshot->tags_data.values);
   SEXP required_tag = PROTECT(Rf_mkChar("required"));
   const int valid_tags = map_tags_and_required(
     snapshot,
@@ -482,7 +492,7 @@ static void evaluate_activity(const get_values_snapshot_t *snapshot,
   result->reasons = NULL;
   const paradox_activity_plan_t plan = {
     snapshot->params_data.row_count,
-    VECTOR_ELT(snapshot->params, PARADOX_DOMAIN_DEFAULT),
+    snapshot->defaults,
     snapshot->values_data.values,
     snapshot->value_by_parameter,
     snapshot->dependencies_data.row_count,

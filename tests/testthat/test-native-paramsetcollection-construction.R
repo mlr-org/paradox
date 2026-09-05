@@ -374,7 +374,7 @@ test_that("native collection add rejects cycles and corruption atomically", {
   )
   expect_error(
     valid$add(corrupt_values, "bad_values"),
-    "Corrupt ParamSet child capsule state"
+    "Corrupt ParamSet"
   )
   expect_identical(
     data.table::address(collection2_state(valid)),
@@ -556,7 +556,7 @@ test_that("native boundaries reject invalid sets, flags, and duplicate IDs", {
   )
 })
 
-test_that("constructor rejects malformed canonical capsule fields", {
+test_that("constructor validates consumed capsule fields, not private labels", {
   malformed = list(
     table_class = collection2_forge_child("params", function(table) {
       class(table) = c("data.table", "data.frame")
@@ -578,6 +578,21 @@ test_that("constructor rejects malformed canonical capsule fields", {
       table[c(1L, 1L), , drop = FALSE]
     })
   )
+
+  # Native readers use positional columns and construct new outward headers.
+  # Neither those private labels nor the copied class string need admission.
+  for (name in c("table_class", "column_schema", "domain_kind")) {
+    sets = list(owner = malformed[[name]])
+    native = collection2_construct(sets)
+    collection = ParamSetCollection$new(sets)
+    expect_identical(native$params$id, c("owner.number", "owner.flag"))
+    expect_identical(collection$ids(), native$params$id)
+    if (name == "domain_kind") {
+      expect_identical(native$params$cls[[1L]], "ParamUnknown")
+      expect_identical(collection$class[[1L]], "ParamUnknown")
+    }
+  }
+  malformed[c("table_class", "column_schema", "domain_kind")] = NULL
 
   for (name in names(malformed)) {
     sets = list(owner = malformed[[name]])

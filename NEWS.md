@@ -26,6 +26,21 @@ hazards that Paradox 2 is intended to remove.
   `base::getOption()`; newer R uses documented `Rf_GetOption1`. Ordinary old-R
   constructors no longer fall back unconditionally to `deparse1()`, while
   unsupported or unstable representations retain that correctness fallback.
+* Static properties such as `$class`, `$lower`, `$upper`, and `$levels` now
+  enter the capsule-aware native getter directly. Shared type/name checks and
+  ordinary vector copying do less work, while results remain detached from
+  internal storage. `$all_numeric`, `$all_categorical`, and `$all_bounded`
+  compute scalar answers without constructing named intermediate vectors;
+  `$length` and `$is_empty` avoid an R-side table-dimension round trip.
+* Private-state validation is operation-specific: getters and native readers
+  guard the columns they use instead of rescanning the complete Domain schema.
+  Stored-value and Collection readers share resolved rows and avoid redundant
+  name/schema checks; outward Collection values are detached in one pass.
+  Unchanged Shadows reuse public-generation stamps, while public value and
+  schema changes still refresh live projections. Private cache edits are not
+  automatically diagnosed or repaired by unrelated reads.
+  Public argument checks and detached results are unchanged. After unsupported
+  private edits, unrelated operations no longer promise a corruption diagnostic.
 * Invalid `aggr`, `in_tune_fn`, and `disable_in_tune` constructor arguments
   are diagnosed by argument name, uniformly for all five Domain constructors,
   including the Paradox-1 internal-tuning pairing messages (tag required,

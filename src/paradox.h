@@ -266,6 +266,11 @@ typedef enum {
 } paradox_property_t;
 
 attribute_hidden SEXP paradox_param_set_property(SEXP params, SEXP property);
+attribute_hidden SEXP paradox_param_set_get_property(
+  SEXP private_environment,
+  SEXP self,
+  SEXP property
+);
 attribute_hidden SEXP paradox_domain_check_builtin(
   SEXP param,
   SEXP values,

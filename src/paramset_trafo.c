@@ -231,15 +231,10 @@ static int callback_accepts_param_set(SEXP callback) {
 
 static void validate_trafo_table(trafo_snapshot_t *snapshot,
     R_xlen_t *work_since_interrupt) {
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       snapshot->params_table,
-      R_NilValue,
-      TRUE,
-      &snapshot->params,
-      &unused_row,
-      work_since_interrupt
-    ) || !paradox_domain_validate_trafos(
+      1U << PARADOX_DOMAIN_DEFAULT, &snapshot->params) ||
+      !paradox_domain_validate_trafos(
       snapshot->trafos_table,
       &snapshot->trafos,
       work_since_interrupt
@@ -415,6 +410,7 @@ static void load_snapshot(SEXP private_environment, SEXP self,
     paradox_collection_graph_build(
       private_environment,
       self,
+      PARADOX_GRAPH_ALL,
       &snapshot->graph,
       graph_roots,
       graph_roots_index,
@@ -1429,6 +1425,7 @@ SEXP paradox_param_set_collection_has_callback(SEXP private_environment,
   paradox_collection_graph_build(
     private_environment,
     self,
+    0U, /* Only topology is needed; callback fields are read below. */
     &graph,
     &roots,
     roots_index,

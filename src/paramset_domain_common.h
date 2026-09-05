@@ -191,6 +191,13 @@ typedef struct {
   R_xlen_t size;
 } paradox_domain_values_t;
 
+/* Private read view: only the carrier shapes needed to enumerate rows.
+ * Condition evaluation and public admission validate the selected conditions
+ * at their respective boundaries; a row count does not interpret them. */
+attribute_hidden int paradox_domain_read_dependencies(
+  SEXP dependencies, paradox_domain_dependencies_t *result
+);
+
 typedef struct {
   const paradox_domain_params_t *params;
   R_xlen_t parameter_row;
@@ -230,6 +237,10 @@ attribute_hidden int paradox_domain_string_is(
   const char *expected
 );
 attribute_hidden int paradox_domain_strings_equal(SEXP left, SEXP right);
+/* R-compatible duplicate predicate for an admitted ordinary character vector.
+ * Tiny native-ASCII vectors use bounded allocation-free comparisons; every
+ * other representation/size retains R's complete matching implementation. */
+attribute_hidden int paradox_domain_strings_have_duplicates(SEXP values);
 
 /* One open-addressed FNV-1a identifier index over an admitted `id` column,
  * shared by every engine that resolves names to rows. The map borrows `ids`
@@ -323,13 +334,8 @@ attribute_hidden int paradox_domain_exact_plain_table(
   R_xlen_t *row_count,
   R_xlen_t *work_since_interrupt
 );
-attribute_hidden SEXP paradox_domain_plain_table_snapshot(
-  SEXP source,
-  const char *const *column_names,
-  R_xlen_t column_count
-);
-/* Exact private-state validators reject ALTREP table shells, structural
- * attributes, columns, and inspected nested vectors. Validators root every
+/* Private-state readers reject unsafe table/column representations. More
+ * specialized tables retain their own shape/interpretation rules. Readers root
  * borrowed child across their own allocation-capable checks. Returned child
  * SEXPs are still borrowed: callers must root each retained child immediately
  * on return, before allocating or invoking R. Every reported size is captured
@@ -347,13 +353,17 @@ attribute_hidden int paradox_domain_owns_private_environment(
  * the old-R binding API; active/delayed bindings are still never invoked. */
 attribute_hidden SEXP paradox_domain_required_private_environment(SEXP self);
 attribute_hidden SEXP paradox_domain_private_environment(SEXP self);
-attribute_hidden int paradox_domain_validate_params(
+/* Operation-local structural admission of a private fixed-layout table.
+ * `columns` is a bit mask of columns subsequently indexed by the caller;
+ * `id` is always admitted. No allocations, callbacks, or row-semantic scan.
+ * The view is borrowed: root selected children before allocating or calling R.
+ * Full-table copiers use ALL; ID-only readers use zero. Classes are returned
+ * only when requested. Public Domain admission is deliberately separate. */
+#define PARADOX_PARAMS_COLUMNS_ALL ((1U << PARADOX_DOMAIN_TAGS) - 1U)
+attribute_hidden int paradox_domain_read_params(
   SEXP params,
-  SEXP selected_id,
-  int validate_all_rows,
-  paradox_domain_params_t *result,
-  R_xlen_t *selected_row,
-  R_xlen_t *work_since_interrupt
+  unsigned int columns,
+  paradox_domain_params_t *result
 );
 attribute_hidden int paradox_domain_validate_tags(
   SEXP tags,
@@ -379,13 +389,23 @@ attribute_hidden int paradox_domain_validate_dependencies_with_rhs(
   SEXP **condition_rhs,
   R_xlen_t *work_since_interrupt
 );
-attribute_hidden int paradox_domain_validate_values(
+attribute_hidden int paradox_domain_read_values(
   SEXP values,
   paradox_domain_values_t *result,
   R_xlen_t *work_since_interrupt
 );
-/* Install the canonical one-row built-in Domain facade on a fresh, owned
- * 16-column shell. The class scalar must be an admitted built-in Param class. */
+/* Match two admitted ordinary name columns. NULL is the identity mapping;
+ * otherwise return fresh one-based integer positions, with unknown owners
+ * rejected before any consumer indexes a column. The caller roots the result. */
+attribute_hidden SEXP paradox_domain_value_rows(
+  SEXP ids, SEXP names, R_xlen_t *work_since_interrupt
+);
+static inline R_xlen_t paradox_domain_value_row(SEXP rows, R_xlen_t index) {
+  return rows == R_NilValue ? index : (R_xlen_t) INTEGER_ELT(rows, index) - 1;
+}
+/* Install the canonical one-row Domain facade on a fresh, owned 16-column
+ * shell. `cls` is a CHARSXP from an admitted character column; copying a
+ * private class label here does not assert that it names a built-in kind. */
 attribute_hidden SEXP paradox_domain_prepare_facade(
   SEXP domain,
   SEXP cls,

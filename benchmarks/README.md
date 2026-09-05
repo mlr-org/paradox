@@ -1,5 +1,56 @@
 # Paired performance benchmarks
 
+## September 2026 graph/value validation
+
+`graph-validation-20260905.R LIBRARY OUTPUT.tsv` measures 51 focused BASE,
+Collection and Shadow cases, including small/wide stores, the general
+reordered-private-store mapping, public mutation/refresh, construction, and
+class/dependency controls, callback flags and built-in sampling. Each process warms for ten seconds and records
+three 300-iteration blocks. Run in baseline/candidate/candidate/baseline order
+with one CPU/numeric thread and no concurrent builds/tests; summarize with
+`summarize-getters-20260905.R`. The baseline is the immediately preceding
+installed development build, not Paradox 1. The implementation plan and
+results belong to [the completion report](../design/graph-validation-20260905.md).
+
+## September 2026 static getters
+
+`getters-20260905.R` compares already installed libraries on static property,
+scalar flag, dimension, derived-node, and adjacent read/constructor workloads.
+Its optional third argument selects `columns`, `related`, `derived`,
+`controls`, or `validation`; the default is `all`. The separate `validation`
+group covers value/check/trafo readers, full snapshots, tags, subset, quantiles,
+sampling and logscale construction at small and large parameter counts. A
+fourth argument is a case-name regular
+expression for narrowly scoped follow-ups. `PARADOX_BENCH_WARMUP_SECONDS`
+can increase the initial CPU warmup above its one-second default on machines
+with slow power-state transitions. Each process records three blocks per
+workload (1,500 iterations by default; `PARADOX_BENCH_ITERATIONS` can lower
+this to at least 100 for heavier workloads), elapsed medians/means, allocation,
+and a semantic result
+key. Run fresh processes in baseline/candidate/candidate/baseline order with
+the same dependencies, compiler flags, and CPU affinity, with no concurrent
+tests or builds. Do not edit runner or fixture files while a process still has
+them open. `summarize-getters-20260905.R` checks result identity and
+combines both orders. The plan, profiles, retained libraries, results, and
+remaining tradeoff are in
+[`design/getter-performance-20260905.md`](../design/getter-performance-20260905.md).
+The subsequent operation-specific validation comparison is recorded in
+[`design/validation-policy-20260905.md`](../design/validation-policy-20260905.md).
+
+```sh
+. scripts/activate
+# Create a fresh output directory and select an available CPU on this machine.
+taskset -c 6 Rscript --vanilla benchmarks/getters-20260905.R \
+  /path/to/baseline-library /path/to/fresh-results/baseline-a1.tsv all
+# Repeat for candidate-b1, candidate-b2, and baseline-a2 in that order.
+Rscript --vanilla benchmarks/summarize-getters-20260905.R /path/to/fresh-results
+```
+
+Optional `v1-v1.tsv` and `v1-v2.tsv` runs of the `columns` group add a separate
+Paradox-1 comparison. On systems without `taskset`, use an equivalent affinity
+mechanism or report its absence. These are development comparisons, not sealed
+release acceptance.
+
 ## September 2026 implementation review
 
 `benchmarks/review-20260905.R` is a small installed-library comparison for the
@@ -57,9 +108,10 @@ are:
   both were faster in every balanced target case without changing allocation.
 
 The equivalent chain-512 Callgrind workload fell from about 908.2 million to
-51.8 million instructions. The residual native cost is the single exact
-dependency/Condition pass and exact parameter-table admission required by the
-Paradox-2 integrity contract, not duplicated R/C logic. Strict GCC 14 and
+51.8 million instructions. The residual native cost in that historical batch
+was the single exact dependency/Condition pass and exact parameter-table
+admission. The September operation-specific validation policy supersedes that
+blanket private-schema requirement. Strict GCC 14 and
 Clang 22 C17 builds are retained at
 `.local/checks/final-performance-batch-strict-20260726`; both promoted warnings
 to errors. The 176-record exhaustive direct native probe ledger has no

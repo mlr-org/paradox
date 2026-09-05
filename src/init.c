@@ -133,6 +133,7 @@ static const R_CallMethodDef call_methods[] = {
   {"param_set_set_callback",
     (DL_FUNC) &paradox_param_set_set_callback, 4},
   {"param_set_property", (DL_FUNC) &paradox_param_set_property, 2},
+  {"param_set_get_property", (DL_FUNC) &paradox_param_set_get_property, 3},
   {"param_set_qunif_builtin", (DL_FUNC) &paradox_param_set_qunif_builtin, 3},
   {"sampler_unif_sample_builtin",
     (DL_FUNC) &paradox_sampler_unif_sample_builtin, 2},
@@ -219,6 +220,7 @@ static const R_CallMethodDef call_methods[] = {
 #endif
 
 void attribute_visible R_init_paradox(DllInfo *dll) {
+  paradox_core_intern_field_names();
   paradox_domain_intern_column_names();
   paradox_domain_admission_intern();
   paradox_test_altrep_initialize(dll);

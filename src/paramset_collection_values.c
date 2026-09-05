@@ -35,398 +35,61 @@ static int exact_flag(SEXP value, int *flag) {
   return TRUE;
 }
 
-static int ordinary_table_columns(SEXP table, R_xlen_t column_count) {
-  if (TYPEOF(table) != VECSXP || ALTREP(table) || Rf_isS4(table) ||
-      XLENGTH(table) != column_count) {
-    return FALSE;
-  }
-  for (R_xlen_t column = 0; column < column_count; ++column) {
-    if (ALTREP(VECTOR_ELT(table, column)) ||
-        Rf_isS4(VECTOR_ELT(table, column)) ||
-        Rf_isObject(VECTOR_ELT(table, column))) {
-      return FALSE;
-    }
-  }
+static int read_set_names(SEXP sets, SEXP *names) {
+  if (TYPEOF(sets) != VECSXP || ALTREP(sets)) return FALSE;
+  SEXP observed = Rf_getAttrib(sets, R_NamesSymbol);
+  if (TYPEOF(observed) != STRSXP || ALTREP(observed) ||
+      XLENGTH(observed) != XLENGTH(sets)) return FALSE;
+  *names = observed;
   return TRUE;
 }
 
-static int exact_set_names(SEXP sets, SEXP *names,
+static int read_translation(SEXP table, R_xlen_t child_count,
+    R_xlen_t parameter_count, paradox_collection_translation_t *translation,
     R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || Rf_isS4(sets) ||
-      Rf_isObject(sets) ||
-      !paradox_api_has_only_attributes(sets, (const char *const[]) {"names"}, 1)) {
+  if (TYPEOF(table) != VECSXP || ALTREP(table) || XLENGTH(table) != 4) {
     return FALSE;
   }
-  SEXP observed = PROTECT(Rf_getAttrib(sets, R_NamesSymbol));
-  const R_xlen_t count = XLENGTH(sets);
-  int valid = TYPEOF(observed) == STRSXP && !ALTREP(observed) &&
-    !Rf_isS4(observed) && !Rf_isObject(observed) &&
-    paradox_api_has_no_attributes(observed) && XLENGTH(observed) == count;
-  for (R_xlen_t right = 0; valid && right < count; ++right) {
-    paradox_account_work(work_since_interrupt);
-    SEXP right_name = STRING_ELT(observed, right);
-    if (!paradox_charsxp_is_ordinary(right_name)) {
-      valid = FALSE;
-      break;
-    }
-    if (CHAR(right_name)[0] == '\0') {
-      continue;
-    }
-    for (R_xlen_t left = 0; left < right; ++left) {
-      paradox_account_work(work_since_interrupt);
-      SEXP left_name = STRING_ELT(observed, left);
-      if (CHAR(left_name)[0] != '\0' &&
-          paradox_domain_strings_equal(left_name, right_name)) {
-        valid = FALSE;
-        break;
-      }
-    }
+  for (int column = 0; column < 4; ++column) {
+    SEXP value = VECTOR_ELT(table, column);
+    if (TYPEOF(value) != (column == 2 ? INTSXP : STRSXP) ||
+        ALTREP(value) || XLENGTH(value) != parameter_count) return FALSE;
   }
-  if (valid) {
-    *names = observed;
-  }
-  UNPROTECT(1);
-  return valid;
-}
-
-static int exact_translation(SEXP table, SEXP set_names,
-    R_xlen_t child_count, R_xlen_t parameter_count,
-    paradox_collection_translation_t *translation,
-    R_xlen_t **translation_by_param, SEXP parameter_ids,
-    R_xlen_t *work_since_interrupt) {
-  static const char *const column_names[] = {
-    "id", "original_id", "owner_ps_index", "owner_name"
-  };
-  R_xlen_t row_count = 0;
-  if (!ordinary_table_columns(table, 4) ||
-      !paradox_domain_exact_plain_table(
-        table,
-        column_names,
-        4,
-        &row_count,
-        work_since_interrupt
-      ) || row_count != parameter_count) {
-    return FALSE;
-  }
-
-  SEXP ids = VECTOR_ELT(table, 0);
-  SEXP original_ids = VECTOR_ELT(table, 1);
-  SEXP owner_indices = VECTOR_ELT(table, 2);
-  SEXP owner_names = VECTOR_ELT(table, 3);
-  if (TYPEOF(ids) != STRSXP || TYPEOF(original_ids) != STRSXP ||
-      TYPEOF(owner_indices) != INTSXP || TYPEOF(owner_names) != STRSXP ||
-      ALTREP(ids) || ALTREP(original_ids) || ALTREP(owner_indices) ||
-      ALTREP(owner_names) || !paradox_api_has_no_attributes(ids) ||
-      !paradox_api_has_no_attributes(original_ids) ||
-      !paradox_api_has_no_attributes(owner_indices) ||
-      !paradox_api_has_no_attributes(owner_names)) {
-    return FALSE;
-  }
-  for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_account_work(work_since_interrupt);
-    const int owner = INTEGER_ELT(owner_indices, row);
-    if (!paradox_charsxp_is_ordinary(STRING_ELT(ids, row)) ||
-        !paradox_charsxp_is_ordinary(STRING_ELT(original_ids, row)) ||
-        !paradox_charsxp_is_ordinary(STRING_ELT(owner_names, row)) || owner <= 0 ||
-        (R_xlen_t) owner > child_count ||
-        !paradox_domain_strings_equal(
-          STRING_ELT(owner_names, row),
-          STRING_ELT(set_names, (R_xlen_t) owner - 1)
-        )) {
-      return FALSE;
-    }
-  }
-  if (Rf_any_duplicated(ids, FALSE) != 0) {
-    return FALSE;
-  }
-
-  SEXP matches = PROTECT(Rf_match(ids, parameter_ids, 0));
-  if ((TYPEOF(matches) != INTSXP && TYPEOF(matches) != REALSXP) ||
-      ALTREP(matches) || XLENGTH(matches) != parameter_count) {
-    UNPROTECT(1);
-    Rf_error("Internal error: invalid collection translation match");
-  }
-  R_xlen_t *by_param = paradox_temporary_alloc(
-    parameter_count,
-    sizeof(*by_param)
-  );
+  SEXP owners = VECTOR_ELT(table, 2);
   for (R_xlen_t row = 0; row < parameter_count; ++row) {
     paradox_account_work(work_since_interrupt);
-    R_xlen_t position = 0;
-    if (TYPEOF(matches) == INTSXP) {
-      const int value = INTEGER_ELT(matches, row);
-      position = value == NA_INTEGER || value <= 0 ? 0 : (R_xlen_t) value;
-    } else {
-      const double value = REAL_ELT(matches, row);
-      position = !R_FINITE(value) || value <= 0.0 ||
-          value > (double) R_XLEN_T_MAX
-        ? 0
-        : (R_xlen_t) value;
-    }
-    if (position == 0 || position > row_count) {
-      UNPROTECT(1);
-      return FALSE;
-    }
-    by_param[row] = position - 1;
+    const int owner = INTEGER_ELT(owners, row);
+    if (owner <= 0 || (R_xlen_t) owner > child_count) return FALSE;
   }
-  UNPROTECT(1);
-
   *translation = (paradox_collection_translation_t) {
-    table, ids, original_ids, owner_indices, owner_names, row_count
+    table, VECTOR_ELT(table, 0), VECTOR_ELT(table, 1), owners,
+    VECTOR_ELT(table, 3), parameter_count
   };
-  *translation_by_param = by_param;
   return TRUE;
 }
 
-static int exact_dynamic_state(paradox_collection_graph_node_t *node,
-    R_xlen_t *work_since_interrupt) {
-  SEXP params = VECTOR_ELT(node->state, PARADOX_CORE_PARAMS);
-  SEXP dependencies = VECTOR_ELT(node->state, PARADOX_CORE_DEPS);
-  SEXP values = VECTOR_ELT(node->state, PARADOX_CORE_VALUES);
-  SEXP tags = VECTOR_ELT(node->state, PARADOX_CORE_TAGS);
-  SEXP trafos = VECTOR_ELT(node->state, PARADOX_CORE_TRAFOS);
-  R_xlen_t unused_row = 0;
-  if (!ordinary_table_columns(params, PARADOX_DOMAIN_TAGS) ||
-      !ordinary_table_columns(dependencies, 3) ||
-      !ordinary_table_columns(tags, 2) ||
-      !ordinary_table_columns(trafos, 2) ||
-      !paradox_domain_validate_params(
-        params,
-        R_NilValue,
-        TRUE,
-        &node->params,
-        &unused_row,
-        work_since_interrupt
-      ) || !paradox_domain_validate_dependencies(
-        dependencies,
-        &node->dependencies,
-        work_since_interrupt
-      ) || !paradox_domain_validate_values(
-        values,
-        &node->values,
-        work_since_interrupt
-      )) {
+static int read_dynamic_state(paradox_collection_graph_node_t *node,
+    unsigned int fields, R_xlen_t *work_since_interrupt) {
+  const unsigned int columns = (fields & PARADOX_GRAPH_SCHEMA)
+    ? PARADOX_PARAMS_COLUMNS_ALL
+    : (fields & PARADOX_GRAPH_VALUES) ? 1U << PARADOX_DOMAIN_CLS : 0U;
+  if (!paradox_domain_read_params(
+      VECTOR_ELT(node->state, PARADOX_CORE_PARAMS), columns, &node->params)) {
     return FALSE;
   }
-
-  node->value_param_rows = node->values.size == 0
-    ? NULL
-    : paradox_temporary_alloc(
-        node->values.size,
-        sizeof(*node->value_param_rows)
-      );
-  for (R_xlen_t index = 0; index < node->values.size; ++index) {
-    paradox_account_work(work_since_interrupt);
-    SEXP name = STRING_ELT(node->values.names, index);
-    SEXP value = VECTOR_ELT(node->values.values, index);
-    if (!paradox_charsxp_is_ordinary(name) || value == R_UnboundValue ||
-        value == R_MissingArg || TYPEOF(value) == PROMSXP) {
-      return FALSE;
-    }
-    const R_xlen_t parameter_row = paradox_domain_find_string(
-      node->params.ids,
-      name,
-      work_since_interrupt
-    );
-    if (parameter_row == R_XLEN_T_MAX) {
-      return FALSE;
-    }
-    node->value_param_rows[index] = parameter_row;
+  if (fields & PARADOX_GRAPH_DEPENDENCIES) {
+    SEXP dependencies = VECTOR_ELT(node->state, PARADOX_CORE_DEPS);
+    const int valid = fields & PARADOX_GRAPH_SCHEMA
+      ? paradox_domain_validate_dependencies(dependencies,
+          &node->dependencies, work_since_interrupt)
+      : paradox_domain_read_dependencies(dependencies, &node->dependencies);
+    if (!valid) return FALSE;
   }
+  if ((fields & PARADOX_GRAPH_VALUES) &&
+      !paradox_domain_read_values(
+        VECTOR_ELT(node->state, PARADOX_CORE_VALUES),
+        &node->values, work_since_interrupt)) return FALSE;
   return TRUE;
-}
-
-static int numeric_equal(SEXP left, R_xlen_t left_row,
-    SEXP right, R_xlen_t right_row) {
-  const SEXPTYPE left_type = (SEXPTYPE) TYPEOF(left);
-  const SEXPTYPE right_type = (SEXPTYPE) TYPEOF(right);
-  if ((left_type != INTSXP && left_type != REALSXP) ||
-      (right_type != INTSXP && right_type != REALSXP)) {
-    return FALSE;
-  }
-  const int left_integer = left_type == INTSXP
-    ? INTEGER_ELT(left, left_row)
-    : NA_INTEGER;
-  const int right_integer = right_type == INTSXP
-    ? INTEGER_ELT(right, right_row)
-    : NA_INTEGER;
-  double left_value = left_type == INTSXP
-    ? (left_integer == NA_INTEGER ? NA_REAL : (double) left_integer)
-    : REAL_ELT(left, left_row);
-  double right_value = right_type == INTSXP
-    ? (right_integer == NA_INTEGER ? NA_REAL : (double) right_integer)
-    : REAL_ELT(right, right_row);
-  if (ISNA(left_value) || ISNA(right_value)) {
-    return ISNA(left_value) && ISNA(right_value);
-  }
-  if (ISNAN(left_value) || ISNAN(right_value)) {
-    return ISNAN(left_value) && ISNAN(right_value);
-  }
-  return left_value == right_value;
-}
-
-static int permanent_rows_equal(const paradox_domain_params_t *parent,
-    R_xlen_t parent_row, const paradox_domain_params_t *child,
-    R_xlen_t child_row, R_xlen_t *work_since_interrupt) {
-  for (enum paradox_domain_column column = PARADOX_DOMAIN_CLS;
-      column < PARADOX_DOMAIN_TAGS;
-      column = (enum paradox_domain_column) (column + 1)) {
-    paradox_account_work(work_since_interrupt);
-    SEXP left = VECTOR_ELT(parent->table, column);
-    SEXP right = VECTOR_ELT(child->table, column);
-    switch (TYPEOF(left)) {
-    case STRSXP:
-      if (TYPEOF(right) != STRSXP || !paradox_domain_strings_equal(
-          STRING_ELT(left, parent_row),
-          STRING_ELT(right, child_row)
-        )) {
-        return FALSE;
-      }
-      break;
-    case VECSXP: {
-      if (TYPEOF(right) != VECSXP) {
-        return FALSE;
-      }
-      SEXP left_value = PROTECT(VECTOR_ELT(left, parent_row));
-      SEXP right_value = PROTECT(VECTOR_ELT(right, child_row));
-      const int equal = left_value == right_value || R_compute_identical(
-          left_value,
-          right_value,
-          paradox_api_identical_default_flags()
-        );
-      UNPROTECT(2);
-      if (!equal) {
-        return FALSE;
-      }
-      break;
-    }
-    case INTSXP:
-    case REALSXP:
-      if (!numeric_equal(left, parent_row, right, child_row)) {
-        return FALSE;
-      }
-      break;
-    default:
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-static char *utf8_copy(SEXP value, size_t *size) {
-  return paradox_temporary_utf8_copy(value, size);
-}
-
-static int ascii_size(const char *text, size_t *size) {
-  const unsigned char *cursor = (const unsigned char *) text;
-  while (*cursor != '\0') {
-    if (*cursor >= 0x80U) {
-      return FALSE;
-    }
-    ++cursor;
-  }
-  *size = (size_t) (cursor - (const unsigned char *) text);
-  return TRUE;
-}
-
-static int raw_affixed_id_equal(SEXP outer, SEXP owner, SEXP inner,
-    int postfix, int *known) {
-  const cetype_t encoding = Rf_getCharCE(outer);
-  if (Rf_getCharCE(owner) != encoding || Rf_getCharCE(inner) != encoding ||
-      (encoding != CE_NATIVE && encoding != CE_UTF8 &&
-       encoding != CE_LATIN1)) {
-    *known = FALSE;
-    return FALSE;
-  }
-
-  const char *outer_text = CHAR(outer);
-  const char *owner_text = CHAR(owner);
-  const char *inner_text = CHAR(inner);
-  size_t outer_size = 0;
-  size_t owner_size = 0;
-  size_t inner_size = 0;
-  if (encoding == CE_NATIVE) {
-    if (!ascii_size(outer_text, &outer_size) ||
-        !ascii_size(owner_text, &owner_size) ||
-        !ascii_size(inner_text, &inner_size)) {
-      *known = FALSE;
-      return FALSE;
-    }
-  } else {
-    outer_size = strlen(outer_text);
-    owner_size = strlen(owner_text);
-    inner_size = strlen(inner_text);
-  }
-
-  *known = TRUE;
-  if (owner_size > SIZE_MAX - inner_size - 1U ||
-      outer_size != owner_size + inner_size + 1U) {
-    return FALSE;
-  }
-  if (postfix) {
-    return memcmp(outer_text, inner_text, inner_size) == 0 &&
-      outer_text[inner_size] == '.' &&
-      memcmp(outer_text + inner_size + 1U, owner_text, owner_size) == 0;
-  }
-  return memcmp(outer_text, owner_text, owner_size) == 0 &&
-    outer_text[owner_size] == '.' &&
-    memcmp(outer_text + owner_size + 1U, inner_text, inner_size) == 0;
-}
-
-static int affixed_id_equal(SEXP outer, SEXP owner, SEXP inner, int postfix) {
-  if (!paradox_charsxp_is_ordinary(outer) || !paradox_charsxp_is_ordinary(owner) ||
-      !paradox_charsxp_is_ordinary(inner)) {
-    return FALSE;
-  }
-  if (CHAR(owner)[0] == '\0') {
-    return paradox_domain_strings_equal(outer, inner);
-  }
-  int raw_known = FALSE;
-  const int raw_equal = raw_affixed_id_equal(
-    outer,
-    owner,
-    inner,
-    postfix,
-    &raw_known
-  );
-  if (raw_known) {
-    return raw_equal;
-  }
-  PROTECT(outer);
-  PROTECT(owner);
-  PROTECT(inner);
-  const void *vmax = vmaxget();
-  size_t outer_size = 0;
-  size_t owner_size = 0;
-  size_t inner_size = 0;
-  char *outer_text = utf8_copy(outer, &outer_size);
-  char *owner_text = utf8_copy(owner, &owner_size);
-  char *inner_text = utf8_copy(inner, &inner_size);
-  int equal = FALSE;
-  if (outer_text != NULL && owner_text != NULL && inner_text != NULL &&
-      owner_size <= SIZE_MAX - inner_size - 1U &&
-      outer_size == owner_size + inner_size + 1U) {
-    if (postfix) {
-      equal = memcmp(outer_text, inner_text, inner_size) == 0 &&
-        outer_text[inner_size] == '.' &&
-        memcmp(
-          outer_text + inner_size + 1U,
-          owner_text,
-          owner_size
-        ) == 0;
-    } else {
-      equal = memcmp(outer_text, owner_text, owner_size) == 0 &&
-        outer_text[owner_size] == '.' &&
-        memcmp(
-          outer_text + owner_size + 1U,
-          inner_text,
-          inner_size
-        ) == 0;
-    }
-  }
-  vmaxset(vmax);
-  UNPROTECT(3);
-  return equal;
 }
 
 static void reserve_graph(paradox_collection_graph_t *graph,
@@ -480,7 +143,7 @@ static int initialize_new_node(SEXP self, SEXP private_environment,
     R_xlen_t parent_child,
     paradox_collection_graph_node_t *node, SEXP *roots,
     PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt,
-    int retain_receipt) {
+    int retain_receipt, unsigned int fields) {
   if (!paradox_core_is_valid(operation_core) ||
       !paradox_core_is_valid(source_core)) {
     return FALSE;
@@ -505,12 +168,13 @@ static int initialize_new_node(SEXP self, SEXP private_environment,
     .shadow_signature_content = R_NilValue,
     .state = state,
     .kind = kind,
-    .value_param_rows = NULL,
+    .value_param_rows = R_NilValue,
+    .values = {R_NilValue, R_NilValue, 0},
+    .dependencies = {R_NilValue, R_NilValue, R_NilValue, 0},
     .sets = R_NilValue,
     .set_names = R_NilValue,
     .translation = {R_NilValue, R_NilValue, R_NilValue, R_NilValue,
       R_NilValue, 0},
-    .translation_by_param = NULL,
     .parent = parent,
     .parent_child = parent_child,
     .parent_param_start = 0,
@@ -520,9 +184,8 @@ static int initialize_new_node(SEXP self, SEXP private_environment,
     .subtree_contributes = FALSE,
     .postfix = FALSE
   };
-  if ((kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
-       kind != PARADOX_CORE_SHADOW) ||
-      !paradox_core_state_exact_schema(state)) {
+  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
+      kind != PARADOX_CORE_SHADOW) {
     return FALSE;
   }
   /*
@@ -554,8 +217,15 @@ static int initialize_new_node(SEXP self, SEXP private_environment,
     UNPROTECT(1);
     node->shadow_signature_content = content;
   }
-  if (!exact_dynamic_state(node, work_since_interrupt)) {
+  if (!read_dynamic_state(node, fields, work_since_interrupt)) {
     return FALSE;
+  }
+  if ((fields & PARADOX_GRAPH_VALUES) && kind != PARADOX_CORE_COLLECTION) {
+    SEXP rows = PROTECT(paradox_domain_value_rows(
+      node->params.ids, node->values.names, work_since_interrupt));
+    if (rows != R_NilValue) retain_root(rows, roots, roots_index);
+    node->value_param_rows = rows;
+    UNPROTECT(1);
   }
   node->subtree_dependencies = node->dependencies.row_count;
   /* A callback is a contribution even on a set with no parameters: it runs
@@ -566,41 +236,18 @@ static int initialize_new_node(SEXP self, SEXP private_environment,
     VECTOR_ELT(state, PARADOX_CORE_EXTRA_TRAFO) != R_NilValue ||
     VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT) != R_NilValue;
 
+  if (kind != PARADOX_CORE_COLLECTION) return TRUE;
   SEXP sets = VECTOR_ELT(state, PARADOX_CORE_SETS);
-  SEXP translation = VECTOR_ELT(state, PARADOX_CORE_TRANSLATION);
-  SEXP postfix = VECTOR_ELT(state, PARADOX_CORE_POSTFIX);
-  int parsed_postfix = FALSE;
-  if (!exact_flag(postfix, &parsed_postfix)) {
+  if (TYPEOF(sets) != VECSXP || ALTREP(sets) || XLENGTH(sets) > INT_MAX) {
     return FALSE;
   }
-  node->postfix = parsed_postfix;
-
-  if (kind == PARADOX_CORE_BASE) {
-    return sets == R_NilValue && translation == R_NilValue && !parsed_postfix;
-  }
-  if (kind == PARADOX_CORE_SHADOW) {
-    return TYPEOF(sets) == VECSXP && !ALTREP(sets) &&
-      !Rf_isS4(sets) && !Rf_isObject(sets) &&
-      paradox_api_has_no_attributes(sets) && XLENGTH(sets) == 1 &&
-      TYPEOF(VECTOR_ELT(sets, 0)) == ENVSXP &&
-      !Rf_isS4(VECTOR_ELT(sets, 0)) &&
-      translation == R_NilValue && !parsed_postfix;
-  }
-
   node->sets = sets;
-  if (node->values.size != 0 ||
-      !exact_set_names(sets, &node->set_names, work_since_interrupt) ||
-      XLENGTH(sets) > INT_MAX || !exact_translation(
-        translation,
-        node->set_names,
-        XLENGTH(sets),
-        node->params.row_count,
-        &node->translation,
-        &node->translation_by_param,
-        node->params.ids,
-        work_since_interrupt
-      )) {
-    return FALSE;
+  if (fields & PARADOX_GRAPH_SCHEMA) {
+    if (!read_set_names(sets, &node->set_names) ||
+        !exact_flag(VECTOR_ELT(state, PARADOX_CORE_POSTFIX), &node->postfix) ||
+        !read_translation(VECTOR_ELT(state, PARADOX_CORE_TRANSLATION),
+          XLENGTH(sets), node->params.row_count, &node->translation,
+          work_since_interrupt)) return FALSE;
   }
   return TRUE;
 }
@@ -640,7 +287,7 @@ void paradox_collection_validate_single_node(SEXP private_environment,
         roots,
         roots_index,
         work_since_interrupt,
-        FALSE
+        FALSE, PARADOX_GRAPH_ALL
       )) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet child capsule state");
@@ -654,49 +301,6 @@ void paradox_collection_validate_single_node(SEXP private_environment,
  * unnecessary for admission, it is what turned a shared alternating
  * shadow/collection graph exponential: every install invalidates the
  * neighboring signatures, so each admission re-healed the complete subtree. */
-void paradox_collection_validate_single_node_readonly(
-    SEXP private_environment, SEXP self, SEXP *roots,
-    PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(private_environment) != ENVSXP ||
-      Rf_isS4(private_environment) ||
-      TYPEOF(self) != ENVSXP || Rf_isS4(self) ||
-      !paradox_domain_owns_private_environment(self, private_environment)) {
-    Rf_error("Corrupt ParamSet child shell");
-  }
-  SEXP source_core = PROTECT(paradox_core_from_private(private_environment));
-  PROTECT_INDEX operation_index;
-  SEXP operation_core;
-  PROTECT_WITH_INDEX(operation_core = source_core, &operation_index);
-  if (paradox_core_kind(source_core) == PARADOX_CORE_SHADOW) {
-    REPROTECT(
-      operation_core = paradox_shadow_preview_authoritative(
-        self,
-        private_environment
-      ),
-      operation_index
-    );
-  }
-  paradox_collection_graph_node_t node;
-  if ((paradox_core_kind(operation_core) != PARADOX_CORE_BASE &&
-       paradox_core_kind(operation_core) != PARADOX_CORE_SHADOW) ||
-      !initialize_new_node(
-        self,
-        private_environment,
-        operation_core,
-        source_core,
-        R_XLEN_T_MAX,
-        R_XLEN_T_MAX,
-        &node,
-        roots,
-        roots_index,
-        work_since_interrupt,
-        FALSE
-      )) {
-    UNPROTECT(2);
-    Rf_error("Corrupt ParamSet child capsule state");
-  }
-  UNPROTECT(2);
-}
 
 static int initialize_node(SEXP self, SEXP private_environment,
     SEXP operation_core, SEXP source_core, R_xlen_t parent,
@@ -704,7 +308,7 @@ static int initialize_node(SEXP self, SEXP private_environment,
     const paradox_collection_graph_t *graph,
     paradox_collection_graph_node_t *node, SEXP *roots,
     PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt,
-    int retain_receipt) {
+    int retain_receipt, unsigned int fields) {
   if (previous != R_XLEN_T_MAX) {
     if (previous >= graph->count || graph->nodes[previous].self != self) {
       return FALSE;
@@ -733,52 +337,20 @@ static int initialize_node(SEXP self, SEXP private_environment,
     roots,
     roots_index,
     work_since_interrupt,
-    retain_receipt
+    retain_receipt, fields
   );
 }
 
-static int validate_edge(paradox_collection_graph_node_t *parent,
-    paradox_collection_graph_node_t *child, R_xlen_t child_index,
-    R_xlen_t *work_since_interrupt) {
+static int read_edge(paradox_collection_graph_node_t *parent,
+    paradox_collection_graph_node_t *child) {
   const R_xlen_t child_rows = child->params.row_count;
-  if (parent->kind != PARADOX_CORE_COLLECTION ||
-      parent->consumed_params > parent->params.row_count ||
+  if (parent->consumed_params > parent->params.row_count ||
       child_rows > parent->params.row_count - parent->consumed_params) {
     return FALSE;
   }
-  const R_xlen_t start = parent->consumed_params;
-  SEXP owner_name = STRING_ELT(parent->set_names, child_index);
-  for (R_xlen_t child_row = 0; child_row < child_rows; ++child_row) {
-    paradox_account_work(work_since_interrupt);
-    const R_xlen_t parent_row = start + child_row;
-    const R_xlen_t translation_row =
-      parent->translation_by_param[parent_row];
-    SEXP parent_id = STRING_ELT(parent->params.ids, parent_row);
-    SEXP child_id = STRING_ELT(child->params.ids, child_row);
-    if (translation_row >= parent->translation.row_count ||
-        !affixed_id_equal(parent_id, owner_name, child_id, parent->postfix) ||
-        INTEGER_ELT(parent->translation.owner_indices, translation_row) !=
-          (int) (child_index + 1) ||
-        !paradox_domain_strings_equal(
-          STRING_ELT(parent->translation.ids, translation_row),
-          parent_id
-        ) || !paradox_domain_strings_equal(
-          STRING_ELT(parent->translation.original_ids, translation_row),
-          child_id
-        ) || !paradox_domain_strings_equal(
-          STRING_ELT(parent->translation.owner_names, translation_row),
-          owner_name
-        ) || !permanent_rows_equal(
-          &parent->params,
-          parent_row,
-          &child->params,
-          child_row,
-          work_since_interrupt
-        )) {
-      return FALSE;
-    }
-  }
-  child->parent_param_start = start;
+  /* Public schema mutation maintains this concatenation. Its content is not
+   * re-proved here; these range checks are what native consumers need. */
+  child->parent_param_start = parent->consumed_params;
   parent->consumed_params += child_rows;
   return TRUE;
 }
@@ -786,19 +358,16 @@ static int validate_edge(paradox_collection_graph_node_t *parent,
 static void collection_graph_build(SEXP private_environment, SEXP self,
     paradox_collection_graph_t *graph, SEXP *roots,
     PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt,
-    int commit_shadow_refreshes, int retain_receipt) {
+    int commit_shadow_refreshes, int retain_receipt, unsigned int fields) {
   if (TYPEOF(private_environment) != ENVSXP ||
       Rf_isS4(private_environment) ||
       TYPEOF(self) != ENVSXP || Rf_isS4(self)) {
     Rf_error("Corrupt ParamSetCollection shell");
   }
 
-  /* A traversal re-proves that every cached flatten agrees with its children,
-   * so the graph must be healed before it is admitted -- otherwise a schema
-   * change below an ancestor is reported as corruption instead of being
-   * absorbed. A verified graph pays one comparison for this. Migration
-   * preflight is deliberately excluded: it may not install anything into a
-   * current shell, so a stale collection still fails it, exactly as before. */
+  /* Public child changes must be reflected before selecting operation views.
+   * A verified graph needs no refresh. Non-installing cold previews leave
+   * the live shells untouched and select offside Shadow projections below. */
   SEXP selected = paradox_core_from_private(private_environment);
   if (commit_shadow_refreshes && selected != R_UnboundValue &&
       !paradox_core_is_verified(selected)) {
@@ -844,7 +413,7 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
       roots,
       roots_index,
       work_since_interrupt,
-      retain_receipt
+      retain_receipt, fields
     )) {
     UNPROTECT(2);
     Rf_error("Corrupt ParamSetCollection root state");
@@ -942,12 +511,10 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
           roots,
           roots_index,
           work_since_interrupt,
-          retain_receipt
-        ) && validate_edge(
+          retain_receipt, fields
+        ) && read_edge(
           &graph->nodes[node_index],
-          &graph->nodes[child_node_index],
-          child_position,
-          work_since_interrupt
+          &graph->nodes[child_node_index]
         );
       if (!reused) {
         UNPROTECT(3);
@@ -990,6 +557,7 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
 }
 
 void paradox_collection_graph_build(SEXP private_environment, SEXP self,
+    unsigned int fields,
     paradox_collection_graph_t *graph, SEXP *roots,
     PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
   collection_graph_build(
@@ -1000,7 +568,7 @@ void paradox_collection_graph_build(SEXP private_environment, SEXP self,
     roots_index,
     work_since_interrupt,
     TRUE,
-    FALSE
+    FALSE, fields
   );
 }
 
@@ -1016,25 +584,10 @@ void paradox_collection_graph_build_receipted(
     roots_index,
     work_since_interrupt,
     TRUE,
-    TRUE
+    TRUE, PARADOX_GRAPH_ALL
   );
 }
 
-void paradox_collection_graph_build_readonly(
-    SEXP private_environment, SEXP self,
-    paradox_collection_graph_t *graph, SEXP *roots,
-    PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
-  collection_graph_build(
-    private_environment,
-    self,
-    graph,
-    roots,
-    roots_index,
-    work_since_interrupt,
-    FALSE,
-    FALSE
-  );
-}
 
 void paradox_collection_graph_build_readonly_receipted(
     SEXP private_environment, SEXP self,
@@ -1048,7 +601,7 @@ void paradox_collection_graph_build_readonly_receipted(
     roots_index,
     work_since_interrupt,
     FALSE,
-    TRUE
+    TRUE, PARADOX_GRAPH_ALL
   );
 }
 
@@ -1078,11 +631,9 @@ int paradox_collection_graph_snapshot_is_intact(
   return TRUE;
 }
 
-/* Value admission has already resolved each stored name to one local
- * parameter row. Every admitted collection edge then proves that child row
- * `r` is represented by parent row `parent_param_start + r`. Reusing those
- * facts avoids replaying a linear ID search for every emitted value while
- * preserving the complete graph and corruption validation. */
+/* Stored names have already been resolved to local parameter rows. Public
+ * construction concatenates child rows; the walker checks the extents needed
+ * to follow that layout, not private parent/child semantic equality. */
 static SEXP translate_value_row(const paradox_collection_graph_t *graph,
     R_xlen_t node_index, R_xlen_t row) {
   while (graph->nodes[node_index].parent != R_XLEN_T_MAX) {
@@ -1106,6 +657,7 @@ static SEXP translate_value_row(const paradox_collection_graph_t *graph,
 
 SEXP paradox_collection_values_from_graph(
     const paradox_collection_graph_t *graph,
+    int detach,
     R_xlen_t *work_since_interrupt) {
   R_xlen_t output_size = 0;
   for (R_xlen_t node_index = 0; node_index < graph->count; ++node_index) {
@@ -1118,6 +670,24 @@ SEXP paradox_collection_values_from_graph(
     }
   }
 
+  /* Detaching a typed leaf can enter an ALTREP provider. Retain the selected
+   * carriers independently of their mutable private owners across that call.
+   * The internal collector only moves ordinary list/string elements and does
+   * not need this additional snapshot. Row maps are already graph roots. */
+  SEXP selected = R_NilValue;
+  if (detach) {
+    if (graph->count > (R_XLEN_T_MAX - 1) / 2) {
+      Rf_error("ParamSetCollection value snapshot is too large");
+    }
+    selected = PROTECT(Rf_allocVector(VECSXP, 2 * graph->count + 1));
+    SET_VECTOR_ELT(selected, 0, graph->nodes[0].params.ids);
+    for (R_xlen_t index = 0; index < graph->count; ++index) {
+      SET_VECTOR_ELT(selected, 2 * index + 1, graph->nodes[index].values.values);
+      SET_VECTOR_ELT(selected, 2 * index + 2, graph->nodes[index].params.classes);
+    }
+  } else {
+    PROTECT(selected);
+  }
   SEXP result = PROTECT(Rf_allocVector(VECSXP, output_size));
   SEXP names = PROTECT(Rf_allocVector(STRSXP, output_size));
   R_xlen_t output = 0;
@@ -1126,26 +696,32 @@ SEXP paradox_collection_values_from_graph(
     if (node->kind == PARADOX_CORE_COLLECTION) {
       continue;
     }
-    if (node->values.size != 0 && node->value_param_rows == NULL) {
-      Rf_error("Internal error: missing collection value row snapshot");
-    }
     for (R_xlen_t index = 0; index < node->values.size; ++index) {
       paradox_account_work(work_since_interrupt);
-      SET_VECTOR_ELT(result, output, VECTOR_ELT(node->values.values, index));
+      const R_xlen_t row = paradox_domain_value_row(node->value_param_rows, index);
+      SEXP value = VECTOR_ELT(node->values.values, index);
+      if (detach) {
+        value = paradox_detach_stored_value_leaf(value,
+          !paradox_domain_string_is(STRING_ELT(node->params.classes, row),
+            "ParamUty"));
+      }
+      PROTECT(value);
+      SET_VECTOR_ELT(result, output, value);
       SET_STRING_ELT(
         names,
         output,
         translate_value_row(
           graph,
           node_index,
-          node->value_param_rows[index]
+          row
         )
       );
+      UNPROTECT(1);
       ++output;
     }
   }
   Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(2);
+  UNPROTECT(3);
   return result;
 }
 
@@ -1183,29 +759,29 @@ SEXP paradox_param_set_collection_values(SEXP private_environment, SEXP self) {
     SEXP state = paradox_core_payload(core);
     paradox_domain_params_t params;
     paradox_domain_values_t values;
-    R_xlen_t unused_row = 0;
     if (state == R_UnboundValue ||
-        !paradox_domain_validate_params(
+        !paradox_domain_read_params(
           VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-          R_NilValue,
-          TRUE,
-          &params,
-          &unused_row,
-          &work_since_interrupt
-        ) || !paradox_domain_validate_values(
+          1U << PARADOX_DOMAIN_CLS, &params)) {
+      UNPROTECT(1);
+      Rf_error("Corrupt ParamSet value capsule state");
+    }
+    PROTECT(params.ids);
+    PROTECT(params.classes);
+    if (!paradox_domain_read_values(
           VECTOR_ELT(state, PARADOX_CORE_VALUES),
           &values,
           &work_since_interrupt
         )) {
-      UNPROTECT(1);
+      UNPROTECT(3);
       Rf_error("Corrupt ParamSet value capsule state");
     }
     SEXP result = PROTECT(paradox_detach_named_values(
-      values.values,
+      &values,
       &params,
       &work_since_interrupt
     ));
-    UNPROTECT(2);
+    UNPROTECT(4);
     return result;
   }
 
@@ -1216,20 +792,17 @@ SEXP paradox_param_set_collection_values(SEXP private_environment, SEXP self) {
   paradox_collection_graph_build(
     private_environment,
     self,
+    PARADOX_GRAPH_VALUES,
     &graph,
     &roots,
     roots_index,
     &work_since_interrupt
   );
-  SEXP values = PROTECT(paradox_collection_values_from_graph(
+  SEXP result = PROTECT(paradox_collection_values_from_graph(
     &graph,
+    TRUE,
     &work_since_interrupt
   ));
-  SEXP result = PROTECT(paradox_detach_named_values(
-    values,
-    &graph.nodes[0].params,
-    &work_since_interrupt
-  ));
-  UNPROTECT(4);
+  UNPROTECT(3);
   return result;
 }

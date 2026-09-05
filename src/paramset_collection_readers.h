@@ -35,13 +35,12 @@ typedef struct {
   paradox_domain_params_t params;
   paradox_domain_dependencies_t dependencies;
   paradox_domain_values_t values;
-  /* Operation-local rows proven while admitting `values`. Readers reuse
-   * them instead of searching the same parameter IDs a second time. */
-  R_xlen_t *value_param_rows;
+  /* R_NilValue for schema-order values, otherwise rooted, fresh one-based
+   * integer row positions. Reused rather than searched a second time. */
+  SEXP value_param_rows;
   SEXP sets;
   SEXP set_names;
   paradox_collection_translation_t translation;
-  R_xlen_t *translation_by_param;
   R_xlen_t parent;
   R_xlen_t parent_child;
   R_xlen_t parent_param_start;
@@ -58,6 +57,13 @@ typedef struct {
 } paradox_collection_graph_node_t;
 
 #define PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY 16
+
+enum paradox_collection_graph_fields {
+  PARADOX_GRAPH_VALUES = 1U,
+  PARADOX_GRAPH_DEPENDENCIES = 2U,
+  PARADOX_GRAPH_SCHEMA = 4U,
+  PARADOX_GRAPH_ALL = 7U
+};
 
 typedef struct {
   paradox_collection_graph_node_t *nodes;
@@ -83,6 +89,7 @@ typedef struct {
 attribute_hidden void paradox_collection_graph_build(
   SEXP private_environment,
   SEXP self,
+  unsigned int fields,
   paradox_collection_graph_t *graph,
   SEXP *roots,
   PROTECT_INDEX roots_index,
@@ -102,18 +109,7 @@ attribute_hidden void paradox_collection_graph_build_receipted(
   R_xlen_t *work_since_interrupt
 );
 
-/* Migration preflight uses the same complete graph admission while previewing
- * stale SHADOW children offside instead of installing their refreshed cores. */
-attribute_hidden void paradox_collection_graph_build_readonly(
-  SEXP private_environment,
-  SEXP self,
-  paradox_collection_graph_t *graph,
-  SEXP *roots,
-  PROTECT_INDEX roots_index,
-  R_xlen_t *work_since_interrupt
-);
-
-/* Cold Shadow preview combines the non-installing traversal above with the
+/* Cold Shadow preview combines a non-installing traversal with the
  * exact metadata receipt required before a newly assembled derived capsule
  * can be trusted. */
 attribute_hidden void paradox_collection_graph_build_readonly_receipted(
@@ -146,19 +142,6 @@ attribute_hidden void paradox_collection_validate_single_node(
   R_xlen_t *work_since_interrupt
 );
 
-/* The read-only form of the validator above: SHADOW nodes are admitted
- * against their previewed authoritative projection and nothing is committed.
- * Admission-only callers must use this form -- a committing admission
- * invalidates neighboring refresh signatures and re-heals shared subtrees
- * once per occurrence. */
-attribute_hidden void paradox_collection_validate_single_node_readonly(
-  SEXP private_environment,
-  SEXP self,
-  SEXP *roots,
-  PROTECT_INDEX roots_index,
-  R_xlen_t *work_since_interrupt
-);
-
 /* Resolve one dependency endpoint spelled in `node_index`'s own namespace into
  * the spelling the root of this graph exposes: the name is translated outward
  * at the first enclosing namespace that knows it, and passed on verbatim while
@@ -174,11 +157,14 @@ attribute_hidden SEXP paradox_collection_translate_dependency_id(
   R_xlen_t *work_since_interrupt
 );
 
-/* Both emitters consume only the frozen graph. The dependency result is a
+/* Both emitters consume only the selected graph. The value emitter optionally
+ * detaches typed leaves for an outward result, without a second name map.
+ * The dependency result is a
  * canonical plain data.frame for internal composition; the public wrapper
  * installs the detached data.table facade exactly once at the boundary. */
 attribute_hidden SEXP paradox_collection_values_from_graph(
   const paradox_collection_graph_t *graph,
+  int detach,
   R_xlen_t *work_since_interrupt
 );
 attribute_hidden SEXP paradox_collection_dependencies_from_graph(

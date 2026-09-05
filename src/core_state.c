@@ -26,6 +26,15 @@ static const char *const core_field_names[PARADOX_CORE_FIELD_COUNT] = {
   ".postfix",
   ".edges"
 };
+static SEXP interned_core_field_names[PARADOX_CORE_FIELD_COUNT];
+
+void paradox_core_intern_field_names(void) {
+  for (int field = 0; field < PARADOX_CORE_FIELD_COUNT; ++field) {
+    SEXP name = Rf_mkChar(core_field_names[field]);
+    R_PreserveObject(name);
+    interned_core_field_names[field] = name;
+  }
+}
 
 /* The fields a parent's flattened schema is built from. A generation that
  * differs from the stamped one only outside this slice -- a value commit is
@@ -197,23 +206,11 @@ uintptr_t paradox_core_state_epoch_value(void) {
 void paradox_core_stamp_verified(SEXP core) {
   const paradox_core_kind_t kind =
     kind_from_tag(R_ExternalPtrTag(core));
-  /*
-   * A Shadow's package-private signature is the sole mutable carrier outside
-   * the protected capsule payload. No finite address-slot fingerprint can
-   * prove exact identity of an arbitrarily rewritten ordinary list. Leave
-   * every Shadow unstamped so its next semantic entry performs the exact
-   * authoritative shell/generation comparison.
-   *
-   * The same rule propagates one edge at a time through collections. A child
-   * collection is stampable only after its own complete subtree acquired an
-   * exact no-Shadow proof, so inspecting direct children here is sufficient
-   * and costs nothing on the ordinary read path. BASE and proven no-Shadow
-   * COLLECTION reads retain their original one-comparison fast path.
-   */
-  if (kind == PARADOX_CORE_SHADOW) {
-    R_SetExternalPtrAddr(core, NULL);
-    return;
-  }
+  /* Stamps certify public freshness, not private storage validity. Shadows
+   * observe the state epoch (including values), while Shadow-free Collections
+   * need only the schema epoch. Keep Shadow-bearing Collections unstamped:
+   * stamping them with the schema epoch would miss a child's value refresh.
+   * Direct children suffice because the same exclusion propagates upward. */
   if (kind == PARADOX_CORE_COLLECTION) {
     SEXP payload = paradox_core_payload(core);
     if (payload == R_UnboundValue) {
@@ -234,12 +231,13 @@ void paradox_core_stamp_verified(SEXP core) {
         ? R_UnboundValue
         : paradox_core_from_private(private_environment);
       if (child_core == R_UnboundValue ||
+          paradox_core_kind(child_core) == PARADOX_CORE_SHADOW ||
           !paradox_core_is_verified(child_core)) {
         R_SetExternalPtrAddr(core, NULL);
         return;
       }
     }
-  } else if (kind != PARADOX_CORE_BASE) {
+  } else if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_SHADOW) {
     R_SetExternalPtrAddr(core, NULL);
     return;
   }
@@ -258,14 +256,7 @@ int paradox_core_is_verified(SEXP core) {
   if (kind == PARADOX_CORE_BASE) {
     return TRUE;
   }
-  /*
-   * Shape is insufficient here: the mutable signature may retain its carrier
-   * identity while any entry changes. Exact reauthentication is performed by
-   * the authoritative refresh reached after this deliberate cache miss. Fold
-   * NONE and SHADOW into one branch so a proven no-Shadow COLLECTION retains
-   * the same two comparisons as the former hot path.
-   */
-  if (kind != PARADOX_CORE_COLLECTION) {
+  if (kind != PARADOX_CORE_COLLECTION && kind != PARADOX_CORE_SHADOW) {
     return FALSE;
   }
   /* An empty slot is the fresh, restored, and cleared state and is never a
@@ -295,9 +286,14 @@ static int exact_names(SEXP names) {
       XLENGTH(names) != PARADOX_CORE_FIELD_COUNT) {
     return FALSE;
   }
+  /* This fixed-size read cannot allocate or dispatch: the carrier is already
+   * ordinary and every canonical name is interned at load. It is an exact
+   * comparison on every entry, not a memoized validation of the payload. */
+  const SEXP *values = STRING_PTR_RO(names);
   for (int field = 0; field < PARADOX_CORE_FIELD_COUNT; ++field) {
-    SEXP name = STRING_ELT(names, field);
-    if (name == NA_STRING || strcmp(CHAR(name), core_field_names[field]) != 0) {
+    SEXP name = values[field];
+    if (name != interned_core_field_names[field] &&
+        (name == NA_STRING || strcmp(CHAR(name), core_field_names[field]) != 0)) {
       return FALSE;
     }
   }
@@ -472,10 +468,8 @@ static int exact_edges(paradox_core_kind_t kind, SEXP payload) {
 }
 
 static SEXP new_core(paradox_core_kind_t kind, SEXP payload) {
-  if (kind < PARADOX_CORE_BASE || kind > PARADOX_CORE_SHADOW ||
-      !exact_payload(payload)) {
-    Rf_error("Internal error: invalid ParamSet core construction");
-  }
+  /* All callers have selected the kind and built this unexposed payload.
+   * Edges can still contain caller-reachable fields, so their guard remains. */
   if (!exact_edges(kind, payload)) {
     Rf_error("Internal error: invalid ParamSet capsule edge record");
   }
@@ -547,9 +541,13 @@ static SEXP core_from_private_using(SEXP private_environment,
     private_environment,
     core_symbol
   ));
-  const int canonical = paradox_core_is_canonical(core);
+  /* Named metadata on a private payload is not used for positional access.
+   * The closed tag and ordinary eleven-slot carrier are sufficient here;
+   * each consumer guards the fields it actually interprets. Explicit capsule
+   * construction/inspection retains its exact-schema diagnostics. */
+  const int valid = paradox_core_is_valid(core);
   UNPROTECT(1);
-  return canonical ? core : R_UnboundValue;
+  return valid ? core : R_UnboundValue;
 }
 
 SEXP paradox_core_from_private(SEXP private_environment) {
@@ -1452,7 +1450,7 @@ SEXP paradox_param_set_core_kind(SEXP owner) {
     }
     core = owner;
   } else {
-    /* The optional private lookup already admits only canonical capsules. */
+    /* The optional private lookup already admits a closed capsule tag. */
     core = paradox_core_from_private_optional(owner);
     if (core == R_UnboundValue) {
       Rf_error("Corrupt ParamSet state: missing versioned core capsule");

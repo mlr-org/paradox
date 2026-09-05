@@ -392,6 +392,7 @@ static void load_param_state(SEXP param_set, SEXP private,
     snapshot->values = PROTECT(
       paradox_collection_values_from_graph(
         &snapshot->collection_graph,
+        FALSE,
         work_since_interrupt
       )
     );
@@ -447,19 +448,13 @@ static void load_param_state(SEXP param_set, SEXP private,
     Rf_error("Unknown ParamSet node kind in Design dependency operation");
   }
 
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       snapshot->params,
-      R_NilValue,
-      TRUE,
-      &snapshot->params_data,
-      &unused_row,
-      work_since_interrupt
-    ) || !paradox_domain_validate_dependencies(
+      0U, &snapshot->params_data) || !paradox_domain_validate_dependencies(
       snapshot->dependencies,
       &snapshot->dependencies_data,
       work_since_interrupt
-    ) || !paradox_domain_validate_values(
+    ) || !paradox_domain_read_values(
       snapshot->values,
       &snapshot->values_data,
       work_since_interrupt

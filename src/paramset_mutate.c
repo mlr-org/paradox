@@ -47,12 +47,12 @@ static SEXP scalar_string(SEXP value, const char *name) {
 
 /*
  * Returns with one protection owned by the caller.  Selection and a possible
- * refresh must be rooted before parameter admission: that admission allocates
- * its root carrier and may therefore run a finalizer that replaces `.core`.
+ * refresh must be rooted before further planning can allocate and run a
+ * finalizer that replaces `.core`. Parameter-column admission cannot allocate.
  */
 static SEXP protected_checked_core(SEXP private_environment, SEXP self,
     paradox_core_kind_t *kind, paradox_domain_params_t *params,
-    int allow_derived, R_xlen_t *work_since_interrupt,
+    int allow_derived,
     PROTECT_INDEX *core_index) {
   if (!paradox_domain_owns_private_environment(self, private_environment)) {
     Rf_error("ParamSet method called with a foreign private environment");
@@ -76,15 +76,9 @@ static SEXP protected_checked_core(SEXP private_environment, SEXP self,
     Rf_error("ParamSetShadow state is read-only at this mutation boundary");
   }
   SEXP state = R_ExternalPtrProtected(core);
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-      R_NilValue,
-      TRUE,
-      params,
-      &unused_row,
-      work_since_interrupt
-    )) {
+      0U, params)) {
     Rf_error("Corrupt ParamSet parameter capsule");
   }
   return core;
@@ -420,15 +414,9 @@ SEXP paradox_param_set_get_tags(SEXP private_environment, SEXP self) {
   SEXP state = R_ExternalPtrProtected(core);
   paradox_domain_params_t params;
   paradox_domain_tags_t tags;
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-      R_NilValue,
-      TRUE,
-      &params,
-      &unused_row,
-      &work_since_interrupt
-    ) || !paradox_domain_validate_tags(
+      0U, &params) || !paradox_domain_validate_tags(
       VECTOR_ELT(state, PARADOX_CORE_TAGS),
       &tags,
       &work_since_interrupt
@@ -515,7 +503,6 @@ SEXP paradox_param_set_set_tags(SEXP private_environment, SEXP self,
     &kind,
     &params,
     TRUE,
-    &work_since_interrupt,
     &core_index
   );
   /* The same ordinary-container admission as every sibling structural
@@ -694,7 +681,6 @@ SEXP paradox_param_set_set_dependencies(SEXP private_environment, SEXP self,
     &kind,
     &params,
     FALSE,
-    &work_since_interrupt,
     &core_index
   );
   if (kind != PARADOX_CORE_BASE) {
@@ -716,8 +702,7 @@ SEXP paradox_param_set_set_dependencies(SEXP private_environment, SEXP self,
  * through the final binding receipt, so visibility decisions and the
  * delegated write cannot straddle two origin generations. */
 static SEXP shadow_origin_core(SEXP origin, SEXP origin_private,
-    paradox_domain_params_t *params,
-    R_xlen_t *work_since_interrupt) {
+    paradox_domain_params_t *params) {
   PROTECT_INDEX core_index;
   SEXP core;
   PROTECT_WITH_INDEX(
@@ -731,16 +716,10 @@ static SEXP shadow_origin_core(SEXP origin, SEXP origin_private,
   if (!paradox_core_is_verified(core)) {
     REPROTECT(core = paradox_core_refresh(origin, origin_private), core_index);
   }
-  R_xlen_t unused_row = 0;
   if (!paradox_core_has_exact_schema(core) ||
-      !paradox_domain_validate_params(
+      !paradox_domain_read_params(
         VECTOR_ELT(paradox_core_payload(core), PARADOX_CORE_PARAMS),
-        R_NilValue,
-        TRUE,
-        params,
-        &unused_row,
-        work_since_interrupt
-      )) {
+        0U, params)) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSetShadow origin state");
   }
@@ -776,15 +755,9 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
     );
     SEXP state = R_ExternalPtrProtected(core);
     paradox_domain_params_t visible;
-    R_xlen_t unused_row = 0;
-    if (!paradox_domain_validate_params(
+    if (!paradox_domain_read_params(
         VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-        R_NilValue,
-        TRUE,
-        &visible,
-        &unused_row,
-        &work_since_interrupt
-      )) {
+        0U, &visible)) {
       UNPROTECT(1);
       Rf_error("Corrupt ParamSetShadow visible schema");
     }
@@ -821,8 +794,7 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
     SEXP origin_core = PROTECT(shadow_origin_core(
       origin,
       origin_private,
-      &origin_params,
-      &work_since_interrupt
+      &origin_params
     ));
     /* An endpoint this view does not show is either one it hides or one the
      * origin does not have at all. Only the origin's own ID universe tells
@@ -902,7 +874,6 @@ SEXP paradox_param_set_add_dependency(SEXP private_environment, SEXP self,
     &kind,
     &params,
     FALSE,
-    &work_since_interrupt,
     &core_index
   );
   (void) kind;
@@ -994,7 +965,6 @@ static int closure_has_formal(SEXP function, SEXP sought) {
 
 SEXP paradox_param_set_set_callback(SEXP private_environment, SEXP self,
     SEXP callback, SEXP selector) {
-  R_xlen_t work_since_interrupt = 0;
   paradox_core_kind_t kind;
   paradox_domain_params_t params;
   PROTECT_INDEX core_index;
@@ -1004,7 +974,6 @@ SEXP paradox_param_set_set_callback(SEXP private_environment, SEXP self,
     &kind,
     &params,
     FALSE,
-    &work_since_interrupt,
     &core_index
   );
   (void) params;

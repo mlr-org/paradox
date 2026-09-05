@@ -15,7 +15,11 @@ snapshot <- normalizePath(args[[1L]], mustWork = TRUE)
 library_path <- normalizePath(args[[2L]], mustWork = TRUE)
 selection <- match.arg(args[[3L]], c("none", "analyzer", "focused", "full"))
 ledger_path <- if (length(args) == 4L) {
-  normalizePath(args[[4L]], winslash = "/", mustWork = FALSE)
+  path <- normalizePath(path.expand(args[[4L]]), winslash = "/", mustWork = FALSE)
+  # normalizePath() may leave a not-yet-created output relative. Worker HOME
+  # and cache paths derive from this path and must survive test_dir()'s chdir.
+  if (!grepl("^(/|[A-Za-z]:)", path)) path <- file.path(getwd(), path)
+  path
 } else {
   NULL
 }
@@ -225,7 +229,7 @@ filter <- switch(selection,
   # public class/API names intentionally do not contain "native".
   focused = paste0(
     "(characterization|native|regression|",
-    "ParamSetShadow|core-state-contract|paramset-equality|to_tune|",
+    "ParamSetShadow|core-state-contract|operation-validation|paramset-equality|to_tune|",
     "upgrade-paradox-object|upgrade-registry)"
   ),
   NULL

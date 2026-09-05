@@ -4,7 +4,15 @@
 
 Implementation review reopened in September 2026 at the user's request.
 [`review-20260905.md`](review-20260905.md) owns the new changes and their
-development checks. They preserve the public contract but change package
+development checks; the subsequent static-getter performance pass is recorded
+in [`getter-performance-20260905.md`](getter-performance-20260905.md).
+The latest operation-specific validation pass, including the newly explicit
+private-mutation safety boundary, is specified in
+[`validation-policy-20260905.md`](validation-policy-20260905.md).
+Its graph/value/Shadow completion, targeted measurements and verification
+follow-ups are recorded in
+[`graph-validation-20260905.md`](graph-validation-20260905.md).
+These passes preserve documented public behavior but change package
 bytes, so the edited working source needs a new freeze and source-bound
 release verification. The completed gates recorded below belong only to the
 unchanged `a0a9ff3` candidate, not to this development revision.

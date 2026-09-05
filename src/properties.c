@@ -1,21 +1,12 @@
-#include <string.h>
-
 #include "paradox.h"
 #include <R_ext/Arith.h>
 #include <R_ext/Utils.h>
 
 #include "paramset_domain_common.h"
 #include "paramset_params_internal.h"
+#include "core_state.h"
+#include "domain_admission.h"
 #include "r_utils.h"
-
-typedef enum {
-  PARAM_CLASS_UNKNOWN = 0,
-  PARAM_CLASS_DBL,
-  PARAM_CLASS_INT,
-  PARAM_CLASS_FCT,
-  PARAM_CLASS_LGL,
-  PARAM_CLASS_UTY
-} param_class_t;
 
 enum public_property_selector {
   PUBLIC_PROPERTY_CLASS = PARADOX_PROPERTY_COUNT,
@@ -25,86 +16,60 @@ enum public_property_selector {
   PUBLIC_PROPERTY_STORAGE_TYPE,
   PUBLIC_PROPERTY_SPECIAL_VALS,
   PUBLIC_PROPERTY_DEFAULT,
+  PUBLIC_PROPERTY_ALL_NUMERIC,
+  PUBLIC_PROPERTY_ALL_CATEGORICAL,
+  PUBLIC_PROPERTY_ALL_BOUNDED,
+  PUBLIC_PROPERTY_LENGTH,
+  PUBLIC_PROPERTY_IS_EMPTY,
   PUBLIC_PROPERTY_COUNT
 };
 
-enum property_root_slot {
-  PROPERTY_ROOT_IDS = 0,
-  PROPERTY_ROOT_CLASSES,
-  PROPERTY_ROOT_LOWER,
-  PROPERTY_ROOT_UPPER,
-  PROPERTY_ROOT_LEVELS,
-  PROPERTY_ROOT_COUNT
-};
-
-static param_class_t classify_param(SEXP cls) {
-  if (cls == NA_STRING) {
-    return PARAM_CLASS_UNKNOWN;
-  }
-
-  const char *name = CHAR(cls);
-  if (strcmp(name, "ParamDbl") == 0) {
-    return PARAM_CLASS_DBL;
-  }
-  if (strcmp(name, "ParamInt") == 0) {
-    return PARAM_CLASS_INT;
-  }
-  if (strcmp(name, "ParamFct") == 0) {
-    return PARAM_CLASS_FCT;
-  }
-  if (strcmp(name, "ParamLgl") == 0) {
-    return PARAM_CLASS_LGL;
-  }
-  if (strcmp(name, "ParamUty") == 0) {
-    return PARAM_CLASS_UTY;
-  }
-  return PARAM_CLASS_UNKNOWN;
-}
-
-static double param_nlevels(param_class_t cls, double lower, double upper,
+static double param_nlevels(paradox_builtin_domain_kind_t cls,
+    double lower, double upper,
     SEXP levels) {
   switch (cls) {
-  case PARAM_CLASS_DBL:
+  case PARADOX_BUILTIN_DOMAIN_DBL:
     if (ISNAN(lower) || ISNAN(upper)) {
       return NA_REAL;
     }
     return lower == upper ? 1.0 : R_PosInf;
-  case PARAM_CLASS_INT:
+  case PARADOX_BUILTIN_DOMAIN_INT:
     return paradox_integer_domain_nlevels(lower, upper);
-  case PARAM_CLASS_FCT: {
+  case PARADOX_BUILTIN_DOMAIN_FCT: {
     /* Keep the function result in its native type before conversion.  This is
      * equivalent but also satisfies GCC's useful -Wbad-function-cast audit. */
     const R_xlen_t size = XLENGTH(levels);
     return (double) size;
   }
-  case PARAM_CLASS_LGL:
+  case PARADOX_BUILTIN_DOMAIN_LGL:
     return 2.0;
-  case PARAM_CLASS_UTY:
+  case PARADOX_BUILTIN_DOMAIN_UTY:
     return R_PosInf;
-  case PARAM_CLASS_UNKNOWN:
+  case PARADOX_BUILTIN_DOMAIN_UNKNOWN:
     return NA_REAL;
   }
   return NA_REAL;
 }
 
-static int param_is_number(param_class_t cls) {
-  return cls == PARAM_CLASS_DBL || cls == PARAM_CLASS_INT;
+static int param_is_number(paradox_builtin_domain_kind_t cls) {
+  return cls == PARADOX_BUILTIN_DOMAIN_DBL || cls == PARADOX_BUILTIN_DOMAIN_INT;
 }
 
-static int param_is_categ(param_class_t cls) {
-  return cls == PARAM_CLASS_FCT || cls == PARAM_CLASS_LGL;
+static int param_is_categ(paradox_builtin_domain_kind_t cls) {
+  return cls == PARADOX_BUILTIN_DOMAIN_FCT || cls == PARADOX_BUILTIN_DOMAIN_LGL;
 }
 
-static int param_is_bounded(param_class_t cls, double lower, double upper) {
+static int param_is_bounded(paradox_builtin_domain_kind_t cls,
+    double lower, double upper) {
   switch (cls) {
-  case PARAM_CLASS_DBL:
-  case PARAM_CLASS_INT:
+  case PARADOX_BUILTIN_DOMAIN_DBL:
+  case PARADOX_BUILTIN_DOMAIN_INT:
     return R_FINITE(lower) && R_FINITE(upper);
-  case PARAM_CLASS_FCT:
-  case PARAM_CLASS_LGL:
+  case PARADOX_BUILTIN_DOMAIN_FCT:
+  case PARADOX_BUILTIN_DOMAIN_LGL:
     return TRUE;
-  case PARAM_CLASS_UTY:
-  case PARAM_CLASS_UNKNOWN:
+  case PARADOX_BUILTIN_DOMAIN_UTY:
+  case PARADOX_BUILTIN_DOMAIN_UNKNOWN:
     return FALSE;
   }
   return FALSE;
@@ -127,32 +92,43 @@ static enum paradox_domain_column public_property_column(int selector) {
 
 static SEXP detached_public_property(SEXP params, int selector) {
   R_xlen_t work_since_interrupt = 0;
-  paradox_domain_params_t parsed;
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
-      params,
-      R_NilValue,
-      TRUE,
-      &parsed,
-      &unused_row,
-      &work_since_interrupt
-    )) {
-    Rf_error("Corrupt ParamSet storage: invalid canonical `.params` table");
-  }
   const enum paradox_domain_column column =
     public_property_column(selector);
-  SEXP source = VECTOR_ELT(params, column);
+  const int typed_leaves = column == PARADOX_DOMAIN_SPECIAL_VALS ||
+    column == PARADOX_DOMAIN_DEFAULT;
+  SEXP columns[PARADOX_DOMAIN_COLUMN_COUNT];
+  paradox_domain_select_columns(params, "ParamSet storage", ".params",
+    (1U << PARADOX_DOMAIN_ID) | (1U << column) |
+      (typed_leaves ? (1U << PARADOX_DOMAIN_CLS) : 0U), columns);
+
+  /* Retain the admitted children themselves, not only their table: a pending
+   * finalizer can replace a table field during outward allocation. Only the
+   * selected columns matter: unrelated private semantics are not a getter's
+   * input contract. The row detacher owns nested representation admission. */
+  SEXP source = PROTECT(columns[column]);
+  SEXP ids = PROTECT(columns[PARADOX_DOMAIN_ID]);
+  SEXP classes = PROTECT(columns[PARADOX_DOMAIN_CLS]);
+  if (TYPEOF(ids) != STRSXP || ALTREP(ids)) {
+    Rf_error("Corrupt ParamSet storage: `id` must be ordinary character");
+  }
+  const R_xlen_t size = XLENGTH(ids);
+  if (column == PARADOX_DOMAIN_LOWER || column == PARADOX_DOMAIN_UPPER) {
+    paradox_require_numeric_column(source, size, "ParamSet storage",
+      paradox_domain_column_names[column]);
+  } else {
+    paradox_require_column(source, paradox_domain_column_types[column], size,
+      paradox_domain_column_names[column]);
+  }
+  if (typed_leaves) paradox_require_column(classes, STRSXP, size, "cls");
   SEXP result;
   if (column == PARADOX_DOMAIN_LEVELS ||
       column == PARADOX_DOMAIN_SPECIAL_VALS ||
       column == PARADOX_DOMAIN_DEFAULT) {
-    result = PROTECT(Rf_allocVector(VECSXP, parsed.row_count));
-    for (R_xlen_t row = 0; row < parsed.row_count; ++row) {
+    result = PROTECT(Rf_allocVector(VECSXP, size));
+    for (R_xlen_t row = 0; row < size; ++row) {
       paradox_account_work(&work_since_interrupt);
-      const int typed = !paradox_domain_string_is(
-        STRING_ELT(parsed.classes, row),
-        "ParamUty"
-      );
+      const int typed = column != PARADOX_DOMAIN_LEVELS &&
+        !paradox_domain_string_is(STRING_ELT(classes, row), "ParamUty");
       SEXP detached = PROTECT(paradox_detach_domain_row_field(
         VECTOR_ELT(source, row),
         column,
@@ -160,7 +136,7 @@ static SEXP detached_public_property(SEXP params, int selector) {
         &work_since_interrupt
       ));
       if (detached == R_UnboundValue) {
-        UNPROTECT(2);
+        UNPROTECT(5);
         Rf_error("Corrupt ParamSet storage: cannot detach public property");
       }
       SET_VECTOR_ELT(result, row, detached);
@@ -169,9 +145,9 @@ static SEXP detached_public_property(SEXP params, int selector) {
   } else {
     result = PROTECT(paradox_snapshot_semantic_vector(source));
   }
-  SEXP names = PROTECT(paradox_snapshot_semantic_vector(parsed.ids));
+  SEXP names = PROTECT(paradox_snapshot_semantic_vector(ids));
   Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(2);
+  UNPROTECT(5);
   return result;
 }
 
@@ -188,21 +164,43 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
   }
 
   const int selector = INTEGER_ELT(property, 0);
-  if (selector >= PARADOX_PROPERTY_COUNT) {
+  if (selector == PUBLIC_PROPERTY_LENGTH || selector == PUBLIC_PROPERTY_IS_EMPTY) {
+    SEXP columns[PARADOX_DOMAIN_COLUMN_COUNT];
+    paradox_domain_select_columns(params, "ParamSet storage", ".params",
+      1U << PARADOX_DOMAIN_ID, columns);
+    SEXP ids = columns[PARADOX_DOMAIN_ID];
+    if (TYPEOF(ids) != STRSXP || ALTREP(ids) || XLENGTH(ids) > INT_MAX) {
+      Rf_error("Corrupt ParamSet storage: invalid `id` column");
+    }
+    const R_xlen_t size = XLENGTH(ids);
+    return selector == PUBLIC_PROPERTY_LENGTH
+      ? Rf_ScalarInteger((int) size)
+      : Rf_ScalarLogical(size == 0);
+  }
+  const int aggregate = selector >= PUBLIC_PROPERTY_ALL_NUMERIC;
+  if (selector >= PARADOX_PROPERTY_COUNT && !aggregate) {
     return detached_public_property(params, selector);
   }
-  const paradox_property_t selected = (paradox_property_t) selector;
-  SEXP roots = PROTECT(Rf_allocVector(VECSXP, PROPERTY_ROOT_COUNT));
-  SEXP ids = paradox_get_named_column(params, ".params", "id");
-  SET_VECTOR_ELT(roots, PROPERTY_ROOT_IDS, ids);
-  SEXP classes = paradox_get_named_column(params, ".params", "cls");
-  SET_VECTOR_ELT(roots, PROPERTY_ROOT_CLASSES, classes);
-  SEXP lower = paradox_get_named_column(params, ".params", "lower");
-  SET_VECTOR_ELT(roots, PROPERTY_ROOT_LOWER, lower);
-  SEXP upper = paradox_get_named_column(params, ".params", "upper");
-  SET_VECTOR_ELT(roots, PROPERTY_ROOT_UPPER, upper);
-  SEXP levels = paradox_get_named_column(params, ".params", "levels");
-  SET_VECTOR_ELT(roots, PROPERTY_ROOT_LEVELS, levels);
+  const paradox_property_t selected = (paradox_property_t) (aggregate
+    ? selector - PUBLIC_PROPERTY_ALL_NUMERIC + PARADOX_PROPERTY_IS_NUMBER
+    : selector);
+  const int uses_bounds = selected == PARADOX_PROPERTY_NLEVELS ||
+    selected == PARADOX_PROPERTY_IS_BOUNDED;
+  const int uses_levels = selected == PARADOX_PROPERTY_NLEVELS;
+  SEXP columns[PARADOX_DOMAIN_COLUMN_COUNT];
+  paradox_domain_select_columns(
+    params, "ParamSet storage", ".params",
+    (1U << PARADOX_DOMAIN_ID) | (1U << PARADOX_DOMAIN_CLS) |
+      (uses_bounds ? (1U << PARADOX_DOMAIN_LOWER) |
+        (1U << PARADOX_DOMAIN_UPPER) : 0U) |
+      (uses_levels ? (1U << PARADOX_DOMAIN_LEVELS) : 0U),
+    columns
+  );
+  SEXP ids = PROTECT(columns[PARADOX_DOMAIN_ID]);
+  SEXP classes = PROTECT(columns[PARADOX_DOMAIN_CLS]);
+  SEXP lower = PROTECT(columns[PARADOX_DOMAIN_LOWER]);
+  SEXP upper = PROTECT(columns[PARADOX_DOMAIN_UPPER]);
+  SEXP levels = PROTECT(columns[PARADOX_DOMAIN_LEVELS]);
 
   /* Check storage types without observing ALTREP length methods.  This keeps
    * useful corruption diagnostics for vectors of the wrong type while making
@@ -222,81 +220,95 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
   const R_xlen_t size = XLENGTH(ids);
   paradox_require_column(ids, STRSXP, size, "id");
   paradox_require_column(classes, STRSXP, size, "cls");
-  paradox_require_column(levels, VECSXP, size, "levels");
+  if (uses_levels) paradox_require_column(levels, VECSXP, size, "levels");
 
   const SEXPTYPE value_type = selected == PARADOX_PROPERTY_NLEVELS
     ? (size == 0 ? INTSXP : REALSXP)
     : LGLSXP;
-  SEXP value = PROTECT(Rf_allocVector(value_type, size));
+  SEXP value = PROTECT(Rf_allocVector(value_type, aggregate ? 1 : size));
   /* Reuse the shared canonical-column diagnostics, but deliberately discard
    * their temporary raw views. Element APIs below keep no vector pointer live
    * across an interrupt poll. */
-  paradox_require_numeric_column(
-    lower,
-    size,
-    "ParamSet storage",
-    "lower"
-  );
-  paradox_require_numeric_column(
-    upper,
-    size,
-    "ParamSet storage",
-    "upper"
-  );
+  if (uses_bounds) {
+    paradox_require_numeric_column(lower, size, "ParamSet storage", "lower");
+    paradox_require_numeric_column(upper, size, "ParamSet storage", "upper");
+  }
 
+  int all = TRUE;
   for (R_xlen_t row = 0; row < size; ++row) {
     if (row != 0 && row % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
       R_CheckUserInterrupt();
     }
 
-    const param_class_t cls = classify_param(STRING_ELT(classes, row));
-    if (cls == PARAM_CLASS_UNKNOWN) {
+    const paradox_builtin_domain_kind_t cls =
+      paradox_resolve_builtin_domain_class_char(STRING_ELT(classes, row));
+    if (cls == PARADOX_BUILTIN_DOMAIN_UNKNOWN) {
       Rf_error(
         "Corrupt ParamSet storage: unsupported parameter class at row %.0f",
         (double) (row + 1)
       );
     }
-    const double row_lower = paradox_numeric_elt(lower, row);
-    const double row_upper = paradox_numeric_elt(upper, row);
-    SEXP row_levels = PROTECT(VECTOR_ELT(levels, row));
-    if (selected == PARADOX_PROPERTY_NLEVELS && cls == PARAM_CLASS_FCT) {
-      if (TYPEOF(row_levels) != STRSXP) {
-        UNPROTECT(1);
-        Rf_error(
-          "Corrupt ParamSet storage: each `levels` element for `ParamFct` must be character"
-        );
-      }
-      if (ALTREP(row_levels)) {
-        Rf_error(
-          "Corrupt ParamSet storage: factor levels must use ordinary representations"
-        );
-      }
-    }
-
     if (selected == PARADOX_PROPERTY_NLEVELS) {
+      SEXP row_levels = VECTOR_ELT(levels, row);
+      if (cls == PARADOX_BUILTIN_DOMAIN_FCT) {
+        if (TYPEOF(row_levels) != STRSXP) {
+          Rf_error(
+            "Corrupt ParamSet storage: each `levels` element for `ParamFct` must be character"
+          );
+        }
+        if (ALTREP(row_levels)) {
+          Rf_error(
+            "Corrupt ParamSet storage: factor levels must use ordinary representations"
+          );
+        }
+      }
       SET_REAL_ELT(
         value,
         row,
-        param_nlevels(cls, row_lower, row_upper, row_levels)
+        param_nlevels(cls, paradox_numeric_elt(lower, row),
+          paradox_numeric_elt(upper, row), row_levels)
       );
-    } else if (selected == PARADOX_PROPERTY_IS_NUMBER) {
-      SET_LOGICAL_ELT(value, row, param_is_number(cls));
-    } else if (selected == PARADOX_PROPERTY_IS_CATEG) {
-      SET_LOGICAL_ELT(value, row, param_is_categ(cls));
     } else {
-      SET_LOGICAL_ELT(
-        value,
-        row,
-        param_is_bounded(cls, row_lower, row_upper)
-      );
+      const int flag = selected == PARADOX_PROPERTY_IS_NUMBER
+        ? param_is_number(cls)
+        : selected == PARADOX_PROPERTY_IS_CATEG
+          ? param_is_categ(cls)
+          : param_is_bounded(cls, paradox_numeric_elt(lower, row),
+              paradox_numeric_elt(upper, row));
+      if (aggregate) {
+        all = all && flag;
+        if (!all) break;
+      } else {
+        SET_LOGICAL_ELT(value, row, flag);
+      }
     }
-    UNPROTECT(1);
+  }
+
+  if (aggregate) {
+    /* An unread private row cannot affect memory safety. Scalar reductions
+     * short-circuit instead of diagnosing unrelated later corruption. */
+    SET_LOGICAL_ELT(value, 0, all);
+    UNPROTECT(6);
+    return value;
   }
 
   /* Attribute vectors are mutable under data.table::setattr(), so even the
    * outward names carrier must not alias the capsule's `id` column. */
   SEXP names = PROTECT(paradox_snapshot_semantic_vector(ids));
   Rf_setAttrib(value, R_NamesSymbol, names);
-  UNPROTECT(3);
+  UNPROTECT(7);
   return value;
+}
+
+SEXP paradox_param_set_get_property(SEXP private_environment, SEXP self,
+    SEXP property) {
+  /* Refresh once, then retain the kernel's complete input itself: retaining
+   * only its parent would not root a table detached by a pending finalizer.
+   * No allocation intervenes between the ordinary payload selection and its
+   * protection. Neither the payload nor its table makes a round trip to R. */
+  SEXP state = paradox_param_set_core_state(private_environment, self);
+  SEXP params = PROTECT(VECTOR_ELT(state, PARADOX_CORE_PARAMS));
+  SEXP result = paradox_param_set_property(params, property);
+  UNPROTECT(1);
+  return result;
 }

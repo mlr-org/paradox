@@ -484,15 +484,9 @@ static SEXP validate_shadow_template(SEXP core, SEXP expected_origin,
   paradox_domain_dependencies_t dependencies;
   paradox_domain_trafos_t trafos;
   paradox_domain_values_t values;
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-      R_NilValue,
-      TRUE,
-      params,
-      &unused_row,
-      work_since_interrupt
-    ) || !paradox_domain_validate_tags(
+      PARADOX_PARAMS_COLUMNS_ALL, params) || !paradox_domain_validate_tags(
       VECTOR_ELT(state, PARADOX_CORE_TAGS),
       &tags,
       work_since_interrupt
@@ -504,7 +498,7 @@ static SEXP validate_shadow_template(SEXP core, SEXP expected_origin,
       VECTOR_ELT(state, PARADOX_CORE_TRAFOS),
       &trafos,
       work_since_interrupt
-    ) || !paradox_domain_validate_values(
+    ) || !paradox_domain_read_values(
       VECTOR_ELT(state, PARADOX_CORE_VALUES),
       &values,
       work_since_interrupt
@@ -545,15 +539,9 @@ static SEXP validate_base_origin(SEXP core,
   }
   SEXP state = paradox_core_payload(core);
   paradox_domain_tags_t tags;
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-      R_NilValue,
-      TRUE,
-      params,
-      &unused_row,
-      work_since_interrupt
-    ) || !paradox_domain_validate_tags(
+      PARADOX_PARAMS_COLUMNS_ALL, params) || !paradox_domain_validate_tags(
       VECTOR_ELT(state, PARADOX_CORE_TAGS),
       &tags,
       work_since_interrupt
@@ -565,7 +553,7 @@ static SEXP validate_base_origin(SEXP core,
       VECTOR_ELT(state, PARADOX_CORE_TRAFOS),
       trafos,
       work_since_interrupt
-    ) || !paradox_domain_validate_values(
+    ) || !paradox_domain_read_values(
       VECTOR_ELT(state, PARADOX_CORE_VALUES),
       values,
       work_since_interrupt
@@ -1389,6 +1377,7 @@ static SEXP build_from_collection(SEXP template_state, SEXP origin,
   }
   SEXP values_object = PROTECT(paradox_collection_values_from_graph(
     graph,
+    FALSE,
     work_since_interrupt
   ));
   SEXP dependencies_object = PROTECT(
@@ -1400,7 +1389,7 @@ static SEXP build_from_collection(SEXP template_state, SEXP origin,
   paradox_domain_values_t values;
   paradox_domain_dependencies_t dependencies;
   paradox_domain_trafos_t trafos;
-  if (!paradox_domain_validate_values(
+  if (!paradox_domain_read_values(
       values_object,
       &values,
       work_since_interrupt
@@ -1847,14 +1836,6 @@ static SEXP shadow_refresh_authoritative(SEXP self,
     Rf_error("Corrupt ParamSetShadow origin edge");
   }
   R_xlen_t work_since_interrupt = 0;
-  paradox_domain_params_t template_params;
-  SEXP template_state = validate_shadow_template(
-    current_core,
-    origin,
-    &template_params,
-    &work_since_interrupt
-  );
-  (void) template_params;
   SEXP signature = PROTECT(exact_metadata_signature(current_core));
   if (signature == R_UnboundValue) {
     UNPROTECT(5);
@@ -1896,6 +1877,9 @@ static SEXP shadow_refresh_authoritative(SEXP self,
       &origin_values,
       &work_since_interrupt
     );
+    paradox_domain_params_t template_params;
+    SEXP template_state = validate_shadow_template(current_core, origin,
+      &template_params, &work_since_interrupt);
     SEXP reused_trafos = R_NilValue;
     SEXP refreshed_template = PROTECT(shadow_refresh_template(
       current_core,
@@ -1967,6 +1951,9 @@ static SEXP shadow_refresh_authoritative(SEXP self,
       UNPROTECT(8);
       return current_core;
     }
+    paradox_domain_params_t template_params;
+    SEXP template_state = validate_shadow_template(current_core, origin,
+      &template_params, &work_since_interrupt);
     SEXP reused_trafos = R_NilValue;
     SEXP refreshed_template = PROTECT(shadow_refresh_template(
       current_core,

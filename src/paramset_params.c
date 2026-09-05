@@ -47,56 +47,6 @@ int paradox_params_supported_table_attributes(SEXP table) {
   return paradox_api_has_only_attributes(table, supported, 3);
 }
 
-int paradox_params_exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
-    R_xlen_t *work_since_interrupt) {
-  SEXP row_names = PROTECT(paradox_api_raw_attribute(
-    table,
-    R_RowNamesSymbol
-  ));
-  /*
-   * Capsule tables are package-produced, not public ingress. Read the exact
-   * stored representation rather than Rf_getAttrib()'s expanded ALTREP
-   * facade. R may retain package-built row names as compact c(NA, +/-n) or as
-   * the ordinary explicit 1:n vector, depending on the producer/runtime; both
-   * are canonical. A wrong-length or callback-capable forged carrier is
-   * rejected before it can be observed.
-   */
-  if (row_count > INT_MAX || TYPEOF(row_names) != INTSXP ||
-      ALTREP(row_names) || Rf_isS4(row_names) ||
-      Rf_isObject(row_names) ||
-      !paradox_api_has_no_attributes(row_names)) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  if (row_count == 0) {
-    const int valid = XLENGTH(row_names) == 0;
-    UNPROTECT(1);
-    return valid;
-  }
-  const R_xlen_t encoded_size = XLENGTH(row_names);
-  if (encoded_size == 2 &&
-      INTEGER_ELT(row_names, 0) == NA_INTEGER) {
-    const int encoded = INTEGER_ELT(row_names, 1);
-    const int expected = (int) row_count;
-    const int valid = encoded == expected || encoded == -expected;
-    UNPROTECT(1);
-    return valid;
-  }
-  if (encoded_size != row_count) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  int valid = TRUE;
-  for (R_xlen_t row = 0; row < row_count; ++row) {
-    paradox_account_work(work_since_interrupt);
-    if (INTEGER_ELT(row_names, row) != (int) row + 1) {
-      valid = FALSE;
-      break;
-    }
-  }
-  UNPROTECT(1);
-  return valid;
-}
 
 int paradox_params_names_are_only_attribute(SEXP value) {
   return paradox_api_has_single_attribute(value, "names");
@@ -312,45 +262,24 @@ SEXP paradox_detach_domain_row_field(SEXP source,
   return source;
 }
 
-SEXP paradox_detach_named_values(SEXP values,
+SEXP paradox_detach_named_values(const paradox_domain_values_t *values,
     const paradox_domain_params_t *params,
     R_xlen_t *work_since_interrupt) {
-  paradox_domain_values_t parsed;
-  if (!paradox_domain_validate_values(
-      values,
-      &parsed,
-      work_since_interrupt
-    )) {
-    Rf_error("Corrupt ParamSet capsule: invalid value store");
-  }
+  const paradox_domain_values_t parsed = *values;
+  /* The caller has admitted this store or produced it itself. Retain children
+   * individually across outward allocations, without repeating admission. */
+  PROTECT(parsed.values);
+  PROTECT(parsed.names);
+  PROTECT(params->ids);
+  PROTECT(params->classes);
   SEXP result = PROTECT(Rf_allocVector(VECSXP, parsed.size));
   SEXP names = PROTECT(Rf_allocVector(STRSXP, parsed.size));
-  SEXP owners = PROTECT(Rf_match(params->ids, parsed.names, 0));
-  const SEXPTYPE owner_type = (SEXPTYPE) TYPEOF(owners);
-  if ((owner_type != INTSXP && owner_type != REALSXP) ||
-      XLENGTH(owners) != parsed.size) {
-    UNPROTECT(3);
-    Rf_error("Internal error: invalid value-owner match result");
-  }
+  SEXP owners = PROTECT(paradox_domain_value_rows(
+    params->ids, parsed.names, work_since_interrupt));
   for (R_xlen_t index = 0; index < parsed.size; ++index) {
     paradox_account_work(work_since_interrupt);
     SEXP name = STRING_ELT(parsed.names, index);
-    R_xlen_t one_based = 0;
-    if (owner_type == INTSXP) {
-      const int owner = INTEGER_ELT(owners, index);
-      one_based = owner > 0 ? (R_xlen_t) owner : 0;
-    } else {
-      const double owner = REAL_ELT(owners, index);
-      one_based = R_FINITE(owner) && owner > 0.0 &&
-          owner <= (double) params->row_count
-        ? (R_xlen_t) owner
-        : 0;
-    }
-    if (one_based == 0 || one_based > params->row_count) {
-      UNPROTECT(3);
-      Rf_error("Corrupt ParamSet capsule: value owner is unknown");
-    }
-    const R_xlen_t row = one_based - 1;
+    const R_xlen_t row = paradox_domain_value_row(owners, index);
     SEXP detached = PROTECT(paradox_detach_stored_value_leaf(
       VECTOR_ELT(parsed.values, index),
       param_row_has_typed_values(params, row)
@@ -360,7 +289,7 @@ SEXP paradox_detach_named_values(SEXP values,
     UNPROTECT(1);
   }
   Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(3);
+  UNPROTECT(7);
   return result;
 }
 
@@ -429,7 +358,7 @@ static int validate_dynamic_state(
     PARAMS_ROOT_DEPENDENCY_CONDITIONS,
     dependencies->conditions
   );
-  if (!paradox_domain_validate_values(
+  if (!paradox_domain_read_values(
         values_sexp,
         values,
         work_since_interrupt
@@ -487,7 +416,6 @@ static int load_core_state(SEXP core,
   SET_VECTOR_ELT(state_roots, PARAMS_ROOT_CORE, core);
 
   int valid = FALSE;
-  R_xlen_t unused_row = 0;
   if (!paradox_core_is_canonical(core) ||
       (paradox_core_kind(core) == PARADOX_CORE_SHADOW &&
         !paradox_shadow_metadata_is_exact(core))) {
@@ -521,20 +449,14 @@ static int load_core_state(SEXP core,
     state->values_sexp
   );
   if (
-      !paradox_params_supported_table_attributes(state->params_sexp) ||
       !paradox_params_supported_table_attributes(state->tags_sexp) ||
       !paradox_params_supported_table_attributes(state->trafos_sexp)) {
     goto done;
   }
 
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
         state->params_sexp,
-        R_NilValue,
-        TRUE,
-        &state->params,
-        &unused_row,
-        work_since_interrupt
-      )) {
+      PARADOX_PARAMS_COLUMNS_ALL, &state->params)) {
     goto done;
   }
   for (enum paradox_domain_column column = PARADOX_DOMAIN_ID;
@@ -550,14 +472,6 @@ static int load_core_state(SEXP core,
   }
   state->params.ids = state->params_columns[PARADOX_DOMAIN_ID];
   state->params.classes = state->params_columns[PARADOX_DOMAIN_CLS];
-  if (!paradox_params_exact_data_frame_row_names(
-      state->params_sexp,
-      state->params.row_count,
-      work_since_interrupt
-    )) {
-    goto done;
-  }
-
   if (!paradox_domain_validate_tags(
         state->tags_sexp,
         &state->tags,

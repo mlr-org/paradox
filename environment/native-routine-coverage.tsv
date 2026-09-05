@@ -65,6 +65,7 @@ param_set_set_dependencies	3	production	production-dynamic	direct_param_set_set_
 param_set_add_dependency	6	production	production-dynamic	direct_param_set_add_dependency	Direct validated dependency append including native Shadow origin routing
 param_set_set_callback	4	production	production-dynamic	direct_param_set_set_callback	Direct BASE constraint or extra-transformation callback replacement
 param_set_property	2	production	production-dynamic	direct_param_set_property	Direct named-vector static property extraction
+param_set_get_property	3	production	production-dynamic	direct_param_set_get_property	Capsule-gated static property extraction without an R round trip
 param_set_qunif_builtin	3	production	production-dynamic	direct_param_set_qunif_builtin	Direct matrix/data.frame mapping from an owned current capsule; malformed inputs error without replay
 sampler_unif_sample_builtin	2	production	production-dynamic	direct_sampler_unif_sample_builtin	Direct capsule-driven whole-operation uniform sampling
 sampler_unif_subspace_handoffs	1	production	production-dynamic	direct_sampler_unif_subspace_handoffs	Direct issue of fresh sampler-specific single-use subspace ownership carriers

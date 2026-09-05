@@ -9,6 +9,23 @@ The normative details are in
 [`contract-first-2.0.0.md`](contract-first-2.0.0.md). This document is the
 reviewable impact summary for maintainers and downstream authors.
 
+The [September 2026 validation policy](validation-policy-20260905.md) clarifies
+the private-state boundary: well-formed R objects with wrong types, lengths,
+values, or private fields must not cause invalid native access. They need not
+produce a particular diagnostic after private mutation. An unrelated getter
+may now succeed despite private semantic damage elsewhere. Public argument
+validation, supported behavior, detached ownership, and callback/transaction
+semantics are unchanged. Broken native object representations and ALTREP
+providers violating R's rules are not supported inputs.
+
+The [graph/value completion pass](graph-validation-20260905.md) applies this
+same boundary to stored-value names, dependency counts, unused Collection
+translation metadata, and Shadow cache signatures. Public generation changes
+still refresh Shadows, including nested/shared and restored graphs. Arbitrary
+private signature edits no longer trigger automatic detection or repair on
+every read. Public checks, value order, detached typed leaves, and opaque
+ParamUty identity are unchanged; downstream packages need no adaptation.
+
 ## Preserved ordinary behavior
 
 Subject to the legacy-object migration boundary described below, preserve:

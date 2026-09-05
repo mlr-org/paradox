@@ -10,6 +10,7 @@ test_that("static properties use one fixed native capsule interface", {
   symbol = property_symbol()
   expect_s3_class(symbol, "NativeSymbolInfo")
   expect_identical(symbol$numParameters, 2L)
+  expect_identical(paradox:::C_param_set_get_property$numParameters, 3L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
 
   empty = ParamSet$new()
@@ -17,6 +18,81 @@ test_that("static properties use one fixed native capsule interface", {
   expect_identical(empty$is_number, setNames(logical(), character()))
   expect_identical(empty$is_categ, setNames(logical(), character()))
   expect_identical(empty$is_bounded, setNames(logical(), character()))
+})
+
+test_that("capsule property entry preserves the table kernel and scalar reductions", {
+  domains = list(
+    x = p_dbl(-1, 1), i = p_int(), f = p_fct(c("a", "b")),
+    l = p_lgl(), u = p_uty(default = new.env(parent = emptyenv()))
+  )
+  for (set in list(ParamSet$new(), ParamSet$new(domains),
+    ps(x = p_dbl(-1, 1)), ps(f = p_fct("one"), l = p_lgl()))) {
+    private = set$.__enclos_env__$private
+    params = property_params(set)
+    for (selector in 0:15) {
+      expect_identical(
+        .Call(paradox:::C_param_set_get_property, private, set, selector),
+        .Call(property_symbol(), params, selector),
+        info = paste("selector", selector)
+      )
+    }
+    expect_identical(set$all_numeric, all(set$is_number))
+    expect_identical(set$all_categorical, all(set$is_categ))
+    expect_identical(set$all_bounded, all(set$is_bounded))
+  }
+})
+
+test_that("scalar reductions stop after their answer is known", {
+  params = list(id = c("first", "last"), cls = c("ParamUty", "Unknown"),
+    lower = c(NA_real_, NA_real_), upper = c(NA_real_, NA_real_),
+    levels = list(NULL, NULL))
+  for (selector in 11:13) {
+    expect_identical(.Call(property_symbol(), params, selector), FALSE)
+  }
+})
+
+test_that("static getters refresh nested collections and Shadow views", {
+  origin = ParamSetCollection$new(list(a = ps(x = p_dbl(0, 1))))
+  view = ParamSetShadow$new(origin, "a.x")
+  parent = ParamSetCollection$new(list(view = view, whole = origin))
+  fields = c("class", "lower", "upper", "levels", "storage_type", "nlevels",
+    "is_number", "is_categ", "is_bounded", "all_numeric", "all_categorical",
+    "all_bounded", "length", "is_empty")
+  for (field in fields) invisible(parent[[field]])
+  origin$add(ps(y = p_int(-2, 2), z = p_fct(c("a", "b"))), n = "b")
+
+  expected_origin = ParamSetCollection$new(list(a = ps(x = p_dbl(0, 1)),
+    b = ps(y = p_int(-2, 2), z = p_fct(c("a", "b")))))
+  expected = ParamSetCollection$new(list(
+    view = ParamSetShadow$new(expected_origin, "a.x"), whole = expected_origin))
+  for (actual in list(parent, parent$clone(deep = TRUE),
+    unserialize(serialize(parent, NULL)))) {
+    for (field in fields) {
+      expect_identical(actual[[field]], expected[[field]], info = field)
+    }
+  }
+})
+
+test_that("uninterpreted private levels do not trigger uniqueness checks", {
+  prototype = property_params(ps(choice = p_fct("one")))
+  utf8 = enc2utf8("caf\u00e9")
+  latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
+  bytes = utf8
+  Encoding(bytes) = "bytes"
+  cases = list(character(), "", NA_character_, c("", ""), c(NA, NA),
+    c(utf8, latin1), c(utf8, bytes), c(latin1, bytes), c(bytes, bytes),
+    c(strrep("a", 64L), strrep("a", 65L)), rep(strrep("a", 65L), 2L))
+  for (n in 1:10) {
+    levels = paste0("level", seq_len(n))
+    cases[[length(cases) + 1L]] = levels
+    for (i in seq_len(n)) cases[[length(cases) + 1L]] = append(levels, levels[i])
+  }
+  for (levels in cases) {
+    params = prototype
+    params$levels = list(levels)
+    expect_identical(.Call(property_symbol(), params, 4L), c(choice = "ParamFct"))
+    expect_identical(.Call(property_symbol(), params, 7L), list(choice = levels))
+  }
 })
 
 test_that("native static properties cover the five maintained Domain kinds", {
@@ -176,7 +252,7 @@ test_that("static properties reject corrupt state instead of dispatching", {
     fixed = TRUE
   )
 
-  for (selector in list(0, NA_integer_, -1L, 11L, 0:1)) {
+  for (selector in list(0, NA_integer_, -1L, 100L, 0:1)) {
     expect_error(
       .Call(symbol, valid, selector),
       "invalid ParamSet property selector",
@@ -228,8 +304,8 @@ test_that("static properties reject S4 and attributed column shells", {
     )
   }
 
-  # Exercise the public active bindings as well as the direct kernel. A
-  # forged capsule must fail closed for every property selector.
+  # Each binding guards the columns it actually reads. Unused private columns
+  # are outside that operation's contract, including their representation.
   for (column in c("id", "cls", "lower", "upper", "levels")) {
     set = ps(x = p_int(0L, 2L))
     private = set$.__enclos_env__$private
@@ -239,7 +315,12 @@ test_that("static properties reject S4 and attributed column shells", {
     ))
     state$.params[[column]] = asS4(state$.params[[column]])
     private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
-    for (property in c("nlevels", "is_number", "is_categ", "is_bounded")) {
+    properties = if (column %in% c("id", "cls")) {
+      c("nlevels", "is_number", "is_categ", "is_bounded")
+    } else if (column %in% c("lower", "upper")) {
+      c("nlevels", "is_bounded")
+    } else "nlevels"
+    for (property in properties) {
       expect_error(
         set[[property]],
         "Corrupt ParamSet",

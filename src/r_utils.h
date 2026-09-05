@@ -343,7 +343,10 @@ attribute_hidden int paradox_public_row_names_count(
  * rooted immediately by the caller. */
 attribute_hidden SEXP paradox_materialize_public_table_shell(SEXP table);
 
-attribute_hidden SEXP paradox_prepare_data_table(SEXP table, int growable);
+/* Install the public self-reference on an owned table. Set normalize_columns
+ * only when a producer may have kept names on its columns. Fresh unnamed
+ * numeric/character/list carriers need no metadata inspection. */
+attribute_hidden SEXP paradox_prepare_data_table(SEXP table, int normalize_columns);
 /* Finish a freshly allocated table whose canonical names, class, and row
  * names are already installed. Unlike the registered defensive finalizer,
  * this does not duplicate the shell or metadata: callers must own the fresh

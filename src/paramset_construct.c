@@ -316,10 +316,9 @@ SEXP paradox_snapshot_domain_nested(SEXP source,
         !paradox_api_has_no_attributes(source)) {
       return R_UnboundValue;
     }
-    SEXP result = PROTECT(paradox_snapshot_semantic_vector(source));
-    Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
-    UNPROTECT(1);
-    return result;
+    /* Admission proves names absent; the semantic snapshot receipts that
+     * absence across allocation. There is no attribute left to remove. */
+    return paradox_snapshot_semantic_vector(source);
   }
   if (column == PARADOX_DOMAIN_SPECIAL_VALS) {
     static const char *const names_only[] = {"names"};

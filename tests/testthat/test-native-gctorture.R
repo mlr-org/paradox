@@ -13,6 +13,7 @@ test_that("every allocating native entry point survives forced collection", {
       "param_set_construct",
       "param_set_ids",
       "param_set_property",
+      "param_set_get_property",
       "param_set_check_builtin",
       "param_set_check_dt_builtin",
       "param_set_qunif_builtin",
@@ -79,6 +80,9 @@ test_that("every allocating native entry point survives forced collection", {
   stripped_subset_private$.core = NULL
   sampler = SamplerUnif$new(ParamSet$new(domains))
   sampler$sample(0L)
+  expected_lower = parameter_set$lower
+  expected_levels = parameter_set$levels
+  expected_shadow_lower = shadow$lower
 
   previous = gctorture(TRUE)
   on.exit(gctorture(previous), add = TRUE)
@@ -139,6 +143,18 @@ test_that("every allocating native entry point survives forced collection", {
     NULL
   )
   properties = .Call(symbols$C_param_set_property, params, 0L)
+  gated_properties = .Call(
+    symbols$C_param_set_get_property, private, parameter_set, 0L
+  )
+  detached_lower = .Call(
+    symbols$C_param_set_get_property, private, parameter_set, 5L
+  )
+  detached_levels = .Call(
+    symbols$C_param_set_get_property, private, parameter_set, 7L
+  )
+  detached_shadow_lower = .Call(
+    symbols$C_param_set_get_property, shadow_private, shadow, 5L
+  )
   checked_values = .Call(
     symbols$C_param_set_check_builtin,
     private,
@@ -292,6 +308,10 @@ test_that("every allocating native entry point survives forced collection", {
   transposed = .Call(symbols$C_design_transpose, transpose_values, TRUE)
 
   gctorture(previous)
+  expect_identical(gated_properties, properties)
+  expect_identical(detached_lower, expected_lower)
+  expect_identical(detached_levels, expected_levels)
+  expect_identical(detached_shadow_lower, expected_shadow_lower)
 
   expect_identical(names(constructed_domain), paradox:::domain_names)
   expect_true(checked_domain)

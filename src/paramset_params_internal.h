@@ -28,15 +28,6 @@ typedef struct {
 } paradox_params_state_t;
 
 attribute_hidden int paradox_params_supported_table_attributes(SEXP table);
-/* Canonical capsule row names: attribute-free ordinary integer(0) for zero
- * rows, exact compact c(NA, +/-n), or the exact ordinary 1:n spelling retained
- * by some package producers/runtimes. Public-boundary callback-capable
- * row-name facades are never admitted into a capsule. */
-attribute_hidden int paradox_params_exact_data_frame_row_names(
-  SEXP table,
-  R_xlen_t row_count,
-  R_xlen_t *work_since_interrupt
-);
 attribute_hidden int paradox_params_names_are_only_attribute(SEXP value);
 attribute_hidden int paradox_params_load_private_state_rooted(
   SEXP private_environment,
@@ -78,7 +69,7 @@ attribute_hidden SEXP paradox_detach_stored_value_leaf(
 /* Detach the outer store and every typed atomic value using the owning
  * parameter row. ParamUty/TuneToken/S4/other opaque leaves keep identity. */
 attribute_hidden SEXP paradox_detach_named_values(
-  SEXP values,
+  const paradox_domain_values_t *values,
   const paradox_domain_params_t *params,
   R_xlen_t *work_since_interrupt
 );

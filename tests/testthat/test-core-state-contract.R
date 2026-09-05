@@ -58,7 +58,24 @@ test_that("capsule admission rejects noncanonical physical schemas", {
   )
 })
 
-test_that("installed capsule carrier attributes are rejected, not healed", {
+test_that("every capsule field name is checked on each admission", {
+  state = core_state(ps(x = p_int()))
+  expected_names = names(state)
+  for (field in seq_along(expected_names)) {
+    changed = state
+    names(changed)[field] = paste0(expected_names[field], "_changed")
+    expect_error(.Call(paradox:::C_param_set_core_new, 1L, changed),
+      "exact canonical eleven-field")
+    names(changed)[field] = NA_character_
+    expect_error(.Call(paradox:::C_param_set_core_new, 1L, changed),
+      "exact canonical eleven-field")
+  }
+  restored = unserialize(serialize(state, NULL, version = 2L))
+  capsule = .Call(paradox:::C_param_set_core_new, 1L, restored)
+  expect_identical(names(paradox:::param_set_core_state(capsule)), expected_names)
+})
+
+test_that("private readers ignore unused capsule attributes but explicit admission checks them", {
   objects = list(
     base = ps(x = p_int()),
     collection = ParamSetCollection$new(list(unit = ps(x = p_int())))
@@ -68,10 +85,10 @@ test_that("installed capsule carrier attributes are rejected, not healed", {
     private = core_private(object)
     attr(private$.core, "rogue") = TRUE
 
-    expect_error(object$get_values(), "Corrupt ParamSet")
-    expect_error(object$clone(deep = TRUE), "Corrupt ParamSet")
+    expect_identical(object$get_values(), named_list())
+    expect_error(object$clone(deep = TRUE), "Invalid ParamSet deep-clone capsule")
     restored = unserialize(serialize(object, NULL, version = 3L))
-    expect_error(restored$get_values(), "Corrupt ParamSet")
+    expect_identical(restored$get_values(), named_list())
     expect_error(
       upgrade_paradox_object(object),
       "corrupt current state capsule"
@@ -239,9 +256,8 @@ test_that("additive ParamSet subclasses share the sealed engine", {
 })
 
 test_that("capsule tables must be rectangular before any consumer indexes them", {
-  # The shared exact-table validator derives the row count from column zero.
-  # A capsule whose remaining columns are shorter must be rejected there, not
-  # read out of bounds by whichever consumer indexes them first.
+  # Private translation columns matter only to operations that consume them.
+  # Those consumers must still reject shorter columns before indexing.
   make_collection = function() {
     collection = ParamSetCollection$new(list(
       a = ps(x = p_dbl(0, 1), y = p_dbl(0, 1)),
@@ -273,21 +289,25 @@ test_that("capsule tables must be rectangular before any consumer indexes them",
       envir = private
     )
 
-    expect_error(collection$values, "Corrupt ParamSetCollection")
-    expect_error(collection$deps, "Corrupt ParamSetCollection")
-    expect_error(collection$get_values(), "Corrupt ParamSetCollection")
+    expect_identical(collection$values, list(a.x = 0.25, a.y = 0.5, b.z = 0.75))
+    expect_identical(collection$get_values(), collection$values)
+    expect_identical(nrow(collection$deps), 0L)
+    expect_error(collection$subset("a.x"), "Corrupt ParamSetCollection")
   }
 })
 
 test_that("capsule tables reject S4 structural shells and metadata when used", {
-  install_base_state = function(state, check = function(set) set$get_values()) {
+  install_base_state = function(state, check = function(set) set$get_values(),
+    reject = TRUE) {
     set = ps(x = p_int())
     assign(
       ".core",
       .Call(paradox:::C_param_set_core_new, 1L, state),
       envir = core_private(set)
     )
-    expect_error(check(set), "Corrupt")
+    if (reject) expect_error(check(set), "Corrupt") else {
+      expect_identical(check(set), named_list())
+    }
   }
 
   fresh_base_state = function() {
@@ -309,7 +329,7 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
     attr(state$.params, metadata) = asS4(
       attr(state$.params, metadata, exact = TRUE)
     )
-    install_base_state(state)
+    install_base_state(state, reject = FALSE)
   }
 
   state = fresh_base_state()
@@ -321,29 +341,27 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
     NULL
   ))
   state$.params$levels[[1L]] = asS4(state$.params$levels[[1L]])
-  install_base_state(state)
+  install_base_state(state, reject = FALSE)
 
   state = fresh_base_state()
   state$.params$special_vals[[1L]] = asS4(
     state$.params$special_vals[[1L]]
   )
-  install_base_state(state)
+  install_base_state(state, reject = FALSE)
 
   state = fresh_base_state()
   special_values = state$.params$special_vals[[1L]]
   attr(special_values, "class") = asS4("rogue_special_values")
   state$.params$special_vals[[1L]] = special_values
-  install_base_state(state)
+  install_base_state(state, reject = FALSE)
 
   state = fresh_base_state()
   special_values = state$.params$special_vals[[1L]]
   class(special_values) = "rogue_special_values"
   state$.params$special_vals[[1L]] = special_values
-  install_base_state(state)
+  install_base_state(state, reject = FALSE)
 
-  # Exact capsule tables and nested special-value metadata are admitted
-  # through hard-bounded attribute scans. Overlong caller-owned spines must
-  # reject deterministically before an old-R raw selector can walk them.
+  # Neither table attributes nor special values are used by this reader.
   state = fresh_base_state()
   for (index in seq_len(65L)) {
     attr(
@@ -351,7 +369,7 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
       sprintf("paradox.table.attribute.%03d", index)
     ) = index
   }
-  install_base_state(state)
+  install_base_state(state, reject = FALSE)
 
   state = fresh_base_state()
   special_values = state$.params$special_vals[[1L]]
@@ -362,7 +380,7 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
     ) = index
   }
   state$.params$special_vals[[1L]] = special_values
-  install_base_state(state)
+  install_base_state(state, reject = FALSE)
 
   for (mutate in list(
       function(state) {
@@ -374,18 +392,20 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
         state
       }
     )) {
-    install_base_state(mutate(fresh_base_state()))
+    install_base_state(mutate(fresh_base_state()), reject = FALSE)
   }
 
-  # Constructor admission must cover the complete child payload: these fields
-  # are not consumed by the flatten itself, but a child that every later read
-  # rejects must not construct at all.
+  # Construction does not pre-admit unrelated private child fields.
   for (field in c(".postfix", ".values", ".deps")) {
     state = fresh_base_state()
     state[[field]] = asS4(state[[field]])
     install_base_state(
       state,
-      function(set) ParamSetCollection$new(list(child = set))
+      function(set) {
+        collection = ParamSetCollection$new(list(child = set))
+        expect_identical(collection$ids(), "child.x")
+        named_list()
+      }, reject = FALSE
     )
   }
 
@@ -398,7 +418,7 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
       .Call(paradox:::C_param_set_core_new, 2L, state),
       envir = core_private(collection)
     )
-    expect_error(collection$get_values(), "Corrupt ParamSetCollection")
+    expect_identical(collection$get_values(), named_list())
   }
   for (mutate in list(
       function(state) {
@@ -422,7 +442,7 @@ test_that("capsule tables reject S4 structural shells and metadata when used", {
   }
 })
 
-test_that("$params rejects noncanonical stored row-name carriers unobserved", {
+test_that("$params ignores unused private row-name carriers", {
   set = ps(x = p_int())
   private = core_private(set)
   state = unserialize(serialize(core_state(set), NULL))
@@ -446,13 +466,13 @@ test_that("$params rejects noncanonical stored row-name carriers unobserved", {
   attr(state$.params, "row.names") = wrong_length
   private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
 
-  expect_error(set$params, "Corrupt ParamSet parameter state capsule")
+  expect_identical(set$params$id, "x")
   expect_identical(callbacks, 0L)
 
   state = unserialize(serialize(core_state(ps(x = p_int())), NULL))
   data.table::setattr(state$.params, "row.names", 2L)
   private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
-  expect_error(set$params, "Corrupt ParamSet parameter state capsule")
+  expect_identical(set$params$id, "x")
 })
 
 test_that("capsule tables admit each exact ordinary row-name spelling", {
@@ -473,7 +493,7 @@ test_that("capsule tables admit each exact ordinary row-name spelling", {
   }
 })
 
-test_that("strict capsule tables reject first-column ALTREP without observation", {
+test_that("capsule readers guard IDs but do not observe private row names", {
   skip_if_not(
     exists("C_test_stateful_altrep", asNamespace("paradox"), inherits = FALSE),
     "the internal stateful ALTREP test class is unavailable"
@@ -517,7 +537,7 @@ test_that("strict capsule tables reject first-column ALTREP without observation"
     envir = core_private(set)
   )
 
-  expect_error(set$get_values(), "Corrupt ParamSet")
+  expect_identical(set$get_values(), named_list())
   expect_identical(calls, 0L)
 })
 

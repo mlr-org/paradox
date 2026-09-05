@@ -17,6 +17,7 @@ SEXP paradox_param_set_collection_params(SEXP private_environment, SEXP self) {
   paradox_collection_graph_build(
     private_environment,
     self,
+    PARADOX_GRAPH_VALUES | PARADOX_GRAPH_DEPENDENCIES,
     &graph,
     &graph_roots,
     graph_roots_index,
@@ -49,6 +50,7 @@ SEXP paradox_param_set_collection_params(SEXP private_environment, SEXP self) {
   ));
   SEXP values = PROTECT(paradox_collection_values_from_graph(
     &graph,
+    FALSE,
     &work_since_interrupt
   ));
 

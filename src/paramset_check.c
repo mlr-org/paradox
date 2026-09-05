@@ -758,30 +758,7 @@ static void validate_node_schema(check_node_t *node,
     R_xlen_t *work_since_interrupt) {
   SEXP params = node->params;
   SEXP classes = VECTOR_ELT(params, PARADOX_DOMAIN_CLS);
-  SEXP cargos = VECTOR_ELT(params, PARADOX_DOMAIN_CARGO);
-  SEXP lower = VECTOR_ELT(params, PARADOX_DOMAIN_LOWER);
-  SEXP upper = VECTOR_ELT(params, PARADOX_DOMAIN_UPPER);
-  SEXP tolerance = VECTOR_ELT(params, PARADOX_DOMAIN_TOLERANCE);
   SEXP storage = VECTOR_ELT(params, PARADOX_DOMAIN_STORAGE_TYPE);
-  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
-    paradox_account_work(work_since_interrupt);
-    const value_kind_t kind = value_kind(
-      STRING_ELT(classes, row), STRING_ELT(storage, row)
-    );
-    if (kind == VALUE_DBL || kind == VALUE_INT) {
-      if (!paradox_domain_numeric_capsule_is_canonical(
-          kind == VALUE_INT,
-          paradox_numeric_elt(lower, row),
-          paradox_numeric_elt(upper, row),
-          paradox_numeric_elt(tolerance, row)
-        )) {
-        Rf_error("Corrupt ParamSet state: invalid numeric bounds or tolerance");
-      }
-    }
-    if (kind == VALUE_UTY) {
-      (void) utility_callback(VECTOR_ELT(cargos, row));
-    }
-  }
 
   for (R_xlen_t row = 0; row < node->checked_tags.row_count; ++row) {
     if (local_param_row(
@@ -1111,11 +1088,9 @@ static void initialize_node(SEXP self, SEXP private_environment,
   SET_VECTOR_ELT(node->roots, NODE_ROOT_SETS, node->sets);
   SET_VECTOR_ELT(node->roots, NODE_ROOT_TRANSLATION, node->translation);
 
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
-      node->params, R_NilValue, TRUE, &node->checked_params,
-      &unused_row, work_since_interrupt
-    ) || !paradox_domain_validate_values(
+  if (!paradox_domain_read_params(
+      node->params,
+      PARADOX_PARAMS_COLUMNS_ALL, &node->checked_params) || !paradox_domain_read_values(
       node->values, &node->checked_values, work_since_interrupt
     ) || !paradox_domain_validate_tags(
       node->tags, &node->checked_tags, work_since_interrupt
@@ -2032,6 +2007,14 @@ static value_spec_t load_spec(SEXP params, R_xlen_t row) {
   spec.special_values = VECTOR_ELT(
     VECTOR_ELT(params, PARADOX_DOMAIN_SPECIAL_VALS), row
   );
+  /* These private nested carriers are indexed by the shared value kernel.
+   * Check their representation here, once per selected spec, not all the
+   * unrelated level semantics on every native reader. */
+  if (TYPEOF(spec.special_values) != VECSXP || ALTREP(spec.special_values) ||
+      (spec.kind == VALUE_FCT &&
+       (TYPEOF(spec.levels) != STRSXP || ALTREP(spec.levels)))) {
+    Rf_error("Corrupt ParamSet state: invalid factor levels or special values");
+  }
   spec.custom_check = spec.kind == VALUE_UTY
     ? utility_callback(VECTOR_ELT(
         VECTOR_ELT(params, PARADOX_DOMAIN_CARGO), row

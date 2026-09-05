@@ -78,16 +78,12 @@ static R_xlen_t qunif_column_root(enum paradox_domain_column column) {
 static int load_param_columns(SEXP params, param_columns_t *columns,
     SEXP roots) {
   paradox_domain_params_t checked;
-  R_xlen_t unused_row = 0;
-  R_xlen_t work_since_interrupt = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       params,
-      R_NilValue,
-      TRUE,
-      &checked,
-      &unused_row,
-      &work_since_interrupt
-    )) {
+      (1U << PARADOX_DOMAIN_CLS) | (1U << PARADOX_DOMAIN_LOWER) |
+        (1U << PARADOX_DOMAIN_UPPER) | (1U << PARADOX_DOMAIN_TOLERANCE) |
+        (1U << PARADOX_DOMAIN_LEVELS) | (1U << PARADOX_DOMAIN_STORAGE_TYPE),
+      &checked)) {
     return FALSE;
   }
 
@@ -513,7 +509,7 @@ static void snapshot_qunif_input(SEXP x, qunif_input_t *info, SEXP roots) {
 
 static SEXP snapshot_factor_levels(SEXP levels,
     R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(levels) != STRSXP) {
+  if (TYPEOF(levels) != STRSXP || ALTREP(levels)) {
     return R_NilValue;
   }
   const R_xlen_t size = XLENGTH(levels);
@@ -563,9 +559,7 @@ static int load_spec(const param_columns_t *columns, R_xlen_t row,
     return TRUE;
   } else if (paradox_domain_string_is(class_name, "ParamLgl") &&
       paradox_domain_string_is(storage_type, "logical")) {
-    /* `paradox_domain_validate_params()` admitted every row of this capsule
-     * with `validate_all_rows`, so the canonical `c(TRUE, FALSE)` levels of
-     * this exact class/storage pairing are already proven. */
+    /* Logical quantiles do not read stored levels. */
     spec->kind = QUNIF_KIND_LGL;
     UNPROTECT(1);
     return TRUE;
@@ -634,7 +628,7 @@ static SEXP set_table_attributes(SEXP table, SEXP names, R_xlen_t rows) {
   Rf_setAttrib(table, R_RowNamesSymbol, row_names);
   Rf_setAttrib(table, R_ClassSymbol, classes);
   Rf_setAttrib(table, R_NamesSymbol, names);
-  SEXP result = PROTECT(paradox_prepare_data_table(table, TRUE));
+  SEXP result = PROTECT(paradox_prepare_data_table(table, FALSE));
   UNPROTECT(3);
   return result;
 }
@@ -1129,6 +1123,7 @@ static void load_grid_state(SEXP private_environment, SEXP self,
 
     SEXP values = PROTECT(paradox_collection_values_from_graph(
       &graph,
+      FALSE,
       work_since_interrupt
     ));
     state->values = values;
@@ -1214,7 +1209,7 @@ static void load_grid_state(SEXP private_environment, SEXP self,
     }
   }
 
-  if (!paradox_domain_validate_values(
+  if (!paradox_domain_read_values(
         state->values,
         &state->values_data,
         work_since_interrupt

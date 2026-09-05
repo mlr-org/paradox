@@ -87,7 +87,7 @@ test_that("unknown get_domain IDs preserve text and reject bytes", {
   )
 })
 
-test_that("malformed direct requests and corrupt state error deterministically", {
+test_that("get_domain validates requests without revalidating private labels", {
   object = ps(x = p_int())
   expect_error(native_get_domain_call(object, NA_character_), "non-missing")
   expect_error(native_get_domain_call(object, character()), "one non-missing")
@@ -97,5 +97,5 @@ test_that("malformed direct requests and corrupt state error deterministically",
   params = paradox:::param_set_core_state(private)$.params
   params$storage_type[[1L]] = "extension"
   paradox:::param_set_core_replace(private, params = params)
-  expect_error(object$get_domain("x"), "Corrupt ParamSet Domain capsule state")
+  expect_identical(object$get_domain("x")$storage_type, "extension")
 })

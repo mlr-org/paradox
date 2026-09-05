@@ -139,7 +139,7 @@ static void capture_specs(const paradox_domain_params_t *params,
       }
       break;
     case SAMPLER_LGL:
-      /* The shared parameter validator already proves c(TRUE, FALSE). */
+      /* Logical draws do not read stored levels. */
       break;
     }
   }
@@ -183,7 +183,7 @@ static SEXP allocate_table(const sampler_spec_t *specs,
   Rf_setAttrib(table, R_ClassSymbol, classes);
   Rf_setAttrib(table, R_RowNamesSymbol, row_names);
 
-  SEXP result = PROTECT(paradox_prepare_data_table(table, TRUE));
+  SEXP result = PROTECT(paradox_prepare_data_table(table, FALSE));
   UNPROTECT(5);
   return result;
 }
@@ -375,22 +375,28 @@ SEXP paradox_sampler_unif_sample_builtin(SEXP param_set, SEXP n) {
 
   R_xlen_t work_since_interrupt = 0;
   paradox_domain_params_t params;
-  R_xlen_t unused_row = 0;
   PROTECT_INDEX roots_index;
   SEXP roots;
   PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
   const paradox_core_kind_t kind = paradox_core_kind(core);
+  const unsigned int columns = (1U << PARADOX_DOMAIN_CLS) |
+    (1U << PARADOX_DOMAIN_LOWER) | (1U << PARADOX_DOMAIN_UPPER) |
+    (1U << PARADOX_DOMAIN_LEVELS);
   if (kind == PARADOX_CORE_COLLECTION) {
     paradox_collection_graph_t graph;
     paradox_collection_graph_build(
       private_environment,
       param_set,
+      0U, /* Dynamic stores and translation metadata are not sampled. */
       &graph,
       &roots,
       roots_index,
       &work_since_interrupt
     );
-    params = graph.nodes[0].params;
+    if (!paradox_domain_read_params(graph.nodes[0].params.table, columns, &params)) {
+      UNPROTECT(4);
+      Rf_error("Corrupt ParamSet sampling state: invalid parameter schema");
+    }
   } else {
     if (!paradox_core_is_verified(core)) {
       REPROTECT(
@@ -406,14 +412,9 @@ SEXP paradox_sampler_unif_sample_builtin(SEXP param_set, SEXP n) {
     }
     SEXP state = PROTECT(paradox_core_payload(core));
     if (!paradox_core_state_exact_schema(state) ||
-      !paradox_domain_validate_params(
+      !paradox_domain_read_params(
         VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-        R_NilValue,
-        TRUE,
-        &params,
-        &unused_row,
-        &work_since_interrupt
-      )) {
+        columns, &params)) {
       UNPROTECT(5);
       Rf_error("Corrupt ParamSet sampling state: invalid parameter schema");
     }

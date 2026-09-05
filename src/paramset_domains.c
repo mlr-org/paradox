@@ -159,15 +159,9 @@ static SEXP copy_names(SEXP source) {
 static void validate_snapshot(SEXP params, SEXP tags, SEXP trafos,
     SEXP dependencies, SEXP values, domain_snapshot_t *snapshot,
     R_xlen_t *work) {
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
         params,
-        R_NilValue,
-        TRUE,
-        &snapshot->params,
-        &unused_row,
-        work
-      ) || !paradox_domain_validate_tags(
+      PARADOX_PARAMS_COLUMNS_ALL, &snapshot->params) || !paradox_domain_validate_tags(
         tags,
         &snapshot->tags,
         work
@@ -179,7 +173,7 @@ static void validate_snapshot(SEXP params, SEXP tags, SEXP trafos,
         dependencies,
         &snapshot->dependencies,
         work
-      ) || !paradox_domain_validate_values(
+      ) || !paradox_domain_read_values(
         values,
         &snapshot->values,
         work
@@ -298,6 +292,7 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     paradox_collection_graph_build(
       private_environment,
       self,
+      PARADOX_GRAPH_VALUES | PARADOX_GRAPH_DEPENDENCIES,
       &graph,
       &graph_roots,
       graph_roots_index,
@@ -319,7 +314,7 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     SET_VECTOR_ELT(roots, DOMAIN_ROOT_TAGS, tags);
     SET_VECTOR_ELT(roots, DOMAIN_ROOT_TRAFOS, trafos);
 
-    values = PROTECT(paradox_collection_values_from_graph(&graph, work));
+    values = PROTECT(paradox_collection_values_from_graph(&graph, FALSE, work));
     SET_VECTOR_ELT(roots, DOMAIN_ROOT_VALUES, values);
     UNPROTECT(1);
 

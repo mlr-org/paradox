@@ -1446,9 +1446,9 @@ ParamSet = R6Class("ParamSet",
     # ParamSet flags
 
     #' @field length (`integer(1)`)\cr Number of contained parameters.
-    length = function() nrow(private$.state()$.params),
+    length = function() .Call(C_param_set_get_property, private, self, 14L),
     #' @field is_empty (`logical(1)`)\cr Is the `ParamSet` empty? Named with parameter IDs.
-    is_empty = function() nrow(private$.state()$.params) == 0L,
+    is_empty = function() .Call(C_param_set_get_property, private, self, 15L),
     #' @field has_trafo (`logical(1)`)\cr Whether a `trafo` function is present, in parameters or in `extra_trafo`.
     has_trafo = function() {
       if (inherits(self, "ParamSetCollection")) {
@@ -1477,44 +1477,44 @@ ParamSet = R6Class("ParamSet",
       }
     },
     #' @field all_numeric (`logical(1)`)\cr Is `TRUE` if all parameters are [`p_dbl()`] or [`p_int()`].
-    all_numeric = function() all(self$is_number),
+    all_numeric = function() .Call(C_param_set_get_property, private, self, 11L),
     #' @field all_categorical (`logical(1)`)\cr Is `TRUE` if all parameters are [`p_fct()`] and [`p_lgl()`].
-    all_categorical = function() all(self$is_categ),
+    all_categorical = function() .Call(C_param_set_get_property, private, self, 12L),
     #' @field all_bounded (`logical(1)`)\cr Is `TRUE` if all parameters are bounded.
-    all_bounded = function() all(self$is_bounded),
+    all_bounded = function() .Call(C_param_set_get_property, private, self, 13L),
 
     ############################
     # Per-Parameter properties
 
     #' @field class (named `character()`)\cr Classes of contained parameters. Named with parameter IDs.
     class = function() {
-      .Call(C_param_set_property, private$.state()$.params, 4L)
+      .Call(C_param_set_get_property, private, self, 4L)
     },
     #' @field lower (named `double()`)\cr Lower bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
     lower = function() {
-      .Call(C_param_set_property, private$.state()$.params, 5L)
+      .Call(C_param_set_get_property, private, self, 5L)
     },
     #' @field upper (named `double()`)\cr Upper bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
     upper = function() {
-      .Call(C_param_set_property, private$.state()$.params, 6L)
+      .Call(C_param_set_get_property, private, self, 6L)
     },
     #' @field levels (named `list()` of `character`)\cr Allowed levels of categorical parameters (`NULL` for non-categoricals).
     #' Named with parameter IDs.
     levels = function() {
-      .Call(C_param_set_property, private$.state()$.params, 7L)
+      .Call(C_param_set_get_property, private, self, 7L)
     },
     #' @field storage_type (`character()`)\cr Data types of parameters when stored in tables. Named with parameter IDs.
     storage_type = function() {
-      .Call(C_param_set_property, private$.state()$.params, 8L)
+      .Call(C_param_set_get_property, private, self, 8L)
     },
     #' @field special_vals (named `list()` of `list()`)\cr Special values for all parameters. Named with parameter IDs.
     special_vals = function() {
-      .Call(C_param_set_property, private$.state()$.params, 9L)
+      .Call(C_param_set_get_property, private, self, 9L)
     },
     #' @field default (named `list()`)\cr Default values of all parameters. If no default exists, element is not present.
     #' Named with parameter IDs.
     default = function() {
-      values = .Call(C_param_set_property, private$.state()$.params, 10L)
+      values = .Call(C_param_set_get_property, private, self, 10L)
       values[!map_lgl(values, is_nodefault)]
     },
     #' @field has_trafo_param (`logical()`)\cr Whether `trafo` is set for any parameter.
@@ -1546,22 +1546,22 @@ ParamSet = R6Class("ParamSet",
     #' @field nlevels (named `integer()`)\cr Number of distinct levels of parameters. `Inf` for double parameters or unbounded integer parameters.
     #' Named with param IDs.
     nlevels = function() {
-      .Call(C_param_set_property, private$.state()$.params, 0L)
+      .Call(C_param_set_get_property, private, self, 0L)
     },
 
     #' @field is_number (named `logical()`)\cr Whether parameter is [`p_dbl()`] or [`p_int()`]. Named with parameter IDs.
     is_number = function() {
-      .Call(C_param_set_property, private$.state()$.params, 1L)
+      .Call(C_param_set_get_property, private, self, 1L)
     },
 
     #' @field is_categ (named `logical()`)\cr Whether parameter is [`p_fct()`] or [`p_lgl()`]. Named with parameter IDs.
     is_categ = function() {
-      .Call(C_param_set_property, private$.state()$.params, 2L)
+      .Call(C_param_set_get_property, private, self, 2L)
     },
 
     #' @field is_bounded (named `logical()`)\cr Whether parameters have finite bounds. Named with parameter IDs.
     is_bounded = function() {
-      .Call(C_param_set_property, private$.state()$.params, 3L)
+      .Call(C_param_set_get_property, private, self, 3L)
     }
   ),
 

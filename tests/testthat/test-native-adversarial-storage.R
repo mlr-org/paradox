@@ -77,10 +77,10 @@ test_that("native table access rejects corrupt ParamSet storage safely", {
   )
   expect_error(.Call(property, wrong_bounds, 3L), "`lower` must be numeric")
 
-  # Selectors 0-3 are the static properties and 4-10 the detached public
-  # schema projections; 11 is the first selector past that closed set.
+  # Selectors 0-3 are vector properties, 4-10 detached schema projections,
+  # 11-13 scalar reductions, and 14-15 dimension queries.
   expect_error(.Call(property, params, -1L), "invalid ParamSet property selector")
-  expect_error(.Call(property, params, 11L), "invalid ParamSet property selector")
+  expect_error(.Call(property, params, 100L), "invalid ParamSet property selector")
   expect_error(.Call(property, params, NA_integer_), "invalid ParamSet property selector")
 
   expect_error(

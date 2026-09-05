@@ -127,6 +127,7 @@ SEXP paradox_param_set_has_dependencies(SEXP private_environment, SEXP self) {
     paradox_collection_graph_build(
       private_environment,
       self,
+      PARADOX_GRAPH_DEPENDENCIES,
       &graph,
       &roots,
       roots_index,
@@ -151,10 +152,9 @@ SEXP paradox_param_set_has_dependencies(SEXP private_environment, SEXP self) {
 
   SEXP state = R_ExternalPtrProtected(core);
   paradox_domain_dependencies_t dependencies;
-  if (!paradox_domain_validate_dependencies(
+  if (!paradox_domain_read_dependencies(
       VECTOR_ELT(state, PARADOX_CORE_DEPS),
-      &dependencies,
-      &work_since_interrupt
+      &dependencies
     )) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet dependency capsule");
@@ -200,6 +200,7 @@ SEXP paradox_param_set_assertion_state(SEXP private_environment, SEXP self) {
     paradox_collection_graph_build(
       private_environment,
       self,
+      PARADOX_GRAPH_DEPENDENCIES,
       &graph,
       &roots,
       roots_index,
@@ -239,18 +240,11 @@ SEXP paradox_param_set_assertion_state(SEXP private_environment, SEXP self) {
   SEXP state = paradox_core_payload(core);
   paradox_domain_params_t params;
   paradox_domain_dependencies_t dependencies;
-  R_xlen_t unused_row = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
       VECTOR_ELT(state, PARADOX_CORE_PARAMS),
-      R_NilValue,
-      TRUE,
-      &params,
-      &unused_row,
-      &work_since_interrupt
-    ) || !paradox_domain_validate_dependencies(
+      PARADOX_PARAMS_COLUMNS_ALL, &params) || !paradox_domain_read_dependencies(
       VECTOR_ELT(state, PARADOX_CORE_DEPS),
-      &dependencies,
-      &work_since_interrupt
+      &dependencies
     )) {
     UNPROTECT(1);
     Rf_error("Corrupt ParamSet assertion capsule state");
@@ -279,6 +273,7 @@ SEXP paradox_param_set_collection_deps(SEXP private_environment, SEXP self) {
   paradox_collection_graph_build(
     private_environment,
     self,
+    PARADOX_GRAPH_DEPENDENCIES,
     &graph,
     &roots,
     roots_index,

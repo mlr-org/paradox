@@ -1,5 +1,88 @@
 # Paradox 2 C rewrite: maintainer and agent notes
 
+## Active September 2026 validation policy
+
+The completed graph/value policy pass is documented in
+[`design/graph-validation-20260905.md`](design/graph-validation-20260905.md).
+It applies the same policy to remaining stored-value and graph readers, not a
+change to public detached-output ownership. The preceding installed baseline
+is retained; new artifacts use `.local/graph-validation-20260905/`. Historical
+requirements to authenticate every private signature or parent/child semantic
+relationship on every hot read do not override the operation-specific policy.
+Its terminal library is `.local/graph-validation-20260905/library-final`, DSO
+`3ea9517e6773b919775f2d25a981ee3d957c4f6a7ae3668ac0f841c0a5dd764e`.
+The 51-case warmed A/B/B/A comparison in `benchmark-final-r2/` agrees on every
+result key and has no observed allocation increase or paired-median slowdown.
+Representative gains versus the preceding v2 build are 1.63--1.73x for wide
+raw values, 1.90x for Shadow values, 2.76--3.47x for rich/nested Collection
+values, 17--24x for wide Collection callback flags, and 2.70x for wide built-in
+Collection sampling. The main Collection reader is 426 lines shorter.
+The report records focused current/3.6 tests, strict C99/C23, full native/GCT
+coverage, and zero-error/loss/suppression Valgrind checks with their exact
+stages. The 117-file intermediate unit run is not green: its twenty ConfigSpace
+environment errors and five unconfigured migration skips have passing focused
+follow-ups. The relative-output worker-HOME bug is fixed and regression-tested.
+No complete release/downstream matrix was rerun; old immutable acceptance does
+not transfer to this edited working source.
+
+The user's operation-specific validation policy is now authoritative;
+[`design/validation-policy-20260905.md`](design/validation-policy-20260905.md)
+records the plan, safety boundary, and review. Preserve public argument checks
+and all access/lifetime guards required for objects which valid R operations
+can produce or change, including private members and ordinary by-reference R
+APIs. Private semantic corruption has no behavior guarantee: do not validate
+unrelated fields solely to diagnose it. Internally produced, rooted values
+which have not been exposed to user mutation need no repeated admission.
+Native-invalid object representations and nonconforming ALTREP providers are
+outside the input model. GC/finalizer reentry, public callback snapshots,
+checked indexing/sizes, and reachable graph cycles remain in scope. These
+rules supersede older blanket corruption/receipt requirements below; retained
+historical tests and design narratives are not authority to restore redundant
+checks. The preceding getter work is the preserved baseline for this pass.
+
+The completed operation-specific pass removes the whole parameter-schema
+validator, uses declared column masks for native readers, trusts admitted
+internal value views, and skips redundant normalization of fresh design
+columns. The final installed DSO is
+`b11972e8cc9732a0ff716e1432545dc773ab53190711772788bd9c2678f2e66d`
+at `.local/validation-20260905/library`; the similarly named `final-library`
+is a withdrawn diagnostic sampler experiment and must not be selected as the
+final build. The report distinguishes the full 117-file unit run's eleven
+obsolete private-semantic expectations from their passing current/old-R
+follow-ups, and records strict C99/C23, all 112 native routines, 654 final
+focused expectations, and the zero-error/loss/suppression Valgrind follow-up.
+All 300 integrated benchmark workloads retain result identity and none
+increases allocation. Wide class/lower/upper reads improve 3.38--5.71x versus
+the pre-policy build; small negative control timings and the remaining roughly
+7% wide-class gap versus Paradox 1 are explicitly retained in the report.
+No complete release/downstream matrix was rerun, and historical candidate
+acceptance does not transfer to this edited working source.
+
+## September 2026 static-getter optimization
+
+The follow-up to development baseline `be2de62a` is specified and measured in
+[`design/getter-performance-20260905.md`](design/getter-performance-20260905.md).
+Static R6 bindings now use one capsule-gated native entry over the existing
+property kernel; scalar flags avoid named intermediate vectors, and dimensions
+avoid an R table round trip. Shared admission reuses the closed-kind classifier,
+tiny native-ASCII duplicate queries avoid hash allocation, ordinary unnamed
+semantic copies reuse the owned-payload copier, and fixed capsule labels use
+interned identity with an exact byte fallback. None of these changes caches
+mutable validity, lends outward storage, or changes a serialized field. That
+earlier pass retained complete admission for detached properties; the active
+validation-policy pass above now explicitly replaces it. Artifacts for the
+earlier pass are below `.local/getters-20260905/`; installed libraries and
+benchmarks are reused, and no full release/downstream matrix is required in
+this development pass. Its final unit/old-R/compiler and paired benchmark
+conclusions belong in that report, not in the historical release ledger below.
+The complete integrated suite passes 10,646 expectations with one expected
+skip and no failures/warnings. A final root-only wrapper correction then passes
+all ten affected files on R 4.6.1 and R 3.6.3, strict C99/C23 checks, the API
+audit, and all 236 native probe records. The report distinguishes that final
+delta from the preceding full-suite/257-workload payload. The warmed twelve-
+case follow-up finds no material cost from the correction. A new freeze and
+release validation are still needed before publication.
+
 ## September 2026 development review
 
 The user reopened implementation review after the accepted `a0a9ff3` candidate.

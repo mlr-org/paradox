@@ -225,15 +225,9 @@ static void validate_source_fields(SEXP params_table, SEXP tags_table,
     SEXP trafos_table, SEXP deps_table, SEXP values_list,
     subset_source_t *source) {
   R_xlen_t work = 0;
-  R_xlen_t unused = 0;
-  if (!paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
         params_table,
-        R_NilValue,
-        TRUE,
-        &source->params,
-        &unused,
-        &work
-      ) || !paradox_domain_validate_tags(
+      PARADOX_PARAMS_COLUMNS_ALL, &source->params) || !paradox_domain_validate_tags(
         tags_table,
         &source->tags,
         &work
@@ -245,7 +239,7 @@ static void validate_source_fields(SEXP params_table, SEXP tags_table,
         deps_table,
         &source->deps,
         &work
-      ) || !paradox_domain_validate_values(
+      ) || !paradox_domain_read_values(
         values_list,
         &source->values,
         &work
@@ -456,6 +450,7 @@ static void load_source(SEXP private_environment, SEXP self, SEXP roots,
     R_xlen_t work_since_interrupt = 0;
     SEXP values = PROTECT(paradox_collection_values_from_graph(
       graph,
+      FALSE,
       &work_since_interrupt
     ));
     SEXP dependencies = PROTECT(paradox_collection_dependencies_from_graph(

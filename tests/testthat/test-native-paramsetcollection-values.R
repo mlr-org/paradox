@@ -212,7 +212,9 @@ test_that("collection values reject malformed capsules and active-path cycles", 
   bad = state$.translation
   bad$owner_ps_index[[1L]] = 99L
   paradox:::param_set_core_replace(private, translation = bad)
-  expect_error(valid$values, "Corrupt ParamSetCollection")
+  # Value emission does not consume this private translation table.
+  expect_identical(valid$values, list(child.x = 1L))
+  expect_error(valid$subset("child.x"), "Corrupt ParamSetCollection")
 
   child = ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
   invalid_value = ParamSetCollection$new(list(child = child))
@@ -221,7 +223,7 @@ test_that("collection values reject malformed capsules and active-path cycles", 
     child_private,
     values = setNames(list(1L), "missing")
   )
-  expect_error(invalid_value$values, "Corrupt ParamSetCollection")
+  expect_error(invalid_value$values, "Corrupt ParamSet")
 
   duplicate_translation = ParamSetCollection$new(list(
     child = ps(x = p_int(), y = p_lgl())
@@ -231,7 +233,7 @@ test_that("collection values reject malformed capsules and active-path cycles", 
   bad = duplicate_state$.translation
   bad$id[[2L]] = bad$id[[1L]]
   paradox:::param_set_core_replace(duplicate_private, translation = bad)
-  expect_error(duplicate_translation$values, "Corrupt ParamSetCollection")
+  expect_identical(duplicate_translation$values, setNames(list(), character()))
 })
 
 test_that("collection values compare supported string encodings semantically", {

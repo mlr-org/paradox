@@ -335,16 +335,9 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
   SEXP params = VECTOR_ELT(state, PARADOX_CORE_PARAMS);
   SET_VECTOR_ELT(roots, roots_offset + CONSTRUCTOR_ROOT_PARAMS, params);
   paradox_domain_params_t checked_params;
-  R_xlen_t unused_row = 0;
-  if (!paradox_params_supported_table_attributes(params) ||
-      !paradox_domain_validate_params(
+  if (!paradox_domain_read_params(
         params,
-        R_NilValue,
-        TRUE,
-        &checked_params,
-        &unused_row,
-        work_since_interrupt
-      )) {
+      PARADOX_PARAMS_COLUMNS_ALL, &checked_params)) {
     return FALSE;
   }
   child->param_count = checked_params.row_count;
@@ -358,13 +351,6 @@ static int initialize_child(SEXP self, SEXP owner, SEXP roots,
       roots_offset + CONSTRUCTOR_ROOT_PARAM_COLUMNS + column,
       value
     );
-  }
-  if (!paradox_params_exact_data_frame_row_names(
-      params,
-      child->param_count,
-      work_since_interrupt
-    )) {
-    return FALSE;
   }
   SEXP params_ids = child->params_columns[PARADOX_DOMAIN_ID];
   for (R_xlen_t row = 0; row < child->param_count; ++row) {
@@ -821,44 +807,9 @@ static SEXP build_collection_static_state(SEXP sets, SEXP tag_sets,
         "ParamSet child state"
       );
     }
-    /*
-     * Constructor admission is the reader's admission: the flatten above
-     * consumes `.params`/`.tags`/`.trafos`, but a child whose remaining
-     * payload fields are corrupt would otherwise construct a collection every
-     * later read rejects. Admission is strictly read-only -- SHADOW children
-     * are previewed, never refreshed. A committing admission installs a new
-     * capsule per validated occurrence, which invalidates the neighboring
-     * refresh signatures and turns a shared alternating shadow/collection
-     * graph exponential; healing stays where it always was, at read time.
-     */
-    {
-      PROTECT_INDEX admission_roots_index;
-      SEXP admission_roots;
-      PROTECT_WITH_INDEX(
-        admission_roots = R_NilValue,
-        &admission_roots_index
-      );
-      if (paradox_core_kind(child->core) == PARADOX_CORE_COLLECTION) {
-        paradox_collection_graph_t admission_graph;
-        paradox_collection_graph_build_readonly(
-          child->private_environment,
-          child->self,
-          &admission_graph,
-          &admission_roots,
-          admission_roots_index,
-          &work_since_interrupt
-        );
-      } else {
-        paradox_collection_validate_single_node_readonly(
-          child->private_environment,
-          child->self,
-          &admission_roots,
-          admission_roots_index,
-          &work_since_interrupt
-        );
-      }
-      UNPROTECT(1);
-    }
+    /* initialize_child admitted the fields this flatten actually consumes.
+     * Unrelated private values/dependencies are checked by their readers, not
+     * by a second traversal of the child's complete graph here. */
     const int edge_tag_sets = LOGICAL_ELT(tag_sets, child_index);
     const int edge_tag_params = LOGICAL_ELT(tag_params, child_index);
     if (!checked_add(&total_params, child->param_count) ||

@@ -97,12 +97,13 @@ test_that("collection params detach every mutable output shell", {
   expect_identical(collection$params, second)
 })
 
-test_that("collection params reject malformed graph translations", {
+test_that("collection params do not authenticate unused private translations", {
   collection = ParamSetCollection$new(list(child = ps(x = p_int(init = 1L))))
   private = collection$.__enclos_env__$private
+  expected = collection$params
   state = paradox:::param_set_core_state(private)
   translation = state$.translation
   translation$original_id[[1L]] = "not-x"
   paradox:::param_set_core_replace(private, translation = translation)
-  expect_error(collection$params, "Corrupt ParamSetCollection")
+  expect_identical(collection$params, expected)
 })
