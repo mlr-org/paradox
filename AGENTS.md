@@ -1,5 +1,24 @@
 # Paradox 2 C rewrite: maintainer and agent notes
 
+## September 2026 release verification
+
+The user requested the complete release matrix. The active package candidate
+is `refs/paradox-release/candidate-20260905T212019Z`, commit
+`75f85f5be79a0da2dba268b0a7562839f7f9177c`, tree
+`f18cf53d2430278b78ee76d222c71c1040378242`. The scoped plan, new evidence,
+and explicit analyzer review are in
+[`design/release-validation-20260905.md`](design/release-validation-20260905.md).
+Its complete nine-task release-core coordinator passes, including current R
+and all seven older minor-version stages. A macOS one-ULP assertion was fixed
+without changing the sampler. The reviewed rchk policy now has 114 blocks,
+377 UP/30 PB findings, and 112 registrations; final combined memory evidence
+is still required. Compatibility axes select this new candidate, not August's
+historical candidate. Final memory, dual-axis downstream/documentation,
+benchmarks, and hosted portability are pending at this tooling freeze.
+Do not transfer historical acceptance or mutate the active source while an
+immutable coordinator is running. Keep direct memory work separate from the
+broad aggregate coordinator. All remote publication remains manual.
+
 ## Active September 2026 validation policy
 
 The completed graph/value policy pass is documented in

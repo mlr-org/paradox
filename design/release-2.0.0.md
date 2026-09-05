@@ -2,6 +2,17 @@
 
 ## Status
 
+The complete September release matrix is now in progress against frozen
+candidate `75f85f5be79a0da2dba268b0a7562839f7f9177c`, full ref
+`refs/paradox-release/candidate-20260905T212019Z`, tree
+`f18cf53d2430278b78ee76d222c71c1040378242`.
+[`release-validation-20260905.md`](release-validation-20260905.md) owns the
+new plan, evidence, analyzer review, and remaining gates. All nine release-core
+tasks pass, including every supported R minor version. Final memory,
+downstream/documentation, benchmark, and hosted results remain pending.
+The August acceptance below is retained history, not acceptance of this new
+candidate.
+
 Implementation review reopened in September 2026 at the user's request.
 [`review-20260905.md`](review-20260905.md) owns the new changes and their
 development checks; the subsequent static-getter performance pass is recorded
@@ -17,9 +28,9 @@ bytes, so the edited working source needs a new freeze and source-bound
 release verification. The completed gates recorded below belong only to the
 unchanged `a0a9ff3` candidate, not to this development revision.
 
-### Last accepted immutable candidate
+### Historical August accepted immutable candidate
 
-**The active immutable package-facing candidate is
+**The August immutable package-facing candidate was
 `refs/paradox-release/candidate-20260803T131049Z`, commit
 `a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
 `49079e12a816542fe8d8d6a0a2290a757a558b41`. Its complete nine-task

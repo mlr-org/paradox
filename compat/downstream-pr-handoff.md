@@ -7,6 +7,15 @@ PR is open and neither branch should be published.
 
 ## Current handoff heads and manual state
 
+September 2026 update: the eight exact heads below remain published and
+unchanged. The new candidate is `75f85f5be79a0da2dba268b0a7562839f7f9177c`;
+fresh dual-axis checks are pending in
+[`design/release-validation-20260905.md`](../design/release-validation-20260905.md).
+Remote reads now report merge conflicts for mlr3mbo #284 and mlr3fda #171.
+Their merge results must be rechecked after manual resolution. The following
+hosted-check descriptions and August compatibility results are historical,
+not new acceptance or a current mergeability claim.
+
 The user has published all eight reviewed migration heads and opened their
 pull requests. No agent made a remote write. The exact heads remain the sealed
 compatibility inputs; do not update or force-push them without rerunning the
@@ -25,7 +34,7 @@ corresponding evidence.
 
 No mlr3 or mlr3fselect diagnostic-only PR remains open.
 
-## Current source and candidate
+## Historical August source and candidate
 
 Package-facing source is frozen at
 `refs/paradox-release/candidate-20260803T131049Z`, commit
@@ -39,7 +48,7 @@ package-facing-source-identical tooling ref
 `7749375e12300c6aa4258a76206ce082b96bd09f`. Both axes bind the eight
 published PR heads above without changing them.
 
-## Active compatibility conclusion
+## Historical August compatibility conclusion
 
 Fresh Paradox-1 and Paradox-2 preparation reproduced exact dependency endpoint
 `3828cdaf0c767d89fa30ea595845d3eab9695dfdb80bee909a5b3fabcc31919e`;
