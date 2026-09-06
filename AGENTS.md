@@ -11,13 +11,44 @@ and explicit analyzer review are in
 Its complete nine-task release-core coordinator passes, including current R
 and all seven older minor-version stages. A macOS one-ULP assertion was fixed
 without changing the sampler. The reviewed rchk policy now has 114 blocks,
-377 UP/30 PB findings, and 112 registrations; final combined memory evidence
-is still required. Compatibility axes select this new candidate, not August's
-historical candidate. Final memory, dual-axis downstream/documentation,
-benchmarks, and hosted portability are pending at this tooling freeze.
-Do not transfer historical acceptance or mutate the active source while an
-immutable coordinator is running. Keep direct memory work separate from the
-broad aggregate coordinator. All remote publication remains manual.
+377 UP/30 PB findings, and 112 registrations. Fresh combined GCT, Valgrind,
+and bounded rchk run `release-candidate-75f85f5b-memory-r2` passes independent
+validation, with zero Valgrind errors, losses, or suppressions. Its eligible
+donor is `release-candidate-75f85f5b-native-policy-r3` (full tests); probe-only
+donors are not eligible for the combined gate.
+
+Local execution is complete under package-facing-source-identical tooling
+`28798768ffc6aec0c1566bf3ddf1e86f33bee9f2`, ref
+`refs/paradox-release/validation-tooling-20260905T222715Z`. All eight exact PR
+heads build/check on both Paradox axes, with only the reviewed mlr3fda NOTE on
+each axis. P1 coordinator `release-candidate-75f85f5b-p1-focused-r2` passes all
+five tasks. P2 `release-candidate-75f85f5b-p2-compat-r1` passes ten of twelve
+tasks: the broad corpus (20 pass, seven fail, one timeout) and reverse matrix
+(ten pass, twelve reviewed failures) retain factual non-green aggregates.
+Do not call that coordinator green. The report explicitly distinguishes the
+new mlr3resampling failure / mlr3extralearners timeout from their previous
+termination details. All seven mandatory documentation conclusions pass;
+14 of 17 rows pass overall. Current and retained evidence verifiers agree.
+
+Benchmark `release-candidate-75f85f5b-final-benchmark-r1` accepts all 82 policy
+rows on its first attempt: 81 passes and the existing bounded
+`design_transpose_plain` allocation margin, zero failures. All local gates
+finished before the package-excluded focused-selector repair: the verifier now
+admits `test-operation-validation.R`, with a regression fixture and passing
+focused/full/analyzer ledger replays plus the complete hardening self-test.
+The earlier incomplete focused donor is retained as failed diagnostic evidence.
+The repair does not change the candidate or relabel frozen evidence.
+
+Hosted portability is still pending for the prepared direct-child companion
+`4f6adf59475680c55779954d14f4fc20065137c9`, tag
+`paradox-2.0.0-ci-75f85f5b-harness`. Current PR reads also require manual
+conflict resolution for bbotk #356, mlr3mbo #284, and mlr3fda #171, followed by
+dual-axis checks of the resulting heads. Publication is not yet cleared.
+Compatibility axes select the September candidate, not August's historical
+candidate; never transfer its old acceptance. All remote writes remain manual.
+Keep direct memory work separate from the broad aggregate coordinator. The
+normal 49,152-MiB self-service target is restored; its protected reserves and
+effective systemd limit remain authoritative for parallel scheduling.
 
 ## Active September 2026 validation policy
 

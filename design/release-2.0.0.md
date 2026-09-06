@@ -2,14 +2,27 @@
 
 ## Status
 
-The complete September release matrix is now in progress against frozen
+The local September release matrix has completed against frozen
 candidate `75f85f5be79a0da2dba268b0a7562839f7f9177c`, full ref
 `refs/paradox-release/candidate-20260905T212019Z`, tree
 `f18cf53d2430278b78ee76d222c71c1040378242`.
 [`release-validation-20260905.md`](release-validation-20260905.md) owns the
 new plan, evidence, analyzer review, and remaining gates. All nine release-core
-tasks pass, including every supported R minor version. Final memory,
-downstream/documentation, benchmark, and hosted results remain pending.
+tasks pass, including every R minor series from 3.6 through 4.6. Fresh GCT,
+Valgrind, bounded rchk, all sixteen exact-head checks across Paradox 1 and 2,
+mandatory documentation, and all 82 benchmark policy rows pass. The broad
+corpus and reverse-dependency aggregates remain non-green with their reviewed
+exclusions, not blanket acceptance. The current and retained verifiers agree
+on every completed evidence stage.
+
+These results belong to clean validation tooling `28798768` and package
+candidate `75f85f5b`; the later focused-selector fixture/verifier and ledger
+follow-up is package-excluded and separately tested. New hosted portability
+for prepared companion `4f6adf59` is still pending. bbotk #356, mlr3mbo #284,
+and mlr3fda #171 also require manual conflict resolution and targeted dual-axis
+checks of their resulting heads. Publication is not yet cleared. See the
+September report and [`downstream handoff`](../compat/downstream-pr-handoff.md)
+for exact identities and manual commands.
 The August acceptance below is retained history, not acceptance of this new
 candidate.
 
@@ -24,8 +37,8 @@ Its graph/value/Shadow completion, targeted measurements and verification
 follow-ups are recorded in
 [`graph-validation-20260905.md`](graph-validation-20260905.md).
 These passes preserve documented public behavior but change package
-bytes, so the edited working source needs a new freeze and source-bound
-release verification. The completed gates recorded below belong only to the
+bytes; the new freeze and source-bound local verification are recorded above.
+The completed August gates recorded below belong only to the
 unchanged `a0a9ff3` candidate, not to this development revision.
 
 ### Historical August accepted immutable candidate

@@ -9,40 +9,49 @@ PR is open and neither branch should be published.
 
 September 2026 update: the eight exact heads below remain published and
 unchanged. The new candidate is `75f85f5be79a0da2dba268b0a7562839f7f9177c`;
-fresh dual-axis checks are pending in
+fresh source-package checks pass for all eight heads on both Paradox 1 and 2,
+with only the reviewed mlr3fda `fdasrvf` Rd cross-reference NOTE on each axis.
+Exact source identities, independent replay, and completion hashes are in
 [`design/release-validation-20260905.md`](../design/release-validation-20260905.md).
-Remote reads now report merge conflicts for mlr3mbo #284 and mlr3fda #171.
-Their merge results must be rechecked after manual resolution. The following
-hosted-check descriptions and August compatibility results are historical,
-not new acceptance or a current mergeability claim.
+Remote reads at 2026-09-06 02:43 UTC report merge conflicts for **bbotk #356,
+mlr3mbo #284, and mlr3fda #171**. Their resulting heads must be rechecked on
+both axes after manual resolution. All eight PRs remain open drafts. The
+table records that read's mergeability, not new hosted-CI acceptance; the
+August compatibility and hosted evidence below remain historical.
 
 The user has published all eight reviewed migration heads and opened their
 pull requests. No agent made a remote write. The exact heads remain the sealed
 compatibility inputs; do not update or force-push them without rerunning the
 corresponding evidence.
 
-| Repository | Exact head | Current remote state | Remaining manual action |
+| Repository | Exact head | Remote state at the September read | Remaining manual action |
 |---|---|---|---|
-| bbotk | `09dafa6c3048f9be5b6961739787d201f6600a6f` | [PR #356](https://github.com/mlr-org/bbotk/pull/356), open/mergeable draft; all hosted checks green | mark ready, review, merge, and release before Paradox 2 |
-| mlr3tuning | `0ec4f40033a393d41c7842541c2d5f8173dfb6bd` | [PR #565](https://github.com/mlr-org/mlr3tuning/pull/565), open/mergeable draft; all hosted checks green | mark ready, review, merge, and release before Paradox 2 |
-| miesmuschel | `3c4bf94788b9259878b1fa067d216823d0771681` | [PR #100](https://github.com/mlr-org/miesmuschel/pull/100), open/mergeable draft; repository workflow disabled for inactivity | mark ready and review/merge; rely on the exact local dual-axis source checks unless CI is re-enabled |
-| mlr3mbo | `85dd8a5ada86aacafe93637711e3b1f2e91ba219` | [PR #284](https://github.com/mlr-org/mlr3mbo/pull/284), open/mergeable draft; ordinary checks green, one dev-bbotk row lacks Rush development API | mark ready, review, merge, and release as at least 1.2.2 |
-| celecx | `5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1` | [PR #8](https://github.com/mlr-org/celecx/pull/8), open/mergeable draft; hosted dependency solving cannot obtain unpublished mlr3mbo >= 1.2.1.9000 | mark ready and merge only after the compatible mlr3mbo release; exact local source check passes |
-| mlr3pipelines | `a7954067061f20a45dd9e6c03129dca0ba0f1753` | [PR #1016](https://github.com/mlr-org/mlr3pipelines/pull/1016), open/mergeable draft; pkgdown green, check rows fail only on removed mlbench Pima data | mark ready, review, merge, and release before Paradox 2; do not retry unchanged Pima failures |
-| mlr3fda | `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` | [PR #171](https://github.com/mlr-org/mlr3fda/pull/171), open/mergeable draft; hosted checks green | mark ready, review, merge, and release before Paradox 2 |
-| mlr3forecast | `35e4bdc914a913508450866e629309f8364077ec` | [PR #53](https://github.com/mlr-org/mlr3forecast/pull/53), open/mergeable draft; hosted checks green | mark ready, review, merge, and release before Paradox 2 |
+| bbotk | `09dafa6c3048f9be5b6961739787d201f6600a6f` | [PR #356](https://github.com/mlr-org/bbotk/pull/356), conflicting draft | resolve conflicts, recheck both axes, then review/merge/release before Paradox 2 |
+| mlr3tuning | `0ec4f40033a393d41c7842541c2d5f8173dfb6bd` | [PR #565](https://github.com/mlr-org/mlr3tuning/pull/565), mergeable draft | mark ready, review, merge, and release before Paradox 2 |
+| miesmuschel | `3c4bf94788b9259878b1fa067d216823d0771681` | [PR #100](https://github.com/mlr-org/miesmuschel/pull/100), mergeable draft | mark ready and review/merge; retain the exact local dual-axis checks |
+| mlr3mbo | `85dd8a5ada86aacafe93637711e3b1f2e91ba219` | [PR #284](https://github.com/mlr-org/mlr3mbo/pull/284), conflicting draft | resolve conflicts, recheck both axes, then review/merge/release as at least 1.2.2 |
+| celecx | `5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1` | [PR #8](https://github.com/mlr-org/celecx/pull/8), mergeable draft; merge-state UNSTABLE | review hosted checks, mark ready, and merge after the compatible mlr3mbo release |
+| mlr3pipelines | `a7954067061f20a45dd9e6c03129dca0ba0f1753` | [PR #1016](https://github.com/mlr-org/mlr3pipelines/pull/1016), mergeable draft; merge-state UNSTABLE | review hosted checks, mark ready, review/merge/release before Paradox 2 |
+| mlr3fda | `0df56f51b5d7fd751e16575fbd897b1c7f449c5e` | [PR #171](https://github.com/mlr-org/mlr3fda/pull/171), conflicting draft | resolve conflicts, recheck both axes, then review/merge/release before Paradox 2 |
+| mlr3forecast | `35e4bdc914a913508450866e629309f8364077ec` | [PR #53](https://github.com/mlr-org/mlr3forecast/pull/53), mergeable draft | mark ready, review, merge, and release before Paradox 2 |
 
 No mlr3 or mlr3fselect diagnostic-only PR remains open.
 
+The Paradox package itself still needs hosted portability for the new
+candidate. The prepared tag and manual dispatch commands are in the
+[September report](../design/release-validation-20260905.md#hosted-companion-prepared-not-published).
+Do not retry an old candidate, reuse August's hosted acceptance, or infer
+acceptance of a future rebased downstream head from today's passing checks.
+
 ## Historical August source and candidate
 
-Package-facing source is frozen at
+The August package-facing source was frozen at
 `refs/paradox-release/candidate-20260803T131049Z`, commit
 `a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
-`49079e12a816542fe8d8d6a0a2290a757a558b41`. The checked-in
-`release-refresh-20260720`/`paradox2` compatibility axis now binds that exact
-immutable identity. Final compatibility evidence is owned by clean,
-package-facing-source-identical tooling ref
+`49079e12a816542fe8d8d6a0a2290a757a558b41`. At that time the
+`release-refresh-20260720`/`paradox2` axis bound that exact identity; it now
+selects the September candidate instead. August compatibility evidence is
+owned by clean, package-facing-source-identical tooling ref
 `refs/paradox-release/validation-tooling-20260803T151943Z`, commit
 `f7b3eff651ad747015a4d3372304f296eac661f7`, tree
 `7749375e12300c6aa4258a76206ce082b96bd09f`. Both axes bind the eight

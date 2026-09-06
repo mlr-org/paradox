@@ -215,7 +215,7 @@ if (selection == "focused") {
   selected_files <- selected_files[
     grepl(
       paste0(
-        "(characterization|native|regression|",
+        "(characterization|native|regression|operation-validation|",
         "ParamSetShadow|core-state-contract|paramset-equality|to_tune|",
         "upgrade-paradox-object|upgrade-registry)"
       ),

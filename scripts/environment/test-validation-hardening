@@ -1594,7 +1594,8 @@ fixture_test_file() {
     6) printf '%s\n' test-native-paramset-trafo-gctorture.R ;;
     7) printf '%s\n' test-native-paramset-value-mutation.R ;;
     8) printf '%s\n' test-native-paramsetcollection-construction.R ;;
-    9|1[0-2])
+    9) printf '%s\n' test-operation-validation.R ;;
+    1[0-2])
       printf 'test-native-fixture-%03d.R\n' "$1"
       ;;
     *) printf 'test-fixture-%03d.R\n' "$1" ;;
@@ -1899,7 +1900,7 @@ write_functional_ledger_fixture() {
   while IFS= read -r worker_file; do
     if [[ "$FIXTURE_TESTS" == focused ]]; then
       case "$worker_file" in
-        *characterization*|*native*|*regression*) ;;
+        *characterization*|*native*|*regression*|*operation-validation*) ;;
         *) continue ;;
       esac
     fi

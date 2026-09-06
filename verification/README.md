@@ -514,9 +514,16 @@ therefore be either unrunnable or misleading.
 
 After a successful release foundation, run the existing source-bound memory
 gate directly using the `native-release` result's `child_run_id`. Its own
-admission/evidence contract remains authoritative. The intended coordinator
-refactor is to put GCT/Valgrind in an ordinary hard worker and make the pinned
-rchk image the outer worker, with no nested engine. Until that refactor exists
+admission/evidence contract remains authoritative. An eligible source donor
+must pass all six release-static modes with `--tests focused` or `--tests full`
+and the source-run validator. A probe-only run is not a functional-test donor,
+even when every probe and compiler mode passes. If verification metadata has
+changed since the foundation run, create and validate a fresh eligible donor
+before starting the combined memory gate.
+
+The intended coordinator refactor is to put GCT/Valgrind in an ordinary hard
+worker and make the pinned rchk image the outer worker, with no nested engine.
+Until that refactor exists
 and is tested, do not describe the memory gate as container-contained by this
 coordinator.
 
