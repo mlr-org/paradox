@@ -6,8 +6,25 @@
 \alias{paradox-package}
 \title{paradox: Define and Work with Parameter Spaces for Complex Algorithms}
 \description{
-Define parameter spaces, constraints and dependencies for arbitrary algorithms, to program on such spaces. Also includes statistical designs and random samplers. Objects are implemented as 'R6' classes.
+Define parameter spaces, constraints and dependencies for arbitrary algorithms, to program on such spaces. Also includes statistical designs and random samplers. Objects are implemented as serializable 'R6' classes, with performance-sensitive built-in operations implemented in portable C.
 }
+\section{Callback source references}{
+
+Paradox removes \code{srcref}, \code{srcfile}, and \code{wholeSrcref} attributes
+recursively from stored \code{custom_check}, per-parameter \code{trafo},
+\code{extra_trafo}, \code{constraint}, aggregation, and internal-tuning callbacks.
+This keeps serialized search spaces independent of the source file that
+defined a callback. The callback's enclosing environment and ordinary
+return values are preserved; source display, breakpoint, and introspection
+behavior can change for a stripped copy. Source-reference normalization
+never modifies function-valued parameter values or opaque value payloads.
+
+For source-level debugging, set
+\code{options(paradox.strip_srcrefs = FALSE)} before constructing or assigning
+the callbacks, then reconstruct the object. The option is read only at each
+admission boundary and does not retroactively change existing objects.
+}
+
 \seealso{
 Useful links:
 \itemize{
@@ -22,6 +39,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Martin Binder \email{mlr.developer@mb706.com}
   \item Michel Lang \email{michellang@gmail.com} (\href{https://orcid.org/0000-0001-9754-0393}{ORCID})
   \item Bernd Bischl \email{bernd_bischl@gmx.net} (\href{https://orcid.org/0000-0001-6002-6980}{ORCID})
   \item Jakob Richter \email{jakob1richter@gmail.com} (\href{https://orcid.org/0000-0003-4481-5554}{ORCID})
@@ -31,7 +49,7 @@ Authors:
 Other contributors:
 \itemize{
   \item Marc Becker \email{marcbecker@posteo.de} (\href{https://orcid.org/0000-0002-8115-0400}{ORCID}) [contributor]
-  \item Anna Nazarova \email{anna.nazarova@outlook.com} (\href{https://orcid.org/0000-0002-8115-0400}{ORCID}) [contributor]
+  \item Anna Nazarova \email{anna.nazarova@outlook.com} [contributor]
 }
 
 }

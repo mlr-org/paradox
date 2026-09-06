@@ -12,13 +12,27 @@
 #' `Domain` objects are representations of parameter ranges and are intermediate objects to be used in short form
 #' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user, once constructed.
 #' The `Domain` object's internals are subject to change and should not be relied upon.
+#' Paradox 2 closes Domain execution over the five package-provided kinds.
+#' Third-party Domain classes and S3 methods are not supported; use
+#' `p_uty(custom_check = )` when an opaque value needs package-external
+#' validation. Domain/table shells, cargo containers and interpreted cargo
+#' entries, class/name vectors, rows, and other structural metadata must be
+#' ordinary non-ALTREP and non-S4. Admitted semantic atomic vectors may be
+#' stable ALTREP and are materialized once; the documented opaque value-leaf
+#' exceptions below retain identity instead.
 #'
 #' @template param_lower
 #' @template param_upper
 #' @param levels (`character` | `atomic` | `list`)\cr
 #'   Allowed categorical values of the parameter. If this is not a `character`, then a `trafo` is generated that
 #'   converts the names (if not given: `as.character()` of the values) of the `levels` argument to the values.
+#'   An atomic semantic vector may be stable ALTREP and is admitted once. A
+#'   list-valued outer shell and its names/list metadata must be ordinary
+#'   non-ALTREP/non-S4; opaque list leaves retain identity.
 #'   This trafo is then performed *before* the function given as the `trafo` argument.
+#'   `character()` is a valid empty categorical Domain. It produces typed
+#'   zero-row quantile, grid, and uniform-sampling results; requesting a
+#'   nonempty quantile or uniform sample errors.
 #' @template param_special_vals
 #' @template param_default
 #' @template param_tags
@@ -31,13 +45,26 @@
 #'   with e.g. `p_dbl(..., trafo = ...)` will *not* automatically give the `to_tune()` assigned to it a transformation.
 #'   `trafo` only makes sense for [`ParamSet`]s that get used as search spaces for optimization or tuning, it is not useful when
 #'   defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.
+#'   Source-reference attributes are removed from the stored callback at
+#'   construction time. See `options(paradox.strip_srcrefs = FALSE)` under
+#'   [paradox-package] for the debugging opt-out.
 #' @param depends (`call` | `expression`)\cr
 #'   An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
 #'   expression (using `quote()`), or the expression can be entered directly and will be parsed using NSE (see
 #'   examples). The expression may be of the form `<Param> == <value>` or `<Param> %in% <values>`, which will result in
 #'   dependencies according to `ParamSet$add_dep(on = "<Param>", cond = CondEqual(<value>))` or
 #'   `ParamSet$add_dep(on = "<Param>", cond = CondAnyOf(<values>))`, respectively (see [`CondEqual`],
-#'   [`CondAnyOf`]). The expression may also contain multiple conditions separated by `&&`.
+#'   [`CondAnyOf`]). The expression may also contain multiple conditions
+#'   separated by `&&`.
+#'
+#'   Dependency activity is recursive. For an active parent, its explicit value
+#'   in the configuration is tested first; if the parent is absent, its
+#'   recorded `default` is tested instead. An absent parent without a default,
+#'   or an inactive parent, leaves the dependency unsatisfied. Defaults
+#'   participate in activity but are not inserted into the configuration. A
+#'   Domain-valid value may still be stored while this dependency is
+#'   unsatisfied; it remains dormant until the dependency becomes satisfied
+#'   and is omitted from the default [`ParamSet`]`$get_values()` view meanwhile.
 #' @param logscale (`logical(1)`)\cr
 #'   Put numeric domains on a log scale. Default `FALSE`. Log-scale `Domain`s represent parameter ranges where lower and upper bounds
 #'   are logarithmized, and where a `trafo` is added that exponentiates sampled values to the original scale. This is
@@ -47,7 +74,7 @@
 #'   (see examples).\cr
 #'   `p_int()` with `logscale = TRUE` results in a continuous parameter similar to `p_dbl()`, not an integer-valued parameter, with bounds `log(max(lower, 0.5))` ...
 #'   `log(upper + 1)` and a trafo similar to "`as.integer(exp(x))`" (with additional bounds correction). The lower bound
-#'   is lifted to `0.5` if `lower` 0 to handle the `lower == 0` case. The upper bound is increased to `log(upper + 1)`
+#'   is lifted to `0.5` if `lower` is 0 to handle the `lower == 0` case. The upper bound is increased to `log(upper + 1)`
 #'   because the trafo would otherwise almost never generate a value of `upper`.\cr
 #'   When `logscale` is `TRUE`, then upper bounds may be infinite, but lower bounds should be greater than 0 for `p_dbl()`
 #'   or greater or equal 0 for `p_int()`.\cr
@@ -60,20 +87,32 @@
 #' @param repr (`language`)\cr
 #'   Symbol to use to represent the value given in `default`.
 #'   The `deparse()` of this object is used when printing the domain, in some cases.
+#'   Unless `options(paradox.strip_srcrefs = FALSE)` is set, source-reference
+#'   metadata is removed before the printable ID is computed, so inline
+#'   functions use canonical deparse formatting without original comments.
 #' @param init (`any`)\cr
 #'   Initial value. When this is given, then the corresponding entry in `ParamSet$values` is initialized with this
-#'   value upon construction.
+#'   value upon construction. For `p_dbl()`, `p_int()`, `p_fct()`, and
+#'   `p_lgl()`, an S4 initial value is accepted only when it is the exact
+#'   pointer-identical admitted S4 special value. `p_uty()` initial values are
+#'   opaque and may be S4.
 #' @param aggr (`function`)\cr
 #'   Default aggregation function for a parameter. Can only be given for parameters tagged with `"internal_tuning"`.
 #'   Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.
+#'   Source-reference attributes are removed from the stored callback unless
+#'   `options(paradox.strip_srcrefs = FALSE)` is set before construction.
 #' @param in_tune_fn (`function(domain, param_vals)`)\cr
-#'   Function that converters a `Domain` object into a parameter value.
+#'   Function that converts a `Domain` object into a parameter value.
 #'   Can only be given for parameters tagged with `"internal_tuning"`.
 #'   This function should also assert that the parameters required to enable internal tuning for the given `domain` are
 #'   set in `param_vals` (such as `early_stopping_rounds` for `XGBoost`).
+#'   Source-reference attributes are removed from the stored callback unless
+#'   `options(paradox.strip_srcrefs = FALSE)` is set before construction.
 #' @param disable_in_tune (named `list()`)\cr
 #'   The parameter values that need to be set in the `ParamSet` to disable the internal tuning for the parameter.
 #'   For `XGBoost` this would e.g. be `list(early_stopping_rounds = NULL)`.
+#'   This interpreted metadata container and its structural entries must be
+#'   ordinary non-ALTREP/non-S4 objects.
 #'
 #' @return A `Domain` object.
 #'
@@ -156,10 +195,10 @@
 #' @name Domain
 NULL
 
-# Construct the actual `Domain` object
-# @param Constructor: The ParamXxx to call `$new()` for.
-# @param constargs: arguments of constructor
-# @param constargs_override: replace these in `constargs`, but don't represent this in printer
+# Construct the actual `Domain` object: the shared back end of the five p_*()
+# short-form constructors. The two dot-prefixed numeric arguments are a
+# package-private hand-off from p_dbl()/p_int() to the single native
+# constructor; they are deliberately not part of the documented public API.
 Domain = function(cls, grouping,
   cargo = NULL,
   lower = NA_real_, upper = NA_real_, tolerance = NA_real_, levels = NULL,
@@ -169,34 +208,9 @@ Domain = function(cls, grouping,
   trafo = NULL,
   depends_expr = NULL,
   storage_type = "list",
-  init) {
-
-  if ("internal_tuning" %in% tags) {
-    assert_true(!is.null(cargo$aggr), .var.name = "aggregation function exists")
-  }
-  assert_list(cargo$disable_in_tune, null.ok = TRUE, names = "unique")
-  assert_function(cargo$aggr, null.ok = TRUE)
-  assert_function(cargo$in_tune_fn, null.ok = TRUE)
-  if ((!is.null(cargo$in_tune_fn) || !is.null(cargo$disable_in_tune)) && "internal_tuning" %nin% tags) {
-    # we cannot check the reverse, as parameters in the search space can be tagged with 'internal_tuning'
-    # and not provide in_tune_fn or disable_in_tune
-    stopf("Arguments in_tune_fn and disable_in_tune require the tag 'internal_tuning' to be present.")
-  }
-  if ((is.null(cargo$in_tune_fn) + is.null(cargo$disable_in_tune)) == 1) {
-    stopf("Arguments in_tune_fn and disable_tune_fn must both be present")
-  }
-
-  assert_string(cls)
-  assert_string(grouping)
-  assert_number(lower, na.ok = TRUE)
-  assert_number(upper, na.ok = TRUE)
-  assert_number(tolerance, na.ok = TRUE)
-  if (!is.logical(levels)) assert_character(levels, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
-  assert_list(special_vals)
-  if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
-  assert_character(tags, any.missing = FALSE, unique = TRUE)
-  assert_function(trafo, null.ok = TRUE)
-
+  init,
+  .numeric_source_kind = 0L,
+  .numeric_logscale = FALSE) {
 
   # depends may be an expression, but may also be quote() or expression()
   if (length(depends_expr) == 1) {
@@ -213,42 +227,84 @@ Domain = function(cls, grouping,
   trafoexpr = constructorcall$trafo
   constructorcall$trafo = NULL
   constructorcall$depends = NULL
-  reprargs = sapply(names(constructorcall)[-1], get, pos = parent.frame(1), simplify = FALSE)
+  argument_names = names(constructorcall)[-1L]
+  reprargs = if (length(argument_names)) {
+    mget(argument_names, envir = parent.frame(1), inherits = TRUE)
+  } else {
+    list()
+  }
   reprargs$depends = depends_expr
   reprargs$trafo = trafoexpr
-  if (isTRUE(reprargs$logscale)) reprargs$trafo = NULL
+  if (identical(reprargs$logscale, TRUE)) reprargs$trafo = NULL
+  # `as.call()` below creates a fresh, source-free carrier. Normalize only
+  # closure/language components before assembly instead of recursively
+  # rescanning the complete ordinary constructor call. This preserves the
+  # exact recursive semantics for every component that can carry source
+  # metadata while keeping callback-free construction cheap.
+  for (index in seq_along(reprargs)) {
+    component = reprargs[[index]]
+    if (is.null(component)) {
+      next
+    }
+    if (typeof(component) == "closure" ||
+        is.language(component) ||
+        is.pairlist(component)) {
+      reprargs[[index]] = .paradox_strip_srcref(component)
+    }
+  }
   param_repr = as.call(c(constructorcall[[1]], reprargs))
 
-  # domain is a data.table with a few classes.
-  # setting `id` to something preliminary so that `domain_assert()` works.
-  # we construct this data.table as structure(list(...)), however, since this is *much* faster.
-  param = structure(list(
-      id = deparse1(param_repr, collapse = "\n", width.cutoff = 80),
-      cls = cls, grouping = grouping,
-      cargo = list(cargo),
-      lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
-      special_vals = list(special_vals),
-      default = list(default),
-      storage_type = storage_type,
-      .tags = list(tags),
-      .trafo = list(trafo),
-      .requirements = list(parse_depends(depends_expr, parent.frame(2))),
-
-      .init_given = !missing(init),
-      .init = list(if (!missing(init)) init)
-    ),
-    class = c(cls, "Domain", "data.table", "data.frame"),
-    repr = param_repr
+  param_id = .Call(C_domain_simple_repr_id, param_repr)
+  if (is.null(param_id)) {
+    param_id = deparse1(param_repr, collapse = "\n", width.cutoff = 80)
+  }
+  # Explicit short-form arguments may already have been forced by
+  # representation capture; hidden wrapper promises are first observed in this
+  # historical row order. Structural shells are rejected before native
+  # semantic observation. Opaque leaves retain identity; ParamUty special
+  # membership is the sole narrow base-identical observation of such leaves.
+  default_value = default
+  storage_type_value = storage_type
+  requirements = parse_depends(depends_expr, parent.frame(2))
+  init_given = !missing(init)
+  init_value = if (init_given) init else NULL
+  # The native constructor owns the sole semantic materialization boundary. It
+  # materializes admitted atomic semantic vectors once, preserves opaque leaf
+  # identity, rejects structural ALTREP/S4 shells, validates the closed built-in
+  # kind, and constructs the one canonical row. Do not pre-copy semantic inputs
+  # here: that would observe ALTREP vectors twice and add an allocation to every
+  # Domain construction.
+  param = .Call(
+    C_domain_construct,
+    cls,
+    grouping,
+    cargo,
+    lower,
+    upper,
+    tolerance,
+    levels,
+    special_vals,
+    default_value,
+    tags,
+    trafo,
+    storage_type_value,
+    init_given,
+    init_value,
+    .numeric_source_kind,
+    .numeric_logscale,
+    param_id,
+    requirements
   )
+  attr(param, "repr") = param_repr
 
-  if (!is_nodefault(default)) {
+  if (identical(param$cls[[1L]], "ParamUty") && !is_nodefault(default)) {
     domain_assert(param, list(default))
-    if ("required" %in% tags) stop("A 'required' parameter can not have a 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default', but the 'required' indicates that the parameter may not be missing.")
   }
 
-  if (!missing(init)) {
-    if (!is.null(trafo)) stop("Initial value and trafo can not both be given at the same time.")
-    domain_assert(param, list(init))
+  if (init_given) {
+    if (identical(param$cls[[1L]], "ParamUty")) {
+      domain_assert(param, list(init))
+    }
     if (identical(init, default)) warning("Initial value and 'default' value seem to be the same, this is usually a mistake due to a misunderstanding of the meaning of 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default' (but then there is no point in setting it as initial value). 'default' should not be used to indicate the value with which values are initialized.")
   }
 
@@ -347,6 +403,7 @@ parse_depends = function(depends_expr, evalenv) {
 
     # recurse on `&&`: combine LHS and RHS
     if (identical(cur_expr[[1]], symbol_and)) {
+      if (length(cur_expr) != 3L) throw("`&&` must have exactly two operands")
       return(c(recurse_expression(cur_expr[[2]]), recurse_expression(cur_expr[[3]])))
     }
 
@@ -357,6 +414,9 @@ parse_depends = function(depends_expr, evalenv) {
       constructor = CondAnyOf
     } else {
       throw()
+    }
+    if (length(cur_expr) != 3L) {
+      throw("comparison operators must have exactly two operands")
     }
 
     # get value and referent

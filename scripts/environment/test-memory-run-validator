@@ -1,0 +1,462 @@
+#!/usr/bin/env bash
+
+# Cheap, synthetic adversarial coverage for validate-memory-run.  The fixture
+# contains no executable candidate code and no real protected library trees.
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+VALIDATOR="$ROOT/scripts/environment/validate-memory-run"
+TREE_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+RUN_ID="memory-validator-selftest-$$"
+RUN_DIRECTORY="$ROOT/.local/checks/$RUN_ID"
+
+[[ -x "$VALIDATOR" && -x "$RSCRIPT" ]] || {
+  printf '%s\n' 'memory validator self-test prerequisites are absent' >&2
+  exit 1
+}
+[[ ! -e "$RUN_DIRECTORY" && ! -L "$RUN_DIRECTORY" ]] || {
+  printf '%s\n' "self-test run already exists: $RUN_DIRECTORY" >&2
+  exit 1
+}
+cleanup() { rm -rf -- "$RUN_DIRECTORY"; }
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+expect_failure() {
+  if "$@" > "$RUN_DIRECTORY/expected-failure.stdout" \
+      2> "$RUN_DIRECTORY/expected-failure.stderr"; then
+    printf '%s\n' 'expected validator failure was accepted' >&2
+    exit 1
+  fi
+}
+
+sha256() { sha256sum "$1" | cut -d ' ' -f 1; }
+
+write_probe_fixture() {
+  local result="$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv"
+  local dso="$RUN_DIRECTORY/modes/gct/library/paradox/libs/paradox.so"
+  local dso_sha records_before_summary
+  dso_sha=$(sha256 "$dso")
+  {
+    printf 'kind\tid\tstatus\tdetail\n'
+    printf 'meta\tschema\tpass\t1\n'
+    printf 'meta\tmode\tpass\tgct\n'
+    printf 'meta\trounds\tpass\t1\n'
+    printf 'meta\tgct_step\tpass\t10\n'
+    printf 'meta\tcandidate_version\tpass\t2.0.0\n'
+    printf 'meta\tdso_sha256\tpass\t%s\n' "$dso_sha"
+    printf 'meta\tdynamic_lookup\tpass\tfalse\n'
+    printf 'meta\tforce_symbols\tpass\ttrue\n'
+    awk -F '\t' 'NR > 1 {
+      printf "registration\t%s\tpass\tarity=%s\n", $1, $2
+    }' "$ROOT/environment/native-routine-coverage.tsv"
+    awk -F '\t' 'NR > 1 {
+      printf "probe\tdirect_%s\tpass\trounds=1\n", $1
+    }' "$ROOT/environment/native-routine-coverage.tsv"
+    for hazard in hazard_altrep_snapshot_reentry \
+        hazard_callback_reentry_rooting hazard_finalizer_column_mutation \
+        hazard_finalize_names_alias; do
+      printf 'hazard\t%s\tpass\trounds=1\n' "$hazard"
+    done
+    printf 'gct\ttransition\tpass\tprevious=0;active=10;restored=0\n'
+  } > "$result"
+  records_before_summary=$(( $(wc -l < "$result") - 1 ))
+  printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
+    "$records_before_summary" >> "$result"
+  printf '%s  paradox.so\n' "$dso_sha" \
+    > "$RUN_DIRECTORY/modes/gct/artifacts/paradox.so.sha256"
+}
+
+write_harness_receipt() {
+  sha256sum \
+    "$RUN_DIRECTORY/metadata/memory-check" \
+    "$RUN_DIRECTORY/metadata/copy-check-snapshot.R" \
+    "$RUN_DIRECTORY/metadata/validate-native-source-run" \
+    "$RUN_DIRECTORY/metadata/create-offline-check-repository.R" \
+    "$RUN_DIRECTORY/metadata/valgrind-receipts" \
+    "$RUN_DIRECTORY/metadata/tree-receipt.R" \
+    "$RUN_DIRECTORY/metadata/validate-memory-evidence" \
+    "$RUN_DIRECTORY/metadata/run-native-probes.R" \
+    "$RUN_DIRECTORY/metadata/verify-native-probes.R" \
+    "$RUN_DIRECTORY/metadata/run-native-tests.R" \
+    "$RUN_DIRECTORY/metadata/run-native-test-worker.R" \
+    "$RUN_DIRECTORY/metadata/run-native-test-worker-group" \
+    "$RUN_DIRECTORY/metadata/verify-native-test-ledger.R" \
+    "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols" \
+    "$RUN_DIRECTORY/metadata/resource-jobs" \
+    "$RUN_DIRECTORY/metadata/prepare-bounded-rchk-bcheck" \
+    "$RUN_DIRECTORY/metadata/build-bounded-rchk-bcheck" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck.tsv" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck-command.tsv" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck-environment.tsv" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck-tool-identity.tsv" \
+    > "$RUN_DIRECTORY/metadata/harness.sha256"
+}
+
+write_completion() {
+  local metadata="$RUN_DIRECTORY/metadata"
+  {
+    printf 'harness=memory-check\n'
+    printf 'schema=2\n'
+    printf 'run_id=%s\n' "$RUN_ID"
+    printf 'source_run=synthetic-native-source\n'
+    printf 'run_metadata_sha256=%s\n' "$(sha256 "$metadata/run.txt")"
+    printf 'memory_check_sha256=%s\n' "$(sha256 "$metadata/memory-check")"
+    printf 'harness_bundle_sha256=%s\n' "$(sha256 "$metadata/harness.sha256")"
+    printf 'memory_evidence_helper_sha256=%s\n' \
+      "$(sha256 "$metadata/validate-memory-evidence")"
+    printf 'native_probe_runner_sha256=%s\n' \
+      "$(sha256 "$metadata/run-native-probes.R")"
+    printf 'native_probe_verifier_sha256=%s\n' \
+      "$(sha256 "$metadata/verify-native-probes.R")"
+    printf 'native_test_runner_sha256=%s\n' \
+      "$(sha256 "$metadata/run-native-tests.R")"
+    printf 'native_test_verifier_sha256=%s\n' \
+      "$(sha256 "$metadata/verify-native-test-ledger.R")"
+    printf 'tree_receipt_helper_sha256=%s\n' \
+      "$(sha256 "$metadata/tree-receipt.R")"
+    printf 'source_manifest_sha256=%s\n' \
+      "$(sha256 "$metadata/source-manifest.tsv")"
+    printf 'source_tree_receipt_sha256=%s\n' \
+      "$(sha256 "$metadata/memory-source-tree.tsv")"
+    printf 'modes_tree_receipt_sha256=%s\n' \
+      "$(sha256 "$metadata/memory-modes-tree.tsv")"
+    printf 'source_proof_pre_sha256=%s\n' \
+      "$(sha256 "$metadata/source-run-proof.pre.txt")"
+    printf 'source_proof_post_sha256=%s\n' \
+      "$(sha256 "$metadata/source-run-proof.post.txt")"
+    printf 'ordinary_inputs_seal_sha256=%s\n' \
+      "$(sha256 "$metadata/ordinary-inputs/seal.sha256")"
+    printf 'ordinary_input_metadata_ledger_sha256=%s\n' \
+      "$(sha256 "$metadata/ordinary-inputs/metadata-ledger.tsv")"
+    printf 'valgrind_prerequisite_metadata_ledger_sha256=absent\n'
+    printf 'source_archive_sha256=absent\n'
+    printf 'commands_sha256=%s\n' "$(sha256 "$RUN_DIRECTORY/commands.sh")"
+    printf 'gct=true\n'
+    printf 'valgrind=false\n'
+    printf 'rchk=false\n'
+  } > "$metadata/completion.txt"
+  (cd "$metadata" && sha256sum completion.txt > completion.sha256)
+}
+
+seal_fixture() {
+  rm -f "$RUN_DIRECTORY/metadata/memory-source-tree.tsv" \
+    "$RUN_DIRECTORY/metadata/memory-modes-tree.tsv"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
+    "$RUN_DIRECTORY/metadata/memory-source-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+    "$RUN_DIRECTORY/metadata/memory-modes-tree.tsv" >/dev/null
+  write_completion
+}
+
+write_source_manifest() {
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
+    "$RUN_DIRECTORY/metadata/source-for-manifest.tsv" >/dev/null
+  # The single-quoted expression is R code, not a shell expansion.
+  # shellcheck disable=SC2016
+  "$RSCRIPT" --vanilla -e \
+    'args <- commandArgs(TRUE); x <- read.delim(args[[1L]], sep="\t", quote="\"", colClasses="character", check.names=FALSE); x <- x[x$kind != "directory", , drop=FALSE]; write.table(x, args[[2L]], sep="\t", quote=TRUE, row.names=FALSE, na="")' \
+    "$RUN_DIRECTORY/metadata/source-for-manifest.tsv" \
+    "$RUN_DIRECTORY/metadata/source-manifest.tsv"
+  rm "$RUN_DIRECTORY/metadata/source-for-manifest.tsv"
+}
+
+write_source_run_evidence_receipt() {
+  cp "$RUN_DIRECTORY/metadata/source-manifest.tsv" \
+    "$RUN_DIRECTORY/metadata/origin-source-manifest.tsv"
+  (cd "$RUN_DIRECTORY/metadata" && sha256sum \
+    origin-run.txt origin-result.txt origin-native-check \
+    origin-tree-receipt.R origin-source-manifest.tsv origin-source-tree.tsv \
+    origin-modes-tree.tsv origin-completion.txt origin-completion.sha256 \
+    > source-run-evidence.sha256)
+}
+
+build_fixture() {
+  rm -rf -- "$RUN_DIRECTORY"
+  mkdir -p "$RUN_DIRECTORY/metadata/ordinary-inputs" \
+    "$RUN_DIRECTORY/source/scripts/environment" \
+    "$RUN_DIRECTORY/source/environment" \
+    "$RUN_DIRECTORY/source/tests/testthat" \
+    "$RUN_DIRECTORY/modes/gct/library/paradox/libs" \
+    "$RUN_DIRECTORY/modes/gct/artifacts" \
+    "$RUN_DIRECTORY/modes/gct/logs" \
+    "$RUN_DIRECTORY/artifacts"
+
+  cp "$ROOT/scripts/memory-check" "$RUN_DIRECTORY/metadata/memory-check"
+  cp "$ROOT/scripts/environment/copy-check-snapshot.R" \
+    "$RUN_DIRECTORY/metadata/copy-check-snapshot.R"
+  cp "$ROOT/scripts/environment/validate-native-source-run" \
+    "$RUN_DIRECTORY/metadata/validate-native-source-run"
+  cp "$ROOT/scripts/environment/create-offline-check-repository.R" \
+    "$RUN_DIRECTORY/metadata/create-offline-check-repository.R"
+  cp "$ROOT/scripts/environment/valgrind-receipts" \
+    "$RUN_DIRECTORY/metadata/valgrind-receipts"
+  cp "$ROOT/scripts/environment/tree-receipt.R" \
+    "$RUN_DIRECTORY/metadata/tree-receipt.R"
+  cp "$ROOT/scripts/environment/validate-memory-evidence" \
+    "$RUN_DIRECTORY/metadata/validate-memory-evidence"
+  cp "$ROOT/scripts/environment/run-native-probes.R" \
+    "$RUN_DIRECTORY/metadata/run-native-probes.R"
+  cp "$ROOT/scripts/environment/verify-native-probes.R" \
+    "$RUN_DIRECTORY/metadata/verify-native-probes.R"
+  cp "$ROOT/scripts/environment/run-native-tests.R" \
+    "$RUN_DIRECTORY/metadata/run-native-tests.R"
+  cp "$ROOT/scripts/environment/run-native-test-worker.R" \
+    "$RUN_DIRECTORY/metadata/run-native-test-worker.R"
+  cp "$ROOT/scripts/environment/run-native-test-worker-group" \
+    "$RUN_DIRECTORY/metadata/run-native-test-worker-group"
+  cp "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+    "$RUN_DIRECTORY/metadata/verify-native-test-ledger.R"
+  cp "$ROOT/scripts/bootstrap-valgrind-debug-symbols" \
+    "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols"
+  cp "$ROOT/scripts/environment/resource-jobs" \
+    "$RUN_DIRECTORY/metadata/resource-jobs"
+  cp "$ROOT/scripts/prepare-bounded-rchk-bcheck" \
+    "$RUN_DIRECTORY/metadata/prepare-bounded-rchk-bcheck"
+  cp "$ROOT/scripts/environment/build-bounded-rchk-bcheck" \
+    "$RUN_DIRECTORY/metadata/build-bounded-rchk-bcheck"
+  cp "$ROOT/environment/rchk-bounded-bcheck.tsv" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck.tsv"
+  cp "$ROOT/environment/rchk-bounded-bcheck-command.tsv" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck-command.tsv"
+  cp "$ROOT/environment/rchk-bounded-bcheck-environment.tsv" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck-environment.tsv"
+  cp "$ROOT/environment/rchk-bounded-bcheck-tool-identity.tsv" \
+    "$RUN_DIRECTORY/metadata/rchk-bounded-bcheck-tool-identity.tsv"
+  write_harness_receipt
+
+  cp "$ROOT/scripts/environment/run-native-probes.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-probes.R"
+  cp "$ROOT/scripts/environment/verify-native-probes.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/verify-native-probes.R"
+  cp "$ROOT/scripts/environment/run-native-tests.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-tests.R"
+  cp "$ROOT/scripts/environment/run-native-test-worker.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-test-worker.R"
+  cp "$ROOT/scripts/environment/run-native-test-worker-group" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-test-worker-group"
+  cp "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/verify-native-test-ledger.R"
+  cp "$ROOT/environment/native-routine-coverage.tsv" \
+    "$RUN_DIRECTORY/source/environment/native-routine-coverage.tsv"
+  printf '%s\n' 'Package: paradox' 'Version: 2.0.0' \
+    > "$RUN_DIRECTORY/source/DESCRIPTION"
+  printf '%s\n' '# synthetic source leaf' \
+    > "$RUN_DIRECTORY/source/tests/testthat/test-synthetic.R"
+
+  write_source_manifest
+  for origin_name in run.txt result.txt native-check tree-receipt.R \
+      source-tree.tsv modes-tree.tsv completion.txt completion.sha256; do
+    printf 'synthetic-origin=%s\n' "$origin_name" \
+      > "$RUN_DIRECTORY/metadata/origin-$origin_name"
+  done
+  write_source_run_evidence_receipt
+
+  printf '%s\n' 'synthetic non-loadable DSO evidence' \
+    > "$RUN_DIRECTORY/modes/gct/library/paradox/libs/paradox.so"
+  write_probe_fixture
+  {
+    printf '%s\n' \
+      'mode=gct' \
+      'r_executable=ordinary repository-local R 4.6.1' \
+      'candidate=sealed strict-GCC install copied from the native source run' \
+      'gctorture2_step=10' \
+      'coverage=every registered routine plus four reviewed allocation/callback hazards' \
+      'rounds=1' \
+      'functional_tests=false (owned by the frozen native run)' \
+      'examples_vignettes_manual=false (documentation and policy are separate gates)'
+  } > "$RUN_DIRECTORY/modes/gct/artifacts/scope.txt"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create \
+    "$RUN_DIRECTORY/modes/gct/library/paradox" \
+    "$RUN_DIRECTORY/modes/gct/artifacts/cached-package-tree.tsv" >/dev/null
+
+  printf '%s\n' \
+    'harness=memory-check' \
+    'schema=2' \
+    'started_utc=2026-07-15T00:00:00Z' \
+    "root=$ROOT" \
+    "run_id=$RUN_ID" \
+    'source_run=synthetic-native-source' \
+    'gct=true' \
+    'valgrind=false' \
+    'rchk=false' \
+    > "$RUN_DIRECTORY/metadata/run.txt"
+  printf '%s\n' 'synthetic source proof' \
+    > "$RUN_DIRECTORY/metadata/source-run-proof.pre.txt"
+  cp "$RUN_DIRECTORY/metadata/source-run-proof.pre.txt" \
+    "$RUN_DIRECTORY/metadata/source-run-proof.post.txt"
+  printf '%s\n' '$ synthetic fixture only' > "$RUN_DIRECTORY/commands.sh"
+
+  ordinary="$RUN_DIRECTORY/metadata/ordinary-inputs"
+  printf '%s\n' '"path"\t"kind"\t"sha256_or_target"\t"size"\t"mode"' \
+    > "$ordinary/toolchain-tree.tsv"
+  cp "$ordinary/toolchain-tree.tsv" "$ordinary/library-tree.tsv"
+  cp "$ROOT/environment/toolchain-linux-64.lock" \
+    "$ordinary/toolchain-linux-64.lock"
+  (cd "$ordinary" && sha256sum toolchain-tree.tsv library-tree.tsv \
+    toolchain-linux-64.lock > seal.sha256)
+  {
+    printf 'input\troot\tmetadata_sha256\n'
+    printf 'toolchain\t%s/.local/toolchain\t%s\n' "$ROOT" \
+      aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    printf 'library\t%s/.local/R/library\t%s\n' "$ROOT" \
+      bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  } > "$ordinary/metadata-start.tsv"
+  printf 'stage\tsha256\n' > "$ordinary/metadata-ledger.tsv"
+  for stage in start pre-source pre-gct post-gct final; do
+    if [[ "$stage" != start ]]; then
+      cp "$ordinary/metadata-start.tsv" "$ordinary/metadata-$stage.tsv"
+    fi
+    printf '%s\t%s\n' "$stage" "$(sha256 "$ordinary/metadata-$stage.tsv")" \
+      >> "$ordinary/metadata-ledger.tsv"
+  done
+
+  printf '%s\n' 'status=passed' 'exit_code=0' \
+    'finished_utc=2026-07-15T00:01:00Z' \
+    > "$RUN_DIRECTORY/metadata/result.txt"
+  seal_fixture
+}
+
+build_fixture
+valid_replay_started_ns=$(date +%s%N)
+"$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+valid_replay_finished_ns=$(date +%s%N)
+valid_replay_milliseconds=$((
+  (valid_replay_finished_ns - valid_replay_started_ns) / 1000000
+))
+
+# testthat creates an empty snapshot directory while discovering snapshot
+# tests.  It carries no source leaf and is the sole permitted empty-directory
+# side effect.  A neighboring empty directory must remain inadmissible.
+build_fixture
+mkdir "$RUN_DIRECTORY/source/tests/testthat/_snaps"
+seal_fixture
+"$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+
+build_fixture
+mkdir "$RUN_DIRECTORY/source/tests/testthat/unexplained-empty"
+seal_fixture
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Interrupt the verifier while both independent tree readers are live. Each
+# reader owns a process group; the signal/EXIT path must terminate and reap
+# both groups before the validator itself returns 143.
+build_fixture
+"$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" \
+  > "$RUN_DIRECTORY/interrupted.stdout" \
+  2> "$RUN_DIRECTORY/interrupted.stderr" &
+interrupted_validator_pid=$!
+interrupted_child_groups=()
+for _ in $(seq 1 500); do
+  mapfile -t interrupted_child_groups < <(
+    /usr/bin/pgrep -P "$interrupted_validator_pid" 2>/dev/null || true
+  )
+  if [[ ${#interrupted_child_groups[@]} -eq 2 ]]; then
+    break
+  fi
+  if ! kill -0 "$interrupted_validator_pid" 2>/dev/null; then
+    break
+  fi
+  sleep 0.01
+done
+[[ ${#interrupted_child_groups[@]} -eq 2 ]] || {
+  wait "$interrupted_validator_pid" 2>/dev/null || true
+  printf '%s\n' 'could not intercept both replay tree readers' >&2
+  exit 1
+}
+for child_group in "${interrupted_child_groups[@]}"; do
+  [[ "$(ps -o pgid= -p "$child_group" | tr -d ' ')" == "$child_group" ]] || {
+    kill -TERM "$interrupted_validator_pid" 2>/dev/null || true
+    wait "$interrupted_validator_pid" 2>/dev/null || true
+    printf '%s\n' 'replay child did not own its process group' >&2
+    exit 1
+  }
+done
+kill -TERM "$interrupted_validator_pid"
+interrupted_status=0
+wait "$interrupted_validator_pid" || interrupted_status=$?
+[[ "$interrupted_status" -eq 143 ]] || {
+  printf '%s\n' "interrupted replay returned $interrupted_status, expected 143" >&2
+  exit 1
+}
+for child_group in "${interrupted_child_groups[@]}"; do
+  if kill -0 -- "-$child_group" 2>/dev/null; then
+    kill -KILL -- "-$child_group" 2>/dev/null || true
+    printf '%s\n' 'interrupted replay left a child process group running' >&2
+    exit 1
+  fi
+done
+
+# A semantically incomplete GCT ledger remains invalid even when the generic
+# modes-tree receipt and completion seal are recomputed around it.
+awk -F '\t' '
+  $1 == "gct" && $2 == "transition" { next }
+  $1 == "summary" { next }
+  { print }
+' "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv" \
+  > "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv.new"
+mv "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv.new" \
+  "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv"
+records_before_summary=$((
+  $(wc -l < "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv") - 1
+))
+printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
+  "$records_before_summary" \
+  >> "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv"
+seal_fixture
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Result schema is independently checked even though result.txt is written
+# after the non-circular completion seal.
+build_fixture
+printf '%s\n' 'status=passed' >> "$RUN_DIRECTORY/metadata/result.txt"
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Re-sealing a substituted verifier cannot make it a trusted harness input.
+build_fixture
+printf '%s\n' '# synthetic substitution' \
+  >> "$RUN_DIRECTORY/metadata/validate-memory-evidence"
+write_harness_receipt
+write_completion
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# The validator's relocated offline-repository sibling is also exact trusted
+# harness policy, not an unauthenticated implementation detail.
+build_fixture
+printf '%s\n' '# synthetic substitution' \
+  >> "$RUN_DIRECTORY/metadata/create-offline-check-repository.R"
+write_harness_receipt
+write_completion
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Re-sealing a substituted worker inside the frozen source cannot make it an
+# authenticated implementation of the native-test runner's process boundary.
+build_fixture
+printf '%s\n' '# synthetic worker substitution' \
+  >> "$RUN_DIRECTORY/source/scripts/environment/run-native-test-worker.R"
+write_source_manifest
+write_source_run_evidence_receipt
+seal_fixture
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Metadata ledgers bind both their hashes and an unchanged protected interval.
+build_fixture
+sed -i 's/aaaaaaaa/bbbbbbbb/' \
+  "$RUN_DIRECTORY/metadata/ordinary-inputs/metadata-post-gct.tsv"
+awk -F '\t' -v replacement="$(sha256 \
+    "$RUN_DIRECTORY/metadata/ordinary-inputs/metadata-post-gct.tsv")" \
+  'BEGIN { OFS = "\t" } $1 == "post-gct" { $2 = replacement } { print }' \
+  "$RUN_DIRECTORY/metadata/ordinary-inputs/metadata-ledger.tsv" \
+  > "$RUN_DIRECTORY/metadata/ordinary-inputs/metadata-ledger.tsv.new"
+mv "$RUN_DIRECTORY/metadata/ordinary-inputs/metadata-ledger.tsv.new" \
+  "$RUN_DIRECTORY/metadata/ordinary-inputs/metadata-ledger.tsv"
+write_completion
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+printf '%s\n' 'memory_run_validator_self_test=passed'
+printf '%s\n' 'candidate_code_executed=false'
+printf 'valid_replay_milliseconds=%s\n' "$valid_replay_milliseconds"

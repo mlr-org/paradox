@@ -1,0 +1,2 @@
+# Project-owned placeholder. Package-specific warning/sanitizer flags belong in
+# dedicated check Makevars files; this prevents accidental ~/.R/Makevars input.

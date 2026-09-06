@@ -1,0 +1,6 @@
+[storage]
+driver = "vfs"
+runroot = "@CONTAINER_RUNROOT@"
+graphroot = "@CONTAINER_ROOT@"
+
+[storage.options]

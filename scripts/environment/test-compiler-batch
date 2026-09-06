@@ -1,0 +1,1001 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# shellcheck disable=SC2154 # trap-local assignment is visible when it executes
+trap 'test_status=$?; printf "test-compiler-batch: unexpected failure at line %s (status %s)\n" "$LINENO" "$test_status" >&2; exit "$test_status"' ERR
+
+SCOPE=all
+if [[ $# -eq 1 && "${1:-}" == --deadline-only ]]; then
+  SCOPE=deadline
+elif [[ $# -eq 1 && "${1:-}" == --interrupt-only ]]; then
+  SCOPE=interrupt
+elif (($#)); then
+  printf '%s\n' \
+    'usage: test-compiler-batch [--deadline-only|--interrupt-only]' >&2
+  exit 2
+fi
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+RUNNER="$ROOT/scripts/environment/run-compiler-batch"
+WAVE_RUNNER="$ROOT/scripts/environment/run-compiler-wave"
+SETSID=$(command -v setsid 2>/dev/null || true)
+[[ -x "$RUNNER" && ! -L "$RUNNER" ]] || {
+  printf '%s\n' 'test-compiler-batch: runner is absent or symbolic' >&2
+  exit 1
+}
+[[ -x "$WAVE_RUNNER" && ! -L "$WAVE_RUNNER" ]] || {
+  printf '%s\n' 'test-compiler-batch: wave runner is absent or symbolic' >&2
+  exit 1
+}
+[[ "$SETSID" == /* && -f "$SETSID" && -x "$SETSID" && ! -L "$SETSID" ]] || {
+  printf '%s\n' 'test-compiler-batch: plain absolute setsid is unavailable' >&2
+  exit 1
+}
+SETSID_SHA256=$(sha256sum "$SETSID" | cut -d ' ' -f 1)
+SETSID_IDENTITY_SHA256=$(LC_ALL=C "$SETSID" --version 2>&1 | sha256sum |
+  cut -d ' ' -f 1)
+
+argument_vector_sha256() {
+  if (($#)); then
+    printf '%s\0' "$@"
+  fi | sha256sum | cut -d ' ' -f 1
+}
+mkdir -p "$ROOT/.local/tmp"
+SCRATCH=$(mktemp -d "$ROOT/.local/tmp/compiler-batch-test.XXXXXX")
+trap 'rm -rf "$SCRATCH"' EXIT HUP INT TERM
+mkdir "$SCRATCH/source" "$SCRATCH/output"
+
+make_admission_report() {
+  local jobs=$1 path=$2 cpu_limit cpu_reserve
+  if ((jobs >= 14)); then cpu_reserve=2; cpu_limit=$((jobs + 2))
+  elif ((jobs >= 3)); then cpu_reserve=1; cpu_limit=$((jobs + 1))
+  else cpu_reserve=0; cpu_limit=$jobs
+  fi
+  {
+    printf 'field\tvalue\n'
+    printf 'schema\t2\n'
+    printf 'profile\tapi-compile\n'
+    printf 'containment\tdirect\n'
+    printf 'platform\tLinux\n'
+    printf 'online_cpus\t%s\n' "$cpu_limit"
+    printf 'affinity_cpus\t%s\n' "$cpu_limit"
+    printf 'cgroup_cpu_limit\tunlimited\n'
+    printf 'cpu_limit\t%s\n' "$cpu_limit"
+    printf 'cpu_reserve\t%s\n' "$cpu_reserve"
+    printf 'cpu_per_job\t1\n'
+    printf 'cpu_jobs\t%s\n' "$jobs"
+    printf 'memory_source\tproc_memavailable\n'
+    printf 'memory_available_mib\t24576\n'
+    printf 'cgroup_memory_available_mib\tunlimited\n'
+    printf 'memory_reserve_mib\t12288\n'
+    printf 'memory_mib_per_job\t768\n'
+    printf 'memory_jobs\t16\n'
+    printf 'profile_max_jobs\tunlimited\n'
+    printf 'operator_max_jobs\t%s\n' "$jobs"
+    printf 'jobs\t%s\n' "$jobs"
+    printf 'selection\tlive_ceiling_lowered_against_retained_initial\n'
+  } > "$path"
+}
+
+for jobs in 1 2 3 4; do
+  make_admission_report "$jobs" "$SCRATCH/admission-$jobs.tsv"
+done
+
+FAKE="$SCRATCH/fake-compiler"
+export PARADOX_FAKE_STRICT_ARGUMENT=-DSTRICT_SYNTHETIC_API
+export PARADOX_FAKE_INCLUDE_ARGUMENT="-I$SCRATCH/include-synthetic"
+FAKE_ARGUMENTS=(
+  "$PARADOX_FAKE_STRICT_ARGUMENT"
+  "$PARADOX_FAKE_INCLUDE_ARGUMENT"
+)
+# These single-quoted expressions are intentionally written into the fixture;
+# they must expand only when the fake compiler runs.
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then printf "fake-compiler-v1\n"; exit 0; fi' \
+  'strict_seen=false' \
+  'include_seen=false' \
+  'for argument in "$@"; do' \
+  '  [[ "$argument" != "${PARADOX_FAKE_STRICT_ARGUMENT:?}" ]] || strict_seen=true' \
+  '  [[ "$argument" != "${PARADOX_FAKE_INCLUDE_ARGUMENT:?}" ]] || include_seen=true' \
+  'done' \
+  '[[ "$strict_seen" == true && "$include_seen" == true ]] || {' \
+  '  printf "missing exact synthetic strict/include arguments\n" >&2' \
+  '  exit 96' \
+  '}' \
+  'source=${!#}' \
+  'printf "compiler_output=%s\\n" "$(basename "$source")"' \
+  'if grep -qx SPOOF "$source"; then printf "timeout: sending signal TERM to command fake\\n" >&2; exit 17; fi' \
+  'if grep -qx RETURN124 "$source"; then printf "timeout: sending signal TERM to command fake\\n" >&2; exit 124; fi' \
+  'if grep -qx RETURN137 "$source"; then printf "timeout: sending signal TERM to command fake\\ntimeout: sending signal KILL to command fake\\n" >&2; exit 137; fi' \
+  'if grep -qx FAIL "$source"; then exit 17; fi' \
+  > "$FAKE"
+chmod +x "$FAKE"
+
+SOURCE_LIST="$SCRATCH/sources.txt"
+: > "$SOURCE_LIST"
+for number in 1 2 3 4 5 6; do
+  source=$(printf '%s/source/source-%02d.c' "$SCRATCH" "$number")
+  if [[ "$number" == 2 || "$number" == 5 ]]; then
+    printf 'FAIL\n' > "$source"
+  else
+    printf 'PASS\n' > "$source"
+  fi
+  printf '%s\n' "$source" >> "$SOURCE_LIST"
+done
+
+verify_task_ledger() {
+  local ledger=$1 output=$2 compiler=$3 mode=$4 expected_rows=$5
+  local expected_header compiler_canonical compiler_link compiler_sha
+  local compiler_identity wrapper wrapper_sha wrapper_bash wrapper_bash_sha row=0
+  local schema ordinal relative source_sha compiler_invoked retained_link
+  local retained_canonical retained_compiler_sha retained_identity
+  local retained_wrapper retained_wrapper_sha retained_wrapper_bash
+  local retained_wrapper_bash_sha status timed_out log_relative log_sha
+  local supervisor_relative supervisor_sha extra source_path
+  local expected_status expected_timeout timeout_tool
+  local timeout_name term_count kill_count supervisor_count
+  expected_header=$'schema\tordinal\tsource_relative\tsource_sha256\tcompiler_invoked_path\tcompiler_link_target\tcompiler_canonical_path\tcompiler_canonical_sha256\tcompiler_identity_sha256\ttask_wrapper_path\ttask_wrapper_sha256\ttask_wrapper_bash_path\ttask_wrapper_bash_sha256\texit_status\ttimed_out\tlog_relative\tlog_sha256\tsupervisor_log_relative\tsupervisor_log_sha256'
+  [[ -f "$ledger" && ! -L "$ledger" ]] || return 1
+  [[ "$(head -n 1 "$ledger")" == "$expected_header" ]] || return 1
+  awk -F '\t' 'NF != 19 { exit 1 }' "$ledger" || return 1
+  [[ "$(awk 'END { print NR - 1 }' "$ledger")" -eq "$expected_rows" ]] ||
+    return 1
+  compiler_canonical=$(readlink -f -- "$compiler")
+  if [[ -L "$compiler" ]]; then
+    compiler_link=$(readlink -- "$compiler")
+  else
+    compiler_link=-
+  fi
+  compiler_sha=$(sha256sum "$compiler_canonical" | cut -d ' ' -f 1)
+  compiler_identity=$(
+    (LC_ALL=C exec -a "$compiler" "$compiler_canonical" --version) \
+      2>&1 | sha256sum | cut -d ' ' -f 1
+  )
+  wrapper=$(readlink -f -- "$RUNNER")
+  wrapper_sha=$(sha256sum "$wrapper" | cut -d ' ' -f 1)
+  wrapper_bash=$(readlink -f -- "${BASH}")
+  wrapper_bash_sha=$(sha256sum "$wrapper_bash" | cut -d ' ' -f 1)
+  timeout_tool=$(awk -F '\t' '$1 == "timeout_tool_path" { print $2 }' \
+    "$output/batch-plan.tsv")
+  [[ "$timeout_tool" == /* ]] || return 1
+  timeout_name=${timeout_tool##*/}
+  declare -A observed_sources=()
+  while IFS=$'\t' read -r schema ordinal relative source_sha compiler_invoked \
+      retained_link retained_canonical retained_compiler_sha retained_identity \
+      retained_wrapper retained_wrapper_sha retained_wrapper_bash \
+      retained_wrapper_bash_sha status timed_out log_relative log_sha \
+      supervisor_relative supervisor_sha extra; do
+    [[ "$schema" != schema ]] || continue
+    row=$((row + 1))
+    [[ "$schema" == 1 && "$ordinal" -eq "$row" &&
+       "$relative" != /* && "$relative" != *..* &&
+       -z "${observed_sources[$relative]+present}" &&
+       "$compiler_invoked" == "$compiler" &&
+       "$retained_link" == "$compiler_link" &&
+       "$retained_canonical" == "$compiler_canonical" &&
+       "$retained_compiler_sha" == "$compiler_sha" &&
+       "$retained_identity" == "$compiler_identity" &&
+       "$retained_wrapper" == "$wrapper" &&
+       "$retained_wrapper_sha" == "$wrapper_sha" &&
+       "$retained_wrapper_bash" == "$wrapper_bash" &&
+       "$retained_wrapper_bash_sha" == "$wrapper_bash_sha" &&
+       "$log_relative" == "$(printf '%04d.log' "$row")" &&
+       "$supervisor_relative" == \
+         "$(printf '%04d.supervisor.log' "$row")" &&
+       "$timed_out" =~ ^(true|false)$ && -z "${extra:-}" ]] || return 1
+    observed_sources[$relative]=1
+    source_path="$SCRATCH/source/$relative"
+    [[ -f "$source_path" &&
+       "$(sha256sum "$source_path" | cut -d ' ' -f 1)" == "$source_sha" &&
+       -f "$output/$log_relative" && ! -L "$output/$log_relative" &&
+       "$(sha256sum "$output/$log_relative" | cut -d ' ' -f 1)" == \
+         "$log_sha" && -f "$output/$supervisor_relative" &&
+       ! -L "$output/$supervisor_relative" &&
+       "$(sha256sum "$output/$supervisor_relative" | cut -d ' ' -f 1)" == \
+         "$supervisor_sha" ]] || return 1
+    expected_status=0
+    expected_timeout=false
+    case "$mode:$row" in
+      failing:2|failing:5|spoof:1) expected_status=17 ;;
+      return124:1) expected_status=124 ;;
+      return137:1) expected_status=137 ;;
+      deadline:1) expected_status=deadline; expected_timeout=true ;;
+      left:2|right:5) expected_status=19 ;;
+    esac
+    if [[ "$expected_status" == deadline ]]; then
+      [[ "$status" =~ ^(124|137)$ ]] || return 1
+    else
+      [[ "$status" -eq "$expected_status" ]] || return 1
+    fi
+    [[ "$timed_out" == "$expected_timeout" ]] || return 1
+    if [[ "$expected_timeout" == true ]]; then
+      term_count=$(grep -Fxc \
+        -e "$timeout_tool: sending signal TERM to command '$wrapper_bash'" \
+        -e "$timeout_name: sending signal TERM to command '$wrapper_bash'" \
+        "$output/$supervisor_relative" || true)
+      kill_count=$(grep -Fxc \
+        -e "$timeout_tool: sending signal KILL to command '$wrapper_bash'" \
+        -e "$timeout_name: sending signal KILL to command '$wrapper_bash'" \
+        "$output/$supervisor_relative" || true)
+      supervisor_count=$(wc -l < "$output/$supervisor_relative")
+      [[ "$term_count" -eq 1 && "$kill_count" -le 1 &&
+         "$supervisor_count" -eq "$((term_count + kill_count))" ]] ||
+        return 1
+      [[ "$status" -ne 137 || "$kill_count" -eq 1 ]] || return 1
+    else
+      [[ ! -s "$output/$supervisor_relative" ]] || return 1
+    fi
+  done < "$ledger"
+  [[ "$row" -eq "$expected_rows" ]]
+}
+
+if [[ "$SCOPE" == all ]]; then
+for noncanonical in 00 08 999999999 9999999999; do
+  if "$RUNNER" --jobs "$noncanonical" --label synthetic --compiler "$FAKE" \
+      --setsid "$SETSID" \
+      --source-root "$SCRATCH/source" --source-list "$SOURCE_LIST" \
+      --output-directory "$SCRATCH/output/noncanonical-batch-$noncanonical" \
+      --aggregate-log "$SCRATCH/output/noncanonical-batch-$noncanonical.log" \
+      > "$SCRATCH/noncanonical-batch-$noncanonical.out" \
+      2> "$SCRATCH/noncanonical-batch-$noncanonical.err"; then
+    printf 'test-compiler-batch: noncanonical batch jobs accepted: %s\n' \
+      "$noncanonical" >&2
+    exit 1
+  fi
+  grep -q 'canonical bounded positive integer' \
+    "$SCRATCH/noncanonical-batch-$noncanonical.err"
+done
+
+if "$RUNNER" --jobs 3 --label synthetic --compiler "$FAKE" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" --source-list "$SOURCE_LIST" \
+    --admission-report "$SCRATCH/admission-3.tsv" \
+    --output-directory "$SCRATCH/output/failing-tasks" \
+    --aggregate-log "$SCRATCH/output/failing.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/failing.stdout" 2> "$SCRATCH/failing.stderr"; then
+  printf '%s\n' 'test-compiler-batch: failing batch returned success' >&2
+  exit 1
+fi
+[[ "$(find "$SCRATCH/output/failing-tasks" -name '[0-9][0-9][0-9][0-9].log' \
+  -type f | wc -l)" -eq 6 ]]
+[[ "$(grep -c '^source-' "$SCRATCH/output/failing.log")" -eq 6 ]]
+grep -q '2 of 6 synthetic task(s) failed' "$SCRATCH/failing.stderr"
+verify_task_ledger "$SCRATCH/output/failing-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/failing-tasks" "$FAKE" failing 6 || {
+  printf '%s\n' 'test-compiler-batch: failing task ledger is invalid' >&2
+  exit 1
+}
+grep -Fqx $'compiler_canonical_sha256\t'"$(sha256sum "$FAKE" | cut -d ' ' -f 1)" \
+  "$SCRATCH/output/failing-tasks/batch-plan.tsv"
+grep -Fqx $'schema\t4' "$SCRATCH/output/failing-tasks/batch-plan.tsv"
+grep -Fqx $'compiler_arguments_count\t2' \
+  "$SCRATCH/output/failing-tasks/batch-plan.tsv"
+grep -Fqx $'compiler_arguments_sha256\t'"$(argument_vector_sha256 \
+  "${FAKE_ARGUMENTS[@]}")" "$SCRATCH/output/failing-tasks/batch-plan.tsv"
+grep -Fqx $'setsid_path\t'"$SETSID" \
+  "$SCRATCH/output/failing-tasks/batch-plan.tsv"
+grep -Fqx $'setsid_sha256\t'"$SETSID_SHA256" \
+  "$SCRATCH/output/failing-tasks/batch-plan.tsv"
+grep -Fqx $'setsid_identity_sha256\t'"$SETSID_IDENTITY_SHA256" \
+  "$SCRATCH/output/failing-tasks/batch-plan.tsv"
+printf 'tamper\n' >> "$SCRATCH/output/failing-tasks/0001.log"
+if verify_task_ledger "$SCRATCH/output/failing-tasks/task-ledger.tsv" \
+    "$SCRATCH/output/failing-tasks" "$FAKE" failing 6; then
+  printf '%s\n' 'test-compiler-batch: task-log tamper was admitted' >&2
+  exit 1
+fi
+observed=()
+while IFS= read -r line; do observed+=("$line"); done \
+  < <(grep '^source-' "$SCRATCH/output/failing.log")
+for index in "${!observed[@]}"; do
+  expected=$(printf 'source-%02d.c' "$((index + 1))")
+  [[ "${observed[$index]}" == "$expected" ]]
+done
+
+for source in "$SCRATCH/source/"*.c; do printf 'PASS\n' > "$source"; done
+"$RUNNER" --jobs 4 --label synthetic --compiler "$FAKE" \
+  --setsid "$SETSID" \
+  --source-root "$SCRATCH/source" --source-list "$SOURCE_LIST" \
+  --admission-report "$SCRATCH/admission-4.tsv" \
+  --output-directory "$SCRATCH/output/passing-tasks" \
+  --aggregate-log "$SCRATCH/output/passing.log" -- \
+  "${FAKE_ARGUMENTS[@]}"
+[[ "$(find "$SCRATCH/output/passing-tasks" -name '[0-9][0-9][0-9][0-9].log' \
+  -type f | wc -l)" -eq 6 ]]
+[[ "$(grep -c '^compiler_output=' "$SCRATCH/output/passing.log")" -eq 6 ]]
+verify_task_ledger "$SCRATCH/output/passing-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/passing-tasks" "$FAKE" passing 6 || {
+  printf '%s\n' 'test-compiler-batch: passing task ledger is invalid' >&2
+  exit 1
+}
+
+# A retained admission report is mandatory and lane jobs may not exceed its
+# exact lowering-only ceiling.
+if "$RUNNER" --jobs 3 --label admission-mismatch --compiler "$FAKE" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" --source-list "$SOURCE_LIST" \
+    --admission-report "$SCRATCH/admission-2.tsv" \
+    --output-directory "$SCRATCH/output/admission-mismatch" \
+    --aggregate-log "$SCRATCH/output/admission-mismatch.log" -- \
+    > "$SCRATCH/admission-mismatch.stdout" \
+    2> "$SCRATCH/admission-mismatch.stderr"; then
+  printf '%s\n' 'test-compiler-batch: admission mismatch returned success' >&2
+  exit 1
+fi
+grep -Fq 'exceeds its admitted shared ceiling' \
+  "$SCRATCH/admission-mismatch.stderr"
+
+# Compiler-written timeout-like text is ordinary log content.  Only GNU
+# timeout's actual status may classify a row as timed out.
+printf 'SPOOF\n' > "$SCRATCH/source/spoof.c"
+printf '%s\n' "$SCRATCH/source/spoof.c" > "$SCRATCH/spoof-sources.txt"
+if "$RUNNER" --jobs 1 --label spoof --compiler "$FAKE" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" --source-list "$SCRATCH/spoof-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/spoof-tasks" \
+    --aggregate-log "$SCRATCH/output/spoof.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/spoof.stdout" 2> "$SCRATCH/spoof.stderr"; then
+  printf '%s\n' 'test-compiler-batch: spoofing compiler returned success' >&2
+  exit 1
+fi
+grep -Fq '1 of 1 spoof task(s) failed (0 timeout(s))' "$SCRATCH/spoof.stderr"
+verify_task_ledger "$SCRATCH/output/spoof-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/spoof-tasks" "$FAKE" spoof 1 || {
+  printf '%s\n' 'test-compiler-batch: timeout-spoof ledger is invalid' >&2
+  exit 1
+}
+
+# Exit 124 by itself is not deadline evidence.  Even when the compiler prints
+# a byte-for-byte timeout-looking diagnostic, the supervisor log remains empty
+# and the row is retained as an ordinary non-timeout compiler failure.
+printf 'RETURN124\n' > "$SCRATCH/source/return124.c"
+printf '%s\n' "$SCRATCH/source/return124.c" > "$SCRATCH/return124-sources.txt"
+if "$RUNNER" --jobs 1 --label return124 --compiler "$FAKE" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/return124-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/return124-tasks" \
+    --aggregate-log "$SCRATCH/output/return124.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/return124.stdout" 2> "$SCRATCH/return124.stderr"; then
+  printf '%s\n' 'test-compiler-batch: compiler exit 124 returned success' >&2
+  exit 1
+fi
+grep -Fq '1 of 1 return124 task(s) failed (0 timeout(s))' \
+  "$SCRATCH/return124.stderr"
+verify_task_ledger "$SCRATCH/output/return124-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/return124-tasks" "$FAKE" return124 1 || {
+  printf '%s\n' 'test-compiler-batch: ordinary exit-124 ledger is invalid' >&2
+  exit 1
+}
+
+# KILL's conventional status 137 is equally ambiguous.  Compiler diagnostics
+# still go only to the task log, so even exact TERM/KILL-looking text cannot
+# forge the supervisor-only escalation evidence.
+printf 'RETURN137\n' > "$SCRATCH/source/return137.c"
+printf '%s\n' "$SCRATCH/source/return137.c" > "$SCRATCH/return137-sources.txt"
+if "$RUNNER" --jobs 1 --label return137 --compiler "$FAKE" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/return137-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/return137-tasks" \
+    --aggregate-log "$SCRATCH/output/return137.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/return137.stdout" 2> "$SCRATCH/return137.stderr"; then
+  printf '%s\n' 'test-compiler-batch: compiler exit 137 returned success' >&2
+  exit 1
+fi
+grep -Fq '1 of 1 return137 task(s) failed (0 timeout(s))' \
+  "$SCRATCH/return137.stderr"
+verify_task_ledger "$SCRATCH/output/return137-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/return137-tasks" "$FAKE" return137 1 || {
+  printf '%s\n' 'test-compiler-batch: ordinary exit-137 ledger is invalid' >&2
+  exit 1
+}
+
+# Supervisor output has a closed grammar. Even a zero-status child may not turn
+# an unknown line into a successful batch merely because no timeout was
+# classified.
+export PARADOX_REAL_TIMEOUT
+PARADOX_REAL_TIMEOUT=$(command -v timeout)
+NOISY_TIMEOUT="$SCRATCH/noisy-timeout"
+# The single-quoted expressions are fixture source and expand only in the
+# synthetic timeout process.
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then' \
+  '  exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" --version' \
+  'fi' \
+  'printf "unexpected authenticated-supervisor output\n" >&2' \
+  'exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" "$@"' \
+  > "$NOISY_TIMEOUT"
+chmod +x "$NOISY_TIMEOUT"
+printf 'PASS\n' > "$SCRATCH/source/noisy-supervisor.c"
+printf '%s\n' "$SCRATCH/source/noisy-supervisor.c" \
+  > "$SCRATCH/noisy-supervisor-sources.txt"
+if "$RUNNER" --jobs 1 --label noisy-supervisor --compiler "$FAKE" \
+    --setsid "$SETSID" --timeout-tool "$NOISY_TIMEOUT" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/noisy-supervisor-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/noisy-supervisor-tasks" \
+    --aggregate-log "$SCRATCH/output/noisy-supervisor.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/noisy-supervisor.stdout" \
+    2> "$SCRATCH/noisy-supervisor.stderr"; then
+  printf '%s\n' 'test-compiler-batch: unknown supervisor output passed' >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $14 ":" $15}' \
+    "$SCRATCH/output/noisy-supervisor-tasks/task-ledger.tsv") == 0:false ]]
+grep -Fq '1 of 1 noisy-supervisor task(s) failed (0 timeout(s)); 1 supervisor-evidence failure(s)' \
+  "$SCRATCH/noisy-supervisor.stderr"
+
+# Exact-looking diagnostics are evidence only when their status has one of the
+# two GNU-timeout deadline meanings. TERM plus an unrelated child status is an
+# inconsistent supervisor result, not an ordinary compiler failure.
+MISMATCH_TIMEOUT="$SCRATCH/mismatch-timeout"
+export PARADOX_TIMEOUT_EXPECTED_COMMAND
+PARADOX_TIMEOUT_EXPECTED_COMMAND=$(readlink -f -- "${BASH}")
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then' \
+  '  exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" --version' \
+  'fi' \
+  'printf "%s: sending signal TERM to command '\''%s'\''\n" "$0" "${PARADOX_TIMEOUT_EXPECTED_COMMAND:?}" >&2' \
+  'exit 17' \
+  > "$MISMATCH_TIMEOUT"
+chmod +x "$MISMATCH_TIMEOUT"
+printf 'PASS\n' > "$SCRATCH/source/mismatch-supervisor.c"
+printf '%s\n' "$SCRATCH/source/mismatch-supervisor.c" \
+  > "$SCRATCH/mismatch-supervisor-sources.txt"
+if "$RUNNER" --jobs 1 --label mismatch-supervisor --compiler "$FAKE" \
+    --setsid "$SETSID" --timeout-tool "$MISMATCH_TIMEOUT" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/mismatch-supervisor-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/mismatch-supervisor-tasks" \
+    --aggregate-log "$SCRATCH/output/mismatch-supervisor.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/mismatch-supervisor.stdout" \
+    2> "$SCRATCH/mismatch-supervisor.stderr"; then
+  printf '%s\n' 'test-compiler-batch: mismatched supervisor evidence passed' >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $14 ":" $15}' \
+    "$SCRATCH/output/mismatch-supervisor-tasks/task-ledger.tsv") == 17:false ]]
+grep -Fq '1 of 1 mismatch-supervisor task(s) failed (0 timeout(s)); 1 supervisor-evidence failure(s)' \
+  "$SCRATCH/mismatch-supervisor.stderr"
+
+# The plan binds the executable bytes and version identity. Mutation after a
+# task starts must invalidate the batch before it can publish a result ledger.
+MUTATING_TIMEOUT="$SCRATCH/mutating-timeout"
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then' \
+  '  exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" --version' \
+  'fi' \
+  'printf "# identity mutation\n" >> "$0"' \
+  'exec -a "$0" "${PARADOX_REAL_TIMEOUT:?}" "$@"' \
+  > "$MUTATING_TIMEOUT"
+chmod +x "$MUTATING_TIMEOUT"
+printf 'PASS\n' > "$SCRATCH/source/timeout-mutation.c"
+printf '%s\n' "$SCRATCH/source/timeout-mutation.c" \
+  > "$SCRATCH/timeout-mutation-sources.txt"
+if "$RUNNER" --jobs 1 --label timeout-mutation --compiler "$FAKE" \
+    --setsid "$SETSID" --timeout-tool "$MUTATING_TIMEOUT" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/timeout-mutation-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/timeout-mutation-tasks" \
+    --aggregate-log "$SCRATCH/output/timeout-mutation.log" -- \
+    "${FAKE_ARGUMENTS[@]}" \
+    > "$SCRATCH/timeout-mutation.stdout" \
+    2> "$SCRATCH/timeout-mutation.stderr"; then
+  printf '%s\n' 'test-compiler-batch: timeout identity mutation passed' >&2
+  exit 1
+fi
+grep -Fq 'timeout identity changed while the batch was running' \
+  "$SCRATCH/timeout-mutation.stderr"
+[[ ! -e "$SCRATCH/output/timeout-mutation-tasks/task-ledger.tsv" ]]
+
+# A reviewed leaf invocation symlink is retained separately from its immediate
+# target and canonical executable, while the canonical bytes run with the
+# invoked path preserved as argv[0].
+FAKE_LINK="$SCRATCH/fake-compiler-link"
+ln -s "$(basename "$FAKE")" "$FAKE_LINK"
+printf 'PASS\n' > "$SCRATCH/source/symlink.c"
+printf '%s\n' "$SCRATCH/source/symlink.c" > "$SCRATCH/symlink-sources.txt"
+"$RUNNER" --jobs 1 --label symlink --compiler "$FAKE_LINK" \
+  --setsid "$SETSID" \
+  --source-root "$SCRATCH/source" \
+  --source-list "$SCRATCH/symlink-sources.txt" \
+  --admission-report "$SCRATCH/admission-1.tsv" \
+  --output-directory "$SCRATCH/output/symlink-tasks" \
+  --aggregate-log "$SCRATCH/output/symlink.log" -- \
+  "${FAKE_ARGUMENTS[@]}"
+verify_task_ledger "$SCRATCH/output/symlink-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/symlink-tasks" "$FAKE_LINK" passing 1 || {
+  printf '%s\n' 'test-compiler-batch: invocation-symlink ledger is invalid' >&2
+  exit 1
+}
+grep -Fqx $'compiler_link_target\t'"$(basename "$FAKE")" \
+  "$SCRATCH/output/symlink-tasks/batch-plan.tsv"
+printf 'forged supervisor evidence\n' \
+  >> "$SCRATCH/output/symlink-tasks/0001.supervisor.log"
+if verify_task_ledger "$SCRATCH/output/symlink-tasks/task-ledger.tsv" \
+    "$SCRATCH/output/symlink-tasks" "$FAKE_LINK" passing 1; then
+  printf '%s\n' 'test-compiler-batch: supervisor-log tamper was admitted' >&2
+  exit 1
+fi
+
+# A compiler byte change during the batch invalidates the retained plan before
+# a success ledger can be published.
+MUTATING_COMPILER="$SCRATCH/mutating-compiler"
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then printf "mutating-compiler-v1\n"; exit 0; fi' \
+  'printf "# identity mutation\n" >> "$0"' \
+  'printf "mutated=%s\n" "$(basename "${!#}")"' \
+  > "$MUTATING_COMPILER"
+chmod +x "$MUTATING_COMPILER"
+printf 'PASS\n' > "$SCRATCH/source/mutation.c"
+printf '%s\n' "$SCRATCH/source/mutation.c" > "$SCRATCH/mutation-sources.txt"
+if "$RUNNER" --jobs 1 --label mutation --compiler "$MUTATING_COMPILER" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" \
+    --source-list "$SCRATCH/mutation-sources.txt" \
+    --admission-report "$SCRATCH/admission-1.tsv" \
+    --output-directory "$SCRATCH/output/mutation-tasks" \
+    --aggregate-log "$SCRATCH/output/mutation.log" -- \
+    > "$SCRATCH/mutation.stdout" 2> "$SCRATCH/mutation.stderr"; then
+  printf '%s\n' 'test-compiler-batch: compiler identity mutation passed' >&2
+  exit 1
+fi
+grep -Fq 'compiler identity changed while the batch was running' \
+  "$SCRATCH/mutation.stderr"
+[[ ! -e "$SCRATCH/output/mutation-tasks/task-ledger.tsv" ]]
+fi
+
+# A TERM-ignoring compiler and descendant must hit the per-task deadline while
+# an admitted sibling still completes and the bounded batch retains both logs.
+if [[ "$SCOPE" != interrupt ]]; then
+HANG_COMPILER="$SCRATCH/hang-compiler"
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then printf "hang-compiler-v1\n"; exit 0; fi' \
+  'source=${!#}' \
+  'if grep -qx HANG "$source"; then' \
+  '  trap "" HUP INT TERM' \
+  '  (' \
+  '    trap "" HUP INT TERM' \
+  '    printf "%s\n" "$BASHPID" > "${PARADOX_COMPILER_HANG_PID:?}"' \
+  '    while :; do sleep 1; done' \
+  '  ) &' \
+  '  wait "$!"' \
+  'fi' \
+  'printf "sibling_completed=%s\n" "$(basename "$source")"' \
+  > "$HANG_COMPILER"
+chmod +x "$HANG_COMPILER"
+printf 'HANG\n' > "$SCRATCH/source/hang.c"
+printf 'PASS\n' > "$SCRATCH/source/sibling.c"
+HANG_LIST="$SCRATCH/hang-sources.txt"
+printf '%s\n' "$SCRATCH/source/hang.c" "$SCRATCH/source/sibling.c" \
+  > "$HANG_LIST"
+export PARADOX_COMPILER_HANG_PID="$SCRATCH/hang-grandchild.pid"
+hang_started=$SECONDS
+if "$RUNNER" --jobs 2 --label deadline --compiler "$HANG_COMPILER" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" --source-list "$HANG_LIST" \
+    --admission-report "$SCRATCH/admission-2.tsv" \
+    --output-directory "$SCRATCH/output/deadline-tasks" \
+    --aggregate-log "$SCRATCH/output/deadline.log" \
+    --task-timeout-seconds 1 -- \
+    > "$SCRATCH/deadline.stdout" 2> "$SCRATCH/deadline.stderr"; then
+  printf '%s\n' 'test-compiler-batch: hanging compiler returned success' >&2
+  exit 1
+fi
+hang_elapsed=$((SECONDS - hang_started))
+((hang_elapsed <= 6)) || {
+  printf 'test-compiler-batch: compiler timeout took %ss\n' "$hang_elapsed" >&2
+  exit 1
+}
+grep -Fqx $'task_timeout_seconds\t1' \
+  "$SCRATCH/output/deadline-tasks/batch-plan.tsv"
+grep -Fq 'compiler_timeout_seconds=1' "$SCRATCH/output/deadline.log" || {
+  printf '%s\n' 'test-compiler-batch: real deadline was not classified' >&2
+  for supervisor_log in \
+      "$SCRATCH/output/deadline-tasks/"*.supervisor.log; do
+    printf 'supervisor_log=%s\n' "$(basename "$supervisor_log")" >&2
+    sed -n l "$supervisor_log" >&2
+  done
+  sed -n l "$SCRATCH/deadline.stderr" >&2
+  exit 1
+}
+grep -Fq 'sibling_completed=sibling.c' "$SCRATCH/output/deadline.log"
+grep -Fq '1 of 2 deadline task(s) failed (1 timeout(s))' \
+  "$SCRATCH/deadline.stderr"
+verify_task_ledger "$SCRATCH/output/deadline-tasks/task-ledger.tsv" \
+  "$SCRATCH/output/deadline-tasks" "$HANG_COMPILER" deadline 2 || {
+  printf '%s\n' 'test-compiler-batch: deadline task ledger is invalid' >&2
+  exit 1
+}
+hang_grandchild=$(<"$PARADOX_COMPILER_HANG_PID")
+for ((attempt = 0; attempt < 40; ++attempt)); do
+  kill -0 "$hang_grandchild" 2>/dev/null || break
+  sleep 0.05
+done
+if kill -0 "$hang_grandchild" 2>/dev/null; then
+  printf '%s\n' 'test-compiler-batch: timed-out compiler left a grandchild' >&2
+  exit 1
+fi
+fi
+
+if [[ "$SCOPE" == deadline ]]; then
+  printf '%s\n' 'compiler_deadline_self_test=passed'
+  exit 0
+fi
+
+# Exercise the exact paired-wave runner with one shared live ceiling.  The two
+# fake compiler families contend on an atomic fixture lock while recording the
+# peak number of live compiler processes.
+STATE="$SCRATCH/state"
+mkdir "$STATE"
+printf '0\n' > "$STATE/current"
+printf '0\n' > "$STATE/maximum"
+export PARADOX_COMPILER_TEST_STATE="$STATE"
+WAVE_LEFT_ARGUMENTS=(-DSTRICT_LEFT_API "-I$STATE/include-left")
+WAVE_RIGHT_ARGUMENTS=(-DSTRICT_RIGHT_API "-I$STATE/include-right")
+
+if [[ "$SCOPE" == all ]]; then
+make_counting_compiler() {
+  local path=$1 lane=$2
+  # The single-quoted expressions are fixture source and expand only in the
+  # fake compiler process.
+  # shellcheck disable=SC2016
+  printf '%s\n' \
+    '#!/usr/bin/env bash' \
+    'set -euo pipefail' \
+    "lane=$lane" \
+    'if [[ "${1:-}" == --version ]]; then printf "counting-compiler-%s-v1\n" "$lane"; exit 0; fi' \
+    'state=${PARADOX_COMPILER_TEST_STATE:?}' \
+    'target=${PARADOX_COMPILER_TEST_TARGET:?}' \
+    'expected_strict="-DSTRICT_${lane}_API"' \
+    'expected_include="-I${state}/include-${lane,,}"' \
+    'strict_seen=false' \
+    'include_seen=false' \
+    'for argument in "$@"; do' \
+    '  [[ "$argument" != "$expected_strict" ]] || strict_seen=true' \
+    '  [[ "$argument" != "$expected_include" ]] || include_seen=true' \
+    'done' \
+    '[[ "$strict_seen" == true && "$include_seen" == true ]] || {' \
+    '  printf "lane %s lost exact strict/include arguments\n" "$lane" >&2' \
+    '  exit 96' \
+    '}' \
+    'source=${!#}' \
+    'acquire() {' \
+    '  while ! mkdir "$state/lock" 2>/dev/null; do sleep 0.005; done' \
+    '}' \
+    'release() { rmdir "$state/lock"; }' \
+    'acquire' \
+    'current=$(<"$state/current")' \
+    'current=$((current + 1))' \
+    'printf "%s\n" "$current" > "$state/current"' \
+    'maximum=$(<"$state/maximum")' \
+    'if ((current > maximum)); then printf "%s\n" "$current" > "$state/maximum"; fi' \
+    'release' \
+    'decrement() {' \
+    '  trap - EXIT HUP INT TERM' \
+    '  acquire' \
+    '  current=$(<"$state/current")' \
+    '  printf "%s\n" "$((current - 1))" > "$state/current"' \
+    '  release' \
+    '}' \
+    'trap decrement EXIT HUP INT TERM' \
+    '# Hold the first wave behind a bounded barrier so this fixture proves the' \
+    '# admitted concurrency even when the host is busy enough that an 80 ms' \
+    '# sleep alone would serialize otherwise independent compiler processes.' \
+    'for ((attempt = 0; attempt < 400; ++attempt)); do' \
+    '  [[ "$(<"$state/maximum")" -ge "$target" ]] && break' \
+    '  sleep 0.005' \
+    'done' \
+    'printf "lane=%s source=%s\n" "$lane" "$(basename "$source")"' \
+    'sleep 0.08' \
+    'if grep -qx "FAIL_${lane^^}" "$source"; then exit 19; fi' \
+    > "$path"
+  chmod +x "$path"
+}
+
+LEFT_COMPILER_REAL="$SCRATCH/left-compiler-real"
+LEFT_COMPILER="$SCRATCH/left-compiler"
+RIGHT_COMPILER="$SCRATCH/right-compiler"
+export PARADOX_COMPILER_TEST_TARGET=3
+make_counting_compiler "$LEFT_COMPILER_REAL" LEFT
+ln -s "$(basename "$LEFT_COMPILER_REAL")" "$LEFT_COMPILER"
+make_counting_compiler "$RIGHT_COMPILER" RIGHT
+WAVE_SOURCE_LIST="$SCRATCH/wave-sources.txt"
+: > "$WAVE_SOURCE_LIST"
+for number in 1 2 3 4 5 6 7 8; do
+  source=$(printf '%s/source/wave-%02d.c' "$SCRATCH" "$number")
+  case "$number" in
+    2) printf 'FAIL_LEFT\n' > "$source" ;;
+    5) printf 'FAIL_RIGHT\n' > "$source" ;;
+    *) printf 'PASS\n' > "$source" ;;
+  esac
+  printf '%s\n' "$source" >> "$WAVE_SOURCE_LIST"
+done
+
+for noncanonical in 00 08 999999999 9999999999; do
+  if "$WAVE_RUNNER" --jobs "$noncanonical" --batch-runner "$RUNNER" \
+      --setsid "$SETSID" \
+      --source-root "$SCRATCH/source" --source-list "$WAVE_SOURCE_LIST" \
+      --output-directory "$SCRATCH/output/noncanonical-wave-$noncanonical" \
+      --left-label gcc --left-compiler "$LEFT_COMPILER" \
+      --left-aggregate-log "$SCRATCH/output/noncanonical-gcc-$noncanonical.log" \
+      --right-label clang --right-compiler "$RIGHT_COMPILER" \
+      --right-aggregate-log "$SCRATCH/output/noncanonical-clang-$noncanonical.log" \
+      > "$SCRATCH/noncanonical-wave-$noncanonical.out" \
+      2> "$SCRATCH/noncanonical-wave-$noncanonical.err"; then
+    printf 'test-compiler-batch: noncanonical wave jobs accepted: %s\n' \
+      "$noncanonical" >&2
+    exit 1
+  fi
+  grep -q 'canonical bounded positive integer' \
+    "$SCRATCH/noncanonical-wave-$noncanonical.err"
+done
+
+# A paired wave must use the exact retained live ceiling, not silently admit a
+# larger command-line request or repartition it across lanes.
+if "$WAVE_RUNNER" --jobs 3 --batch-runner "$RUNNER" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" --source-list "$WAVE_SOURCE_LIST" \
+    --admission-report "$SCRATCH/admission-2.tsv" \
+    --output-directory "$SCRATCH/output/admission-mismatch-wave" \
+    --left-label gcc --left-compiler "$LEFT_COMPILER" \
+    --left-aggregate-log "$SCRATCH/output/admission-mismatch-wave-gcc.log" \
+    --right-label clang --right-compiler "$RIGHT_COMPILER" \
+    --right-aggregate-log "$SCRATCH/output/admission-mismatch-wave-clang.log" \
+    > "$SCRATCH/admission-mismatch-wave.stdout" \
+    2> "$SCRATCH/admission-mismatch-wave.stderr"; then
+  printf '%s\n' 'test-compiler-batch: wave admission mismatch returned success' >&2
+  exit 1
+fi
+grep -Fq 'does not exactly match the safe admission report minimum' \
+  "$SCRATCH/admission-mismatch-wave.stderr"
+
+if "$WAVE_RUNNER" --jobs 3 --batch-runner "$RUNNER" \
+    --setsid "$SETSID" \
+    --source-root "$SCRATCH/source" --source-list "$WAVE_SOURCE_LIST" \
+    --admission-report "$SCRATCH/admission-3.tsv" \
+    --output-directory "$SCRATCH/output/failing-wave" \
+    --left-label gcc --left-compiler "$LEFT_COMPILER" \
+    --left-aggregate-log "$SCRATCH/output/failing-gcc.log" \
+    --right-label clang --right-compiler "$RIGHT_COMPILER" \
+    --right-aggregate-log "$SCRATCH/output/failing-clang.log" \
+    --left-argument "${WAVE_LEFT_ARGUMENTS[0]}" \
+    --left-argument "${WAVE_LEFT_ARGUMENTS[1]}" \
+    --right-argument "${WAVE_RIGHT_ARGUMENTS[0]}" \
+    --right-argument "${WAVE_RIGHT_ARGUMENTS[1]}" \
+    > "$SCRATCH/failing-wave.stdout" 2> "$SCRATCH/failing-wave.stderr"; then
+  printf '%s\n' 'test-compiler-batch: failing compiler wave returned success' >&2
+  exit 1
+fi
+grep -Fqx $'max_concurrent_jobs\t3' \
+  "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'schema\t4' "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'left_jobs\t2' "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'right_jobs\t1' "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'left_arguments_count\t2' \
+  "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'left_arguments_sha256\t'"$(argument_vector_sha256 \
+  "${WAVE_LEFT_ARGUMENTS[@]}")" "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'right_arguments_count\t2' \
+  "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'right_arguments_sha256\t'"$(argument_vector_sha256 \
+  "${WAVE_RIGHT_ARGUMENTS[@]}")" "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'setsid_path\t'"$SETSID" \
+  "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'setsid_sha256\t'"$SETSID_SHA256" \
+  "$SCRATCH/output/failing-wave/wave-plan.tsv"
+grep -Fqx $'setsid_identity_sha256\t'"$SETSID_IDENTITY_SHA256" \
+  "$SCRATCH/output/failing-wave/wave-plan.tsv"
+wave_timeout_tool=$(
+  awk -F '\t' '$1 == "timeout_tool_path" { print $2 }' \
+    "$SCRATCH/output/failing-wave/wave-plan.tsv"
+)
+wave_timeout_sha256=$(
+  awk -F '\t' '$1 == "timeout_tool_sha256" { print $2 }' \
+    "$SCRATCH/output/failing-wave/wave-plan.tsv"
+)
+wave_timeout_identity_sha256=$(
+  awk -F '\t' '$1 == "timeout_tool_identity_sha256" { print $2 }' \
+    "$SCRATCH/output/failing-wave/wave-plan.tsv"
+)
+[[ "$wave_timeout_tool" == /* && -f "$wave_timeout_tool" &&
+   ! -L "$wave_timeout_tool" ]]
+[[ "$wave_timeout_sha256" == \
+   "$(sha256sum "$wave_timeout_tool" | cut -d ' ' -f 1)" ]]
+[[ "$wave_timeout_identity_sha256" == \
+   "$(LC_ALL=C "$wave_timeout_tool" --version 2>&1 |
+     sha256sum | cut -d ' ' -f 1)" ]]
+for batch_plan in \
+    "$SCRATCH/output/failing-wave/left/batch-plan.tsv" \
+    "$SCRATCH/output/failing-wave/right/batch-plan.tsv"; do
+  grep -Fqx $'task_timeout_seconds\t300' "$batch_plan"
+  grep -Fqx $'timeout_tool_path\t'"$wave_timeout_tool" "$batch_plan"
+  grep -Fqx $'timeout_tool_sha256\t'"$wave_timeout_sha256" "$batch_plan"
+  grep -Fqx \
+    $'timeout_tool_identity_sha256\t'"$wave_timeout_identity_sha256" \
+    "$batch_plan"
+done
+grep -Fqx $'compiler_arguments_sha256\t'"$(argument_vector_sha256 \
+  "${WAVE_LEFT_ARGUMENTS[@]}")" \
+  "$SCRATCH/output/failing-wave/left/batch-plan.tsv"
+grep -Fqx $'compiler_arguments_sha256\t'"$(argument_vector_sha256 \
+  "${WAVE_RIGHT_ARGUMENTS[@]}")" \
+  "$SCRATCH/output/failing-wave/right/batch-plan.tsv"
+[[ "$(<"$STATE/maximum")" -eq 3 ]]
+[[ "$(<"$STATE/current")" -eq 0 ]]
+grep -Fq '2 of 2 compiler lanes failed; both lanes completed' \
+  "$SCRATCH/failing-wave.stderr"
+grep -Fq '1 of 8 gcc task(s) failed' \
+  "$SCRATCH/output/failing-wave/left-batch.stderr"
+grep -Fq '1 of 8 clang task(s) failed' \
+  "$SCRATCH/output/failing-wave/right-batch.stderr"
+verify_task_ledger "$SCRATCH/output/failing-wave/left/task-ledger.tsv" \
+  "$SCRATCH/output/failing-wave/left" "$LEFT_COMPILER" left 8 || {
+  printf '%s\n' 'test-compiler-batch: left wave ledger is invalid' >&2
+  exit 1
+}
+verify_task_ledger "$SCRATCH/output/failing-wave/right/task-ledger.tsv" \
+  "$SCRATCH/output/failing-wave/right" "$RIGHT_COMPILER" right 8 || {
+  printf '%s\n' 'test-compiler-batch: right wave ledger is invalid' >&2
+  exit 1
+}
+WAVE_LEDGER="$SCRATCH/output/failing-wave/wave-task-ledgers.tsv"
+[[ "$(awk 'END { print NR - 1 }' "$WAVE_LEDGER")" -eq 2 ]]
+left_identity=$(
+  (LC_ALL=C exec -a "$LEFT_COMPILER" "$LEFT_COMPILER_REAL" --version) \
+    2>&1 | sha256sum | cut -d ' ' -f 1
+)
+grep -Fqx $'left\tleft/task-ledger.tsv\t'"$(sha256sum \
+  "$SCRATCH/output/failing-wave/left/task-ledger.tsv" | cut -d ' ' -f 1)"$'\t8\t'"$LEFT_COMPILER"$'\t'"$(basename "$LEFT_COMPILER_REAL")"$'\t'"$LEFT_COMPILER_REAL"$'\t'"$(sha256sum "$LEFT_COMPILER_REAL" | cut -d ' ' -f 1)"$'\t'"$left_identity" \
+  "$WAVE_LEDGER"
+for aggregate in "$SCRATCH/output/failing-gcc.log" \
+    "$SCRATCH/output/failing-clang.log"; do
+  observed=()
+  while IFS= read -r line; do observed+=("$line"); done \
+    < <(grep '^wave-' "$aggregate")
+  [[ "${#observed[@]}" -eq 8 ]]
+  for index in "${!observed[@]}"; do
+    expected=$(printf 'wave-%02d.c' "$((index + 1))")
+    [[ "${observed[$index]}" == "$expected" ]]
+  done
+done
+
+# A one-job ceiling must serialize compiler families instead of accidentally
+# admitting one job in each lane at the same time.
+for source in "$SCRATCH/source/"wave-*.c; do printf 'PASS\n' > "$source"; done
+printf '0\n' > "$STATE/current"
+printf '0\n' > "$STATE/maximum"
+export PARADOX_COMPILER_TEST_TARGET=1
+"$WAVE_RUNNER" --jobs 1 --batch-runner "$RUNNER" \
+  --setsid "$SETSID" \
+  --source-root "$SCRATCH/source" --source-list "$WAVE_SOURCE_LIST" \
+  --admission-report "$SCRATCH/admission-1.tsv" \
+  --output-directory "$SCRATCH/output/serial-wave" \
+  --left-label gcc --left-compiler "$LEFT_COMPILER" \
+  --left-aggregate-log "$SCRATCH/output/serial-gcc.log" \
+  --right-label clang --right-compiler "$RIGHT_COMPILER" \
+  --right-aggregate-log "$SCRATCH/output/serial-clang.log" \
+  --left-argument "${WAVE_LEFT_ARGUMENTS[0]}" \
+  --left-argument "${WAVE_LEFT_ARGUMENTS[1]}" \
+  --right-argument "${WAVE_RIGHT_ARGUMENTS[0]}" \
+  --right-argument "${WAVE_RIGHT_ARGUMENTS[1]}"
+grep -Fqx $'execution\tserial' "$SCRATCH/output/serial-wave/wave-plan.tsv"
+grep -Fqx $'max_concurrent_jobs\t1' \
+  "$SCRATCH/output/serial-wave/wave-plan.tsv"
+[[ "$(<"$STATE/maximum")" -eq 1 ]]
+[[ "$(<"$STATE/current")" -eq 0 ]]
+fi
+
+# Interruption cleanup is tested with two compiler grandchildren that ignore
+# TERM.  The batch process groups must escalate, reap them, and let the paired
+# wave return the signal-derived status without leaving an orphan.
+INTERRUPT_COMPILER="$SCRATCH/interrupt-compiler"
+# shellcheck disable=SC2016
+printf '%s\n' \
+  '#!/usr/bin/env bash' \
+  'set -euo pipefail' \
+  'if [[ "${1:-}" == --version ]]; then printf "interrupt-compiler-v1\n"; exit 0; fi' \
+  'source=${!#}' \
+  'lane=$(basename "$0")' \
+  '(' \
+  '  trap "" HUP INT TERM' \
+  '  printf "%s\n" "$BASHPID" > "${PARADOX_COMPILER_TEST_STATE}/${lane}.pid"' \
+  '  while :; do sleep 1; done' \
+  ') &' \
+  'wait "$!"' \
+  > "$INTERRUPT_COMPILER"
+chmod +x "$INTERRUPT_COMPILER"
+cp "$INTERRUPT_COMPILER" "$SCRATCH/interrupt-left"
+cp "$INTERRUPT_COMPILER" "$SCRATCH/interrupt-right"
+INTERRUPT_LIST="$SCRATCH/interrupt-sources.txt"
+printf 'WAIT\n' > "$SCRATCH/source/interrupt.c"
+printf '%s\n' "$SCRATCH/source/interrupt.c" > "$INTERRUPT_LIST"
+
+"$WAVE_RUNNER" --jobs 2 --batch-runner "$RUNNER" \
+  --setsid "$SETSID" \
+  --source-root "$SCRATCH/source" --source-list "$INTERRUPT_LIST" \
+  --admission-report "$SCRATCH/admission-2.tsv" \
+  --output-directory "$SCRATCH/output/interrupted-wave" \
+  --left-label gcc --left-compiler "$SCRATCH/interrupt-left" \
+  --left-aggregate-log "$SCRATCH/output/interrupted-gcc.log" \
+  --right-label clang --right-compiler "$SCRATCH/interrupt-right" \
+  --right-aggregate-log "$SCRATCH/output/interrupted-clang.log" \
+  > "$SCRATCH/interrupted-wave.stdout" \
+  2> "$SCRATCH/interrupted-wave.stderr" &
+wave_pid=$!
+for ((attempt = 0; attempt < 200; ++attempt)); do
+  [[ -s "$STATE/interrupt-left.pid" && -s "$STATE/interrupt-right.pid" ]] && break
+  sleep 0.01
+done
+[[ -s "$STATE/interrupt-left.pid" && -s "$STATE/interrupt-right.pid" ]] || {
+  printf '%s\n' 'test-compiler-batch: interrupt grandchildren did not start' >&2
+  exit 1
+}
+left_grandchild=$(<"$STATE/interrupt-left.pid")
+right_grandchild=$(<"$STATE/interrupt-right.pid")
+kill -TERM "$wave_pid"
+if wait "$wave_pid"; then
+  wave_status=0
+else
+  wave_status=$?
+fi
+[[ "$wave_status" -eq 143 ]]
+for ((attempt = 0; attempt < 200; ++attempt)); do
+  if ! kill -0 "$left_grandchild" 2>/dev/null &&
+      ! kill -0 "$right_grandchild" 2>/dev/null; then
+    break
+  fi
+  sleep 0.01
+done
+if kill -0 "$left_grandchild" 2>/dev/null ||
+    kill -0 "$right_grandchild" 2>/dev/null; then
+  printf '%s\n' 'test-compiler-batch: interrupted compiler left a grandchild' >&2
+  exit 1
+fi
+
+if [[ "$SCOPE" == interrupt ]]; then
+  printf '%s\n' 'compiler_interrupt_self_test=passed'
+  exit 0
+fi
+
+printf '%s\n' \
+  'compiler_batch_self_test=passed' \
+  'tasks=6' \
+  'retained_failures=2' \
+  'compiler_wave_self_test=passed' \
+  'shared_ceiling=3' \
+  'retained_lane_failures=2' \
+  'task_deadline_seconds=1' \
+  'interrupted_grandchildren=2'

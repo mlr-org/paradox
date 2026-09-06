@@ -1,0 +1,198 @@
+#ifndef PARADOX_PARAMSET_COLLECTION_READERS_H
+#define PARADOX_PARAMSET_COLLECTION_READERS_H
+
+#include "core_state.h"
+#include "paramset_domain_common.h"
+
+typedef struct {
+  SEXP table;
+  SEXP ids;
+  SEXP original_ids;
+  SEXP owner_indices;
+  SEXP owner_names;
+  R_xlen_t row_count;
+} paradox_collection_translation_t;
+
+typedef struct {
+  SEXP self;
+  SEXP private_environment;
+  /* `core` is the operation-local semantic generation. During a read-only
+   * migration preflight it may be an offside authoritative SHADOW preview.
+   * `source_core` is the exact generation selected from the live private
+   * binding and is therefore the generation used by mutation receipts. */
+  SEXP core;
+  SEXP source_core;
+  /* Exact package-private Shadow cache signature selected with source_core.
+   * The graph root carrier owns this value separately so an in-place
+   * attribute replacement cannot leave an unrooted pointer in native
+   * workspace while the operation allocates. */
+  SEXP shadow_signature;
+  /* Optional exact-entry receipt retained only by the receipted graph builder.
+   * Ordinary hot readers leave both receipt fields NULL to avoid allocation. */
+  SEXP shadow_signature_content;
+  SEXP state;
+  paradox_core_kind_t kind;
+  paradox_domain_params_t params;
+  paradox_domain_dependencies_t dependencies;
+  paradox_domain_values_t values;
+  /* R_NilValue for schema-order values, otherwise rooted, fresh one-based
+   * integer row positions. Reused rather than searched a second time. */
+  SEXP value_param_rows;
+  SEXP sets;
+  SEXP set_names;
+  paradox_collection_translation_t translation;
+  R_xlen_t parent;
+  R_xlen_t parent_child;
+  R_xlen_t parent_param_start;
+  R_xlen_t next_child;
+  R_xlen_t consumed_params;
+  R_xlen_t subtree_dependencies;
+  /* TRUE once this node or anything below it exposes a parameter, a
+   * dependency, or a stored value.  A shared node whose whole subtree is
+   * barren contributes nothing that can differ between two occurrences of it,
+   * so the builder stops re-descending it; see the skip in
+   * `collection_graph_build()`. */
+  int subtree_contributes;
+  int postfix;
+} paradox_collection_graph_node_t;
+
+#define PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY 16
+
+enum paradox_collection_graph_fields {
+  PARADOX_GRAPH_VALUES = 1U,
+  PARADOX_GRAPH_DEPENDENCIES = 2U,
+  PARADOX_GRAPH_SCHEMA = 4U,
+  PARADOX_GRAPH_ALL = 7U
+};
+
+typedef struct {
+  paradox_collection_graph_node_t *nodes;
+  R_xlen_t *path;
+  R_xlen_t *postorder;
+  R_xlen_t count;
+  R_xlen_t postorder_count;
+  R_xlen_t capacity;
+  /* The common graph fits entirely on the caller's C stack.  The graph
+   * builder switches the three public pointers to operation-local R_alloc
+   * storage together when this capacity is exceeded; consumers never need to
+   * distinguish the two representations. */
+  paradox_collection_graph_node_t
+    inline_nodes[PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY];
+  R_xlen_t inline_path[PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY];
+  R_xlen_t inline_postorder[PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY];
+} paradox_collection_graph_t;
+
+/* The caller owns one PROTECT_WITH_INDEX slot for `roots`. Every selected
+ * source capsule and every operation-local capsule preview is retained there,
+ * so a callback that replaces a live SHADOW core cannot change either the
+ * receipt or the semantic snapshot used by the enclosing operation. */
+attribute_hidden void paradox_collection_graph_build(
+  SEXP private_environment,
+  SEXP self,
+  unsigned int fields,
+  paradox_collection_graph_t *graph,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
+/* The subset/subspace constructor performs substantial allocation after
+ * admitting a graph and therefore needs a terminal generation receipt. This
+ * variant roots exact Shadow metadata carriers for that receipt; ordinary
+ * readers avoid that otherwise-unused work. */
+attribute_hidden void paradox_collection_graph_build_receipted(
+  SEXP private_environment,
+  SEXP self,
+  paradox_collection_graph_t *graph,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Cold Shadow preview combines a non-installing traversal with the
+ * exact metadata receipt required before a newly assembled derived capsule
+ * can be trusted. */
+attribute_hidden void paradox_collection_graph_build_readonly_receipted(
+  SEXP private_environment,
+  SEXP self,
+  paradox_collection_graph_t *graph,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Allocation-free terminal integrity scan for one retained graph snapshot.
+ * Public shell/core replacement cannot invalidate a rooted immutable
+ * generation and is intentionally ignored. The scan detects mutation of the
+ * selected capsule itself and, for Shadows, the exact metadata carrier and
+ * every captured entry. */
+attribute_hidden int paradox_collection_graph_snapshot_is_intact(
+  const paradox_collection_graph_t *graph,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Admit one exact BASE/SHADOW node through the same dynamic-state validator
+ * used by a collection graph. COLLECTION roots should use the complete graph
+ * builder above so every translation edge is checked as well. */
+attribute_hidden void paradox_collection_validate_single_node(
+  SEXP private_environment,
+  SEXP self,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Resolve one dependency endpoint spelled in `node_index`'s own namespace into
+ * the spelling the root of this graph exposes: the name is translated outward
+ * at the first enclosing namespace that knows it, and passed on verbatim while
+ * none does. A dangling endpoint that no ancestor knows is therefore returned
+ * unchanged, which is what makes an unresolved parent reachable again once the
+ * sibling that supplies it arrives. Every reader that resolves a dependency
+ * parent -- the emitter below, the check plan, and the collection constraint
+ * adapter -- has to agree on this one walk. */
+attribute_hidden SEXP paradox_collection_translate_dependency_id(
+  const paradox_collection_graph_t *graph,
+  R_xlen_t node_index,
+  SEXP input,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Both emitters consume only the selected graph. The value emitter optionally
+ * detaches typed leaves for an outward result, without a second name map.
+ * The dependency result is a
+ * canonical plain data.frame for internal composition; the public wrapper
+ * installs the detached data.table facade exactly once at the boundary. */
+attribute_hidden SEXP paradox_collection_values_from_graph(
+  const paradox_collection_graph_t *graph,
+  int detach,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden SEXP paradox_collection_dependencies_from_graph(
+  const paradox_collection_graph_t *graph,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Field layout of the callback-detachment plan produced below and consumed
+ * by the Shadow adapter builder. */
+enum paradox_collection_detach_field {
+  PARADOX_COLLECTION_DETACH_TRANSLATION = 0,
+  PARADOX_COLLECTION_DETACH_CONSTRAINT_INDICES,
+  PARADOX_COLLECTION_DETACH_CONSTRAINT_SETS,
+  PARADOX_COLLECTION_DETACH_TRAFO_INDICES,
+  PARADOX_COLLECTION_DETACH_TRAFO_SETS,
+  PARADOX_COLLECTION_DETACH_POSTFIX,
+  PARADOX_COLLECTION_DETACH_FIELD_COUNT
+};
+
+/* Construct the callback-detachment plan from the exact admitted graph.
+ * This is the sole plan constructor: the registered live entry point routes
+ * through the canonical graph build above and then enters here, so detachment
+ * has no separate admission mode. In particular, migration preflight can
+ * consume offside SHADOW previews without traversing live shells again or
+ * committing a nested refresh. */
+attribute_hidden SEXP paradox_param_set_collection_detach_plan_from_graph(
+  const paradox_collection_graph_t *graph,
+  SEXP requested
+);
+
+#endif

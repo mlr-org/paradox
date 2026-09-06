@@ -1,0 +1,136 @@
+#!/usr/bin/env sh
+
+# Linux process-group supervisor for one isolated native-test R process.  This
+# shell stays attached to processx so it receives the parent-death SIGTERM; its
+# child starts a new session through /usr/bin/setsid and becomes the group
+# leader inherited by R and its callr/processx descendants.
+
+set -eu
+umask 077
+
+if [ "${1:-}" = --watchdog ]; then
+  shift
+  [ "$#" -eq 3 ] || exit 64
+  coordinator_pid=$1
+  worker_token=$2
+  supervisor_pid=$3
+  case "$coordinator_pid" in
+    ''|*[!0-9]*|0) exit 65 ;;
+  esac
+  case "$supervisor_pid" in
+    ''|*[!0-9]*|0) exit 65 ;;
+  esac
+  case "$worker_token" in
+    ''|*[!A-Za-z0-9._-]*) exit 65 ;;
+  esac
+
+  token_pids() {
+    for environment in /proc/[0-9]*/environ; do
+      [ -r "$environment" ] || continue
+      candidate=${environment#/proc/}
+      candidate=${candidate%/environ}
+      [ "$candidate" != "$1" ] || continue
+      if (tr '\000' '\n' < "$environment") 2>/dev/null |
+          grep -Fqx "PARADOX_NATIVE_WORKER_TOKEN=$worker_token"; then
+        printf '%s\n' "$candidate"
+      fi
+    done
+  }
+
+  terminate_tokens() {
+    excluded_pid=$1
+    # Coalescing TERM from processx with USR1 from the supervisor is normal.
+    # Ignore further catchable termination signals once cleanup has begun so a
+    # second signal cannot restore the default action and interrupt the scan.
+    trap '' HUP TERM USR1
+    token_pids "$excluded_pid" |
+      while IFS= read -r candidate; do
+        /bin/kill -TERM "$candidate" 2>/dev/null || true
+      done
+    sleep 0.2
+    token_pids "$excluded_pid" |
+      while IFS= read -r candidate; do
+        /bin/kill -KILL "$candidate" 2>/dev/null || true
+      done
+    exit 0
+  }
+
+  # processx may terminate this detached watchdog itself while tearing down a
+  # dead coordinator's descendant tree. Every termination path must therefore
+  # perform the token scan; exiting directly would race the supervisor and
+  # could strand a nested processx session outside the worker process group.
+  # SIGINT/SIGQUIT are ignored by an asynchronous POSIX-shell child before
+  # exec. If coordinator interruption uses INT, the watchdog observes the dead
+  # coordinator in its polling loop; the direct cleanup signals are the three
+  # catchable paths below.
+  trap 'terminate_tokens "$supervisor_pid"' HUP TERM USR1
+  while /bin/kill -0 "$coordinator_pid" 2>/dev/null; do
+    sleep 0.1
+  done
+  terminate_tokens 0
+fi
+
+[ "$#" -gt 0 ] || {
+  printf '%s\n' 'run-native-test-worker-group: no worker command' >&2
+  exit 64
+}
+
+coordinator_pid=${PARADOX_NATIVE_COORDINATOR_PID:-}
+worker_token=${PARADOX_NATIVE_WORKER_TOKEN:-}
+case "$coordinator_pid" in
+  ''|*[!0-9]*|0)
+    printf '%s\n' 'run-native-test-worker-group: unsafe coordinator identity' >&2
+    exit 65
+    ;;
+esac
+case "$worker_token" in
+  ''|*[!A-Za-z0-9._-]*)
+    printf '%s\n' 'run-native-test-worker-group: unsafe worker identity' >&2
+    exit 65
+    ;;
+esac
+
+env -i "PATH=/usr/bin:/bin" /usr/bin/setsid "$0" --watchdog \
+  "$coordinator_pid" "$worker_token" "$$" &
+watchdog_pid=$!
+
+worker_pid=
+# Invoked indirectly by the signal traps below.
+# shellcheck disable=SC2329
+terminate_group() {
+  signal_status=$1
+  attempt=0
+  trap - HUP INT TERM
+  if [ -n "$worker_pid" ]; then
+    /bin/kill -TERM -- "-$worker_pid" 2>/dev/null || true
+    while [ "$attempt" -lt 20 ] &&
+        /bin/kill -0 -- "-$worker_pid" 2>/dev/null; do
+      sleep 0.05
+      attempt=$((attempt + 1))
+    done
+    /bin/kill -KILL -- "-$worker_pid" 2>/dev/null || true
+    wait "$worker_pid" 2>/dev/null || true
+  fi
+  /bin/kill -USR1 "$watchdog_pid" 2>/dev/null || true
+  wait "$watchdog_pid" 2>/dev/null || true
+  exit "$signal_status"
+}
+
+trap 'terminate_group 129' HUP
+trap 'terminate_group 130' INT
+trap 'terminate_group 143' TERM
+
+/usr/bin/setsid "$@" &
+worker_pid=$!
+set +e
+wait "$worker_pid"
+worker_status=$?
+set -e
+trap - HUP INT TERM
+# Reap descendants that outlived R, including nested processx trees that made a
+# new session of their own.  The detached watchdog scans the task's unique
+# inherited environment token and excludes this supervisor.
+/bin/kill -TERM -- "-$worker_pid" 2>/dev/null || true
+/bin/kill -USR1 "$watchdog_pid" 2>/dev/null || true
+wait "$watchdog_pid" 2>/dev/null || true
+exit "$worker_status"

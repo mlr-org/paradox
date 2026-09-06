@@ -1,0 +1,12 @@
+ordinal	argument
+1	/usr/bin/make
+2	--no-print-directory
+3	-C
+4	/work/source/src
+5	--jobs=1
+6	bcheck
+7	HOST=paradox-bounded-rchk
+8	CXX=/usr/bin/clang++
+9	LLVM=/usr/lib/llvm-14
+10	BCHECK_MAX_STATES=3000000
+11	CALLOCATORS_MAX_STATES=3000000

@@ -1,0 +1,1040 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+MATRIX_ROOT="$ROOT/.local/runtime-matrix"
+PREFIX_ROOT="$MATRIX_ROOT/prefixes"
+RECEIPT_ROOT="$MATRIX_ROOT/receipts"
+MAMBA_ROOT="$MATRIX_ROOT/micromamba"
+MICROMAMBA_VERSION=2.5.0
+MICROMAMBA_ARCHIVE_SHA256=cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-${MICROMAMBA_VERSION}-linux-64.tar.bz2"
+MICROMAMBA_URL="https://micro.mamba.pm/api/micromamba/linux-64/${MICROMAMBA_VERSION}"
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+INVENTORY_HELPER="$ROOT/scripts/environment/runtime-matrix-inventory.R"
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+PREFIX_REPAIR="$ROOT/scripts/environment/runtime-matrix-prefix-repair"
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/bootstrap-runtime-matrix [OPTIONS]
+
+Provision or verify exact repository-local compatibility runtimes.
+
+Options:
+  --runtime VERSION  Select one registered runtime or all (default: all).
+  --verify           Read-only verification; never provisions a prefix.
+  --verify-prefix-only
+                     Read-only prefix verification for an authenticated staged
+                     dependency-library handoff.
+  --verify-locks     Validate only the checked-in explicit artifact locks.
+  --refresh-receipts Reauthenticate existing prefixes and atomically rewrite
+                     only their receipt.tsv and receipt.sha256 files.
+  --offline          Provision absent prefixes from the local conda cache only.
+  -h, --help         Show this help.
+
+Run the ordinary scripts/bootstrap first.  Matrix prefixes, package caches,
+receipts, temporary files, and development libraries all remain under
+.local/runtime-matrix or .cache within this checkout.
+USAGE
+}
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+mode=provision
+selection=all
+offline=false
+while (($#)); do
+  case "$1" in
+    --runtime)
+      (($# >= 2)) || fail "--runtime requires a value"
+      selection=$2
+      shift 2
+      ;;
+    --verify) mode=verify; shift ;;
+    --verify-prefix-only) mode=verify_prefix; shift ;;
+    --verify-locks) mode=verify_locks; shift ;;
+    --refresh-receipts) mode=refresh_receipts; shift ;;
+    --offline) offline=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown bootstrap-runtime-matrix argument: $1" ;;
+  esac
+done
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" ]] ||
+  fail "Runtime registry or dependency-library manager is absent"
+"$REGISTRY" validate >/dev/null
+if [[ "$selection" == all ]]; then
+  mapfile -t versions < <("$REGISTRY" versions)
+elif "$REGISTRY" contains "$selection"; then
+  versions=("$selection")
+else
+  fail "Runtime must be registered or all: $selection"
+fi
+[[ "$mode" == provision || "$offline" == false ]] ||
+  fail "--offline is meaningful only while provisioning"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *) fail "The local runtime matrix is pinned for Linux x86_64" ;;
+esac
+
+# Bootstrap and read-only verification are also hostile-environment boundaries.
+# In particular, Rscript prints an inherited R_HOME warning to stdout, which
+# would otherwise corrupt the exact installed-package inventory being compared.
+unset \
+  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE \
+  R_DEFAULT_PACKAGES \
+  R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON \
+  R_MAKEVARS_SITE R_MAKEVARS_USER \
+  CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
+  AR AS LD NM OBJCOPY OBJDUMP RANLIB READELF SIZE STRINGS STRIP \
+  CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS FORTRANFLAGS LDFLAGS \
+  CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH \
+  LIBRARY_PATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH \
+  PKG_CONFIG PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
+  CMAKE_PREFIX_PATH CMAKE_MODULE_PATH CMAKE_TOOLCHAIN_FILE CMAKE_ARGS \
+  CONFIG_SITE MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES \
+  CONDA_PREFIX CONDA_BUILD CONDA_BUILD_SYSROOT ||
+  fail "Could not clear inherited R/compiler inputs"
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  [[ "$path" != *//* && ("$path" == "$ROOT" || "$path" != */) ]] ||
+    fail "Managed runtime-matrix path is not component-canonical: $path"
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "Managed runtime-matrix path escaped the repository: $path" ;;
+  esac
+  [[ -d "$ROOT" && ! -L "$ROOT" &&
+    "$(cd "$ROOT" && pwd -P)" == "$ROOT" ]] ||
+    fail "Repository root is absent, symbolic, or non-canonical: $ROOT"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "Managed runtime-matrix path has an invalid component: $path"
+    current=$current/$component
+    [[ ! -L "$current" ]] || fail "Refusing symbolic managed directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "Managed runtime-matrix path is not a directory: $current"
+    if [[ -d "$current" ]]; then
+      [[ "$(cd "$current" && pwd -P)" == "$current" ]] ||
+        fail "Managed runtime-matrix directory is not canonical: $current"
+    fi
+  done
+}
+
+require_plain_directory() {
+  local path=$1
+  assert_plain_directory_chain "$path"
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "Required runtime-matrix directory is absent or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "Required runtime-matrix directory is not canonical: $path"
+}
+
+ensure_plain_directory() {
+  local path=$1 current remainder component
+  assert_plain_directory_chain "$path"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    current="$current/$component"
+    if [[ ! -e "$current" && ! -L "$current" ]] &&
+        ! mkdir -- "$current" 2>/dev/null; then
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "Could not create managed runtime-matrix directory: $current"
+    fi
+    require_plain_directory "$current"
+  done
+}
+
+path_identity() {
+  /usr/bin/stat -c '%d:%i' -- "$1"
+}
+
+require_owned_directory() {
+  local path=$1 expected=$2 label=$3
+  require_plain_directory "$path"
+  [[ "$(path_identity "$path")" == "$expected" ]] ||
+    fail "$label identity changed after creation: $path"
+}
+
+require_owned_file() {
+  local path=$1 expected=$2 label=$3
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-regular, or symbolic: $path"
+  [[ "$(path_identity "$path")" == "$expected" ]] ||
+    fail "$label identity changed after creation: $path"
+}
+
+verify_open_directory() {
+  local descriptor=$1 path=$2 expected=$3 label=$4
+  local fd_identity path_identity_now
+  require_plain_directory "$path"
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  path_identity_now=$(path_identity "$path")
+  [[ "$fd_identity" == "$expected" && "$path_identity_now" == "$expected" ]] ||
+    fail "$label was substituted while opening: $path"
+}
+
+require_open_regular_file() {
+  local path=$1 label=$2
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-regular, or symbolic: $path"
+}
+
+verify_open_file() {
+  local descriptor=$1 expected=$2 label=$3
+  local fd_path="/proc/$$/fd/$descriptor"
+  [[ -f "$fd_path" ]] ||
+    fail "$label is not an opened regular file"
+  [[ "$(/usr/bin/stat -Lc '%d:%i' "$fd_path")" == "$expected" ]] ||
+    fail "$label changed while it was opened"
+}
+
+clear_open_directory_contents() {
+  local descriptor=$1 expected=$2 label=$3 fd_identity
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  [[ "$fd_identity" == "$expected" ]] ||
+    fail "$label identity changed before cleanup"
+  /usr/bin/find -H "/proc/$$/fd/$descriptor" -xdev -depth -mindepth 1 \
+    -delete
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  [[ "$fd_identity" == "$expected" ]] ||
+    fail "$label identity changed during cleanup"
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  assert_plain_directory_chain "${path%/*}"
+  [[ ! -L "$path" ]] || fail "Refusing symbolic managed file: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "Managed runtime-matrix path is not a regular file: $path"
+}
+
+require_plain_file() {
+  local path=$1
+  assert_plain_file_or_absent "$path"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "Required runtime-matrix file is absent or symbolic: $path"
+}
+
+validate_lock() {
+  local version=$1 lock=$2 line package_count=0 r_count=0
+  local expected_header="# platform: linux-64"
+  [[ -f "$lock" && ! -L "$lock" ]] || fail "Runtime lock is absent or symbolic: $lock"
+  mapfile -t lines < "$lock"
+  [[ ${#lines[@]} -gt 3 && "${lines[0]}" == "$expected_header" &&
+    "${lines[1]}" == "# runtime: R $version" && "${lines[2]}" == @EXPLICIT ]] ||
+    fail "Runtime lock has an unexpected header: $lock"
+  declare -A seen=()
+  for line in "${lines[@]:3}"; do
+    [[ "$line" =~ ^https://conda\.anaconda\.org/conda-forge/(linux-64|noarch)/[^[:space:]#]+#([0-9a-f]{64})$ ]] ||
+      fail "Runtime lock contains an invalid explicit artifact: $lock"
+    [[ -z ${seen[$line]+x} ]] || fail "Runtime lock contains a duplicate artifact: $line"
+    seen[$line]=1
+    ((package_count += 1))
+    if [[ "$line" =~ /r-base-${version}- ]]; then
+      ((r_count += 1))
+    fi
+  done
+  ((package_count >= 50 && r_count == 1)) ||
+    fail "Runtime lock does not contain one exact R $version closure"
+  printf 'runtime_lock=%s\nlock_sha256=%s\nlocked_packages=%s\n' \
+    "$version" "$(sha256_file "$lock")" "$package_count"
+}
+
+for version in "${versions[@]}"; do
+  runtime_lock=$("$REGISTRY" field "$version" runtime_lock)
+  validate_lock "$version" "$ROOT/$runtime_lock"
+  if [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
+    "$LIBRARY_MANAGER" --runtime "$version" --verify-lock
+  fi
+  if [[ "$version" == 3.6.3 ]]; then
+    "$LIBRARY_MANAGER" --runtime "$version" --profile declared-floor \
+      --verify-lock
+  fi
+done
+[[ "$mode" != verify_locks ]] || exit 0
+
+for input in "$PREFIX_RECEIPT" "$INVENTORY_HELPER" "$REGISTRY" \
+    "$LIBRARY_MANAGER" "$PREFIX_REPAIR"; do
+  [[ -f "$input" && ! -L "$input" ]] || fail "Runtime helper is absent or symbolic: $input"
+done
+for managed in \
+  "$ROOT/.local" "$ROOT/.local/bin" "$MATRIX_ROOT" "$PREFIX_ROOT" \
+  "$RECEIPT_ROOT" "$MAMBA_ROOT" "$ROOT/.local/tmp" \
+  "$ROOT/.cache" "$ROOT/.cache/downloads"
+do
+  assert_plain_directory_chain "$managed"
+done
+for version in "${versions[@]}"; do
+  assert_plain_directory_chain "$PREFIX_ROOT/R-$version"
+  assert_plain_directory_chain "$RECEIPT_ROOT/R-$version"
+done
+assert_plain_file_or_absent "$MICROMAMBA"
+assert_plain_file_or_absent "$MICROMAMBA_ARCHIVE"
+
+if [[ "$mode" == provision ]]; then
+  ensure_plain_directory "$ROOT/.local"
+else
+  require_plain_directory "$ROOT/.local"
+fi
+local_root_identity=$(path_identity "$ROOT/.local")
+exec 8< "$ROOT/.local"
+verify_open_directory 8 "$ROOT/.local" "$local_root_identity" \
+  "runtime-matrix bootstrap lock"
+if [[ "$mode" == verify || "$mode" == verify_prefix ]]; then
+  /usr/bin/flock -s 8
+else
+  /usr/bin/flock -x 8
+fi
+verify_open_directory 8 "$ROOT/.local" "$local_root_identity" \
+  "runtime-matrix bootstrap lock"
+if [[ "$mode" == provision ]]; then
+  ensure_plain_directory "$MATRIX_ROOT"
+else
+  require_plain_directory "$MATRIX_ROOT"
+fi
+matrix_root_identity=$(path_identity "$MATRIX_ROOT")
+exec 7< "$MATRIX_ROOT"
+verify_open_directory 7 "$MATRIX_ROOT" "$matrix_root_identity" \
+  "runtime-matrix state lock"
+if [[ "$mode" == verify || "$mode" == verify_prefix ]]; then
+  /usr/bin/flock -s 7
+else
+  /usr/bin/flock -x 7
+fi
+verify_open_directory 7 "$MATRIX_ROOT" "$matrix_root_identity" \
+  "runtime-matrix state lock"
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+release_bootstrap_locks() {
+  /usr/bin/flock -u 7
+  exec 7<&-
+  /usr/bin/flock -u 8
+  exec 8<&-
+}
+
+if [[ ! -f "$MICROMAMBA_ARCHIVE" ]]; then
+  [[ "$mode" == provision && "$offline" == false ]] ||
+    fail "Authenticated micromamba archive is absent: $MICROMAMBA_ARCHIVE"
+  ensure_plain_directory "${MICROMAMBA_ARCHIVE%/*}"
+  temporary_archive=$(mktemp "$MICROMAMBA_ARCHIVE.new.XXXXXX")
+  temporary_archive_identity=$(path_identity "$temporary_archive")
+  require_owned_file "$temporary_archive" "$temporary_archive_identity" \
+    "micromamba download staging file"
+  exec {temporary_archive_descriptor}<> "$temporary_archive"
+  verify_open_file "$temporary_archive_descriptor" \
+    "$temporary_archive_identity" "micromamba download staging file"
+  open_temporary_archive="/proc/$$/fd/$temporary_archive_descriptor"
+  curl --disable -fL "$MICROMAMBA_URL" -o "$open_temporary_archive"
+  verify_open_file "$temporary_archive_descriptor" \
+    "$temporary_archive_identity" "micromamba download staging file"
+  require_owned_file "$temporary_archive" "$temporary_archive_identity" \
+    "micromamba download staging file"
+  [[ "$(sha256_file "$open_temporary_archive")" == \
+    "$MICROMAMBA_ARCHIVE_SHA256" ]] ||
+    fail "Downloaded micromamba archive failed SHA-256 authentication"
+  chmod 0444 "$open_temporary_archive"
+  verify_open_file "$temporary_archive_descriptor" \
+    "$temporary_archive_identity" "micromamba download staging file"
+  require_owned_file "$temporary_archive" "$temporary_archive_identity" \
+    "micromamba download staging file"
+  assert_plain_file_or_absent "$MICROMAMBA_ARCHIVE"
+  [[ ! -e "$MICROMAMBA_ARCHIVE" && ! -L "$MICROMAMBA_ARCHIVE" ]] ||
+    fail "Micromamba archive target appeared concurrently"
+  trap '' HUP INT TERM
+  mv -nT -- "$temporary_archive" "$MICROMAMBA_ARCHIVE"
+  [[ ! -e "$temporary_archive" && ! -L "$temporary_archive" &&
+    "$(path_identity "$MICROMAMBA_ARCHIVE")" == \
+      "$temporary_archive_identity" ]] ||
+    fail "Micromamba archive publication did not retain its owned identity"
+  exec {temporary_archive_descriptor}<&-
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+fi
+require_plain_file "$MICROMAMBA_ARCHIVE"
+[[ "$(sha256_file "$MICROMAMBA_ARCHIVE")" == "$MICROMAMBA_ARCHIVE_SHA256" ]] ||
+  fail "Micromamba archive SHA-256 mismatch"
+member_count=$(tar -tjf "$MICROMAMBA_ARCHIVE" | awk '$0 == "bin/micromamba" {n += 1} END {print n + 0}')
+[[ "$member_count" == 1 ]] || fail "Micromamba archive member identity is ambiguous"
+ensure_plain_directory "$ROOT/.local/bin"
+ensure_plain_directory "$ROOT/.local/tmp"
+member_workspace=$(mktemp -d \
+  "$ROOT/.local/tmp/runtime-matrix-micromamba.XXXXXX")
+member_workspace_identity=$(path_identity "$member_workspace")
+require_owned_directory "$member_workspace" "$member_workspace_identity" \
+  "micromamba extraction workspace"
+exec {member_workspace_descriptor}< "$member_workspace"
+verify_open_directory "$member_workspace_descriptor" "$member_workspace" \
+  "$member_workspace_identity" "micromamba extraction workspace"
+member_open_path=$(mktemp \
+  "/proc/$$/fd/$member_workspace_descriptor/micromamba.XXXXXX")
+member_identity=$(/usr/bin/stat -Lc '%d:%i' "$member_open_path")
+exec {member_descriptor}<> "$member_open_path"
+verify_open_file "$member_descriptor" "$member_identity" \
+  "micromamba extraction staging file"
+member="/proc/$$/fd/$member_descriptor"
+tar -xOjf "$MICROMAMBA_ARCHIVE" bin/micromamba > "$member"
+verify_open_file "$member_descriptor" "$member_identity" \
+  "micromamba extraction staging file"
+chmod 0755 "$member"
+verify_open_file "$member_descriptor" "$member_identity" \
+  "micromamba extraction staging file"
+if [[ -f "$MICROMAMBA" ]]; then
+  [[ -x "$MICROMAMBA" && "$(sha256_file "$MICROMAMBA")" == "$(sha256_file "$member")" ]] ||
+    fail "Installed micromamba is not the executable from the authenticated archive"
+  clear_open_directory_contents "$member_workspace_descriptor" \
+    "$member_workspace_identity" "micromamba extraction workspace"
+else
+  [[ "$mode" == provision ]] || fail "Authenticated micromamba executable is absent"
+  assert_plain_file_or_absent "$MICROMAMBA"
+  [[ "$(/usr/bin/stat -Lc '%d:%i' "$member_open_path")" == \
+    "$member_identity" ]] ||
+    fail "micromamba extraction staging file changed before publication"
+  trap '' HUP INT TERM
+  mv -nT -- "$member_open_path" "$MICROMAMBA"
+  [[ ! -e "$member_open_path" && ! -L "$member_open_path" &&
+    "$(path_identity "$MICROMAMBA")" == "$member_identity" ]] ||
+    fail "Micromamba executable publication did not retain its owned identity"
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+fi
+exec {member_descriptor}<&-
+verify_open_directory "$member_workspace_descriptor" "$member_workspace" \
+  "$member_workspace_identity" "micromamba extraction workspace"
+rmdir -- "$member_workspace"
+[[ ! -e "$member_workspace" && ! -L "$member_workspace" ]] ||
+  fail "micromamba extraction workspace was not removed"
+exec {member_workspace_descriptor}<&-
+[[ "$($MICROMAMBA --version)" == "$MICROMAMBA_VERSION" ]] ||
+  fail "Authenticated micromamba reports an unexpected version"
+
+write_expected_receipt() {
+  local version=$1 prefix=$2 lock=$3 manifest=$4
+  local cc lock_relative repair_relative
+  lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+  cc=$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    "$prefix/bin/R" CMD config CC)
+  printf 'format\t1\n'
+  printf 'runtime\t%s\n' "$version"
+  printf 'platform\tlinux-64\n'
+  printf 'prefix_relative\t.local/runtime-matrix/prefixes/R-%s\n' "$version"
+  printf 'lock_relative\t%s\n' "$lock_relative"
+  printf 'lock_sha256\t%s\n' "$(sha256_file "$lock")"
+  printf 'micromamba_version\t%s\n' "$MICROMAMBA_VERSION"
+  printf 'micromamba_archive_sha256\t%s\n' "$MICROMAMBA_ARCHIVE_SHA256"
+  printf 'micromamba_executable_sha256\t%s\n' "$(sha256_file "$MICROMAMBA")"
+  printf 'inventory_helper_sha256\t%s\n' "$(sha256_file "$INVENTORY_HELPER")"
+  printf 'prefix_receipt_helper_sha256\t%s\n' "$(sha256_file "$PREFIX_RECEIPT")"
+  printf 'prefix_manifest_sha256\t%s\n' "$(sha256_file "$manifest")"
+  printf 'r_version\t%s\n' "$(
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+      "$prefix/bin/Rscript" --vanilla \
+      -e 'cat(as.character(getRversion()))'
+  )"
+  printf 'r_home_relative\t.local/runtime-matrix/prefixes/R-%s/lib/R\n' \
+    "$version"
+  printf 'cc\t%s\n' "$cc"
+  repair_relative=$("$REGISTRY" field "$version" prefix_repair)
+  if [[ "$repair_relative" != - ]]; then
+    printf 'prefix_repair_relative\t%s\n' "$repair_relative"
+    printf 'prefix_repair_lock_sha256\t%s\n' \
+      "$(sha256_file "$ROOT/$repair_relative")"
+    printf 'prefix_repair_helper_sha256\t%s\n' "$(sha256_file "$PREFIX_REPAIR")"
+  fi
+}
+
+verify_one() {
+  local version=$1
+  local refresh_receipt=${2:-false}
+  local lock_relative lock
+  local prefix="$PREFIX_ROOT/R-$version"
+  local receipt_directory="$RECEIPT_ROOT/R-$version"
+  local public_manifest="$receipt_directory/prefix.manifest.tsv"
+  local public_receipt="$receipt_directory/receipt.tsv"
+  local public_seal="$receipt_directory/receipt.sha256"
+  local prefix_identity receipt_directory_identity receipt_descriptor receipt_root
+  local manifest inventory packages receipt seal file public_file
+  local public_identity open_identity
+  local workspace workspace_identity workspace_descriptor workspace_root
+  local public_manifest_copy open_manifest_copy manifest_copy_identity
+  local manifest_copy_descriptor manifest_copy_handle
+  local expected_inventory actual_inventory expected_receipt expected_seal
+  local expected_inventory_name actual_inventory_name expected_receipt_name
+  local expected_inventory_descriptor actual_inventory_descriptor
+  local expected_receipt_descriptor
+  local expected_inventory_identity actual_inventory_identity
+  local expected_receipt_identity
+  local repair_relative
+  local replacement_receipt replacement_seal
+  local replacement_receipt_identity replacement_seal_identity
+  local replacement_receipt_descriptor replacement_seal_descriptor
+  local replacement_receipt_handle replacement_seal_handle
+
+  lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+  lock="$ROOT/$lock_relative"
+
+  require_plain_directory "$prefix"
+  prefix_identity=$(path_identity "$prefix")
+  require_plain_directory "$receipt_directory"
+  receipt_directory_identity=$(path_identity "$receipt_directory")
+  exec {receipt_descriptor}< "$receipt_directory"
+  verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+    "$receipt_directory_identity" "Runtime receipt directory"
+  receipt_root="/proc/$$/fd/$receipt_descriptor"
+  manifest="$receipt_root/prefix.manifest.tsv"
+  inventory="$receipt_root/installed-explicit.lock"
+  packages="$receipt_root/packages.tsv"
+  receipt="$receipt_root/receipt.tsv"
+  seal="$receipt_root/receipt.sha256"
+  for file in prefix.manifest.tsv installed-explicit.lock packages.tsv \
+      receipt.tsv receipt.sha256; do
+    public_file="$receipt_directory/$file"
+    require_plain_file "$public_file"
+    require_open_regular_file "$receipt_root/$file" "Runtime receipt file"
+    public_identity=$(path_identity "$public_file")
+    open_identity=$(/usr/bin/stat -Lc '%d:%i' "$receipt_root/$file")
+    [[ "$public_identity" == "$open_identity" ]] ||
+      fail "Runtime receipt file was substituted while opening: $public_file"
+  done
+  require_plain_directory "$ROOT/.local/tmp"
+  workspace=$(mktemp -d \
+    "$ROOT/.local/tmp/runtime-matrix-verify.R-$version.XXXXXX")
+  workspace_identity=$(path_identity "$workspace")
+  require_owned_directory "$workspace" "$workspace_identity" \
+    "Runtime verification workspace"
+  exec {workspace_descriptor}< "$workspace"
+  verify_open_directory "$workspace_descriptor" "$workspace" \
+    "$workspace_identity" "Runtime verification workspace"
+  workspace_root="/proc/$$/fd/$workspace_descriptor"
+  open_manifest_copy=$(mktemp "$workspace_root/prefix.manifest.XXXXXX")
+  public_manifest_copy="$workspace/${open_manifest_copy##*/}"
+  manifest_copy_identity=$(/usr/bin/stat -Lc '%d:%i' "$open_manifest_copy")
+  exec {manifest_copy_descriptor}<> "$open_manifest_copy"
+  verify_open_file "$manifest_copy_descriptor" "$manifest_copy_identity" \
+    "Runtime prefix manifest verification copy"
+  manifest_copy_handle="/proc/$$/fd/$manifest_copy_descriptor"
+  cp -- "$manifest" "$manifest_copy_handle"
+  verify_open_file "$manifest_copy_descriptor" "$manifest_copy_identity" \
+    "Runtime prefix manifest verification copy"
+  require_plain_file "$public_manifest_copy"
+  [[ "$(path_identity "$public_manifest_copy")" == \
+    "$manifest_copy_identity" ]] ||
+    fail "Runtime prefix manifest verification copy was substituted"
+  repair_relative=$("$REGISTRY" field "$version" prefix_repair)
+  if [[ "$repair_relative" != - ]]; then
+    "$PREFIX_REPAIR" verify "$prefix" "$MAMBA_ROOT/pkgs" \
+      "$ROOT/$repair_relative" >/dev/null
+  fi
+  "$PREFIX_RECEIPT" verify "$prefix" "$public_manifest_copy"
+  verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+    "$receipt_directory_identity" "Runtime receipt directory"
+  verify_open_directory "$workspace_descriptor" "$workspace" \
+    "$workspace_identity" "Runtime verification workspace"
+  require_plain_file "$public_manifest"
+  [[ "$(path_identity "$public_manifest")" == \
+    "$(/usr/bin/stat -Lc '%d:%i' "$manifest")" ]] ||
+    fail "Runtime prefix manifest was substituted during verification"
+  require_plain_file "$public_manifest_copy"
+  [[ "$(path_identity "$public_manifest_copy")" == \
+    "$manifest_copy_identity" ]] ||
+    fail "Runtime prefix manifest verification copy changed identity"
+  verify_open_file "$manifest_copy_descriptor" "$manifest_copy_identity" \
+    "Runtime prefix manifest verification copy"
+
+  expected_inventory_name=$(mktemp "$workspace_root/expected-inventory.XXXXXX")
+  actual_inventory_name=$(mktemp "$workspace_root/actual-inventory.XXXXXX")
+  expected_receipt_name=$(mktemp "$workspace_root/expected-receipt.XXXXXX")
+  expected_inventory_identity=$(
+    /usr/bin/stat -Lc '%d:%i' "$expected_inventory_name"
+  )
+  actual_inventory_identity=$(
+    /usr/bin/stat -Lc '%d:%i' "$actual_inventory_name"
+  )
+  expected_receipt_identity=$(
+    /usr/bin/stat -Lc '%d:%i' "$expected_receipt_name"
+  )
+  exec {expected_inventory_descriptor}<> "$expected_inventory_name"
+  exec {actual_inventory_descriptor}<> "$actual_inventory_name"
+  exec {expected_receipt_descriptor}<> "$expected_receipt_name"
+  verify_open_file "$expected_inventory_descriptor" \
+    "$expected_inventory_identity" "Runtime expected inventory"
+  verify_open_file "$actual_inventory_descriptor" \
+    "$actual_inventory_identity" "Runtime actual inventory"
+  verify_open_file "$expected_receipt_descriptor" \
+    "$expected_receipt_identity" "Runtime expected receipt"
+  expected_inventory="/proc/$$/fd/$expected_inventory_descriptor"
+  actual_inventory="/proc/$$/fd/$actual_inventory_descriptor"
+  expected_receipt="/proc/$$/fd/$expected_receipt_descriptor"
+  tail -n +4 "$lock" | LC_ALL=C sort > "$expected_inventory"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
+    LC_ALL=C sort > "$actual_inventory"
+  verify_open_file "$expected_inventory_descriptor" \
+    "$expected_inventory_identity" "Runtime expected inventory"
+  verify_open_file "$actual_inventory_descriptor" \
+    "$actual_inventory_identity" "Runtime actual inventory"
+  cmp -s -- "$expected_inventory" "$actual_inventory" ||
+    fail "Installed package identities differ from the exact R $version lock"
+  cmp -s -- "$actual_inventory" "$inventory" ||
+    fail "Installed package inventory differs from its retained receipt"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" packages "$prefix" |
+    cmp -s -- "$packages" - || fail "Installed package ledger differs from conda metadata"
+  write_expected_receipt "$version" "$prefix" "$lock" "$manifest" > "$expected_receipt"
+  verify_open_file "$expected_receipt_descriptor" \
+    "$expected_receipt_identity" "Runtime expected receipt"
+  if [[ "$refresh_receipt" == true ]]; then
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Runtime receipt directory"
+    replacement_receipt=$(mktemp "$receipt_root/.receipt.tsv.XXXXXX")
+    replacement_seal=$(mktemp "$receipt_root/.receipt.sha256.XXXXXX")
+    replacement_receipt_identity=$(
+      /usr/bin/stat -Lc '%d:%i' "$replacement_receipt"
+    )
+    replacement_seal_identity=$(
+      /usr/bin/stat -Lc '%d:%i' "$replacement_seal"
+    )
+    exec {replacement_receipt_descriptor}<> "$replacement_receipt"
+    exec {replacement_seal_descriptor}<> "$replacement_seal"
+    verify_open_file "$replacement_receipt_descriptor" \
+      "$replacement_receipt_identity" "Replacement runtime receipt"
+    verify_open_file "$replacement_seal_descriptor" \
+      "$replacement_seal_identity" "Replacement runtime receipt seal"
+    replacement_receipt_handle="/proc/$$/fd/$replacement_receipt_descriptor"
+    replacement_seal_handle="/proc/$$/fd/$replacement_seal_descriptor"
+    cp -- "$expected_receipt" "$replacement_receipt_handle"
+    verify_open_file "$replacement_receipt_descriptor" \
+      "$replacement_receipt_identity" "Replacement runtime receipt"
+    printf '%s  receipt.tsv\n' \
+      "$(sha256_file "$replacement_receipt_handle")" \
+      > "$replacement_seal_handle"
+    verify_open_file "$replacement_seal_descriptor" \
+      "$replacement_seal_identity" "Replacement runtime receipt seal"
+    chmod 0444 "$replacement_receipt_handle" "$replacement_seal_handle"
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Runtime receipt directory"
+    [[ "$(/usr/bin/stat -Lc '%d:%i' "$replacement_receipt")" == \
+      "$replacement_receipt_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$replacement_seal")" == \
+        "$replacement_seal_identity" ]] ||
+      fail "Replacement runtime receipt pathname was substituted"
+    trap '' HUP INT TERM
+    mv -T -- "$replacement_receipt" "$receipt"
+    [[ ! -e "$replacement_receipt" && ! -L "$replacement_receipt" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$receipt")" == \
+        "$replacement_receipt_identity" ]] ||
+      fail "Replacement runtime receipt publication changed identity"
+    mv -T -- "$replacement_seal" "$seal"
+    [[ ! -e "$replacement_seal" && ! -L "$replacement_seal" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$seal")" == \
+        "$replacement_seal_identity" ]] ||
+      fail "Replacement runtime receipt seal publication changed identity"
+    exec {replacement_receipt_descriptor}<&-
+    exec {replacement_seal_descriptor}<&-
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Runtime receipt directory"
+    require_plain_file "$public_receipt"
+    require_plain_file "$public_seal"
+  fi
+  cmp -s -- "$receipt" "$expected_receipt" ||
+    fail "Runtime receipt differs from its authenticated inputs"
+  expected_seal="$(sha256_file "$receipt")  receipt.tsv"
+  [[ $(wc -l < "$seal") -eq 1 && "$(<"$seal")" == "$expected_seal" ]] ||
+    fail "Runtime receipt seal is malformed or stale"
+  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))')" == "$version" ]] ||
+    fail "Runtime executable does not report R $version"
+  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/R" RHOME)" == "$prefix/lib/R" ]] ||
+    fail "Runtime RHOME escaped its exact prefix"
+  require_owned_directory "$prefix" "$prefix_identity" "Runtime prefix"
+  verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+    "$receipt_directory_identity" "Runtime receipt directory"
+  clear_open_directory_contents "$workspace_descriptor" "$workspace_identity" \
+    "Runtime verification workspace"
+  exec {manifest_copy_descriptor}<&-
+  exec {expected_inventory_descriptor}<&-
+  exec {actual_inventory_descriptor}<&-
+  exec {expected_receipt_descriptor}<&-
+  verify_open_directory "$workspace_descriptor" "$workspace" \
+    "$workspace_identity" "Runtime verification workspace"
+  rmdir -- "$workspace"
+  [[ ! -e "$workspace" && ! -L "$workspace" ]] ||
+    fail "Runtime verification workspace was not removed"
+  exec {workspace_descriptor}<&-
+  exec {receipt_descriptor}<&-
+  printf 'runtime_matrix_prefix=passed\nruntime=%s\nprefix=%s\nreceipt=%s\n' \
+    "$version" "$prefix" "$public_receipt"
+}
+
+verify_unreceipted_prefix() {
+  local version=$1 prefix=$2 lock=$3 expected actual
+  local prefix_identity workspace workspace_identity workspace_descriptor
+  local workspace_root expected_identity actual_identity
+  local expected_name actual_name expected_descriptor actual_descriptor
+  require_plain_directory "$prefix"
+  prefix_identity=$(path_identity "$prefix")
+  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    "$prefix/bin/Rscript" --vanilla \
+    -e 'cat(as.character(getRversion()))')" == "$version" ]] ||
+    fail "Unreceipted runtime does not report exact R $version"
+  require_plain_directory "$ROOT/.local/tmp"
+  workspace=$(mktemp -d \
+    "$ROOT/.local/tmp/runtime-unreceipted.R-$version.XXXXXX")
+  workspace_identity=$(path_identity "$workspace")
+  require_owned_directory "$workspace" "$workspace_identity" \
+    "Unreceipted runtime verification workspace"
+  exec {workspace_descriptor}< "$workspace"
+  verify_open_directory "$workspace_descriptor" "$workspace" \
+    "$workspace_identity" "Unreceipted runtime verification workspace"
+  workspace_root="/proc/$$/fd/$workspace_descriptor"
+  expected_name=$(mktemp "$workspace_root/expected.XXXXXX")
+  actual_name=$(mktemp "$workspace_root/actual.XXXXXX")
+  expected_identity=$(/usr/bin/stat -Lc '%d:%i' "$expected_name")
+  actual_identity=$(/usr/bin/stat -Lc '%d:%i' "$actual_name")
+  exec {expected_descriptor}<> "$expected_name"
+  exec {actual_descriptor}<> "$actual_name"
+  verify_open_file "$expected_descriptor" "$expected_identity" \
+    "Unreceipted expected inventory"
+  verify_open_file "$actual_descriptor" "$actual_identity" \
+    "Unreceipted actual inventory"
+  expected="/proc/$$/fd/$expected_descriptor"
+  actual="/proc/$$/fd/$actual_descriptor"
+  tail -n +4 "$lock" | LC_ALL=C sort > "$expected"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
+    LC_ALL=C sort > "$actual"
+  verify_open_file "$expected_descriptor" "$expected_identity" \
+    "Unreceipted expected inventory"
+  verify_open_file "$actual_descriptor" "$actual_identity" \
+    "Unreceipted actual inventory"
+  cmp -s -- "$expected" "$actual" ||
+    fail "Unreceipted runtime differs from its exact explicit lock"
+  require_owned_directory "$prefix" "$prefix_identity" "Unreceipted runtime prefix"
+  clear_open_directory_contents "$workspace_descriptor" "$workspace_identity" \
+    "Unreceipted runtime verification workspace"
+  exec {expected_descriptor}<&-
+  exec {actual_descriptor}<&-
+  verify_open_directory "$workspace_descriptor" "$workspace" \
+    "$workspace_identity" "Unreceipted runtime verification workspace"
+  rmdir -- "$workspace"
+  [[ ! -e "$workspace" && ! -L "$workspace" ]] ||
+    fail "Unreceipted runtime verification workspace was not removed"
+  exec {workspace_descriptor}<&-
+}
+
+if [[ "$mode" == verify || "$mode" == verify_prefix ]]; then
+  source_library_versions=()
+  verify_declared_floor=false
+  for version in "${versions[@]}"; do
+    verify_one "$version"
+    if [[ "$mode" == verify &&
+        "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
+      source_library_versions+=("$version")
+    fi
+    if [[ "$mode" == verify && "$version" == 3.6.3 ]]; then
+      verify_declared_floor=true
+    fi
+  done
+  release_bootstrap_locks
+  for version in "${source_library_versions[@]}"; do
+    "$LIBRARY_MANAGER" --runtime "$version" --verify
+  done
+  if [[ "$verify_declared_floor" == true ]]; then
+    "$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor --verify
+  fi
+  exit 0
+fi
+if [[ "$mode" == refresh_receipts ]]; then
+  for version in "${versions[@]}"; do
+    verify_one "$version" true
+  done
+  release_bootstrap_locks
+  exit 0
+fi
+
+ensure_plain_directory "$PREFIX_ROOT"
+ensure_plain_directory "$RECEIPT_ROOT"
+ensure_plain_directory "$MAMBA_ROOT"
+ensure_plain_directory "$ROOT/.local/tmp"
+source_library_versions=()
+provision_declared_floor=false
+for version in "${versions[@]}"; do
+  runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+  lock="$ROOT/$runtime_lock_relative"
+  prefix="$PREFIX_ROOT/R-$version"
+  receipt_directory="$RECEIPT_ROOT/R-$version"
+  finalize_prefix=false
+  assert_plain_directory_chain "$prefix"
+  assert_plain_directory_chain "$receipt_directory"
+  if [[ -e "$prefix" || -L "$prefix" ]]; then
+    if [[ -f "$receipt_directory/receipt.tsv" ]]; then
+      verify_one "$version"
+    else
+      require_plain_directory "$prefix"
+      prefix_identity=$(path_identity "$prefix")
+      require_plain_directory "$receipt_directory"
+      receipt_directory_identity=$(path_identity "$receipt_directory")
+      exec {receipt_descriptor}< "$receipt_directory"
+      verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+        "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+      receipt_root="/proc/$$/fd/$receipt_descriptor"
+      [[ -z "$(find -H "$receipt_root" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+        fail "Unreceipted runtime has a nonempty or unsafe receipt directory"
+      verify_unreceipted_prefix "$version" "$prefix" "$lock"
+      finalize_prefix=true
+    fi
+  else
+    [[ ! -e "$receipt_directory" && ! -L "$receipt_directory" ]] ||
+      fail "Receipt exists for an absent R $version prefix: $receipt_directory"
+    ensure_plain_directory "$receipt_directory"
+    receipt_directory_identity=$(path_identity "$receipt_directory")
+    exec {receipt_descriptor}< "$receipt_directory"
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+    receipt_root="/proc/$$/fd/$receipt_descriptor"
+    # A content receipt is not an immutability boundary when the prefix and
+    # micromamba's writable package cache share regular-file inodes: an
+    # in-place cache write would silently mutate every sealed runtime.  Copy
+    # package members into each prefix instead.  The prefix-receipt helper
+    # independently rejects any remaining multiply-linked regular file before
+    # the prefix can be sealed or used.
+    create_args=(create --yes --no-rc --no-env --always-copy \
+      --safety-checks enabled --extra-safety-checks \
+      -r "$MAMBA_ROOT" -p "$prefix" -f "$lock")
+    [[ "$offline" == false ]] || create_args+=(--offline)
+    CONDARC=/dev/null MAMBARC=/dev/null MAMBA_ROOT_PREFIX="$MAMBA_ROOT" \
+      "$MICROMAMBA" "${create_args[@]}"
+
+    require_plain_directory "$prefix"
+    prefix_identity=$(path_identity "$prefix")
+    verify_unreceipted_prefix "$version" "$prefix" "$lock"
+    finalize_prefix=true
+  fi
+  if [[ "$finalize_prefix" == true ]]; then
+    require_owned_directory "$prefix" "$prefix_identity" "Unreceipted runtime prefix"
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+    repair_relative=$("$REGISTRY" field "$version" prefix_repair)
+    if [[ "$repair_relative" != - ]]; then
+      "$PREFIX_REPAIR" apply "$prefix" "$MAMBA_ROOT/pkgs" \
+        "$ROOT/$repair_relative"
+    fi
+    require_owned_directory "$prefix" "$prefix_identity" "Unreceipted runtime prefix"
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+    test_directory="$MATRIX_ROOT/probes/R-$version"
+    ensure_plain_directory "$test_directory"
+    test_directory_identity=$(path_identity "$test_directory")
+    assert_plain_file_or_absent "$test_directory/c99.c"
+    cat > "$test_directory/c99.c" <<'EOF'
+#include <R.h>
+#include <Rinternals.h>
+SEXP runtime_matrix_c99(SEXP value) {
+  for (int i = 0; i < 1; ++i) { if (value != R_NilValue) return value; }
+  return R_NilValue;
+}
+EOF
+    assert_plain_file_or_absent "$test_directory/build.log"
+    (
+      export PATH="$prefix/bin:/usr/bin:/bin"
+      export CONDA_PREFIX="$prefix"
+      set +u
+      for hook in "$prefix"/etc/conda/activate.d/*.sh; do
+        # shellcheck disable=SC1090
+        [[ ! -f "$hook" || "${hook##*/}" == activate-r-base.sh ]] || . "$hook"
+      done
+      set -u
+      cd "$test_directory"
+      R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+        "$prefix/bin/R" CMD SHLIB --preclean c99.c
+    ) > "$test_directory/build.log" 2>&1
+    [[ -f "$test_directory/c99.so" ]] ||
+      fail "R $version C99 capability probe failed"
+    require_owned_directory "$test_directory" "$test_directory_identity" \
+      "Runtime C99 probe directory"
+    require_owned_directory "$prefix" "$prefix_identity" "Unreceipted runtime prefix"
+
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+    [[ -z "$(find -H "$receipt_root" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+      fail "Unreceipted runtime receipt directory changed before publication"
+    manifest_workspace=$(mktemp -d \
+      "$ROOT/.local/tmp/runtime-prefix-manifest.R-$version.XXXXXX")
+    manifest_workspace_identity=$(path_identity "$manifest_workspace")
+    require_owned_directory "$manifest_workspace" "$manifest_workspace_identity" \
+      "Runtime prefix-manifest workspace"
+    exec {manifest_workspace_descriptor}< "$manifest_workspace"
+    verify_open_directory "$manifest_workspace_descriptor" "$manifest_workspace" \
+      "$manifest_workspace_identity" "Runtime prefix-manifest workspace"
+    manifest_workspace_root="/proc/$$/fd/$manifest_workspace_descriptor"
+    public_manifest_stage="$manifest_workspace/prefix.manifest.tsv"
+    open_manifest_stage="$manifest_workspace_root/prefix.manifest.tsv"
+    "$PREFIX_RECEIPT" create "$prefix" "$public_manifest_stage"
+    require_plain_file "$public_manifest_stage"
+    require_open_regular_file "$open_manifest_stage" \
+      "Runtime prefix manifest staging file"
+    manifest_identity=$(path_identity "$public_manifest_stage")
+    [[ "$(/usr/bin/stat -Lc '%d:%i' "$open_manifest_stage")" == \
+      "$manifest_identity" ]] ||
+      fail "Runtime prefix manifest staging file was substituted"
+    verify_open_directory "$manifest_workspace_descriptor" "$manifest_workspace" \
+      "$manifest_workspace_identity" "Runtime prefix-manifest workspace"
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+    exec {manifest_descriptor}< "$open_manifest_stage"
+    verify_open_file "$manifest_descriptor" "$manifest_identity" \
+      "Runtime prefix manifest staging file"
+    manifest_handle="/proc/$$/fd/$manifest_descriptor"
+    manifest="$manifest_handle"
+    inventory_stage=$(mktemp "$receipt_root/.installed-explicit.lock.XXXXXX")
+    packages_stage=$(mktemp "$receipt_root/.packages.tsv.XXXXXX")
+    receipt_stage=$(mktemp "$receipt_root/.receipt.tsv.XXXXXX")
+    seal_stage=$(mktemp "$receipt_root/.receipt.sha256.XXXXXX")
+    inventory_identity=$(/usr/bin/stat -Lc '%d:%i' "$inventory_stage")
+    packages_identity=$(/usr/bin/stat -Lc '%d:%i' "$packages_stage")
+    receipt_identity=$(/usr/bin/stat -Lc '%d:%i' "$receipt_stage")
+    seal_identity=$(/usr/bin/stat -Lc '%d:%i' "$seal_stage")
+    exec {inventory_descriptor}<> "$inventory_stage"
+    exec {packages_descriptor}<> "$packages_stage"
+    exec {receipt_file_descriptor}<> "$receipt_stage"
+    exec {seal_descriptor}<> "$seal_stage"
+    verify_open_file "$inventory_descriptor" "$inventory_identity" \
+      "Runtime explicit inventory staging file"
+    verify_open_file "$packages_descriptor" "$packages_identity" \
+      "Runtime package inventory staging file"
+    verify_open_file "$receipt_file_descriptor" "$receipt_identity" \
+      "Runtime receipt staging file"
+    verify_open_file "$seal_descriptor" "$seal_identity" \
+      "Runtime receipt seal staging file"
+    inventory_handle="/proc/$$/fd/$inventory_descriptor"
+    packages_handle="/proc/$$/fd/$packages_descriptor"
+    receipt_handle="/proc/$$/fd/$receipt_file_descriptor"
+    seal_handle="/proc/$$/fd/$seal_descriptor"
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+      "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
+      LC_ALL=C sort > "$inventory_handle"
+    verify_open_file "$inventory_descriptor" "$inventory_identity" \
+      "Runtime explicit inventory staging file"
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+      "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" packages "$prefix" \
+      > "$packages_handle"
+    verify_open_file "$packages_descriptor" "$packages_identity" \
+      "Runtime package inventory staging file"
+    write_expected_receipt "$version" "$prefix" "$lock" "$manifest" \
+      > "$receipt_handle"
+    verify_open_file "$receipt_file_descriptor" "$receipt_identity" \
+      "Runtime receipt staging file"
+    printf '%s  receipt.tsv\n' "$(sha256_file "$receipt_handle")" \
+      > "$seal_handle"
+    verify_open_file "$seal_descriptor" "$seal_identity" \
+      "Runtime receipt seal staging file"
+    chmod 0444 "$inventory_handle" "$packages_handle" "$receipt_handle" \
+      "$seal_handle"
+    verify_open_directory "$manifest_workspace_descriptor" "$manifest_workspace" \
+      "$manifest_workspace_identity" "Runtime prefix-manifest workspace"
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+    [[ "$(path_identity "$public_manifest_stage")" == "$manifest_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$inventory_stage")" == \
+        "$inventory_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$packages_stage")" == \
+        "$packages_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$receipt_stage")" == \
+        "$receipt_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$seal_stage")" == "$seal_identity" ]] ||
+      fail "Runtime receipt staging pathname changed identity"
+    final_manifest="$receipt_root/prefix.manifest.tsv"
+    final_inventory="$receipt_root/installed-explicit.lock"
+    final_packages="$receipt_root/packages.tsv"
+    final_receipt="$receipt_root/receipt.tsv"
+    final_seal="$receipt_root/receipt.sha256"
+    trap '' HUP INT TERM
+    mv -T -- "$open_manifest_stage" "$final_manifest"
+    mv -T -- "$inventory_stage" "$final_inventory"
+    mv -T -- "$packages_stage" "$final_packages"
+    mv -T -- "$receipt_stage" "$final_receipt"
+    mv -T -- "$seal_stage" "$final_seal"
+    [[ "$(/usr/bin/stat -Lc '%d:%i' "$final_manifest")" == \
+        "$manifest_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$final_inventory")" == \
+        "$inventory_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$final_packages")" == \
+        "$packages_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$final_receipt")" == \
+        "$receipt_identity" &&
+      "$(/usr/bin/stat -Lc '%d:%i' "$final_seal")" == "$seal_identity" ]] ||
+      fail "Runtime receipt publication files changed identity"
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    exec {manifest_descriptor}<&-
+    exec {inventory_descriptor}<&-
+    exec {packages_descriptor}<&-
+    exec {receipt_file_descriptor}<&-
+    exec {seal_descriptor}<&-
+    clear_open_directory_contents "$manifest_workspace_descriptor" \
+      "$manifest_workspace_identity" "Runtime prefix-manifest workspace"
+    verify_open_directory "$manifest_workspace_descriptor" \
+      "$manifest_workspace" "$manifest_workspace_identity" \
+      "Runtime prefix-manifest workspace"
+    rmdir -- "$manifest_workspace"
+    [[ ! -e "$manifest_workspace" && ! -L "$manifest_workspace" ]] ||
+      fail "Runtime prefix-manifest workspace was not removed"
+    exec {manifest_workspace_descriptor}<&-
+    verify_open_directory "$receipt_descriptor" "$receipt_directory" \
+      "$receipt_directory_identity" "Unreceipted runtime receipt directory"
+    exec {receipt_descriptor}<&-
+    verify_one "$version"
+  fi
+  if [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
+    source_library_versions+=("$version")
+  fi
+  if [[ "$version" == 3.6.3 ]]; then
+    provision_declared_floor=true
+  fi
+done
+release_bootstrap_locks
+for version in "${source_library_versions[@]}"; do
+  library_args=(--runtime "$version")
+  [[ "$offline" == false ]] || library_args+=(--offline)
+  "$LIBRARY_MANAGER" "${library_args[@]}"
+done
+if [[ "$provision_declared_floor" == true ]]; then
+  library_args=(--runtime 3.6.3 --profile declared-floor)
+  [[ "$offline" == false ]] || library_args+=(--offline)
+  "$LIBRARY_MANAGER" "${library_args[@]}"
+fi

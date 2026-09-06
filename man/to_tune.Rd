@@ -17,7 +17,9 @@ This is only available for parameters tagged with \code{"internal_tuning"}.}
 \item{aggr}{(\code{function})\cr
 Function with one argument, which is a list of parameter values and returns a single aggregated value (e.g. the mean).
 This specifies how multiple parameter values are aggregated to form a single value in the context of internal tuning.
-If none specified, the default aggregation function of the parameter will be used.}
+If none specified, the default aggregation function of the parameter will be used.
+Source-reference attributes are removed from the stored callback unless
+\code{options(paradox.strip_srcrefs = FALSE)} is set before construction.}
 }
 \value{
 A \code{TuneToken} object.
@@ -51,16 +53,41 @@ with \verb{p_dbl(... logscale = TRUE)} will \emph{not} automatically give the \c
 \item \strong{\code{to_tune(levels)}}: Indicates a parameter should be tuned through the given discrete values. \code{levels} can be any
 named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 corresponding \code{character} vector with distinct values using \code{as.character}).
-\item \strong{\verb{to_tune(<Domain>)}}: The given \code{\link{Domain}} object (constructed e.g. with \code{\link[=p_int]{p_int()}} or \code{\link[=p_fct]{p_fct()}}) indicates
-the range which should be tuned over. The supplied \code{trafo} function is used for parameter transformation.
-\item \strong{\verb{to_tune(<ParamSet>)}}: The given \code{\link{ParamSet}} is used to tune over a single dimension. This is useful for cases
+\item \strong{\verb{to_tune(<Domain>)}}: The given bounded, value-producing \code{\link{Domain}}
+object (constructed e.g. with \code{\link[=p_int]{p_int()}} or \code{\link[=p_fct]{p_fct()}}) indicates the
+range which should be tuned over. The supplied \code{trafo} function is used
+for parameter transformation. An \code{init} given on that Domain becomes a
+fixed value of the generated search space, exactly as it would when the
+Domain is given to \code{\link[=ps]{ps()}}. An unbounded \code{\link[=p_uty]{p_uty()}} or zero-level
+\code{\link[=p_fct]{p_fct()}} Domain is not a tuning range; use another bounded typed Domain
+or the BASE-ParamSet form when the resulting value is opaque.
+\item \strong{\verb{to_tune(<ParamSet>)}}: The given exact BASE \code{\link{ParamSet}} is used to tune over a single dimension. This is useful for cases
 where a single evaluation-time parameter value (e.g. \code{\link[=p_uty]{p_uty()}}) is constructed from multiple tuner-visible
 parameters (which may not be \code{\link[=p_uty]{p_uty()}}). If not one-dimensional, the supplied \code{\link{ParamSet}} should always contain a \verb{$extra_trafo} function,
-which must then always return a \code{list} with a single entry.
+which must then always return an ordinary non-ALTREP/non-S4 \code{list} shell
+with a single entry. Its admitted semantic leaf may be stable ALTREP.
+\code{\link{ParamSetCollection}}, \code{\link{ParamSetShadow}}, and third-party \code{\link{ParamSet}}
+subclasses are not accepted as this token's content. Checked assignment
+validates that the supplied BASE schema is non-empty, bounded, and
+structurally valid without running its callbacks. A generation receipt is
+retained until the surrounding write commits, so candidate mutation makes
+that write fail without partial storage.
+\verb{$search_space()} alone runs the transformation and checks that its
+one-dimensional output is compatible with the target parameter. Before it
+runs R code, the live candidate has been replaced by a sealed one-use native
+snapshot, so conversion does not invoke or reread the original shell.
 }
 
-The \code{TuneToken} object's internals are subject to change and should not be relied upon. \code{TuneToken} objects should
-only be constructed via \code{to_tune()}, and should only be used by giving them to \verb{$values} of a \code{\link{ParamSet}}.
+\code{TuneToken} is a closed package-defined representation, not a subclassing or
+S3-extension interface. Construct tokens with \code{to_tune()} and use them
+through a \code{\link{ParamSet}}'s \verb{$values} field or \verb{$search_space(values=)}.
+Token/content list shells and their structural class/name metadata must be
+ordinary non-ALTREP/non-S4. Subclassed tokens, reordered or additional
+fields/classes, additional attributes, and recursive metadata are rejected. Native code
+authenticates the exact shape, not literal creator provenance, so a manually
+assembled or copied object that is structurally indistinguishable may pass;
+relying on that internal representation remains unsupported. Exact built-in
+tokens remain serializable and copyable.
 }
 \examples{
 params = ps(
@@ -151,8 +178,8 @@ print(grid$transpose())
 
 }
 \seealso{
-Other ParamSet construction helpers: 
-\code{\link{Domain}()},
-\code{\link{ps}()}
+Other ParamSet construction helpers:
+\code{\link[=Domain]{Domain()}},
+\code{\link[=ps]{ps()}}
 }
 \concept{ParamSet construction helpers}

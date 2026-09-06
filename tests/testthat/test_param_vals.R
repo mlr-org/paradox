@@ -68,12 +68,14 @@ test_that("values calls assert", {
     ParamFct$new(id = "f", levels = letters[1:3])
   ))
   expect_error(ps$values <- list(xxx = 1), "not available")
-  expect_error(ps$values <- list(d = 9), "not <= 1")
+  expect_error(
+    ps$values <- list(d = 9),
+    "d: Element 1 is not <= 1",
+    fixed = TRUE
+  )
 
   # now check that we can disable assert
   ps$assert_values = FALSE
   ps$values = list(d = 9)
   expect_equal(ps$values, list(d = 9))
 })
-
-

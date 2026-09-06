@@ -1,15 +1,36 @@
 skip_if_not_installed("callr")
 skip_if_not_installed("reticulate")
+skip_on_cran()
 
 
 test_that("paramset_to_configspace works without defaults with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
 
     library(paradox)
     library(testthat)
 
     reticulate::py_require(c("numpy<2", "ConfigSpace<0.6.0"))
+    ConfigSpace = reticulate::import("ConfigSpace")
+    if (identical(
+      Sys.getenv("PARADOX_CONFIGSPACE_FIXTURE", unset = ""),
+      "sealed-v1"
+    )) {
+      expect_false(identical(
+        Sys.getenv("PARADOX_CONFIGSPACE_OLD_PYTHON"),
+        "managed"
+      ))
+      metadata = reticulate::import("importlib.metadata")
+      expect_identical(as.character(metadata$version("ConfigSpace")), "0.5.0")
+    }
+    expect_false(any(vapply(
+      c("Float", "Integer", "Categorical"),
+      function(name) reticulate::py_has_attr(ConfigSpace, name),
+      logical(1L)
+    )))
 
     param_set = ps(
       x1 = p_int(lower = 0, upper = 10, default = 1),
@@ -26,7 +47,10 @@ test_that("paramset_to_configspace works without defaults with old ConfigSpace A
 
 test_that("paramset_to_configspace numeric bounds check with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
 
     library(paradox)
     library(testthat)
@@ -51,7 +75,10 @@ test_that("paramset_to_configspace numeric bounds check with old ConfigSpace API
 
 test_that("paramset_to_configspace utility parameters check with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
 
     library(paradox)
     library(testthat)
@@ -70,7 +97,10 @@ test_that("paramset_to_configspace utility parameters check with old ConfigSpace
 
 test_that("paramset_to_configspace works with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
 
     library(paradox)
     library(testthat)
@@ -108,7 +138,10 @@ test_that("paramset_to_configspace works with old ConfigSpace API", {
 
 test_that("paramset_to_configspace dependencies check with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
 
     library(paradox)
     library(testthat)
@@ -133,7 +166,10 @@ test_that("paramset_to_configspace dependencies check with old ConfigSpace API",
 
 test_that("multiple dependencies for one child are combined with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
 
     library(paradox)
     library(testthat)
@@ -164,7 +200,10 @@ test_that("multiple dependencies for one child are combined with old ConfigSpace
 
 test_that("multiple dependent children can coexist with old ConfigSpace API", {
   expect_true(callr::r(function() {
-    Sys.setenv(RETICULATE_PYTHON = "managed")
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
 
     library(paradox)
     library(testthat)
@@ -185,6 +224,76 @@ test_that("multiple dependent children can coexist with old ConfigSpace API", {
     parents  = map_chr(conds, function(z) z$parent$name)
     expect_setequal(children, c("c1", "c2"))
     expect_true(all(parents == c("parent", "parent")))
+
+    TRUE
+  }))
+})
+
+test_that("scalar sequences are exported as sequences with old ConfigSpace API", {
+  expect_true(callr::r(function() {
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
+
+    library(paradox)
+    library(testthat)
+    library(checkmate)
+    library(mlr3misc)
+
+    reticulate::py_require(c("numpy<2", "ConfigSpace<0.6.0"))
+
+    # A length-1 R vector reaches Python as a scalar, which ConfigSpace would
+    # iterate element-by-element: a single level or a single condition value
+    # would silently become one entry per character.
+    param_set = ps(
+      only = p_fct(levels = "gini"),
+      par = p_fct(levels = c("gini", "entropy"), default = "gini"),
+      ch = p_dbl(lower = 0, upper = 1, default = 0.5, depends = quote(par %in% "gini"))
+    )
+
+    cs = paramset_to_configspace(param_set, name = "scalar-sequences")
+    expect_equal(unlist(cs$get_hyperparameter("only")$choices), "gini")
+    expect_equal(unlist(cs$get_hyperparameter("par")$choices), c("gini", "entropy"))
+
+    conds = cs$get_conditions()
+    expect_true(length(conds) == 1)
+    expect_equal(unlist(conds[[1]]$values), "gini")
+
+    TRUE
+  }))
+})
+
+test_that("dependencies on a p_lgl parent work with old ConfigSpace API", {
+  expect_true(callr::r(function() {
+    Sys.setenv(RETICULATE_PYTHON = Sys.getenv(
+      "PARADOX_CONFIGSPACE_OLD_PYTHON",
+      unset = "managed"
+    ))
+
+    library(paradox)
+    library(testthat)
+    library(checkmate)
+    library(mlr3misc)
+
+    reticulate::py_require(c("numpy<2", "ConfigSpace<0.6.0"))
+
+    # p_lgl is exported as a Categorical over "TRUE"/"FALSE", so a logical
+    # right-hand side has to be spelled the same way.
+    param_set = ps(
+      flag = p_lgl(default = TRUE),
+      other = p_lgl(default = FALSE),
+      ch = p_dbl(lower = 0, upper = 1, default = 0.5, depends = quote(flag == TRUE)),
+      ch2 = p_int(lower = 1, upper = 5, default = 2, depends = quote(other %in% c(TRUE, FALSE)))
+    )
+
+    cs = paramset_to_configspace(param_set, name = "lgl-parent")
+    conds = cs$get_conditions()
+    expect_true(length(conds) == 2)
+    conds = set_names(conds, map_chr(conds, function(z) z$child$name))
+
+    expect_identical(as.character(conds$ch$value), "TRUE")
+    expect_setequal(unlist(conds$ch2$values), c("TRUE", "FALSE"))
 
     TRUE
   }))

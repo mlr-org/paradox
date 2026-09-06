@@ -1,0 +1,3 @@
+file	context	missing_package	leading_guards	reason
+test_paramset_to_configspace.R	paramset_to_configspace	reticulate	skip_if_not_installed:reticulate,skip_on_cran	The exact runtime lock deliberately omits reticulate, so the reviewed leading guard sequence skips the file before testthat creates file-scoped results.
+test_paramset_to_configspace_old.R	paramset_to_configspace_old	reticulate	skip_if_not_installed:callr,skip_if_not_installed:reticulate,skip_on_cran	The exact runtime lock provides callr but omits reticulate, so the reviewed leading guard sequence reaches the reticulate guard and skips the file before testthat creates file-scoped results.

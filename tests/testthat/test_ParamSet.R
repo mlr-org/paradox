@@ -1,5 +1,73 @@
 context("ParamSet")
 
+test_that("empty ps_union still validates collection controls", {
+  expect_s3_class(ps_union(list()), "ParamSet")
+  expect_error(
+    ps_union(list(), tag_sets = NA),
+    "`tag_sets`: May not be NA",
+    fixed = TRUE
+  )
+  expect_error(
+    ps_union(list(), tag_params = 1L),
+    "`tag_params` must be an unclassed logical flag",
+    fixed = TRUE
+  )
+  expect_error(
+    ps_union(list(), postfix_names = logical()),
+    "`postfix_names` must be an unclassed logical flag",
+    fixed = TRUE
+  )
+})
+
+test_that("assert_param_set uses one coherent capsule snapshot", {
+  bounded = ps(parent = p_lgl(), child = p_int(0L, 1L,
+    depends = parent == TRUE
+  ))
+  collection = ParamSetCollection$new(list(owner = bounded))
+  expect_identical(
+    assert_param_set(
+      collection,
+      cl = c("ParamLgl", "ParamInt"),
+      must_bounded = TRUE
+    ),
+    collection
+  )
+  expect_error(
+    assert_param_set(collection, no_deps = TRUE),
+    "contains dependencies",
+    fixed = TRUE
+  )
+  shadow_origin = ps(
+    hidden = p_int(0L, 1L),
+    parent = p_lgl(),
+    child = p_int(0L, 1L, depends = parent == TRUE)
+  )
+  shadow = ParamSetShadow$new(shadow_origin, "hidden")
+  expect_identical(
+    assert_param_set(
+      shadow,
+      cl = c("ParamLgl", "ParamInt"),
+      must_bounded = TRUE
+    ),
+    shadow
+  )
+  expect_error(
+    assert_param_set(shadow, no_deps = TRUE),
+    "contains dependencies",
+    fixed = TRUE
+  )
+  expect_error(
+    assert_param_set(ps(x = p_uty()), no_untyped = TRUE),
+    "contains untyped",
+    fixed = TRUE
+  )
+  expect_error(
+    assert_param_set(ps(x = p_dbl()), must_bounded = TRUE),
+    "contains unbounded",
+    fixed = TRUE
+  )
+})
+
 test_that("simple active bindings work", {
   ps_list = list(
     th_paramset_dbl1(),
@@ -99,8 +167,12 @@ test_that("ParamSet$check", {
   expect_true(ps$check(list(th_param_int = 5, th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_dbl = 5, th_param_int = 5)))
   expect_character(ps$check(list(th_param_dbl = 5, new_param = 5)), fixed = "not available")
-  expect_character(ps$check(list(th_param_dbl = 5, th_param_intx = 5)), fixed = "Did you mean")
-  expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "not <= 10")
+  expect_character(ps$check(list(th_param_dbl = 5, th_param_intx = 5)), fixed = "not available")
+  expect_match(
+    ps$check(list(th_param_dbl = 5, th_param_int = 15)),
+    "Element 1 is not <= 10.5",
+    fixed = TRUE
+  )
   expect_true(ps$check(list(th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_int = 5)))
 
@@ -110,16 +182,19 @@ test_that("ParamSet$check", {
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {
-  expect_error(ParamDbl$new("$foo"), "does not comply")
+  expect_error(ParamDbl$new("$foo"), "strict ASCII IDs")
 })
 
 test_that("ParamSets cannot have duplicated ids", {
   p1 = ParamDbl$new("x1")
   p2 = ParamDbl$new("x1")
-  expect_error(ParamSet_legacy$new(list(p1, p2)), "duplicated")
+  expect_error(ParamSet_legacy$new(list(p1, p2)), "translated parameter IDs must be unique")
   ps = ParamSet_legacy$new(list(p1))
-  expect_error(ps_union(list(ps, p2)), "duplicated")
-  expect_error(ps_union(list(ps, ParamSet_legacy$new(list(p2)))), "duplicated")
+  expect_error(ps_union(list(ps, p2)), "translated parameter IDs must be unique")
+  expect_error(
+    ps_union(list(ps, ParamSet_legacy$new(list(p2)))),
+    "translated parameter IDs must be unique"
+  )
 })
 
 test_that("ParamSet$print", {
@@ -316,6 +391,17 @@ test_that("setting empty tags on empty paramset", {
 
 })
 
+test_that("tags<- rejects a non-plain list container", {
+  # The same ordinary-container boundary as every sibling structural gate: an
+  # S4-classed list is not a plain list, on BASE and derived nodes alike.
+  param_set = ps(x = p_dbl())
+  expect_error(param_set$tags <- asS4(list(x = "a")), "`tags` must be a list", fixed = TRUE)
+  collection = ParamSetCollection$new(list(s = ps(z = p_lgl())))
+  expect_error(collection$tags <- asS4(list(s.z = "a")), "`tags` must be a list", fixed = TRUE)
+  expect_identical(param_set$tags, list(x = character(0)))
+  expect_identical(collection$tags, list(s.z = character(0)))
+})
+
 test_that("paramset clones properly", {
   ps = ParamSet_legacy$new()
   ps = ps_union(list(ps, ParamFct$new("a", levels = letters[1:3])))
@@ -340,9 +426,15 @@ test_that("ParamSet$check_dt", {
   xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 1))
   expect_true(ps$check_dt(xdt))
   xdt = data.table(th_param_dbl = c(20, 20), th_param_int = c(1, 1))
-  expect_character(ps$check_dt(xdt), fixed = "th_param_dbl: Element 1 is not <= 10")
+  expect_character(
+    ps$check_dt(xdt),
+    fixed = "th_param_dbl: Element 1 is not <= 10"
+  )
   xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 20))
-  expect_character(ps$check_dt(xdt), fixed = "th_param_int: Element 1 is not <= 10")
+  expect_character(
+    ps$check_dt(xdt),
+    fixed = "th_param_int: Element 1 is not <= 10.5"
+  )
   xdt = data.table(th_param_dbl = c(1, 1), new_param = c(1, 20))
   expect_character(ps$check_dt(xdt), fixed = "not available")
   ps = ps_replicate(ParamLgl$new("x"), 2)
@@ -469,6 +561,26 @@ test_that("rd_info.ParamSet", {
   expect_character(rd_info(ps), len = 1L)
 })
 
+test_that("rd_info.ParamSet reports untyped defaults against the right rows", {
+  skip_if_not_installed("knitr")
+
+  # `descriptions` merges by id, which reorders the table. The untyped defaults
+  # come from the parameter table and must be realigned before that.
+  set = ps(zz = p_uty(default = "ZDEF"), aa = p_uty(default = "ADEF"), mm = p_dbl(0, 1))
+  described = strsplit(
+    rd_info(set, descriptions = c(zz = "Zdesc", aa = "Adesc", mm = "Mdesc")),
+    "\n"
+  )[[1L]]
+  rows = grep("^\\|(aa|mm|zz) ", described, value = TRUE)
+
+  expect_match(rows[[1L]], "^\\|aa .*Adesc.*\"ADEF\"")
+  expect_match(rows[[3L]], "^\\|zz .*Zdesc.*\"ZDEF\"")
+
+  plain = strsplit(rd_info(set), "\n")[[1L]]
+  expect_match(grep("^\\|zz ", plain, value = TRUE), "\"ZDEF\"")
+  expect_match(grep("^\\|aa ", plain, value = TRUE), "\"ADEF\"")
+})
+
 test_that("rd_info.ParamSet truncates long level lists without markdown links", {
   skip_if_not_installed("knitr")
 
@@ -553,8 +665,14 @@ test_that("set_values allows to unset parameters by setting them to NULL", {
 
   param_set = ps(a = p_int())
   param_set$set_values(a = 1)
-  # .insert = FALSE can also set values to NULL
-  expect_error(param_set$set_values(.values = list(a = NULL), .insert = FALSE), "not 'NULL'")
+  # Replacement preserves a named NULL until native Domain admission.  It is
+  # rejected normally for a non-nullable parameter and commits nothing.
+  expect_error(
+    param_set$set_values(.values = list(a = NULL), .insert = FALSE),
+    "Must be of type 'single integerish value', not 'NULL'",
+    fixed = TRUE
+  )
+  expect_identical(param_set$values, list(a = 1L))
   param_set = ps(a = p_int(special_vals = list(NULL)))
   param_set$set_values(a = 1)
   param_set$set_values(.values = list(a = NULL), .insert = FALSE)

@@ -1,0 +1,255 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Exercise every installed-state mode in a disposable hard-linked checkout.
+# Prefix package files are read only; generated Makevars, locks, and receipts
+# belong exclusively to the fixture.
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+INSTALLED_ROOT=${PARADOX_COMPAT_TEST_INSTALLED_ROOT:-$ROOT}
+if [[ ! -d "$INSTALLED_ROOT" || -L "$INSTALLED_ROOT" ]]; then
+  printf '%s\n' "test-compat-system-installed: installed root is invalid" >&2
+  exit 1
+fi
+INSTALLED_ROOT=$(cd "$INSTALLED_ROOT" && pwd -P)
+TEST_PARENT="$ROOT/.local/tmp"
+mkdir -p "$TEST_PARENT"
+FIXTURE=$(mktemp -d "$TEST_PARENT/compat-system-installed.XXXXXX")
+trap 'rm -rf -- "$FIXTURE"' EXIT HUP INT TERM
+
+fail() {
+  printf '%s\n' "test-compat-system-installed: $*" >&2
+  exit 1
+}
+
+expect_failure() {
+  if "$@" >"$FIXTURE/expected-failure.stdout" 2>"$FIXTURE/expected-failure.stderr"; then
+    fail "command unexpectedly succeeded: $*"
+  fi
+}
+
+for path in \
+  "$INSTALLED_ROOT/.local/toolchain/conda-meta" \
+  "$INSTALLED_ROOT/.local/compat/system/geo/conda-meta" \
+  "$INSTALLED_ROOT/.local/compat/system/p1/conda-meta"
+do
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "installed prefix is absent or symbolic: $path"
+done
+for path in \
+  "$INSTALLED_ROOT/.local/bin/micromamba" \
+  "$INSTALLED_ROOT/.cache/downloads/micromamba-2.5.0-linux-64.tar.bz2"
+do
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "authenticated micromamba input is absent or symbolic: $path"
+done
+[[ -x "$INSTALLED_ROOT/.local/toolchain/bin/Rscript" ]] ||
+  fail "installed project Rscript is absent"
+
+mkdir -p "$FIXTURE/compat" "$FIXTURE/environment" "$FIXTURE/scripts"
+mkdir -p "$FIXTURE/.local/bin" "$FIXTURE/.cache/downloads"
+mkdir -p "$FIXTURE/.local/compat/system"
+mkdir -p "$FIXTURE/.local/tinytex/bin/x86_64-linux"
+mkdir -p "$FIXTURE/.local/quarto/1.9.38/bin" "$FIXTURE/hostile-bin"
+cp "$ROOT/DESCRIPTION" "$FIXTURE/"
+cp "$ROOT/compat/compat-system-evidence.R" "$FIXTURE/compat/"
+cp "$ROOT/environment/Makevars" "$FIXTURE/environment/"
+cp "$ROOT/environment/toolchain-linux-64.lock" "$FIXTURE/environment/"
+cp "$ROOT/environment/compat-system-geo-linux-64.lock" "$FIXTURE/environment/"
+cp "$ROOT/environment/compat-system-p1-linux-64.lock" "$FIXTURE/environment/"
+cp "$ROOT/scripts/activate" "$FIXTURE/scripts/"
+cp "$ROOT/scripts/activate-compat-system" "$FIXTURE/scripts/"
+cp "$ROOT/scripts/bootstrap-compat-system" "$FIXTURE/scripts/"
+chmod 0755 "$FIXTURE/scripts/activate-compat-system"
+chmod 0755 "$FIXTURE/scripts/bootstrap-compat-system"
+ln "$INSTALLED_ROOT/.local/bin/micromamba" "$FIXTURE/.local/bin/micromamba"
+ln "$INSTALLED_ROOT/.cache/downloads/micromamba-2.5.0-linux-64.tar.bz2" \
+  "$FIXTURE/.cache/downloads/micromamba-2.5.0-linux-64.tar.bz2"
+cp -al "$INSTALLED_ROOT/.local/toolchain" "$FIXTURE/.local/toolchain"
+cp -al "$INSTALLED_ROOT/.local/compat/system/geo" "$FIXTURE/.local/compat/system/geo"
+cp -al "$INSTALLED_ROOT/.local/compat/system/p1" "$FIXTURE/.local/compat/system/p1"
+FIXTURE=$(cd "$FIXTURE" && pwd -P)
+
+# R records its installation prefix. Replace only the fixture's two executable
+# hard links with small identity probes so ordinary activation can prove the
+# relocated checkout path; conda metadata remains the exact authenticated set.
+rm -f -- "$FIXTURE/.local/toolchain/bin/R"
+rm -f -- "$FIXTURE/.local/toolchain/bin/Rscript"
+# shellcheck disable=SC2016 # literal positional parameter belongs to the probe.
+printf '%s\n' '#!/usr/bin/env sh' '[ "${1:-}" = RHOME ] || exit 1' \
+  "printf '%s\\n' '$FIXTURE/.local/toolchain/lib/R'" \
+  >"$FIXTURE/.local/toolchain/bin/R"
+printf '%s\n' '#!/usr/bin/env sh' 'exit 1' >"$FIXTURE/.local/toolchain/bin/Rscript"
+chmod 0755 "$FIXTURE/.local/toolchain/bin/R"
+chmod 0755 "$FIXTURE/.local/toolchain/bin/Rscript"
+for tool in pdflatex kpsewhich makeindex; do
+  printf '%s\n' '#!/usr/bin/env sh' 'exit 0' \
+    >"$FIXTURE/.local/tinytex/bin/x86_64-linux/$tool"
+  chmod 0755 "$FIXTURE/.local/tinytex/bin/x86_64-linux/$tool"
+done
+printf '%s\n' '#!/usr/bin/env sh' 'exit 0' \
+  >"$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+chmod 0755 "$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+for tool in R Rscript pdflatex kpsewhich makeindex quarto texi2dvi \
+  x86_64-conda-linux-gnu-cc
+do
+  printf '%s\n' '#!/usr/bin/env sh' 'exit 97' >"$FIXTURE/hostile-bin/$tool"
+  chmod 0755 "$FIXTURE/hostile-bin/$tool"
+done
+
+run_bootstrap() {
+  PATH="$FIXTURE/.local/toolchain/bin:/usr/bin:/bin" \
+  PARADOX_ACTIVE_ROOT="$FIXTURE" \
+    "$FIXTURE/scripts/bootstrap-compat-system" "$@"
+}
+
+run_bootstrap >"$FIXTURE/provision.log"
+run_bootstrap --verify >"$FIXTURE/verify.log"
+run_bootstrap --offline >"$FIXTURE/offline.log"
+run_bootstrap --verify-receipt >"$FIXTURE/receipt.log"
+
+printf 'tampered\n' >>"$FIXTURE/.local/receipts/compat-system/receipt.tsv"
+expect_failure run_bootstrap --verify
+expect_failure run_bootstrap --verify-receipt
+run_bootstrap >"$FIXTURE/receipt-repair.log"
+run_bootstrap --verify >"$FIXTURE/verify-after-repair.log"
+
+mkdir "$FIXTURE/metadata-active" "$FIXTURE/metadata-inactive"
+# shellcheck disable=SC2016 # R expression is deliberately single-quoted.
+env -u PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT \
+  -u PARADOX_COMPAT_SYSTEM_RECEIPT \
+  "$INSTALLED_ROOT/.local/toolchain/bin/Rscript" --vanilla -e '
+    args <- commandArgs(TRUE)
+    sys.source(file.path(args[[1L]], "compat", "compat-system-evidence.R"),
+      envir = environment())
+    state <- compat_system_capture_evidence(args[[1L]], args[[2L]])
+    stopifnot(!state$active)
+    compat_system_verify_evidence(state, "after inactive fixture")
+  ' "$FIXTURE" "$FIXTURE/metadata-inactive"
+
+(
+  cd "$FIXTURE"
+  PATH="$FIXTURE/hostile-bin:/usr/bin:/bin"
+  # shellcheck disable=SC1091 # copied fixture helper resolved at runtime.
+  . scripts/activate
+  ordinary_prefix="$FIXTURE/.local/tinytex/bin/x86_64-linux"
+  ordinary_prefix="$ordinary_prefix:$FIXTURE/.local/quarto/1.9.38/bin"
+  ordinary_prefix="$ordinary_prefix:$FIXTURE/.local/toolchain/bin"
+  ordinary_prefix="$ordinary_prefix:$FIXTURE/.local/bin"
+  case $PATH in
+    "$ordinary_prefix"|"$ordinary_prefix":*) ;;
+    *) fail "ordinary activation did not preserve managed executable order" ;;
+  esac
+  test "$(command -v R)" = "$FIXTURE/.local/toolchain/bin/R"
+  test "$(command -v Rscript)" = "$FIXTURE/.local/toolchain/bin/Rscript"
+  test "$(R RHOME)" = "$FIXTURE/.local/toolchain/lib/R"
+  test "$(command -v pdflatex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/pdflatex"
+  test "$(command -v kpsewhich)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/kpsewhich"
+  test "$(command -v makeindex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/makeindex"
+  test "$(command -v quarto)" = "$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+  test "$(command -v x86_64-conda-linux-gnu-cc)" = \
+    "$FIXTURE/.local/toolchain/bin/x86_64-conda-linux-gnu-cc"
+  ordinary_before=$(mktemp "$FIXTURE/.local/tmp/ordinary-before-compat.XXXXXX")
+  ordinary_after=$(mktemp "$FIXTURE/.local/tmp/ordinary-after-compat.XXXXXX")
+  trap 'rm -f -- "$ordinary_before" "$ordinary_after"' EXIT HUP INT TERM
+  /usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_before"
+  # shellcheck disable=SC1091 # copied fixture helper resolved at runtime.
+  . scripts/activate-compat-system
+  overlay_prefix="$ordinary_prefix:$FIXTURE/.local/compat/system/p1/bin"
+  overlay_prefix="$overlay_prefix:$FIXTURE/.local/compat/system/geo/bin"
+  case $PATH in
+    "$overlay_prefix"|"$overlay_prefix":*) ;;
+    *) fail "compatibility activation did not preserve managed executable order" ;;
+  esac
+  test "$(command -v R)" = "$FIXTURE/.local/toolchain/bin/R"
+  test "$(command -v Rscript)" = "$FIXTURE/.local/toolchain/bin/Rscript"
+  test "$(R RHOME)" = "$FIXTURE/.local/toolchain/lib/R"
+  test "$(command -v pdflatex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/pdflatex"
+  test "$(command -v kpsewhich)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/kpsewhich"
+  test "$(command -v makeindex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/makeindex"
+  test "$(command -v quarto)" = "$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+  test "$(command -v x86_64-conda-linux-gnu-cc)" = \
+    "$FIXTURE/.local/toolchain/bin/x86_64-conda-linux-gnu-cc"
+  test "$PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT" = "$FIXTURE"
+  test "$PARADOX_COMPAT_SYSTEM_RECEIPT" = "$FIXTURE/.local/receipts/compat-system/receipt.tsv"
+  test "$R_MAKEVARS_USER" = "$FIXTURE/.local/compat/system/Makevars"
+  test "$XDG_RUNTIME_DIR" = "$FIXTURE/.local/runtime"
+  test "$CCACHE_TEMPDIR" = "$FIXTURE/.local/tmp/ccache"
+  scripts/bootstrap-compat-system --verify >/dev/null
+  overlay_path=$PATH
+  overlay_makevars=$R_MAKEVARS_USER
+  overlay_pkg_config=$PKG_CONFIG_LIBDIR
+  . scripts/activate-compat-system
+  test "$PATH" = "$overlay_path"
+  test "$R_MAKEVARS_USER" = "$overlay_makevars"
+  test "$PKG_CONFIG_LIBDIR" = "$overlay_pkg_config"
+  injected_path="$FIXTURE/hostile-bin:$FIXTURE/.local/compat/system/p1/bin"
+  injected_path="$injected_path:$FIXTURE/.local/tinytex/bin/x86_64-linux"
+  injected_path="$injected_path:$FIXTURE/.local/toolchain/bin"
+  injected_path="$injected_path:$FIXTURE/.local/quarto/1.9.38/bin"
+  injected_path="$injected_path:$FIXTURE/.local/compat/system/geo/bin"
+  PATH="$injected_path:$PATH"
+  export PATH
+  hash -r 2>/dev/null || true
+  . scripts/activate-compat-system
+  test "$PATH" = "$overlay_path"
+  # shellcheck disable=SC2016 # R expression is deliberately single-quoted.
+  "$INSTALLED_ROOT/.local/toolchain/bin/Rscript" --vanilla -e '
+      args <- commandArgs(TRUE)
+      sys.source(file.path(args[[1L]], "compat", "compat-system-evidence.R"),
+        envir = environment())
+      state <- compat_system_capture_evidence(args[[1L]], args[[2L]])
+      stopifnot(state$active, length(compat_system_child_environment()) > 20L)
+      compat_system_verify_evidence(state, "after active fixture")
+      pkg_config <- Sys.getenv("PKG_CONFIG")
+      Sys.setenv(PKG_CONFIG = "/tampered/pkg-config")
+      stopifnot(inherits(try(
+        compat_system_verify_evidence(state, "after environment tamper"),
+        silent = TRUE
+      ), "try-error"))
+      Sys.setenv(PKG_CONFIG = pkg_config)
+      cat("tampered", file = state$retained_paths[[1L]], append = TRUE)
+      stopifnot(inherits(try(
+        compat_system_verify_evidence(state, "after retained tamper"),
+        silent = TRUE
+      ), "try-error"))
+    ' "$FIXTURE" "$FIXTURE/metadata-active"
+
+  # shellcheck disable=SC1091 # copied fixture helper resolved at runtime.
+  . scripts/activate
+  test "$PARADOX_ACTIVE_ROOT" = "$FIXTURE"
+  test "$R_MAKEVARS_USER" = "$FIXTURE/environment/Makevars"
+  case ":$PATH:" in
+    *:"$FIXTURE/.local/compat/system/p1/bin":*|\
+    *:"$FIXTURE/.local/compat/system/geo/bin":*) exit 1 ;;
+  esac
+  for variable in \
+    PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT PARADOX_COMPAT_SYSTEM_RECEIPT \
+    PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO \
+    PARADOX_COMPAT_SYSTEM_P1 PROJ_DATA GDAL_DATA UDUNITS2_XML_PATH \
+    UDUNITS2_INCLUDE UDUNITS2_LIBS JAVA_HOME JAVA JAVAC JAR \
+    JAVA_CPPFLAGS JAVA_LIBS JAVA_LD_LIBRARY_PATH R_JAVA_LD_LIBRARY_PATH \
+    MPI_ROOT MPI_INCLUDE MPI_LIB_PATH MPI_TYPE OPAL_PREFIX \
+    OMPI_CC OMPI_CXX OMPI_FC OMPI_MCA_plm_ssh_agent \
+    PRTE_MCA_rmaps_default_mapping_policy CARGO_HOME RUSTUP_HOME \
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER FONTCONFIG_PATH FONTCONFIG_FILE
+  do
+    [[ ! -v $variable ]]
+  done
+  /usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_after"
+  cmp -s -- "$ordinary_before" "$ordinary_after"
+  rm -f -- "$ordinary_before" "$ordinary_after"
+  trap - EXIT HUP INT TERM
+)
+
+grep -F 'ordinary_makevars_sha256' "$FIXTURE/.local/receipts/compat-system/receipt.tsv" >/dev/null
+grep -F '# Project-owned placeholder.' "$FIXTURE/.local/compat/system/Makevars" >/dev/null
+PARADOX_COMPAT_TEST_INSTALLED_ROOT="$INSTALLED_ROOT" \
+  "$ROOT/scripts/environment/test-reverse-activation-contract" >/dev/null
+printf '%s\n' 'compat_system_installed_fixture=passed'

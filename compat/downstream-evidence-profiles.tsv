@@ -1,0 +1,3 @@
+profile	checkout_namespace	repository_manifest	snapshot	bridge_provenance	dependency_checkout_namespace	dependency_repository_manifest	dependency_snapshot	install_order
+default	github	github-repositories.tsv	github-snapshot.tsv	github-bridge-provenance.tsv	github	github-repositories.tsv	github-snapshot.tsv	bbotk,mlr3,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx
+release-refresh-20260720	github-release-refresh-20260720	github-repositories.tsv	github-snapshot.release-refresh-20260720.tsv	github-bridge-provenance.release-refresh-20260720.tsv	github	github-repositories.release-refresh-dependencies.tsv	github-snapshot.tsv	bbotk,mlr3,mlr3tuning,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx,mlr3fda,mlr3forecast

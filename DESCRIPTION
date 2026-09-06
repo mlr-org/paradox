@@ -2,7 +2,7 @@ Type: Package
 Package: paradox
 Title: Define and Work with Parameter Spaces for Complex
     Algorithms
-Version: 1.0.1-9000
+Version: 2.0.0
 Authors@R:
     c(person(given = "Michel",
              family = "Lang",
@@ -36,23 +36,24 @@ Authors@R:
       person(given = "Anna",
              family = "Nazarova",
              role = "ctb",
-             email = "anna.nazarova@outlook.com",
-             comment = c(ORCID = "0000-0002-8115-0400")))
+             email = "anna.nazarova@outlook.com"))
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
     includes statistical designs and random samplers. Objects are
-    implemented as 'R6' classes.
+    implemented as serializable 'R6' classes, with performance-sensitive
+    built-in operations implemented in portable C.
+Depends:
+    R (>= 3.6.0)
 License: LGPL-3
 URL: https://paradox.mlr-org.com,
     https://github.com/mlr-org/paradox
 BugReports: https://github.com/mlr-org/paradox/issues
 Imports:
-    backports,
-    checkmate,
-    data.table,
-    methods,
-    mlr3misc (>= 0.9.4),
-    R6
+    backports (>= 1.1.7),
+    checkmate (>= 2.0.0),
+    data.table (>= 1.18.4),
+    mlr3misc (>= 0.10.0),
+    R6 (>= 2.6.1)
 Suggests:
     callr,
     reticulate,
@@ -66,9 +67,9 @@ Suggests:
 Encoding: UTF-8
 Config/testthat/edition: 3
 Config/testthat/parallel: false
-NeedsCompilation: no
+NeedsCompilation: yes
+SystemRequirements: USE_C17
 Roxygen: list(markdown = TRUE, r6 = TRUE)
-RoxygenNote: 7.3.3
 VignetteBuilder: knitr, rmarkdown
 Collate:
     'Condition.R'
@@ -82,12 +83,14 @@ Collate:
     'ParamLgl.R'
     'ParamSet.R'
     'ParamSetCollection.R'
+    'ParamSetShadow.R'
     'ParamUty.R'
     'Sampler.R'
     'Sampler1D.R'
     'SamplerHierarchical.R'
     'SamplerJointIndep.R'
     'SamplerUnif.R'
+    'all_equal.R'
     'asserts.R'
     'config_space.R'
     'default_values.R'
@@ -96,9 +99,13 @@ Collate:
     'generate_design_random.R'
     'generate_design_sobol.R'
     'helper.R'
+    'leanify_paradox.R'
     'ps.R'
     'ps_replicate.R'
     'ps_union.R'
     'reexports.R'
     'to_tune.R'
+    'upgrade_paradox_object.R'
+    'upgrade_registry.R'
     'zzz.R'
+Config/roxygen2/version: 8.0.0

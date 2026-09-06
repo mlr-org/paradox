@@ -1,0 +1,726 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+R_HELPER="$ROOT/scripts/environment/runtime-matrix-library.R"
+BOOTSTRAP="$ROOT/scripts/bootstrap-runtime-matrix"
+PREFIX_HANDOFF="$ROOT/scripts/environment/runtime-matrix-prefix-handoff"
+MANAGED_PATH="$ROOT/scripts/environment/runtime-matrix-managed-path"
+RUNTIME=9.8.7
+
+fail() {
+  printf 'test-runtime-matrix-managed-paths: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ -d "$ROOT" && ! -L "$ROOT" &&
+  "$(cd "$ROOT" && pwd -P)" == "$ROOT" ]] ||
+  fail "repository root is absent, symbolic, or non-canonical"
+for fixture_parent in "$ROOT/.local" "$ROOT/.local/tmp"; do
+  [[ -d "$fixture_parent" && ! -L "$fixture_parent" &&
+    "$(cd "$fixture_parent" && pwd -P)" == "$fixture_parent" ]] ||
+    fail "fixture parent is absent, symbolic, or non-canonical: $fixture_parent"
+done
+FIXTURE_ROOT=$(mktemp -d \
+  "$ROOT/.local/tmp/runtime-matrix-managed-paths.XXXXXX")
+FIXTURE_ROOT_IDENTITY=$(/usr/bin/stat -c '%d:%i' -- "$FIXTURE_ROOT")
+cleanup() {
+  local descriptor fd_identity path_identity
+  trap - EXIT HUP INT TERM
+  [[ -d "$FIXTURE_ROOT" && ! -L "$FIXTURE_ROOT" ]] || return 0
+  path_identity=$(/usr/bin/stat -c '%d:%i' -- "$FIXTURE_ROOT") ||
+    return 0
+  [[ "$path_identity" == "$FIXTURE_ROOT_IDENTITY" ]] || return 0
+  exec {descriptor}< "$FIXTURE_ROOT"
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  [[ "$fd_identity" == "$FIXTURE_ROOT_IDENTITY" ]] || return 0
+  /usr/bin/find -H "/proc/$$/fd/$descriptor" -xdev -type d \
+    -exec chmod u+w -- {} +
+  /usr/bin/find -H "/proc/$$/fd/$descriptor" -xdev -depth -mindepth 1 \
+    -delete
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  [[ "$fd_identity" == "$FIXTURE_ROOT_IDENTITY" ]] || return 0
+  # Leave the empty unique root: pathname rmdir after an identity check would
+  # reopen the substitution window this fixture is meant to police.
+  exec {descriptor}<&-
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+expect_failure() {
+  local label=$1 pattern=$2
+  shift 2
+  local output="$FIXTURE_ROOT/$label.log"
+  if "$@" >"$output" 2>&1; then
+    fail "$label unexpectedly succeeded"
+  fi
+  rg -Fq -- "$pattern" "$output" ||
+    fail "$label did not report the expected failure: $pattern"
+}
+
+prepare_library_fixture() {
+  local root=$1 archive archive_hash receipt_root
+  mkdir -p -- \
+    "$root/scripts/environment" \
+    "$root/environment" \
+    "$root/.local/runtime-matrix/prefixes/R-$RUNTIME/bin" \
+    "$root/.local/runtime-matrix/receipts/R-$RUNTIME" \
+    "$root/.local/tmp" \
+    "$root/.cache/downloads/runtime-matrix/R-$RUNTIME"
+  cp -- "$LIBRARY_MANAGER" \
+    "$root/scripts/environment/runtime-matrix-library"
+  cp -- "$R_HELPER" \
+    "$root/scripts/environment/runtime-matrix-library.R"
+  cp -- "$PREFIX_HANDOFF" \
+    "$root/scripts/environment/runtime-matrix-prefix-handoff"
+  cp -- "$MANAGED_PATH" \
+    "$root/scripts/environment/runtime-matrix-managed-path"
+  chmod 0755 "$root/scripts/environment/runtime-matrix-library"
+  chmod 0755 "$root/scripts/environment/runtime-matrix-prefix-handoff" \
+    "$root/scripts/environment/runtime-matrix-managed-path"
+
+  cat > "$root/scripts/environment/runtime-matrix-registry" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime=9.8.7
+case "${1:-}" in
+  validate) exit 0 ;;
+  versions) printf '%s\n' "$runtime" ;;
+  contains) [[ "${2:-}" == "$runtime" ]] ;;
+  field)
+    [[ "${2:-}" == "$runtime" ]]
+    case "${3:-}" in
+      dependency_mode) printf '%s\n' source-library ;;
+      dependency_lock)
+        printf '%s\n' environment/runtime-r-9.8.7-packages.lock
+        ;;
+      runtime_lock)
+        printf '%s\n' environment/runtime-r-9.8.7-linux-64.lock
+        ;;
+      prefix_repair) printf '%s\n' - ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod 0755 "$root/scripts/environment/runtime-matrix-registry"
+
+  cat > "$root/scripts/environment/runtime-matrix-prefix-receipt" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  create)
+    printf 'fixture-manifest\n' > "$3"
+    ;;
+  verify)
+    [[ -d "$2" && -f "$3" && ! -L "$2" && ! -L "$3" ]]
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod 0755 "$root/scripts/environment/runtime-matrix-prefix-receipt"
+  printf 'fixture inventory helper\n' \
+    > "$root/scripts/environment/runtime-matrix-inventory.R"
+
+  cat > "$root/.local/runtime-matrix/prefixes/R-$RUNTIME/bin/Rscript" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime=9.8.7
+[[ "${1:-}" == --vanilla ]]
+if [[ "${2:-}" == -e ]]; then
+  printf '%s' "$runtime"
+  exit 0
+fi
+operation=${3:-}
+case "$operation" in
+  install)
+    library=$7
+    build_root=${HOME%/home}
+    [[ "$HOME" == "$build_root/home" &&
+      "$R_USER" == "$build_root/home" &&
+      "$TMPDIR" == "$build_root/tmp" &&
+      "$XDG_CONFIG_HOME" == "$build_root/config" &&
+      "$XDG_CACHE_HOME" == "$build_root/cache" &&
+      "$XDG_DATA_HOME" == "$build_root/data" &&
+      "$XDG_STATE_HOME" == "$build_root/state" &&
+      "$XDG_RUNTIME_DIR" == "$build_root/runtime" &&
+      "$R_USER_CACHE_DIR" == "$build_root/r-cache" &&
+      "$CCACHE_DIR" == "$build_root/ccache" &&
+      "$CCACHE_TEMPDIR" == "$build_root/ccache-tmp" &&
+      "$PIP_CACHE_DIR" == "$build_root/pip-cache" &&
+      "$UV_CACHE_DIR" == "$build_root/uv-cache" &&
+      "$CARGO_HOME" == "$build_root/cargo" &&
+      "$RUSTUP_HOME" == "$build_root/rustup" &&
+      "$GOPATH" == "$build_root/go" &&
+      "$GOMODCACHE" == "$build_root/go-mod" &&
+      "$npm_config_cache" == "$build_root/npm" &&
+      "$YARN_CACHE_FOLDER" == "$build_root/yarn" &&
+      "$BUNDLE_USER_HOME" == "$build_root/bundle" &&
+      "$PYTHONPYCACHEPREFIX" == "$build_root/python" &&
+      "$JULIA_DEPOT_PATH" == "$build_root/julia" &&
+      "$CUDA_CACHE_PATH" == "$build_root/cuda" &&
+      "$GIT_CONFIG_GLOBAL" == /dev/null &&
+      "$GIT_CONFIG_SYSTEM" == /dev/null &&
+      "$R_ENVIRON_USER" == /dev/null &&
+      "$R_PROFILE_USER" == /dev/null &&
+      "$R_MAKEVARS_USER" == /dev/null ]]
+    [[ "$TMP" == "$build_root/tmp" && "$TEMP" == "$build_root/tmp" ]]
+    printf 'install\n' >> "${FIXTURE_INSTALL_LOG:?}"
+    sleep "${FIXTURE_INSTALL_DELAY:-0}"
+    if [[ "${FIXTURE_REPLACE_HOME:-false}" == true ]]; then
+      mv -- "$build_root" "$build_root.original"
+      mkdir -- "$build_root"
+      printf 'replacement\n' > "$build_root/replacement-marker"
+      printf '%s\n' "$build_root" > "${FIXTURE_HOME_PATH_LOG:?}"
+      exit 0
+    fi
+    if [[ "${FIXTURE_REPLACE_STAGE:-false}" == true ]]; then
+      mv -- "$library" "$library.original"
+      mkdir -- "$library"
+      printf 'replacement\n' > "$library/replacement-marker"
+      printf '%s\n' "$library" > "${FIXTURE_STAGE_PATH_LOG:?}"
+      exit 0
+    fi
+    mkdir -p -- "$library/fixturepkg"
+    printf 'Package: fixturepkg\nVersion: 1.0\n' \
+      > "$library/fixturepkg/DESCRIPTION"
+    ;;
+  inventory)
+    printf 'Package\tVersion\tBuilt\n'
+    printf 'fixturepkg\t1.0\tR %s; fixture\n' "$runtime"
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod 0755 \
+    "$root/.local/runtime-matrix/prefixes/R-$RUNTIME/bin/Rscript"
+
+  printf 'fixture runtime lock\n' \
+    > "$root/environment/runtime-r-$RUNTIME-linux-64.lock"
+  printf 'fixture runtime registry\n' > "$root/environment/runtime-matrix.tsv"
+  receipt_root="$root/.local/runtime-matrix/receipts/R-$RUNTIME"
+  : > "$receipt_root/installed-explicit.lock"
+  printf 'package\tversion\tbuild\tsubdir\turl\tsha256\n' \
+    > "$receipt_root/packages.tsv"
+  printf 'path\tkind\tsha256_or_target\tsize\tmode\n' \
+    > "$receipt_root/prefix.manifest.tsv"
+  {
+    printf 'format\t1\n'
+    printf 'runtime\t%s\n' "$RUNTIME"
+    printf 'platform\tlinux-64\n'
+    printf 'prefix_relative\t.local/runtime-matrix/prefixes/R-%s\n' "$RUNTIME"
+    printf 'lock_relative\tenvironment/runtime-r-%s-linux-64.lock\n' "$RUNTIME"
+    printf 'lock_sha256\t%s\n' \
+      "$(sha256sum "$root/environment/runtime-r-$RUNTIME-linux-64.lock" |
+        cut -d ' ' -f 1)"
+    printf 'micromamba_version\t2.5.0\n'
+    printf 'micromamba_archive_sha256\t%064d\n' 0
+    printf 'micromamba_executable_sha256\t%064d\n' 0
+    printf 'inventory_helper_sha256\t%s\n' \
+      "$(sha256sum "$root/scripts/environment/runtime-matrix-inventory.R" |
+        cut -d ' ' -f 1)"
+    printf 'prefix_receipt_helper_sha256\t%s\n' \
+      "$(sha256sum "$root/scripts/environment/runtime-matrix-prefix-receipt" |
+        cut -d ' ' -f 1)"
+    printf 'prefix_manifest_sha256\t%s\n' \
+      "$(sha256sum "$receipt_root/prefix.manifest.tsv" | cut -d ' ' -f 1)"
+    printf 'r_version\t%s\n' "$RUNTIME"
+    printf 'r_home_relative\t.local/runtime-matrix/prefixes/R-%s/lib/R\n' \
+      "$RUNTIME"
+    printf 'cc\tfixture-cc\n'
+  } > "$receipt_root/receipt.tsv"
+  printf '%s  receipt.tsv\n' \
+    "$(sha256sum "$receipt_root/receipt.tsv" | cut -d ' ' -f 1)" \
+    > "$receipt_root/receipt.sha256"
+  archive="$root/.cache/downloads/runtime-matrix/R-$RUNTIME/fixturepkg_1.0.tar.gz"
+  printf 'fixture source archive\n' > "$archive"
+  archive_hash=$(sha256sum -- "$archive" | cut -d ' ' -f 1)
+  {
+    printf 'Package\tVersion\tRole\tSHA256\tURL\tFallbackURL\n'
+    printf 'fixturepkg\t1.0\truntime-import\t%s\t%s\t-\n' \
+      "$archive_hash" \
+      'https://cloud.r-project.org/src/contrib/fixturepkg_1.0.tar.gz'
+  } > "$root/environment/runtime-r-$RUNTIME-packages.lock"
+}
+
+for boundary in cache staging library receipt; do
+  case_root="$FIXTURE_ROOT/symlink-$boundary"
+  repository="$case_root/repository"
+  outside="$case_root/outside"
+  prepare_library_fixture "$repository"
+  mkdir -p -- "$outside"
+  case "$boundary" in
+    cache)
+      rm -rf -- "$repository/.cache/downloads/runtime-matrix"
+      ln -s -- "$outside" \
+        "$repository/.cache/downloads/runtime-matrix"
+      ;;
+    staging)
+      rm -rf -- "$repository/.local/tmp"
+      ln -s -- "$outside" "$repository/.local/tmp"
+      ;;
+    library)
+      ln -s -- "$outside" \
+        "$repository/.local/runtime-matrix/dependencies"
+      ;;
+    receipt)
+      ln -s -- "$outside" \
+        "$repository/.local/runtime-matrix/dependency-receipts"
+      ;;
+  esac
+  expect_failure "source-library-$boundary-symlink" \
+    "refusing symbolic managed source-library directory" \
+    env FIXTURE_INSTALL_LOG="$case_root/install.log" \
+      "$repository/scripts/environment/runtime-matrix-library" \
+      --runtime "$RUNTIME" --offline
+  [[ -z "$(find "$outside" -mindepth 1 -print -quit)" ]] ||
+    fail "$boundary symlink fixture wrote outside its managed path"
+done
+
+replacement_root="$FIXTURE_ROOT/cleanup-replacement"
+replacement_repository="$replacement_root/repository"
+prepare_library_fixture "$replacement_repository"
+replacement_stage_log="$replacement_root/stage-path.log"
+expect_failure "source-library-staging-replacement" \
+  "dependency-library staging directory identity changed after creation" \
+  env FIXTURE_INSTALL_LOG="$replacement_root/install.log" \
+    FIXTURE_REPLACE_STAGE=true \
+    FIXTURE_STAGE_PATH_LOG="$replacement_stage_log" \
+    "$replacement_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --offline
+[[ -f "$replacement_stage_log" && ! -L "$replacement_stage_log" ]] ||
+  fail "staging replacement fixture did not retain its selected path"
+replacement_stage=$(<"$replacement_stage_log")
+[[ -f "$replacement_stage/replacement-marker" &&
+  ! -L "$replacement_stage/replacement-marker" ]] ||
+  fail "cleanup removed a staging path with a substituted device/inode"
+
+home_replacement_root="$FIXTURE_ROOT/cleanup-home-replacement"
+home_replacement_repository="$home_replacement_root/repository"
+prepare_library_fixture "$home_replacement_repository"
+home_replacement_log="$home_replacement_root/home-path.log"
+expect_failure "source-library-home-replacement" \
+  "dependency-library build-home staging directory identity changed after creation" \
+  env FIXTURE_INSTALL_LOG="$home_replacement_root/install.log" \
+    FIXTURE_REPLACE_HOME=true \
+    FIXTURE_HOME_PATH_LOG="$home_replacement_log" \
+    "$home_replacement_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --offline
+[[ -f "$home_replacement_log" && ! -L "$home_replacement_log" ]] ||
+  fail "build-home replacement fixture did not retain its selected path"
+home_replacement=$(<"$home_replacement_log")
+[[ -f "$home_replacement/replacement-marker" &&
+  ! -L "$home_replacement/replacement-marker" ]] ||
+  fail "cleanup removed a build-home path with a substituted device/inode"
+
+concurrent_root="$FIXTURE_ROOT/concurrent"
+concurrent_repository="$concurrent_root/repository"
+prepare_library_fixture "$concurrent_repository"
+install_log="$concurrent_root/install.log"
+declare -a publisher_pids=()
+for publisher in {1..8}; do
+  env FIXTURE_INSTALL_LOG="$install_log" FIXTURE_INSTALL_DELAY=1 \
+    "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --offline \
+    >"$concurrent_root/publisher-$publisher.log" 2>&1 &
+  publisher_pids+=("$!")
+done
+for publisher in {1..8}; do
+  wait "${publisher_pids[publisher - 1]}" ||
+    fail "cold concurrent source-library publisher $publisher failed"
+done
+[[ $(wc -l < "$install_log") -eq 1 ]] ||
+  fail "same-key concurrent publication executed more than one install"
+[[ $(find \
+  "$concurrent_repository/.local/runtime-matrix/dependencies/R-$RUNTIME" \
+  -mindepth 2 -maxdepth 2 -type d -name library | wc -l) -eq 1 ]] ||
+  fail "same-key publication did not retain one dependency library"
+[[ $(find \
+  "$concurrent_repository/.local/runtime-matrix/dependency-receipts/R-$RUNTIME" \
+  -mindepth 1 -maxdepth 1 -type d | wc -l) -eq 1 ]] ||
+  fail "same-key publication did not retain one receipt directory"
+mapfile -t build_homes < <(find "$concurrent_repository/.local/tmp" \
+  -mindepth 1 -maxdepth 1 -type d \
+  -name "runtime-library-home.R-$RUNTIME.*" -print)
+[[ ${#build_homes[@]} -eq 0 ]] ||
+  fail "successful source-library build retained its temporary HOME/cache directory"
+env FIXTURE_INSTALL_LOG="$install_log" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+  --runtime "$RUNTIME" --verify >/dev/null
+cache_archive="$concurrent_repository/.cache/downloads/runtime-matrix/R-$RUNTIME/fixturepkg_1.0.tar.gz"
+chmod 0644 "$cache_archive"
+printf 'tampered cache bytes\n' > "$cache_archive"
+env FIXTURE_INSTALL_LOG="$install_log" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+  --runtime "$RUNTIME" --verify >/dev/null
+rm -rf -- "$concurrent_repository/.cache/downloads/runtime-matrix/R-$RUNTIME"
+env FIXTURE_INSTALL_LOG="$install_log" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+  --runtime "$RUNTIME" --verify >/dev/null
+irrelevant_cache_outside="$concurrent_root/irrelevant-cache-outside"
+mkdir -p -- "$irrelevant_cache_outside"
+ln -s -- "$irrelevant_cache_outside" \
+  "$concurrent_repository/.cache/downloads/runtime-matrix/R-$RUNTIME"
+env FIXTURE_INSTALL_LOG="$install_log" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+  --runtime "$RUNTIME" --verify >/dev/null
+env FIXTURE_INSTALL_LOG="$install_log" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+  --runtime "$RUNTIME" --offline >/dev/null
+[[ $(wc -l < "$install_log") -eq 1 ]] ||
+  fail "cache-free verification attempted to reprovision the sealed library"
+[[ -z "$(find "$irrelevant_cache_outside" -mindepth 1 -print -quit)" ]] ||
+  fail "sealed-library cache hit followed an irrelevant symbolic cache"
+
+prefix_handoff="$concurrent_repository/.local/checks/prefix-handoff/runtime-matrix/R-$RUNTIME/artifacts/inputs/bootstrap-receipt"
+mkdir -p -- "${prefix_handoff%/*}"
+cp -R -- \
+  "$concurrent_repository/.local/runtime-matrix/receipts/R-$RUNTIME" \
+  "$prefix_handoff"
+"$concurrent_repository/scripts/environment/runtime-matrix-prefix-handoff" \
+  "$RUNTIME" "$prefix_handoff" >/dev/null
+chmod 0644 "$prefix_handoff/receipt.tsv"
+printf 'mutated\tvalue\n' >> "$prefix_handoff/receipt.tsv"
+expect_failure "prefix-receipt-mutated-handoff" \
+  "staged prefix receipt differs from the live authenticated receipt" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-prefix-handoff" \
+  "$RUNTIME" "$prefix_handoff"
+rm -rf -- "$prefix_handoff"
+cp -R -- \
+  "$concurrent_repository/.local/runtime-matrix/receipts/R-$RUNTIME" \
+  "$prefix_handoff"
+printf 'unexpected\n' > "$prefix_handoff/unexpected"
+expect_failure "prefix-receipt-extra-file-handoff" \
+  "staged prefix receipt does not contain the exact five receipt files" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-prefix-handoff" \
+  "$RUNTIME" "$prefix_handoff"
+
+live_receipt=$(find \
+  "$concurrent_repository/.local/runtime-matrix/dependency-receipts/R-$RUNTIME" \
+  -mindepth 1 -maxdepth 1 -type d -print -quit)
+live_library=$(find \
+  "$concurrent_repository/.local/runtime-matrix/dependencies/R-$RUNTIME" \
+  -mindepth 2 -maxdepth 2 -type d -name library -print -quit)
+handoff="$concurrent_repository/.local/checks/handoff-fixture/runtime-matrix/R-$RUNTIME/artifacts/inputs/dependency-library-receipt"
+mkdir -p -- "${handoff%/*}"
+cp -R -- "$live_receipt" "$handoff"
+observed_library=$(env FIXTURE_INSTALL_LOG="$install_log" \
+  "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+  --runtime "$RUNTIME" --verified-receipt-handoff "$handoff" --print-path)
+[[ "$observed_library" == "$live_library" ]] ||
+  fail "verified receipt handoff returned the wrong dependency library"
+
+forged_handoff="$concurrent_root/forged-receipt"
+cp -R -- "$live_receipt" "$forged_handoff"
+expect_failure "source-library-forged-handoff" \
+  "verified receipt handoff is outside the retained stage tree" \
+  env FIXTURE_INSTALL_LOG="$install_log" \
+    "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --verified-receipt-handoff "$forged_handoff"
+
+misplaced_handoff="$concurrent_repository/.local/checks/misplaced-handoff/dependency-library-receipt"
+mkdir -p -- "${misplaced_handoff%/*}"
+cp -R -- "$live_receipt" "$misplaced_handoff"
+expect_failure "source-library-misplaced-handoff" \
+  "verified receipt handoff is not the exact runtime stage input" \
+  env FIXTURE_INSTALL_LOG="$install_log" \
+    "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --verified-receipt-handoff "$misplaced_handoff"
+
+chmod 0644 "$handoff/receipt.tsv"
+printf 'forged\tvalue\n' >> "$handoff/receipt.tsv"
+expect_failure "source-library-stale-handoff" \
+  "verified receipt handoff differs from the live sealed receipt" \
+  env FIXTURE_INSTALL_LOG="$install_log" \
+    "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --verified-receipt-handoff "$handoff"
+
+symbolic_handoff="$concurrent_repository/.local/checks/symbolic-handoff/runtime-matrix/R-$RUNTIME/artifacts/inputs/dependency-library-receipt"
+mkdir -p -- "${symbolic_handoff%/*}"
+ln -s -- "$live_receipt" "$symbolic_handoff"
+expect_failure "source-library-symbolic-handoff" \
+  "refusing symbolic managed source-library directory" \
+  env FIXTURE_INSTALL_LOG="$install_log" \
+    "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --verified-receipt-handoff "$symbolic_handoff"
+
+symbolic_file_handoff="$concurrent_repository/.local/checks/symbolic-file-handoff/runtime-matrix/R-$RUNTIME/artifacts/inputs/dependency-library-receipt"
+mkdir -p -- "${symbolic_file_handoff%/*}"
+cp -R -- "$live_receipt" "$symbolic_file_handoff"
+rm -f -- "$symbolic_file_handoff/receipt.tsv"
+ln -s -- "$live_receipt/receipt.tsv" \
+  "$symbolic_file_handoff/receipt.tsv"
+expect_failure "source-library-symbolic-file-handoff" \
+  "refusing symbolic managed source-library file" \
+  env FIXTURE_INSTALL_LOG="$install_log" \
+    "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" \
+    --verified-receipt-handoff "$symbolic_file_handoff"
+
+tamper_handoff="$concurrent_repository/.local/checks/library-tamper/runtime-matrix/R-$RUNTIME/artifacts/inputs/dependency-library-receipt"
+mkdir -p -- "${tamper_handoff%/*}"
+cp -R -- "$live_receipt" "$tamper_handoff"
+chmod u+w "$live_library/fixturepkg/DESCRIPTION"
+printf 'X' | dd of="$live_library/fixturepkg/DESCRIPTION" \
+  bs=1 seek=0 conv=notrunc status=none
+expect_failure "source-library-live-tree-tamper" \
+  "dependency-library identity receipt differs from the live tree" \
+  env FIXTURE_INSTALL_LOG="$install_log" \
+    "$concurrent_repository/scripts/environment/runtime-matrix-library" \
+    --runtime "$RUNTIME" --verified-receipt-handoff "$tamper_handoff"
+
+r_executables=()
+if command -v Rscript >/dev/null 2>&1; then
+  r_executables+=("$(command -v Rscript)")
+fi
+if [[ -x "$ROOT/.local/runtime-matrix/prefixes/R-3.6.3/bin/Rscript" ]]; then
+  r_executables+=(
+    "$ROOT/.local/runtime-matrix/prefixes/R-3.6.3/bin/Rscript"
+  )
+fi
+declare -A seen_r_executables=()
+declare -A seen_runtimes=()
+for rscript in "${r_executables[@]}"; do
+  rscript=$(readlink -f -- "$rscript")
+  [[ -z ${seen_r_executables[$rscript]+x} ]] || continue
+  seen_r_executables[$rscript]=1
+  current_runtime=$("$rscript" --vanilla \
+    -e 'cat(as.character(getRversion()))')
+  [[ -z ${seen_runtimes[$current_runtime]+x} ]] || continue
+  seen_runtimes[$current_runtime]=1
+  r_root="$FIXTURE_ROOT/r-helper-$current_runtime/repository"
+  r_outside="$FIXTURE_ROOT/r-helper-$current_runtime/outside"
+  mkdir -p -- "$r_root/environment" "$r_root/library/fixturepkg" \
+    "$r_outside"
+  {
+    printf 'Package\tVersion\tRole\tSHA256\tURL\tFallbackURL\n'
+    printf 'fixturepkg\t1.0\truntime-import\t%s\t%s\t-\n' \
+      "$(printf '%064d' 0)" \
+      'https://cloud.r-project.org/src/contrib/fixturepkg_1.0.tar.gz'
+  } > "$r_root/environment/packages.lock"
+  {
+    printf 'Package: fixturepkg\n'
+    printf 'Version: 1.0\n'
+    printf 'Built: R %s; fixture; fixture\n' "$current_runtime"
+  } > "$r_root/library/fixturepkg/DESCRIPTION"
+  env R_DEFAULT_PACKAGES=NULL PARADOX_ROOT="$r_root" \
+    "$rscript" --vanilla "$R_HELPER" \
+    inventory "$current_runtime" "$r_root/environment/packages.lock" \
+    "$r_root/absent-cache" "$r_root/library" >/dev/null
+
+  ln -s -- "$r_outside" "$r_root/cache"
+  expect_failure "r-helper-$current_runtime-cache-symlink" \
+    "refusing symbolic runtime-library cache component" \
+    env R_DEFAULT_PACKAGES=NULL PARADOX_ROOT="$r_root" \
+      "$rscript" --vanilla "$R_HELPER" \
+      install "$current_runtime" "$r_root/environment/packages.lock" \
+      "$r_root/cache" "$r_root/library"
+
+  mkfifo "$r_root/environment/fifo.lock"
+  expect_failure "r-helper-$current_runtime-fifo" \
+    "runtime package lock is absent, non-regular, or symbolic" \
+    env R_DEFAULT_PACKAGES=NULL PARADOX_ROOT="$r_root" \
+      "$rscript" --vanilla "$R_HELPER" \
+      inventory "$current_runtime" "$r_root/environment/fifo.lock" \
+      "$r_root/absent-cache" "$r_root/library"
+
+  expect_failure "r-helper-$current_runtime-noncanonical-root" \
+    "PARADOX_ROOT must be canonical" \
+    env R_DEFAULT_PACKAGES=NULL PARADOX_ROOT="$r_root/" \
+      "$rscript" --vanilla "$R_HELPER" \
+      inventory "$current_runtime" "$r_root/environment/packages.lock" \
+      "$r_root/absent-cache" "$r_root/library"
+done
+
+real_receipt_root="$FIXTURE_ROOT/real-prefix-receipt"
+mkdir -p -- "$real_receipt_root/prefix/bin" "$real_receipt_root/receipts"
+printf 'fixture runtime member\n' > "$real_receipt_root/prefix/bin/member"
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" create \
+  "$real_receipt_root/prefix" \
+  "$real_receipt_root/receipts/prefix.manifest.tsv" >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" verify \
+  "$real_receipt_root/prefix" \
+  "$real_receipt_root/receipts/prefix.manifest.tsv" >/dev/null
+rg -Fq '"$PREFIX_RECEIPT" verify "$prefix" "$public_manifest_copy"' \
+  "$BOOTSTRAP" ||
+  fail "bootstrap does not pass the real prefix-receipt helper a plain parent"
+rg -Fq -- '--verify-prefix-only' "$ROOT/scripts/activate-runtime-matrix" &&
+  rg -Fq -- '--verified-receipt-handoff' \
+    "$ROOT/scripts/activate-runtime-matrix" &&
+  rg -Fq 'PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF="$STAGE_INPUTS/bootstrap-receipt"' \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage" &&
+  rg -Fq 'PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF="$STAGE_INPUTS/dependency-library-receipt"' \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage" ||
+  fail "runtime stage activation does not use the exact staged receipt handoff"
+
+managed_helper="$ROOT/scripts/environment/runtime-matrix-managed-path"
+managed_helper_root="$FIXTURE_ROOT/managed-helper"
+mkdir -p -- "$managed_helper_root/plain"
+expect_failure "managed-helper-dot" \
+  "managed target contains an unsafe component" \
+  "$managed_helper" "$managed_helper_root" \
+  "$managed_helper_root/plain/./child" allow-missing
+expect_failure "managed-helper-dotdot" \
+  "managed target contains an unsafe component" \
+  "$managed_helper" "$managed_helper_root" \
+  "$managed_helper_root/plain/../child" allow-missing
+expect_failure "managed-helper-duplicate-separator" \
+  "managed target is not component-canonical" \
+  "$managed_helper" "$managed_helper_root" \
+  "$managed_helper_root/plain//child" allow-missing
+
+stage_fixture_root="$FIXTURE_ROOT/stage-user-path-symlink"
+stage_repository="$stage_fixture_root/repository"
+stage_run_root="$stage_repository/.local/checks/stage-fixture/runtime-matrix"
+stage_artifacts="$stage_run_root/R-$RUNTIME/artifacts"
+stage_outside="$stage_fixture_root/outside"
+  mkdir -p -- "$stage_repository/scripts/environment" \
+  "$stage_repository/environment" \
+  "$stage_artifacts/source" "$stage_artifacts/build" \
+  "$stage_artifacts/check" "$stage_artifacts/library" \
+    "$stage_artifacts/logs" "$stage_artifacts/inputs/bootstrap-receipt" \
+  "$stage_run_root/inputs/mbo-config-fixtures/common" "$stage_outside"
+cp -- "$ROOT/scripts/environment/run-runtime-matrix-stage" \
+  "$stage_repository/scripts/environment/run-runtime-matrix-stage"
+cp -- "$managed_helper" \
+  "$stage_repository/scripts/environment/runtime-matrix-managed-path"
+cp -- "$LIBRARY_MANAGER" \
+  "$stage_repository/scripts/environment/runtime-matrix-library"
+cp -- "$ROOT/scripts/environment/verify-r36-declared-check-log" \
+  "$stage_repository/scripts/environment/verify-r36-declared-check-log"
+chmod 0755 "$stage_repository/scripts/environment/run-runtime-matrix-stage" \
+  "$stage_repository/scripts/environment/runtime-matrix-library" \
+  "$stage_repository/scripts/environment/runtime-matrix-managed-path" \
+  "$stage_repository/scripts/environment/verify-r36-declared-check-log"
+cat > "$stage_repository/scripts/environment/runtime-matrix-registry" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  contains) [[ "${2:-}" == 9.8.7 ]] ;;
+  field)
+    [[ "${2:-}" == 9.8.7 && "${3:-}" == dependency_mode ]]
+    printf '%s\n' prefix-library
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+cat > "$stage_repository/scripts/environment/mbo-config-fixtures" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod 0755 "$stage_repository/scripts/environment/runtime-matrix-registry" \
+  "$stage_repository/scripts/environment/mbo-config-fixtures"
+ln -s -- "$stage_outside" "$stage_artifacts/home"
+expect_failure "stage-user-path-symlink" \
+  "managed target contains a symbolic component" \
+  "$stage_repository/scripts/environment/run-runtime-matrix-stage" \
+  "$stage_repository" "$stage_run_root" "$RUNTIME"
+[[ -z "$(find "$stage_outside" -mindepth 1 -print -quit)" ]] ||
+  fail "runtime stage followed a symbolic HOME/cache path"
+
+stage_race_root="$FIXTURE_ROOT/stage-user-path-race"
+stage_race_repository="$stage_race_root/repository"
+stage_race_outside="$stage_race_root/outside"
+mkdir -p -- "$stage_race_root"
+cp -R -- "$stage_repository" "$stage_race_repository"
+rm -f -- \
+  "$stage_race_repository/.local/checks/stage-fixture/runtime-matrix/R-$RUNTIME/artifacts/home"
+mkdir -p -- "$stage_race_outside"
+mv -- "$stage_race_repository/scripts/environment/runtime-matrix-managed-path" \
+  "$stage_race_repository/scripts/environment/runtime-matrix-managed-path.real"
+cat > "$stage_race_repository/scripts/environment/runtime-matrix-managed-path" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+"$0.real" "$@"
+if [[ "$2" == */artifacts/data/xdg && "$3" == allow-missing ]]; then
+  ln -s -- "${FIXTURE_STAGE_OUTSIDE:?}" "${2%/xdg}"
+fi
+EOF
+chmod 0755 \
+  "$stage_race_repository/scripts/environment/runtime-matrix-managed-path"
+stage_race_run_root="$stage_race_repository/.local/checks/stage-fixture/runtime-matrix"
+expect_failure "stage-user-path-race" \
+  "runtime stage directory component is unsafe" \
+  env FIXTURE_STAGE_OUTSIDE="$stage_race_outside" \
+    "$stage_race_repository/scripts/environment/run-runtime-matrix-stage" \
+    "$stage_race_repository" "$stage_race_run_root" "$RUNTIME"
+[[ -z "$(find "$stage_race_outside" -mindepth 1 -print -quit)" ]] ||
+  fail "runtime stage race wrote through a substituted cache ancestor"
+
+prepare_bootstrap_fixture() {
+  local root=$1 digest
+  digest=$(printf '%064d' 0)
+  mkdir -p -- "$root/scripts/environment" "$root/environment" \
+    "$root/.local/runtime-matrix/receipts"
+  cp -- "$BOOTSTRAP" "$root/scripts/bootstrap-runtime-matrix"
+  chmod 0755 "$root/scripts/bootstrap-runtime-matrix"
+  cat > "$root/scripts/environment/runtime-matrix-registry" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+runtime=9.8.7
+case "${1:-}" in
+  validate) exit 0 ;;
+  versions) printf '%s\n' "$runtime" ;;
+  contains) [[ "${2:-}" == "$runtime" ]] ;;
+  field)
+    [[ "${2:-}" == "$runtime" ]]
+    case "${3:-}" in
+      runtime_lock)
+        printf '%s\n' environment/runtime-r-9.8.7-linux-64.lock
+        ;;
+      dependency_mode) printf '%s\n' prefix-library ;;
+      prefix_repair) printf '%s\n' - ;;
+      *) exit 1 ;;
+    esac
+    ;;
+  *) exit 1 ;;
+esac
+EOF
+  chmod 0755 "$root/scripts/environment/runtime-matrix-registry"
+  for helper in runtime-matrix-library runtime-matrix-prefix-receipt \
+      runtime-matrix-prefix-repair; do
+    printf '#!/usr/bin/env bash\nexit 0\n' \
+      > "$root/scripts/environment/$helper"
+    chmod 0755 "$root/scripts/environment/$helper"
+  done
+  printf 'invisible(NULL)\n' \
+    > "$root/scripts/environment/runtime-matrix-inventory.R"
+  {
+    printf '# platform: linux-64\n'
+    printf '# runtime: R %s\n' "$RUNTIME"
+    printf '@EXPLICIT\n'
+    printf 'https://conda.anaconda.org/conda-forge/linux-64/r-base-%s-0.conda#%s\n' \
+      "$RUNTIME" "$digest"
+    for index in {1..49}; do
+      printf 'https://conda.anaconda.org/conda-forge/linux-64/fixture-%s-0.conda#%s\n' \
+        "$index" "$digest"
+    done
+  } > "$root/environment/runtime-r-$RUNTIME-linux-64.lock"
+}
+
+for bootstrap_mode in verify refresh; do
+  bootstrap_root="$FIXTURE_ROOT/bootstrap-$bootstrap_mode"
+  bootstrap_repository="$bootstrap_root/repository"
+  bootstrap_outside="$bootstrap_root/outside"
+  prepare_bootstrap_fixture "$bootstrap_repository"
+  mkdir -p -- "$bootstrap_outside"
+  ln -s -- "$bootstrap_outside" \
+    "$bootstrap_repository/.local/runtime-matrix/receipts/R-$RUNTIME"
+  if [[ "$bootstrap_mode" == verify ]]; then
+    bootstrap_arguments=(--runtime "$RUNTIME" --verify)
+  else
+    bootstrap_arguments=(--runtime "$RUNTIME" --refresh-receipts)
+  fi
+  expect_failure "bootstrap-$bootstrap_mode-receipt-symlink" \
+    "Refusing symbolic managed directory" \
+    "$bootstrap_repository/scripts/bootstrap-runtime-matrix" \
+    "${bootstrap_arguments[@]}"
+  [[ -z "$(find "$bootstrap_outside" -mindepth 1 -print -quit)" ]] ||
+    fail "bootstrap $bootstrap_mode followed its version receipt symlink"
+done
+
+printf 'runtime_matrix_managed_path_fixtures=passed\n'

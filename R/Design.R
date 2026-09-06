@@ -1,9 +1,25 @@
+.design_prepared_grid = new.env(parent = emptyenv())
+
 #' @title Design of Configurations
 #'
 #' @description
 #' A lightweight wrapper around a [ParamSet] and a [data.table::data.table()], where the
 #' latter is a design of configurations produced from the former - e.g.,
 #' by calling a [generate_design_grid()] or by sampling.
+#' Design operations use Paradox's shared structural data-frame/data-table
+#' boundary. A well-formed ordinary class vector ends in `"data.frame"` or
+#' `c("data.table", "data.frame")`; leading additive classes are
+#' representation-only and never dispatch. The classifier does not copy or
+#' materialize an ordinary shell merely to remove the prefix, and native
+#' semantic snapshots ignore it; an already-required ALTREP snapshot installs
+#' only the canonical suffix. Malformed class vectors
+#' reject. Names and accepted data.table cache
+#' carriers are ordinary structure. Raw row names are attribute-free, nonobject, non-S4 integer or
+#' character vectors; compact counts and stable ALTREP lengths are supported,
+#' but row labels are not interpreted. An admitted top-level VECSXP ALTREP
+#' shell is materialized once after names/classes are owned; semantic atomic
+#' columns may likewise be stable ALTREP. Package-created tables retain
+#' canonical ordinary metadata.
 #'
 #' @export
 Design = R6Class("Design",
@@ -12,7 +28,9 @@ Design = R6Class("Design",
     param_set = NULL,
 
     #' @field data ([data.table::data.table()])\cr
-    #' Stored `data`.
+    #' Stored data.table shell. The shared suffix-aware public-table boundary and its
+    #' count-only row-name rules apply. An allowed top-level VECSXP ALTREP is
+    #' accepted once, and semantic atomic columns may be stable ALTREP.
     data = NULL,
 
     #' @description
@@ -20,29 +38,67 @@ Design = R6Class("Design",
     #'
     #' @param param_set ([ParamSet]).
     #' @param data ([data.table::data.table()])\cr
-    #'   Stored `data`.
+    #'   Stored `data`. The shared suffix-aware public-table boundary and its count-only
+    #'   row-name rules apply. An allowed top-level VECSXP ALTREP is accepted
+    #'   once, and admitted semantic atomic columns may be stable ALTREP.
     #' @param remove_dupl (`logical(1)`)\cr
     #'   Remove duplicates?
     initialize = function(param_set, data, remove_dupl) {
 
-      assert_param_set(param_set)
-      assert_data_table(data, ncols = param_set$length)
-      assert_names(colnames(data), permutation.of = param_set$ids())
-      self$param_set = param_set
-      # FIXME: this works in general but is not really fast, as we generate the col first, then overwrite it,
-      # OTOH this is really robust
-      # set fixed param vals to their constant values
-      # FIXME: this might also be problematic for LHS
-      # do we still create an LHS like this?
-      imap(param_set$values, function(v, n) set(data, j = n, value = v))
-      self$data = data
-      if (param_set$has_deps) {
-        private$set_deps_to_na()
+      assert_r6(param_set, "ParamSet")
+      # The namespace-owned grid token certifies a table produced and fully
+      # normalized by the one-shot native grid operation. Keeping this branch
+      # free of a second schema snapshot is both the grid hot path and the
+      # reason the token is an identity object rather than a public flag.
+      if (identical(remove_dupl, .design_prepared_grid)) {
+        self$param_set = param_set
+        self$data = data
+        return(invisible(NULL))
       }
-      # NB: duplicated rows can happen to to NA setting
+
+      assert_data_table(data)
+      # Admit the complete public table first and then one complete ParamSet
+      # graph. The native plan owns fixed-value classification, column
+      # permutation validation, and dependency evaluation from that same
+      # generation; separate `$length`, `$ids`, `$storage_type`, `$values`,
+      # and `$deps` reads could combine generations around a finalizer.
+      native = .Call(C_design_dependency_plan, data, param_set)
+      self$param_set = param_set
+      self$data = data
+      for (index in seq_along(native$fixed_columns)) {
+        value = native$fixed_values[[index]]
+        # The replacement is always passed as a one-column list: a bare list
+        # value of length one would take data.table's unwrap path and store
+        # the leaf's content instead of the wrapped leaf in a 1-row design.
+        set(
+          self$data,
+          j = native$fixed_columns[[index]],
+          value = if (native$fixed_plain[[index]]) {
+            value
+          } else {
+            list(rep(list(value), nrow(self$data)))
+          }
+        )
+      }
+      for (edge in seq_along(native$rows)) {
+        set(
+          self$data,
+          i = native$rows[[edge]],
+          j = native$columns[[edge]],
+          value = native$values[[edge]]
+        )
+      }
+      # NB: duplicated rows can happen due to NA setting.
       if (remove_dupl) {
         self$data = unique(self$data)
-      } # remove duplicated rows
+      }
+      # The native plan retains the exact BASE capsule or complete
+      # COLLECTION/SHADOW graph it used. All callback-capable R work is now
+      # complete, so one allocation-free scan is the terminal barrier: a
+      # finalizer or custom callback which moved the live support during the
+      # by-reference patch wave wins, and this constructor refuses to return a
+      # Design whose rows describe the earlier generation.
+      .Call(C_param_set_generation_receipt, native$receipt)
     },
 
 
@@ -67,6 +123,12 @@ Design = R6Class("Design",
     #' Converts `data` into a list of lists of row-configurations,
     #' possibly removes `NA` entries of inactive parameter values due to unsatisfied dependencies,
     #' and possibly calls the `trafo` function of the [ParamSet].
+    #' The stored table must continue to satisfy the shared public-table
+    #' boundary. Its captured row-name count must match its columns. A
+    #' zero-column data.frame retains that count, so this method returns one
+    #' empty configuration per row; an unclassed empty list represents zero
+    #' rows. An allowed top-level VECSXP ALTREP and stable atomic columns are
+    #' each materialized once.
     #'
     #' @param filter_na (`logical(1)`)\cr
     #'   Should `NA` entries of inactive parameter values due to unsatisfied
@@ -77,42 +139,9 @@ Design = R6Class("Design",
       assert_flag(filter_na)
       assert_flag(trafo)
       ps = self$param_set
-      xs = transpose_list(self$data)
-      if (filter_na) {
-        xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
-      }
-      if (ps$has_trafo && trafo) {
-        xs = map(xs, function(x) ps$trafo(x))
-      }
+      xs = .Call(C_design_transpose, self$data, filter_na)
+      if (trafo) xs = .Call(C_design_transpose_trafos, xs, ps)
       return(xs)
-    }
-  ),
-
-  private = list(
-    # function to set unsatisfied deps to NA in the design dt "data":
-    # walk thru all params, toposorted order, then walk thru all deps
-    # and set values in x to NA which where the dep is not OK
-    set_deps_to_na = function(remove_dupl) {
-
-      ps = self$param_set
-      graph = ps$deps[, 1:2]
-      colnames(graph) = c("id", "parents")
-      # we need to make sure that every param has a (maybe empty) row in the graph table
-      fillin = data.table(id = ps$ids(), parents = list(character(0L)))
-      graph = rbind(graph, fillin[fillin$id %nin% graph$id, ])
-      graph = graph[, list("parents" = list(unlist(get("parents"), use.names = FALSE))), by = "id"]
-      topo = topo_sort(graph)
-      pids_sorted = topo$id
-      storage_types = ps$storage_type
-      for (param_id in pids_sorted) {
-        dd = ps$deps[get("id") == param_id, ]
-        for (j in seq_row(dd)) {
-          pcol = self$data[[dd$on[j]]]
-          # we are ok if parent was active and cond on parent is OK
-          not_ok = which(is.na(pcol) | !condition_test(dd$cond[[j]], pcol))
-          set(self$data, not_ok, j = param_id, value = as_type(NA, storage_types[[param_id]]))
-        }
-      }
     }
   )
 )

@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+selection=${1:-all}
+"$REGISTRY" validate >/dev/null
+if [[ "$selection" == all ]]; then
+  mapfile -t versions < <("$REGISTRY" versions)
+elif "$REGISTRY" contains "$selection"; then
+  versions=("$selection")
+else
+  echo "usage: scripts/environment/test-runtime-matrix-installed [REGISTERED_VERSION|all]" >&2
+  exit 2
+fi
+
+for version in "${versions[@]}"; do
+  env \
+    HOME="$HOME" \
+    PATH="/usr/bin:/bin" \
+    R_HOME=/tmp/host-r \
+    R_LIBS=/tmp/host-library \
+    R_LIBS_USER=/tmp/host-user-library \
+    R_LIBS_SITE=/tmp/host-site-library \
+    R_ENVIRON_USER=/tmp/host-renviron \
+    R_PROFILE_USER=/tmp/host-rprofile \
+    R_MAKEVARS_USER=/tmp/host-makevars \
+    R_BUILD_ENVIRON=/tmp/host-build-environ \
+    R_CHECK_ENVIRON=/tmp/host-check-environ \
+    R_INSTALL_ENVIRON=/tmp/host-install-environ \
+    CC=/tmp/host-cc \
+    CPPFLAGS=-I/tmp/host-include \
+    LDFLAGS=-L/tmp/host-lib \
+    LD_LIBRARY_PATH=/tmp/host-lib \
+    PKG_CONFIG_PATH=/tmp/host-pkgconfig \
+    XDG_RUNTIME_DIR=/tmp/host-runtime \
+    CCACHE_TEMPDIR=/tmp/host-ccache \
+    bash -s -- "$ROOT" "$version" <<'SHELL'
+set -euo pipefail
+root=$1
+version=$2
+cd "$root"
+. scripts/activate
+ordinary_before=$(mktemp "$root/.local/tmp/ordinary-before-runtime.XXXXXX")
+ordinary_after=$(mktemp "$root/.local/tmp/ordinary-after-runtime.XXXXXX")
+trap 'rm -f -- "$ordinary_before" "$ordinary_after"' EXIT HUP INT TERM
+/usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_before"
+
+export PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT="$root"
+export PARADOX_COMPAT_SYSTEM_RECEIPT="$root/.local/receipts/compat-system/receipt.tsv"
+export PARADOX_COMPAT_SYSTEM_ROOT="$root/.local/compat/system"
+export PARADOX_COMPAT_SYSTEM_GEO="$root/.local/compat/system/geo"
+export PARADOX_COMPAT_SYSTEM_P1="$root/.local/compat/system/p1"
+export PARADOX_COMPAT_SYSTEM_ACTIVE=1
+export PARADOX_COMPAT_SYSTEM_GEO_PREFIX="$PARADOX_COMPAT_SYSTEM_GEO"
+export PARADOX_COMPAT_SYSTEM_P1_PREFIX="$PARADOX_COMPAT_SYSTEM_P1"
+export PROJ_DATA="$PARADOX_COMPAT_SYSTEM_GEO/share/proj"
+export GDAL_DATA="$PARADOX_COMPAT_SYSTEM_GEO/share/gdal"
+export UDUNITS2_XML_PATH="$PARADOX_COMPAT_SYSTEM_GEO/share/udunits/udunits2.xml"
+export UDUNITS2_INCLUDE="$PARADOX_COMPAT_SYSTEM_GEO/include"
+export UDUNITS2_LIBS="$PARADOX_COMPAT_SYSTEM_GEO/lib"
+export JAVA_HOME="$PARADOX_COMPAT_SYSTEM_P1/lib/jvm"
+export JAVA="$JAVA_HOME/bin/java" JAVAC="$JAVA_HOME/bin/javac" JAR="$JAVA_HOME/bin/jar"
+export JAVA_CPPFLAGS=-I/outside/java JAVA_LIBS=-L/outside/java
+export JAVA_LD_LIBRARY_PATH=/outside/java R_JAVA_LD_LIBRARY_PATH=/outside/java
+export MPI_ROOT="$PARADOX_COMPAT_SYSTEM_P1"
+export MPI_INCLUDE="$MPI_ROOT/include" MPI_LIB_PATH="$MPI_ROOT/lib" MPI_TYPE=OPENMPI
+export OPAL_PREFIX="$MPI_ROOT" OMPI_CC=/outside/cc OMPI_CXX=/outside/cxx
+export OMPI_FC=/outside/fc OMPI_MCA_plm_ssh_agent=false
+export PRTE_MCA_rmaps_default_mapping_policy=:oversubscribe
+export CARGO_HOME="$PARADOX_COMPAT_SYSTEM_ROOT/cargo-home"
+export RUSTUP_HOME="$PARADOX_COMPAT_SYSTEM_ROOT/rustup-home"
+export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/outside/cc
+export FONTCONFIG_PATH="$PARADOX_COMPAT_SYSTEM_P1/etc/fonts"
+export FONTCONFIG_FILE="$FONTCONFIG_PATH/fonts.conf"
+PATH="$PARADOX_COMPAT_SYSTEM_P1/bin:$PARADOX_COMPAT_SYSTEM_GEO/bin:$PATH"
+export PATH
+. scripts/activate-runtime-matrix "$version"
+prefix="$root/.local/runtime-matrix/prefixes/R-$version"
+[[ "$PARADOX_ACTIVE_ROOT" == "$root" ]]
+[[ "$PARADOX_RUNTIME_MATRIX_ACTIVE" == 1 ]]
+[[ "$PARADOX_RUNTIME_MATRIX_VERSION" == "$version" ]]
+[[ "$(command -v R)" == "$prefix/bin/R" ]]
+[[ "$(command -v Rscript)" == "$prefix/bin/Rscript" ]]
+[[ "$(R RHOME)" == "$prefix/lib/R" ]]
+[[ "$(Rscript --vanilla -e 'cat(as.character(getRversion()))')" == "$version" ]]
+[[ "$R_LIBS_USER" == "$root/.local/runtime-matrix/libraries/R-$version" ]]
+[[ "$R_BUILD_ENVIRON" == "$root/environment/Renviron" ]]
+[[ "$R_CHECK_ENVIRON" == "$root/environment/Renviron" ]]
+[[ "$R_INSTALL_ENVIRON" == "$root/environment/Renviron" ]]
+dependency_mode=$("$PARADOX_RUNTIME_MATRIX_REGISTRY" field \
+  "$version" dependency_mode)
+if [[ "$dependency_mode" == source-library ]]; then
+  [[ -n "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY" &&
+    -d "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY" ]]
+else
+  [[ -z "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY" ]]
+fi
+[[ "$TMPDIR" == "$root/.local/runtime-matrix/tmp/R-$version" ]]
+[[ "$XDG_RUNTIME_DIR" == "$root/.local/runtime-matrix/runtime/R-$version" ]]
+[[ "$(stat -c '%a' "$XDG_RUNTIME_DIR")" == 700 ]]
+case ":$PATH:" in
+  *:"$root/.local/compat/system/p1/bin":*|\
+  *:"$root/.local/compat/system/geo/bin":*) exit 1 ;;
+esac
+for variable in \
+  PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT PARADOX_COMPAT_SYSTEM_RECEIPT \
+  PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO \
+  PARADOX_COMPAT_SYSTEM_P1 PARADOX_COMPAT_SYSTEM_ACTIVE \
+  PARADOX_COMPAT_SYSTEM_GEO_PREFIX PARADOX_COMPAT_SYSTEM_P1_PREFIX \
+  PROJ_DATA GDAL_DATA UDUNITS2_XML_PATH UDUNITS2_INCLUDE UDUNITS2_LIBS \
+  JAVA_HOME JAVA JAVAC JAR JAVA_CPPFLAGS JAVA_LIBS \
+  JAVA_LD_LIBRARY_PATH R_JAVA_LD_LIBRARY_PATH \
+  MPI_ROOT MPI_INCLUDE MPI_LIB_PATH MPI_TYPE OPAL_PREFIX \
+  OMPI_CC OMPI_CXX OMPI_FC OMPI_MCA_plm_ssh_agent \
+  PRTE_MCA_rmaps_default_mapping_policy CARGO_HOME RUSTUP_HOME \
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER FONTCONFIG_PATH FONTCONFIG_FILE
+do
+  [[ ! -v $variable ]]
+done
+Rscript --vanilla -e '
+  root <- normalizePath(commandArgs(TRUE)[[1L]], mustWork = TRUE)
+  paths <- normalizePath(.libPaths(), mustWork = TRUE)
+  stopifnot(length(paths) >= 2L)
+  stopifnot(all(startsWith(paths, paste0(root, .Platform$file.sep))))
+  stopifnot(!any(startsWith(paths, "/usr/") | startsWith(paths, "/tmp/host")))
+' "$root"
+first_path=$PATH
+first_cflags=$CFLAGS
+first_cppflags=$CPPFLAGS
+first_ldflags=$LDFLAGS
+first_debug_cflags=$DEBUG_CFLAGS
+first_cmake_args=$CMAKE_ARGS
+. scripts/activate-runtime-matrix "$version"
+[[ "$PATH" == "$first_path" ]]
+[[ "$CFLAGS" == "$first_cflags" ]]
+[[ "$CPPFLAGS" == "$first_cppflags" ]]
+[[ "$LDFLAGS" == "$first_ldflags" ]]
+[[ "$DEBUG_CFLAGS" == "$first_debug_cflags" ]]
+[[ "$CMAKE_ARGS" == "$first_cmake_args" ]]
+[[ "$(command -v R)" == "$prefix/bin/R" ]]
+configured_cc=$(R CMD config CC)
+case "$(command -v "${configured_cc%% *}")" in "$prefix"/*) ;; *) exit 1 ;; esac
+case "$(command -v "${CC%% *}")" in "$prefix"/*) ;; *) exit 1 ;; esac
+if configured_nm=$(LC_ALL=C R CMD config NM 2>&1); then
+  configured_nm_status=0
+else
+  configured_nm_status=$?
+fi
+nm_name="$CONDA_TOOLCHAIN_HOST-nm"
+[[ -n "$NM" ]]
+[[ "$(command -v "$NM")" == "$prefix/bin/$nm_name" ]]
+if [[ "$version" == 3.6.3 ]]; then
+  [[ "$configured_nm_status" == 1 ]]
+  [[ "$configured_nm" == "ERROR: no information for variable 'NM'" ]]
+else
+  [[ "$configured_nm_status" == 0 ]]
+  [[ "${configured_nm##*/}" == "$nm_name" ]]
+fi
+
+. scripts/activate
+[[ "$(command -v R)" == "$root/.local/toolchain/bin/R" ]]
+[[ "$(R RHOME)" == "$root/.local/toolchain/lib/R" ]]
+case ":$PATH:" in
+  *:"$root/.local/runtime-matrix/prefixes/"R-*/bin:*|\
+  *:"$root/.local/compat/system/p1/bin":*|\
+  *:"$root/.local/compat/system/geo/bin":*) exit 1 ;;
+esac
+for variable in \
+  PARADOX_RUNTIME_MATRIX_ACTIVE PARADOX_RUNTIME_MATRIX_VERSION \
+  PARADOX_RUNTIME_MATRIX_PREFIX PARADOX_RUNTIME_MATRIX_LIBRARY \
+  PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY \
+  PARADOX_RUNTIME_MATRIX_TMP PARADOX_RUNTIME_MATRIX_CACHE \
+  PARADOX_RUNTIME_MATRIX_XDG PARADOX_RUNTIME_MATRIX_REGISTRY \
+  PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER \
+  PARADOX_RUNTIME_MATRIX_PREFIX_HANDOFF
+do
+  [[ ! -v $variable ]]
+done
+/usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_after"
+cmp -s -- "$ordinary_before" "$ordinary_after"
+rm -f -- "$ordinary_before" "$ordinary_after"
+trap - EXIT HUP INT TERM
+SHELL
+  printf 'runtime_matrix_activation_fixture=passed runtime=%s\n' "$version"
+done

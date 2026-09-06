@@ -1,0 +1,52 @@
+repository	url	relation	priority	action	notes
+bbotk	https://github.com/mlr-org/bbotk.git	Depends	0	clone	Exact local dual-version bridge using public collection sets and rooting detached native search-space snapshots while retaining additive Codomain inheritance.
+mlr3tuning	https://github.com/mlr-org/mlr3tuning.git	Depends	0	clone	Core tuning gate.
+miesmuschel	https://github.com/mlr-org/miesmuschel.git	Depends	0	clone	Exact local dual-version bridge selecting Paradox's official ParamSetShadow for Paradox 2.
+celecx	https://github.com/mlr-org/celecx.git	Depends	1	clone	Exact local test-only bridge for Paradox-2 native diagnostics; active GitHub-only consumer.
+smashy	https://github.com/mlr-org/smashy.git	Depends	3	clone	Experimental consumer pinned to an obsolete paradox development branch; retained as source characterization only.
+mlr3	https://github.com/mlr-org/mlr3.git	Imports	0	clone	Exact local test-only bridge for Paradox-2 numeric diagnostics; core framework gate.
+mlr3pipelines	https://github.com/mlr-org/mlr3pipelines.git	Imports	0	clone	Exact local bridge fixing GraphLearner deep-clone ownership and recording the dual-version dormant spline contract; broad ParamSet and collection use.
+mlr3learners	https://github.com/mlr-org/mlr3learners.git	Imports	0	clone	Broad learner integration gate.
+mlr3fselect	https://github.com/mlr-org/mlr3fselect.git	Imports	0	clone	Exact local test-only bridge for the Paradox-2 feature-fraction diagnostic; core feature-selection gate.
+mlr3hyperband	https://github.com/mlr-org/mlr3hyperband.git	Imports	0	clone	Core tuning extension gate.
+mlr3mbo	https://github.com/mlr-org/mlr3mbo.git	Imports	0	clone	Exact local dual-version bridge using public transformation-free subsets on Paradox 2; design-generation and optimization gate.
+mlr3tuningspaces	https://github.com/mlr-org/mlr3tuningspaces.git	Imports	0	clone	Large catalog of real parameter spaces.
+mlr3verse	https://github.com/mlr-org/mlr3verse.git	Imports	0	clone	Meta-package installation gate.
+mlr3cluster	https://github.com/mlr-org/mlr3cluster.git	Imports	1	clone	Active extension.
+mlr3fairness	https://github.com/mlr-org/mlr3fairness.git	Imports	1	clone	Active extension.
+mlr3fda	https://github.com/mlr-org/mlr3fda.git	Imports	1	clone	Active extension.
+mlr3filters	https://github.com/mlr-org/mlr3filters.git	Imports	1	clone	Active extension.
+mlr3inferr	https://github.com/mlr-org/mlr3inferr.git	Imports	1	clone	Active extension.
+mlr3oml	https://github.com/mlr-org/mlr3oml.git	Imports	1	clone	Active OpenML integration.
+mlr3spatiotempcv	https://github.com/mlr-org/mlr3spatiotempcv.git	Imports	1	clone	Active extension.
+mlr3torch	https://github.com/mlr-org/mlr3torch.git	Imports	1	clone	Domain and ParamSet consumer.
+xplainfi	https://github.com/mlr-org/xplainfi.git	Imports	1	clone	Active external-style first-party consumer.
+mlr3proba	https://github.com/mlr-org/mlr3proba.git	Imports	1	clone	Active GitHub-only consumer.
+mlr3extralearners	https://github.com/mlr-org/mlr3extralearners.git	Imports	1	clone	Very broad constructor coverage.
+mlr3automl	https://github.com/mlr-org/mlr3automl.git	Imports	1	clone	Active GitHub-only consumer.
+mlr3forecast	https://github.com/mlr-org/mlr3forecast.git	Imports	1	clone	Active GitHub-only consumer.
+mlr3cmprsk	https://github.com/mlr-org/mlr3cmprsk.git	Imports	1	clone	Active GitHub-only consumer.
+mlr3resampling	https://github.com/tdhock/mlr3resampling.git	Imports	1	clone	Current upstream; mlr-org repository is a stale fork.
+mlr3batchmark	https://github.com/mlr-org/mlr3batchmark.git	Imports	1	clone	Maintained de facto consumer; production workers call ParamSet$set_values through mlr3.
+mlr3temporal	https://github.com/mlr-org/mlr3temporal.git	Imports	3	clone	Unmaintained consumer with removed dependencies; retained as source characterization only.
+mlr3autoweka	https://github.com/mlr-org/mlr3autoweka.git	Imports	2	clone	Secondary integration.
+mlr3survival-old	https://github.com/mlr-org/mlr3survival-old.git	Imports	3	skip	Obsolete package.
+mlr3ordinal	https://github.com/mlr-org/mlr3ordinal.git	Imports	3	skip	Stale package.
+mlr3keras	https://github.com/mlr-org/mlr3keras.git	Imports	3	skip	Stale package and obsolete backend.
+mlr3learners.template	https://github.com/mlr-org/mlr3learners.template.git	Imports	3	skip	Stale template rather than a consumer gate.
+mlr3multioutput	https://github.com/mlr-org/mlr3multioutput.git	Imports	3	skip	Stale package.
+mlr3misc	https://github.com/mlr-org/mlr3misc.git	Suggests	2	clone	Core optional tests.
+mlr3spatial	https://github.com/mlr-org/mlr3spatial.git	Suggests	2	clone	Current extension.
+mlr3viz	https://github.com/mlr-org/mlr3viz.git	Suggests	2	clone	Current visualization package.
+mcboost	https://github.com/mlr-org/mcboost.git	Suggests	2	clone	Optional consumer.
+mlr3summary	https://github.com/mlr-org/mlr3summary.git	Suggests	2	clone	Maintained de facto consumer that reads learner and resampling ParamSet values.
+fastshap	https://github.com/bgreenwell/fastshap.git	Dependency	2	clone	Pinned external fallback for mlr3summary after fastshap was archived on CRAN; not a paradox consumer gate.
+rush	https://github.com/mlr-org/rush.git	ExactDependency	0	clone	Exact transitive provider required by the prepared bbotk and mlr3tuning release heads; not a paradox consumer gate.
+mlr3book	https://github.com/mlr-org/mlr3book.git	Documentation	0	clone	Active advanced paradox chapter and broad implicit UI specification.
+mlr3website	https://github.com/mlr-org/mlr3website.git	Documentation	0	clone	Current gallery successor and paradox benchmark suite.
+mlr3cheatsheets	https://github.com/mlr-org/mlr3cheatsheets.git	Documentation	2	clone	Current user-facing tuning and pipeline UI reference rendered by the documentation gate.
+mlr3gallery	https://github.com/mlr-org/mlr3gallery.git	Documentation	2	clone	Archived legacy corpus; superseded by mlr3website but retained as an advisory probe.
+mlr3benchmark	https://github.com/mlr-org/mlr3benchmark.git	Documentation	2	clone	Maintained package whose documentation assigns through learner ParamSet values.
+mbo_config	https://github.com/mlr-org/mbo_config.git	Workload	1	clone	Realistic optimization configurations and benchmarks.
+mlr3-targets	https://github.com/mlr-org/mlr3-targets.git	Workload	2	clone	Pre-modernization targets prototype; its legacy constructor surface is retained as an advisory migration workload.
+mlr3torch-course	https://github.com/mlr-org/mlr3torch-course.git	Documentation	3	clone	GPU-heavy course corpus retained as source characterization, not an executable release gate.

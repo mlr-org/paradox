@@ -1,0 +1,578 @@
+#!/usr/bin/env bash
+
+# Run exactly two independent compiler batches under one shared concurrency
+# ceiling.  At ceilings above one both compiler families run concurrently with
+# balanced, non-overlapping allocations.  A ceiling of one remains genuinely
+# serial.  Both lanes always finish and retain their complete evidence before
+# an ordinary failure is returned.
+
+set -euo pipefail
+
+fail() {
+  printf 'run-compiler-wave: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: run-compiler-wave --jobs N --batch-runner PATH
+       --source-root PATH --source-list FILE --output-directory PATH
+       --admission-report FILE
+       --setsid PATH
+       --left-label NAME --left-compiler PATH --left-aggregate-log FILE
+       --right-label NAME --right-compiler PATH --right-aggregate-log FILE
+       [--task-timeout-seconds N] [--timeout-tool PATH]
+       [--left-argument ARG]... [--right-argument ARG]...
+EOF
+}
+
+sha256_value() {
+  sha256sum "$1" | cut -d ' ' -f 1
+}
+
+argument_vector_sha256() {
+  if (($#)); then
+    printf '%s\0' "$@"
+  fi | sha256sum | cut -d ' ' -f 1
+}
+
+compiler_link_target() {
+  if [[ -L "$1" ]]; then readlink -- "$1"; else printf '%s\n' -; fi
+}
+
+compiler_identity_sha256() {
+  local invoked=$1 canonical=$2
+  (
+    export LC_ALL=C
+    exec -a "$invoked" "$canonical" --version
+  ) 2>&1 | sha256sum | cut -d ' ' -f 1
+}
+
+verify_compiler_identity() {
+  local invoked=$1 link_target=$2 canonical=$3 content_sha=$4 identity_sha=$5
+  [[ "$(compiler_link_target "$invoked")" == "$link_target" &&
+     "$(readlink -f -- "$invoked")" == "$canonical" &&
+     "$(sha256_value "$canonical")" == "$content_sha" &&
+     "$(compiler_identity_sha256 "$invoked" "$canonical")" == \
+       "$identity_sha" ]]
+}
+
+setsid_identity_sha256() {
+  LC_ALL=C "$SETSID" --version 2>&1 | sha256sum | cut -d ' ' -f 1
+}
+
+verify_setsid_identity() {
+  [[ -f "$SETSID" && -x "$SETSID" && ! -L "$SETSID" &&
+     "$(cd "$(dirname "$SETSID")" && pwd -P)/$(basename "$SETSID")" == \
+       "$SETSID" &&
+     "$(sha256_value "$SETSID")" == "$SETSID_SHA256" &&
+     "$(setsid_identity_sha256)" == "$SETSID_IDENTITY_SHA256" ]]
+}
+
+timeout_identity_sha256() {
+  LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | sha256sum | cut -d ' ' -f 1
+}
+
+verify_timeout_identity() {
+  [[ -f "$TIMEOUT_TOOL" && -x "$TIMEOUT_TOOL" && ! -L "$TIMEOUT_TOOL" &&
+     "$(cd "$(dirname "$TIMEOUT_TOOL")" && pwd -P)/$(basename "$TIMEOUT_TOOL")" == \
+       "$TIMEOUT_TOOL" &&
+     "$(sha256_value "$TIMEOUT_TOOL")" == "$TIMEOUT_TOOL_SHA256" &&
+     "$(timeout_identity_sha256)" == "$TIMEOUT_TOOL_IDENTITY_SHA256" ]]
+}
+
+validate_admission_report() {
+  local report=$1 expected_fields actual_fields
+  local online affinity cgroup_cpu cpu_limit cpu_reserve cpu_per cpu_jobs
+  local memory_available cgroup_memory memory_reserve memory_per memory_jobs
+  local operator jobs expected_cpu_limit expected_cpu_reserve expected_jobs value
+  local expected_cpu_jobs expected_memory_reserve expected_memory_jobs
+  local reserve_floor
+  [[ "$report" == /* && -f "$report" && ! -L "$report" ]] ||
+    fail "--admission-report must be one plain absolute file"
+  [[ "$(cd "$(dirname "$report")" && pwd -P)/$(basename "$report")" == \
+     "$report" ]] || fail "--admission-report is not canonical"
+  awk -F '\t' 'NF != 2 { exit 1 }' "$report" ||
+    fail "admission report is not an exact two-column TSV"
+  expected_fields=$'field\nschema\nprofile\ncontainment\nplatform\nonline_cpus\naffinity_cpus\ncgroup_cpu_limit\ncpu_limit\ncpu_reserve\ncpu_per_job\ncpu_jobs\nmemory_source\nmemory_available_mib\ncgroup_memory_available_mib\nmemory_reserve_mib\nmemory_mib_per_job\nmemory_jobs\nprofile_max_jobs\noperator_max_jobs\njobs\nselection'
+  actual_fields=$(cut -f 1 "$report")
+  [[ "$actual_fields" == "$expected_fields" ]] ||
+    fail "admission report has an unexpected field inventory"
+  report_value() {
+    awk -F '\t' -v field="$1" '$1 == field { print $2 }' "$report"
+  }
+  canonical_positive() { [[ "$1" =~ ^[1-9][0-9]{0,8}$ ]]; }
+  canonical_nonnegative() { [[ "$1" =~ ^(0|[1-9][0-9]{0,8})$ ]]; }
+  [[ "$(report_value schema)" == 2 &&
+     "$(report_value profile)" == api-compile &&
+     "$(report_value selection)" == \
+       live_ceiling_lowered_against_retained_initial ]] ||
+    fail "admission report has an unsupported identity or policy"
+  # Containment selects the reserve floor: the aggregate envelope already
+  # withholds the host reserve, so only a small intra-envelope floor remains.
+  case "$(report_value containment)" in
+    direct) reserve_floor=12288 ;;
+    worker-hard) reserve_floor=1024 ;;
+    aggregate-systemd) reserve_floor=4096 ;;
+    *) fail "admission report has an unknown containment mode" ;;
+  esac
+  online=$(report_value online_cpus)
+  affinity=$(report_value affinity_cpus)
+  cgroup_cpu=$(report_value cgroup_cpu_limit)
+  cpu_limit=$(report_value cpu_limit)
+  cpu_reserve=$(report_value cpu_reserve)
+  cpu_per=$(report_value cpu_per_job)
+  cpu_jobs=$(report_value cpu_jobs)
+  memory_available=$(report_value memory_available_mib)
+  cgroup_memory=$(report_value cgroup_memory_available_mib)
+  memory_reserve=$(report_value memory_reserve_mib)
+  memory_per=$(report_value memory_mib_per_job)
+  memory_jobs=$(report_value memory_jobs)
+  operator=$(report_value operator_max_jobs)
+  jobs=$(report_value jobs)
+  for value in "$online" "$affinity" "$cpu_limit" "$cpu_per" \
+      "$cpu_jobs" "$memory_available" "$memory_reserve" "$memory_per" \
+      "$memory_jobs" "$operator" "$jobs"; do
+    canonical_positive "$value" ||
+      fail "admission report contains a non-canonical positive integer"
+  done
+  canonical_nonnegative "$cpu_reserve" ||
+    fail "admission report contains a non-canonical CPU reserve"
+  [[ "$cgroup_cpu" == unlimited ]] || canonical_positive "$cgroup_cpu" ||
+    fail "admission report contains a malformed cgroup CPU limit"
+  [[ "$cgroup_memory" == unlimited ]] || canonical_positive "$cgroup_memory" ||
+    fail "admission report contains malformed cgroup memory headroom"
+  [[ "$(report_value profile_max_jobs)" == unlimited && "$cpu_per" -eq 1 &&
+     "$memory_per" -eq 768 ]] ||
+    fail "admission report is not the reviewed api-compile profile"
+  expected_cpu_limit=$online
+  ((affinity < expected_cpu_limit)) && expected_cpu_limit=$affinity
+  if [[ "$cgroup_cpu" != unlimited ]] &&
+      ((cgroup_cpu < expected_cpu_limit)); then
+    expected_cpu_limit=$cgroup_cpu
+  fi
+  if ((expected_cpu_limit >= 16)); then expected_cpu_reserve=2
+  elif ((expected_cpu_limit >= 4)); then expected_cpu_reserve=1
+  else expected_cpu_reserve=0
+  fi
+  expected_cpu_jobs=$(((expected_cpu_limit - expected_cpu_reserve) / cpu_per))
+  ((expected_cpu_jobs > 0)) || expected_cpu_jobs=1
+  expected_memory_reserve=$((memory_available / 4))
+  ((expected_memory_reserve >= reserve_floor)) ||
+    expected_memory_reserve=$reserve_floor
+  ((memory_available > expected_memory_reserve)) ||
+    fail "admission report violates the memory safety reserve"
+  expected_memory_jobs=$(((memory_available - expected_memory_reserve) / memory_per))
+  [[ "$cpu_limit" -eq "$expected_cpu_limit" &&
+     "$cpu_reserve" -eq "$expected_cpu_reserve" &&
+     "$cpu_jobs" -eq "$expected_cpu_jobs" &&
+     "$memory_reserve" -eq "$expected_memory_reserve" &&
+     "$memory_jobs" -eq "$expected_memory_jobs" ]] ||
+    fail "admission report arithmetic is internally inconsistent"
+  if [[ "$cgroup_memory" != unlimited ]] &&
+      ((memory_available > cgroup_memory)); then
+    fail "admission report exceeds cgroup memory headroom"
+  fi
+  expected_jobs=$cpu_jobs
+  ((memory_jobs < expected_jobs)) && expected_jobs=$memory_jobs
+  ((operator < expected_jobs)) && expected_jobs=$operator
+  [[ "$jobs" -eq "$expected_jobs" && "$JOBS" -eq "$jobs" ]] ||
+    fail "--jobs does not exactly match the safe admission report minimum"
+  ADMITTED_JOBS=$jobs
+  ADMISSION_REPORT_SHA256=$(sha256_value "$report")
+}
+
+JOBS=
+BATCH_RUNNER=
+SOURCE_ROOT=
+SOURCE_LIST=
+OUTPUT_DIRECTORY=
+ADMISSION_REPORT=
+SETSID=
+LEFT_LABEL=
+LEFT_COMPILER=
+LEFT_AGGREGATE_LOG=
+RIGHT_LABEL=
+RIGHT_COMPILER=
+RIGHT_AGGREGATE_LOG=
+TASK_TIMEOUT_SECONDS=300
+TIMEOUT_TOOL=
+LEFT_ARGUMENTS=()
+RIGHT_ARGUMENTS=()
+while (($#)); do
+  case "$1" in
+    --jobs|--batch-runner|--source-root|--source-list|--output-directory|--admission-report|--setsid|\
+    --left-label|--left-compiler|--left-aggregate-log|\
+    --right-label|--right-compiler|--right-aggregate-log|\
+    --task-timeout-seconds|--timeout-tool)
+      (($# >= 2)) || fail "$1 requires a value"
+      case "$1" in
+        --jobs) JOBS=$2 ;;
+        --batch-runner) BATCH_RUNNER=$2 ;;
+        --source-root) SOURCE_ROOT=$2 ;;
+        --source-list) SOURCE_LIST=$2 ;;
+        --output-directory) OUTPUT_DIRECTORY=$2 ;;
+        --admission-report) ADMISSION_REPORT=$2 ;;
+        --setsid) SETSID=$2 ;;
+        --left-label) LEFT_LABEL=$2 ;;
+        --left-compiler) LEFT_COMPILER=$2 ;;
+        --left-aggregate-log) LEFT_AGGREGATE_LOG=$2 ;;
+        --right-label) RIGHT_LABEL=$2 ;;
+        --right-compiler) RIGHT_COMPILER=$2 ;;
+        --right-aggregate-log) RIGHT_AGGREGATE_LOG=$2 ;;
+        --task-timeout-seconds) TASK_TIMEOUT_SECONDS=$2 ;;
+        --timeout-tool) TIMEOUT_TOOL=$2 ;;
+      esac
+      shift 2
+      ;;
+    --left-argument|--right-argument)
+      (($# >= 2)) || fail "$1 requires a value"
+      if [[ "$1" == --left-argument ]]; then
+        LEFT_ARGUMENTS+=("$2")
+      else
+        RIGHT_ARGUMENTS+=("$2")
+      fi
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *) fail "unknown argument '$1' (see --help)" ;;
+  esac
+done
+
+LEFT_ARGUMENTS_COUNT=${#LEFT_ARGUMENTS[@]}
+LEFT_ARGUMENTS_SHA256=$(argument_vector_sha256 "${LEFT_ARGUMENTS[@]}")
+RIGHT_ARGUMENTS_COUNT=${#RIGHT_ARGUMENTS[@]}
+RIGHT_ARGUMENTS_SHA256=$(argument_vector_sha256 "${RIGHT_ARGUMENTS[@]}")
+
+if [[ ! "$JOBS" =~ ^[1-9][0-9]{0,8}$ ]] || ((JOBS > 65536)); then
+  fail "--jobs must be a canonical bounded positive integer"
+fi
+[[ "$TASK_TIMEOUT_SECONDS" =~ ^[1-9][0-9]{0,8}$ ]] ||
+  fail "--task-timeout-seconds must be a canonical bounded positive integer"
+if [[ -z "$TIMEOUT_TOOL" ]]; then
+  TIMEOUT_TOOL=$(command -v timeout 2>/dev/null || true)
+fi
+[[ "$TIMEOUT_TOOL" == /* && -f "$TIMEOUT_TOOL" && -x "$TIMEOUT_TOOL" &&
+   ! -L "$TIMEOUT_TOOL" && "$TIMEOUT_TOOL" != *$'\t'* &&
+   "$TIMEOUT_TOOL" != *$'\r'* && "$TIMEOUT_TOOL" != *$'\n'* ]] ||
+  fail "--timeout-tool must name a plain absolute executable"
+[[ "$(cd "$(dirname "$TIMEOUT_TOOL")" && pwd -P)/$(basename "$TIMEOUT_TOOL")" == \
+   "$TIMEOUT_TOOL" ]] || fail "--timeout-tool path is not canonical"
+LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |
+  grep -Fq 'timeout (GNU coreutils)' ||
+  fail "--timeout-tool is not GNU coreutils timeout"
+TIMEOUT_TOOL_SHA256=$(sha256_value "$TIMEOUT_TOOL")
+TIMEOUT_TOOL_IDENTITY_SHA256=$(timeout_identity_sha256)
+[[ "$BATCH_RUNNER" == /* && -f "$BATCH_RUNNER" &&
+   -x "$BATCH_RUNNER" && ! -L "$BATCH_RUNNER" ]] ||
+  fail "batch runner is absent, non-executable, or symbolic"
+[[ "$(cd "$(dirname "$BATCH_RUNNER")" && pwd -P)/$(basename "$BATCH_RUNNER")" == \
+   "$BATCH_RUNNER" ]] || fail "batch runner path is not canonical"
+BATCH_RUNNER_SHA256=$(sha256_value "$BATCH_RUNNER")
+[[ "$SETSID" == /* && -f "$SETSID" && -x "$SETSID" && ! -L "$SETSID" &&
+   "$SETSID" != *$'\t'* && "$SETSID" != *$'\r'* &&
+   "$SETSID" != *$'\n'* ]] ||
+  fail "--setsid must name one plain absolute executable"
+[[ "$(cd "$(dirname "$SETSID")" && pwd -P)/$(basename "$SETSID")" == \
+   "$SETSID" ]] || fail "--setsid path is not canonical"
+SETSID_SHA256=$(sha256_value "$SETSID")
+SETSID_IDENTITY_SHA256=$(setsid_identity_sha256)
+LC_ALL=C "$SETSID" --version 2>&1 | head -n 1 |
+  grep -Fq 'setsid from util-linux' ||
+  fail "--setsid is not util-linux setsid"
+for label in "$LEFT_LABEL" "$RIGHT_LABEL"; do
+  [[ "$label" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]] ||
+    fail "each compiler label must be one safe name"
+done
+[[ "$LEFT_LABEL" != "$RIGHT_LABEL" ]] || fail "compiler labels must differ"
+for compiler in "$LEFT_COMPILER" "$RIGHT_COMPILER"; do
+  [[ "$compiler" == /* && -f "$compiler" && -x "$compiler" &&
+     "$compiler" != *$'\t'* &&
+     "$compiler" != *$'\r'* && "$compiler" != *$'\n'* ]] ||
+    fail "compiler must be one absolute executable or executable symlink: $compiler"
+  [[ "$(cd "$(dirname "$compiler")" && pwd -P)/$(basename "$compiler")" == \
+     "$compiler" ]] || fail "compiler invocation parent is not canonical: $compiler"
+done
+LEFT_COMPILER_INVOKED_PATH=$LEFT_COMPILER
+LEFT_COMPILER_LINK_TARGET=$(compiler_link_target "$LEFT_COMPILER_INVOKED_PATH")
+LEFT_COMPILER_CANONICAL_PATH=$(readlink -f -- "$LEFT_COMPILER_INVOKED_PATH")
+RIGHT_COMPILER_INVOKED_PATH=$RIGHT_COMPILER
+RIGHT_COMPILER_LINK_TARGET=$(compiler_link_target "$RIGHT_COMPILER_INVOKED_PATH")
+RIGHT_COMPILER_CANONICAL_PATH=$(readlink -f -- "$RIGHT_COMPILER_INVOKED_PATH")
+for value in "$LEFT_COMPILER_LINK_TARGET" "$RIGHT_COMPILER_LINK_TARGET"; do
+  [[ "$value" != *$'\t'* && "$value" != *$'\r'* &&
+     "$value" != *$'\n'* ]] ||
+    fail "compiler link target contains an unsupported character"
+done
+for compiler in "$LEFT_COMPILER_CANONICAL_PATH" \
+    "$RIGHT_COMPILER_CANONICAL_PATH"; do
+  [[ "$compiler" == /* && -f "$compiler" && -x "$compiler" &&
+     ! -L "$compiler" ]] ||
+    fail "compiler does not resolve to one plain executable"
+done
+LEFT_COMPILER_CANONICAL_SHA256=$(sha256_value "$LEFT_COMPILER_CANONICAL_PATH")
+LEFT_COMPILER_IDENTITY_SHA256=$(compiler_identity_sha256 \
+  "$LEFT_COMPILER_INVOKED_PATH" "$LEFT_COMPILER_CANONICAL_PATH")
+RIGHT_COMPILER_CANONICAL_SHA256=$(sha256_value "$RIGHT_COMPILER_CANONICAL_PATH")
+RIGHT_COMPILER_IDENTITY_SHA256=$(compiler_identity_sha256 \
+  "$RIGHT_COMPILER_INVOKED_PATH" "$RIGHT_COMPILER_CANONICAL_PATH")
+[[ -d "$SOURCE_ROOT" && ! -L "$SOURCE_ROOT" ]] ||
+  fail "source root is absent, non-directory, or symbolic"
+[[ -f "$SOURCE_LIST" && ! -L "$SOURCE_LIST" ]] ||
+  fail "source list is absent, non-regular, or symbolic"
+[[ -d "$(dirname "$OUTPUT_DIRECTORY")" &&
+   ! -L "$(dirname "$OUTPUT_DIRECTORY")" ]] ||
+  fail "output parent is absent, non-directory, or symbolic"
+[[ ! -e "$OUTPUT_DIRECTORY" && ! -L "$OUTPUT_DIRECTORY" ]] ||
+  fail "output directory already exists or is symbolic"
+for aggregate in "$LEFT_AGGREGATE_LOG" "$RIGHT_AGGREGATE_LOG"; do
+  [[ -d "$(dirname "$aggregate")" && ! -L "$(dirname "$aggregate")" ]] ||
+    fail "aggregate-log parent is absent, non-directory, or symbolic"
+  [[ ! -e "$aggregate" && ! -L "$aggregate" ]] ||
+    fail "aggregate log already exists or is symbolic"
+done
+[[ "$LEFT_AGGREGATE_LOG" != "$RIGHT_AGGREGATE_LOG" ]] ||
+  fail "aggregate logs must differ"
+validate_admission_report "$ADMISSION_REPORT"
+
+if ((JOBS == 1)); then
+  LEFT_JOBS=1
+  RIGHT_JOBS=1
+  EXECUTION=serial
+  MAX_CONCURRENT_JOBS=1
+else
+  LEFT_JOBS=$(((JOBS + 1) / 2))
+  RIGHT_JOBS=$((JOBS - LEFT_JOBS))
+  ((LEFT_JOBS > 0 && RIGHT_JOBS > 0 && LEFT_JOBS + RIGHT_JOBS == JOBS)) ||
+    fail "internal compiler allocation is invalid"
+  EXECUTION=concurrent
+  MAX_CONCURRENT_JOBS=$JOBS
+fi
+
+mkdir "$OUTPUT_DIRECTORY"
+{
+  printf 'field\tvalue\n'
+  printf 'schema\t4\n'
+  printf 'jobs_ceiling\t%s\n' "$JOBS"
+  printf 'admitted_jobs\t%s\n' "$ADMITTED_JOBS"
+  printf 'admission_report_path\t%s\n' "$ADMISSION_REPORT"
+  printf 'admission_report_sha256\t%s\n' "$ADMISSION_REPORT_SHA256"
+  printf 'batch_runner_path\t%s\n' "$BATCH_RUNNER"
+  printf 'batch_runner_sha256\t%s\n' "$BATCH_RUNNER_SHA256"
+  printf 'execution\t%s\n' "$EXECUTION"
+  printf 'max_concurrent_jobs\t%s\n' "$MAX_CONCURRENT_JOBS"
+  printf 'left_label\t%s\n' "$LEFT_LABEL"
+  printf 'left_jobs\t%s\n' "$LEFT_JOBS"
+  printf 'left_compiler_invoked_path\t%s\n' "$LEFT_COMPILER_INVOKED_PATH"
+  printf 'left_compiler_link_target\t%s\n' "$LEFT_COMPILER_LINK_TARGET"
+  printf 'left_compiler_canonical_path\t%s\n' "$LEFT_COMPILER_CANONICAL_PATH"
+  printf 'left_compiler_canonical_sha256\t%s\n' \
+    "$LEFT_COMPILER_CANONICAL_SHA256"
+  printf 'left_compiler_identity_sha256\t%s\n' \
+    "$LEFT_COMPILER_IDENTITY_SHA256"
+  printf 'left_arguments_count\t%s\n' "$LEFT_ARGUMENTS_COUNT"
+  printf 'left_arguments_sha256\t%s\n' "$LEFT_ARGUMENTS_SHA256"
+  printf 'right_label\t%s\n' "$RIGHT_LABEL"
+  printf 'right_jobs\t%s\n' "$RIGHT_JOBS"
+  printf 'right_compiler_invoked_path\t%s\n' "$RIGHT_COMPILER_INVOKED_PATH"
+  printf 'right_compiler_link_target\t%s\n' "$RIGHT_COMPILER_LINK_TARGET"
+  printf 'right_compiler_canonical_path\t%s\n' "$RIGHT_COMPILER_CANONICAL_PATH"
+  printf 'right_compiler_canonical_sha256\t%s\n' \
+    "$RIGHT_COMPILER_CANONICAL_SHA256"
+  printf 'right_compiler_identity_sha256\t%s\n' \
+    "$RIGHT_COMPILER_IDENTITY_SHA256"
+  printf 'right_arguments_count\t%s\n' "$RIGHT_ARGUMENTS_COUNT"
+  printf 'right_arguments_sha256\t%s\n' "$RIGHT_ARGUMENTS_SHA256"
+  printf 'setsid_path\t%s\n' "$SETSID"
+  printf 'setsid_sha256\t%s\n' "$SETSID_SHA256"
+  printf 'setsid_identity_sha256\t%s\n' "$SETSID_IDENTITY_SHA256"
+  printf 'task_timeout_seconds\t%s\n' "$TASK_TIMEOUT_SECONDS"
+  printf 'timeout_tool_path\t%s\n' "$TIMEOUT_TOOL"
+  printf 'timeout_tool_sha256\t%s\n' "$TIMEOUT_TOOL_SHA256"
+  printf 'timeout_tool_identity_sha256\t%s\n' \
+    "$TIMEOUT_TOOL_IDENTITY_SHA256"
+} > "$OUTPUT_DIRECTORY/wave-plan.tsv"
+
+pids=()
+labels=()
+failures=0
+
+cleanup_lanes() {
+  local status=$? pid attempt alive
+  trap - EXIT HUP INT TERM
+  for pid in "${pids[@]}"; do
+    [[ -n "$pid" ]] || continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+  # The batch runner owns compiler process groups and receives time to reap
+  # them.  KILL is only the bounded fallback for a broken runner.
+  for ((attempt = 0; attempt < 60; ++attempt)); do
+    alive=false
+    for pid in "${pids[@]}"; do
+      [[ -n "$pid" ]] || continue
+      if kill -0 "$pid" 2>/dev/null; then
+        alive=true
+        break
+      fi
+    done
+    [[ "$alive" == true ]] || break
+    sleep 0.05
+  done
+  for pid in "${pids[@]}"; do
+    [[ -n "$pid" ]] || continue
+    kill -KILL "$pid" 2>/dev/null || true
+  done
+  for pid in "${pids[@]}"; do
+    [[ -n "$pid" ]] || continue
+    wait "$pid" 2>/dev/null || true
+  done
+  exit "$status"
+}
+trap cleanup_lanes EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+launch_left() {
+  exec "$BATCH_RUNNER" --jobs "$LEFT_JOBS" --label "$LEFT_LABEL" \
+    --compiler "$LEFT_COMPILER" --source-root "$SOURCE_ROOT" \
+    --source-list "$SOURCE_LIST" \
+    --admission-report "$ADMISSION_REPORT" \
+    --setsid "$SETSID" \
+    --output-directory "$OUTPUT_DIRECTORY/left" \
+    --aggregate-log "$LEFT_AGGREGATE_LOG" \
+    --task-timeout-seconds "$TASK_TIMEOUT_SECONDS" \
+    --timeout-tool "$TIMEOUT_TOOL" -- \
+    "${LEFT_ARGUMENTS[@]}"
+}
+
+launch_right() {
+  exec "$BATCH_RUNNER" --jobs "$RIGHT_JOBS" --label "$RIGHT_LABEL" \
+    --compiler "$RIGHT_COMPILER" --source-root "$SOURCE_ROOT" \
+    --source-list "$SOURCE_LIST" \
+    --admission-report "$ADMISSION_REPORT" \
+    --setsid "$SETSID" \
+    --output-directory "$OUTPUT_DIRECTORY/right" \
+    --aggregate-log "$RIGHT_AGGREGATE_LOG" \
+    --task-timeout-seconds "$TASK_TIMEOUT_SECONDS" \
+    --timeout-tool "$TIMEOUT_TOOL" -- \
+    "${RIGHT_ARGUMENTS[@]}"
+}
+
+wait_lane() {
+  local index=$1 pid
+  pid=${pids[$index]}
+  if ! wait "$pid"; then
+    printf 'compiler lane failed: %s\n' "${labels[$index]}" >&2
+    failures=$((failures + 1))
+  fi
+  pids[index]=
+}
+
+if [[ "$EXECUTION" == concurrent ]]; then
+  launch_left > "$OUTPUT_DIRECTORY/left-batch.stdout" \
+    2> "$OUTPUT_DIRECTORY/left-batch.stderr" &
+  pids+=("$!")
+  labels+=("$LEFT_LABEL")
+  launch_right > "$OUTPUT_DIRECTORY/right-batch.stdout" \
+    2> "$OUTPUT_DIRECTORY/right-batch.stderr" &
+  pids+=("$!")
+  labels+=("$RIGHT_LABEL")
+  wait_lane 0
+  wait_lane 1
+else
+  launch_left > "$OUTPUT_DIRECTORY/left-batch.stdout" \
+    2> "$OUTPUT_DIRECTORY/left-batch.stderr" &
+  pids+=("$!")
+  labels+=("$LEFT_LABEL")
+  wait_lane 0
+  pids=()
+  labels=()
+  launch_right > "$OUTPUT_DIRECTORY/right-batch.stdout" \
+    2> "$OUTPUT_DIRECTORY/right-batch.stderr" &
+  pids+=("$!")
+  labels+=("$RIGHT_LABEL")
+  wait_lane 0
+fi
+
+if ! verify_compiler_identity "$LEFT_COMPILER_INVOKED_PATH" \
+    "$LEFT_COMPILER_LINK_TARGET" "$LEFT_COMPILER_CANONICAL_PATH" \
+    "$LEFT_COMPILER_CANONICAL_SHA256" "$LEFT_COMPILER_IDENTITY_SHA256" ||
+    ! verify_compiler_identity "$RIGHT_COMPILER_INVOKED_PATH" \
+      "$RIGHT_COMPILER_LINK_TARGET" "$RIGHT_COMPILER_CANONICAL_PATH" \
+      "$RIGHT_COMPILER_CANONICAL_SHA256" "$RIGHT_COMPILER_IDENTITY_SHA256"; then
+  fail "compiler identity changed while the paired wave was running"
+fi
+[[ "$(sha256_value "$BATCH_RUNNER")" == "$BATCH_RUNNER_SHA256" ]] ||
+  fail "batch-runner identity changed while the paired wave was running"
+verify_setsid_identity ||
+  fail "setsid identity changed while the paired wave was running"
+verify_timeout_identity ||
+  fail "timeout identity changed while the paired wave was running"
+
+LEDGER_HEADER=$'schema\tordinal\tsource_relative\tsource_sha256\tcompiler_invoked_path\tcompiler_link_target\tcompiler_canonical_path\tcompiler_canonical_sha256\tcompiler_identity_sha256\ttask_wrapper_path\ttask_wrapper_sha256\ttask_wrapper_bash_path\ttask_wrapper_bash_sha256\texit_status\ttimed_out\tlog_relative\tlog_sha256\tsupervisor_log_relative\tsupervisor_log_sha256'
+LEFT_TASK_LEDGER="$OUTPUT_DIRECTORY/left/task-ledger.tsv"
+RIGHT_TASK_LEDGER="$OUTPUT_DIRECTORY/right/task-ledger.tsv"
+for ledger in "$LEFT_TASK_LEDGER" "$RIGHT_TASK_LEDGER"; do
+  [[ -f "$ledger" && ! -L "$ledger" ]] ||
+    fail "compiler lane retained no plain task ledger: $ledger"
+  IFS= read -r ledger_header < "$ledger"
+  [[ "$ledger_header" == "$LEDGER_HEADER" ]] ||
+    fail "compiler lane task ledger has an unexpected schema: $ledger"
+done
+LEFT_BATCH_PLAN="$OUTPUT_DIRECTORY/left/batch-plan.tsv"
+RIGHT_BATCH_PLAN="$OUTPUT_DIRECTORY/right/batch-plan.tsv"
+for plan in "$LEFT_BATCH_PLAN" "$RIGHT_BATCH_PLAN"; do
+  [[ -f "$plan" && ! -L "$plan" ]] ||
+    fail "compiler lane retained no plain batch plan: $plan"
+  grep -Fqx $'schema\t4' "$plan" ||
+    fail "compiler lane batch plan has the wrong schema: $plan"
+  if ! grep -Fqx $'setsid_path\t'"$SETSID" "$plan" ||
+      ! grep -Fqx $'setsid_sha256\t'"$SETSID_SHA256" "$plan" ||
+      ! grep -Fqx $'setsid_identity_sha256\t'"$SETSID_IDENTITY_SHA256" "$plan"; then
+    fail "compiler lane batch plan changed its setsid identity: $plan"
+  fi
+  if ! grep -Fqx $'task_timeout_seconds\t'"$TASK_TIMEOUT_SECONDS" "$plan" ||
+      ! grep -Fqx $'timeout_tool_path\t'"$TIMEOUT_TOOL" "$plan" ||
+      ! grep -Fqx $'timeout_tool_sha256\t'"$TIMEOUT_TOOL_SHA256" "$plan" ||
+      ! grep -Fqx $'timeout_tool_identity_sha256\t'"$TIMEOUT_TOOL_IDENTITY_SHA256" \
+        "$plan"; then
+    fail "compiler lane batch plan changed its timeout identity: $plan"
+  fi
+done
+if ! grep -Fqx $'compiler_arguments_count\t'"$LEFT_ARGUMENTS_COUNT" \
+    "$LEFT_BATCH_PLAN" ||
+    ! grep -Fqx $'compiler_arguments_sha256\t'"$LEFT_ARGUMENTS_SHA256" \
+      "$LEFT_BATCH_PLAN"; then
+  fail "left compiler lane changed its exact argument vector"
+fi
+if ! grep -Fqx $'compiler_arguments_count\t'"$RIGHT_ARGUMENTS_COUNT" \
+    "$RIGHT_BATCH_PLAN" ||
+    ! grep -Fqx $'compiler_arguments_sha256\t'"$RIGHT_ARGUMENTS_SHA256" \
+      "$RIGHT_BATCH_PLAN"; then
+  fail "right compiler lane changed its exact argument vector"
+fi
+{
+  printf 'lane\ttask_ledger\ttask_ledger_sha256\ttasks\tcompiler_invoked_path\tcompiler_link_target\tcompiler_canonical_path\tcompiler_canonical_sha256\tcompiler_identity_sha256\n'
+  printf 'left\tleft/task-ledger.tsv\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(sha256_value "$LEFT_TASK_LEDGER")" \
+    "$(awk 'END { print NR - 1 }' "$LEFT_TASK_LEDGER")" \
+    "$LEFT_COMPILER_INVOKED_PATH" "$LEFT_COMPILER_LINK_TARGET" \
+    "$LEFT_COMPILER_CANONICAL_PATH" "$LEFT_COMPILER_CANONICAL_SHA256" \
+    "$LEFT_COMPILER_IDENTITY_SHA256"
+  printf 'right\tright/task-ledger.tsv\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$(sha256_value "$RIGHT_TASK_LEDGER")" \
+    "$(awk 'END { print NR - 1 }' "$RIGHT_TASK_LEDGER")" \
+    "$RIGHT_COMPILER_INVOKED_PATH" "$RIGHT_COMPILER_LINK_TARGET" \
+    "$RIGHT_COMPILER_CANONICAL_PATH" "$RIGHT_COMPILER_CANONICAL_SHA256" \
+    "$RIGHT_COMPILER_IDENTITY_SHA256"
+} > "$OUTPUT_DIRECTORY/wave-task-ledgers.tsv"
+
+((failures == 0)) || {
+  printf 'run-compiler-wave: %s of 2 compiler lanes failed; both lanes completed\n' \
+    "$failures" >&2
+  exit 1
+}

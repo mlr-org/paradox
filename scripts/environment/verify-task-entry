@@ -1,0 +1,104 @@
+#!/usr/bin/env sh
+
+# Container-side entry point.  The controller passes no ambient host
+# environment beyond reviewed task variables; activation reconstructs the
+# repository-local R/compiler environment inside the worker.
+
+set -eu
+
+if [ "$#" -lt 5 ]; then
+  printf '%s\n' \
+    "verify-task-entry: ROOT HOME TMPDIR RUNTIME and a command are required" >&2
+  exit 2
+fi
+
+ROOT=$1
+TASK_HOME=$2
+TASK_TMP=$3
+TASK_RUNTIME=$4
+shift 4
+
+case "$ROOT:$TASK_HOME:$TASK_TMP:$TASK_RUNTIME" in
+  *..*|*//*)
+    printf '%s\n' "verify-task-entry: unsafe task path" >&2
+    exit 2
+    ;;
+esac
+case "$ROOT:$TASK_HOME:$TASK_TMP:$TASK_RUNTIME" in
+  /*:/*:/*:/*) ;;
+  *)
+    printf '%s\n' "verify-task-entry: task paths must be absolute" >&2
+    exit 2
+    ;;
+esac
+
+cd "$ROOT"
+mkdir -p "$TASK_HOME" "$TASK_TMP" "$TASK_RUNTIME"
+chmod 0700 "$TASK_RUNTIME"
+export HOME="$TASK_HOME"
+export TMPDIR="$TASK_TMP"
+export TMP="$TASK_TMP"
+export TEMP="$TASK_TMP"
+export XDG_RUNTIME_DIR="$TASK_RUNTIME"
+export PYTHONDONTWRITEBYTECODE=1
+export LANG=C.UTF-8
+export LC_ALL=C.UTF-8
+export TZ=UTC
+unset LANGUAGE
+
+# shellcheck source=../activate
+# shellcheck disable=SC1091
+. "$ROOT/scripts/activate"
+
+case "${PARADOX_VERIFY_COMPAT_SYSTEM:-0}" in
+  0) ;;
+  1)
+    # shellcheck source=../activate-compat-system
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/activate-compat-system"
+    ;;
+  *)
+    printf '%s\n' "verify-task-entry: invalid compatibility-overlay mode" >&2
+    exit 2
+    ;;
+esac
+
+# Both activation layers intentionally reconstruct their ordinary interactive
+# defaults. Restore the attempt-private process state after that verification.
+mkdir -p "$TASK_TMP/ccache"
+export HOME="$TASK_HOME"
+export TMPDIR="$TASK_TMP"
+export TMP="$TASK_TMP"
+export TEMP="$TASK_TMP"
+export XDG_RUNTIME_DIR="$TASK_RUNTIME"
+export CCACHE_TEMPDIR="$TASK_TMP/ccache"
+
+case "${PARADOX_VERIFY_ASSIGNED_CPUS:-}" in
+  ''|*[!0-9.]*|.*|*.*.*)
+    printf '%s\n' "verify-task-entry: invalid assigned CPU count" >&2
+    exit 2
+    ;;
+esac
+case "${PARADOX_VERIFY_ASSIGNED_MEMORY_MIB:-}" in
+  ''|0|0*|*[!0-9]*)
+    printf '%s\n' "verify-task-entry: invalid assigned memory count" >&2
+    exit 2
+    ;;
+esac
+VERIFY_THREADS=${PARADOX_VERIFY_ASSIGNED_CPUS%%.*}
+if [ -z "$VERIFY_THREADS" ] || [ "$VERIFY_THREADS" -lt 1 ]; then
+  VERIFY_THREADS=1
+fi
+export MAKEFLAGS="-j$VERIFY_THREADS"
+export TESTTHAT_PARALLEL=false
+export TESTTHAT_CPUS=1
+export OMP_NUM_THREADS=1
+export OMP_THREAD_LIMIT=1
+export OPENBLAS_NUM_THREADS=1
+export GOTO_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export BLIS_NUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+unset VERIFY_THREADS
+exec "$@"

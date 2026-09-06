@@ -1,0 +1,4 @@
+PKG_CPPFLAGS = -DR_NO_REMAP -DSTRICT_R_HEADERS
+
+# R's Windows package linker consumes <dll-base>-win.def before considering
+# automatic exports. Keep paradox-win.def as the single export allow-list.

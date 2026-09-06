@@ -1,0 +1,84 @@
+#ifndef PARADOX_PARAMSET_PARAMS_INTERNAL_H
+#define PARADOX_PARAMSET_PARAMS_INTERNAL_H
+
+#include "paramset_domain_common.h"
+
+/* Parsed, callback-free state retained for one native `$params` call.  Its
+ * SEXPs are rooted by the owning private environment only until arbitrary R
+ * evaluation begins; a caller that retains any of them across callbacks must
+ * anchor those sources explicitly.  Temporary row maps are allocated with
+ * R_alloc() and therefore live until the registered entry point returns. */
+typedef struct {
+  SEXP params_sexp;
+  SEXP tags_sexp;
+  SEXP trafos_sexp;
+  SEXP dependencies_sexp;
+  SEXP values_sexp;
+  paradox_domain_params_t params;
+  /* Permanent columns are an admitted snapshot, not later table lookups.
+   * The rooted loader anchors every entry before any subsequent allocation. */
+  SEXP params_columns[PARADOX_DOMAIN_TAGS];
+  paradox_domain_tags_t tags;
+  paradox_domain_trafos_t trafos;
+  paradox_domain_dependencies_t dependencies;
+  paradox_domain_values_t values;
+  R_xlen_t *tag_offsets;
+  R_xlen_t *tag_order;
+  R_xlen_t *trafo_index;
+} paradox_params_state_t;
+
+attribute_hidden int paradox_params_supported_table_attributes(SEXP table);
+attribute_hidden int paradox_params_names_are_only_attribute(SEXP value);
+attribute_hidden int paradox_params_load_private_state_rooted(
+  SEXP private_environment,
+  paradox_params_state_t *state,
+  SEXP roots,
+  R_xlen_t roots_offset,
+  R_xlen_t *work_since_interrupt
+);
+/* Load from an already admitted exact core. This avoids manufacturing a
+ * one-binding environment when a collection graph has already selected and
+ * rooted the authoritative generation. */
+attribute_hidden int paradox_params_load_core_state_rooted(
+  SEXP core,
+  paradox_params_state_t *state,
+  SEXP roots,
+  R_xlen_t roots_offset,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden SEXP paradox_params_build_static(
+  const paradox_params_state_t *state,
+  R_xlen_t *work_since_interrupt
+);
+/* Detach one row-level Domain field according to the closed kind's ownership
+ * contract. `typed` is false only for ParamUty. Structural containers and
+ * Conditions are owned; callbacks/ParamUty/S4 opaque leaves retain identity. */
+attribute_hidden SEXP paradox_detach_domain_row_field(
+  SEXP source,
+  enum paradox_domain_column column,
+  int typed,
+  R_xlen_t *work_since_interrupt
+);
+/* Detach one general stored/public value by closed Domain kind. Unlike the
+ * schema default/init helper, this never interprets outward classes such as
+ * `NoDefault`: every ParamUty payload is opaque and retains exact identity. */
+attribute_hidden SEXP paradox_detach_stored_value_leaf(
+  SEXP value,
+  int typed
+);
+/* Detach the outer store and every typed atomic value using the owning
+ * parameter row. ParamUty/TuneToken/S4/other opaque leaves keep identity. */
+attribute_hidden SEXP paradox_detach_named_values(
+  const paradox_domain_values_t *values,
+  const paradox_domain_params_t *params,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden int paradox_params_finish_dynamic(
+  SEXP result,
+  const paradox_domain_params_t *params,
+  SEXP dependencies,
+  SEXP values,
+  R_xlen_t *work_since_interrupt
+);
+
+#endif

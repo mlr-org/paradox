@@ -1,0 +1,804 @@
+#!/usr/bin/env bash
+
+# Fail-closed helpers for protected-input fingerprints and retained
+# native-probe, Valgrind, and rchk evidence.  Keeping these helpers independent
+# of the heavyweight harness makes false-pass cases cheap to exercise in
+# adversarial tests.
+
+set -euo pipefail
+
+fail() {
+  printf '%s\n' "validate-memory-evidence: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  validate-memory-evidence metadata-fingerprint ROOT OUTPUT
+  validate-memory-evidence native-probes RSCRIPT VERIFIER MANIFEST RESULT MODE DSO
+  validate-memory-evidence valgrind LOG_DIRECTORY STEM DIAGNOSTIC_REPORT
+  validate-memory-evidence rchk-policy-directory TRUSTED_DIRECTORY SOURCE_DIRECTORY
+  validate-memory-evidence rchk REPORT_DIRECTORY RCHK_LOG ARTIFACT_DIRECTORY POLICY_DIRECTORY
+  validate-memory-evidence rchk-policy-generate REPORT_DIRECTORY IDENTITY ASSIGNMENTS CATALOG OUTPUT_DIRECTORY
+EOF
+}
+
+[[ $# -ge 1 ]] || { usage >&2; exit 2; }
+COMMAND=$1
+shift
+
+write_metadata_fingerprint() {
+  [[ $# -eq 2 ]] || fail "metadata-fingerprint requires ROOT OUTPUT"
+  local root=$1 output=$2 root_real output_parent output_parent_real
+  local output_name records encoded sorted temporary fingerprint
+  [[ -d "$root" && ! -L "$root" ]] ||
+    fail "metadata-fingerprint root is absent, non-directory, or symbolic"
+  root_real=$(cd "$root" && pwd -P)
+  [[ "$root_real" == "$root" ]] ||
+    fail "metadata-fingerprint root is not a canonical absolute path"
+  output_parent=$(dirname -- "$output")
+  output_name=$(basename -- "$output")
+  [[ -d "$output_parent" && ! -L "$output_parent" ]] ||
+    fail "metadata-fingerprint output parent is absent or symbolic"
+  output_parent_real=$(cd "$output_parent" && pwd -P)
+  [[ "$output_parent_real" == "$output_parent" &&
+      "$output_name" != "" && "$output_name" != "." &&
+      "$output_name" != ".." ]] ||
+    fail "metadata-fingerprint output is not a canonical file path"
+  output=$output_parent/$output_name
+  case "$output/" in
+    "$root"/*) fail "metadata fingerprint must live outside its input tree" ;;
+  esac
+  [[ ! -e "$output" && ! -L "$output" ]] ||
+    fail "metadata-fingerprint output already exists or is symbolic"
+
+  records=$(/usr/bin/mktemp "$output.records.XXXXXX")
+  encoded=$(/usr/bin/mktemp "$output.encoded.XXXXXX")
+  sorted=$(/usr/bin/mktemp "$output.sorted.XXXXXX")
+  temporary=$(/usr/bin/mktemp "$output.new.XXXXXX")
+  cleanup_metadata_fingerprint() {
+    /usr/bin/rm -f -- "$records" "$encoded" "$sorted" "${temporary:-}"
+  }
+  trap cleanup_metadata_fingerprint EXIT
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  # GNU find emits ten NUL-delimited fields per entry.  GNU awk length-prefixes
+  # every field and emits the complete tuple as one NUL-delimited record before
+  # sorting.  Thus arbitrary path/link bytes remain unambiguous and a metadata
+  # value cannot be reassociated with another path by a field-wise multiset
+  # collision.
+  LC_ALL=C /usr/bin/find "$root" \
+    -printf '%P\0%y\0%m\0%s\0%T@\0%C@\0%D\0%i\0%n\0%l\0' \
+    > "$records" || fail "could not inventory metadata below $root"
+  LC_ALL=C /usr/bin/awk '
+    BEGIN {
+      RS = sprintf("%c", 0)
+      ORS = ""
+      metadata_field_count = 10
+    }
+    {
+      field_index = ((NR - 1) % metadata_field_count) + 1
+      metadata_fields[field_index] = $0
+      if (field_index == metadata_field_count) {
+        for (field_number = 1; field_number <= metadata_field_count;
+            field_number++) {
+          printf "%d:%s", length(metadata_fields[field_number]),
+            metadata_fields[field_number]
+        }
+        printf "%c", 0
+        delete metadata_fields
+      }
+    }
+    END {
+      if (NR == 0 || NR % metadata_field_count != 0) exit 1
+    }
+  ' "$records" > "$encoded" ||
+    fail "metadata inventory below $root is truncated"
+  LC_ALL=C /usr/bin/sort -z "$encoded" > "$sorted" ||
+    fail "could not order metadata records below $root"
+  fingerprint=$(/usr/bin/sha256sum "$sorted")
+  fingerprint=${fingerprint%% *}
+  [[ "$fingerprint" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "could not compute metadata fingerprint below $root"
+  printf '%s\n' "$fingerprint" > "$temporary"
+  /usr/bin/chmod 0600 "$temporary"
+  /usr/bin/ln -- "$temporary" "$output" ||
+    fail "could not publish metadata fingerprint without replacement"
+  /usr/bin/rm -f -- "$temporary"
+  temporary=
+  cleanup_metadata_fingerprint
+  trap - EXIT HUP INT TERM
+  printf 'metadata_sha256=%s\n' "$fingerprint"
+}
+
+validate_native_probes() {
+  [[ $# -eq 6 ]] ||
+    fail "native-probes requires RSCRIPT VERIFIER MANIFEST RESULT MODE DSO"
+  local rscript=$1 verifier=$2 manifest=$3 result=$4 mode=$5 dso=$6 dso_sha
+  [[ -x "$rscript" && -f "$rscript" && ! -L "$rscript" ]] ||
+    fail "native-probe Rscript is absent, non-executable, or symbolic"
+  for input in "$verifier" "$manifest" "$result" "$dso"; do
+    [[ -f "$input" && ! -L "$input" ]] ||
+      fail "native-probe evidence input is absent or symbolic: $input"
+  done
+  [[ "$mode" == gct || "$mode" == valgrind ]] ||
+    fail "native-probe memory mode must be gct or valgrind"
+  dso_sha=$(sha256sum "$dso" | cut -d ' ' -f 1)
+  [[ "$dso_sha" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "native-probe DSO SHA-256 is malformed"
+  "$rscript" --vanilla "$verifier" \
+    "--manifest=$manifest" "--result=$result" "--mode=$mode" \
+    "--expected-dso-sha256=$dso_sha"
+  printf 'probe_mode=%s\n' "$mode"
+  printf 'probe_dso_sha256=%s\n' "$dso_sha"
+}
+
+validate_valgrind() {
+  [[ $# -eq 3 ]] || fail "valgrind requires LOG_DIRECTORY STEM DIAGNOSTIC_REPORT"
+  local log_directory=$1 stem=$2 diagnostic_report=$3
+  local log summary_count any_summary_count heap_summary_count leak_shape_count
+  local last_nonempty summary_pid in_use_count total_usage_count
+  local leak_header_count all_freed_count leak_line_count
+  local zero_summary_regex='^==[0-9]+== ERROR SUMMARY: 0 errors from 0 contexts \(suppressed: 0 from 0\)$'
+  local -a logs=()
+  [[ -d "$log_directory" && ! -L "$log_directory" ]] ||
+    fail "Valgrind log directory is missing or symbolic"
+  [[ "$stem" =~ ^[A-Za-z0-9._-]+$ ]] || fail "unsafe Valgrind log stem"
+  mkdir -p "$(dirname "$diagnostic_report")"
+  : > "$diagnostic_report"
+  : > "$diagnostic_report.inventory.tsv"
+  shopt -s nullglob
+  logs=("$log_directory/$stem".*.log)
+  shopt -u nullglob
+  [[ ${#logs[@]} -gt 0 ]] || fail "Valgrind produced no retained logs"
+  for log in "${logs[@]}"; do
+    [[ -f "$log" && ! -L "$log" ]] ||
+      fail "Valgrind log is not a regular file: $log"
+    any_summary_count=$(grep -E -c '^==[0-9]+== ERROR SUMMARY:' "$log" || true)
+    summary_count=$(grep -E -c "$zero_summary_regex" "$log" || true)
+    [[ "$any_summary_count" -eq 1 && "$summary_count" -eq 1 ]] ||
+      fail "Valgrind log lacks exactly one exact suppressed-zero summary: $log"
+    last_nonempty=$(awk 'NF { line = $0 } END { print line }' "$log")
+    [[ "$last_nonempty" =~ $zero_summary_regex ]] ||
+      fail "Valgrind zero-error summary is not the final nonempty line: $log"
+    summary_pid=$(sed -n \
+      's/^==\([0-9][0-9]*\)== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)$/\1/p' \
+      "$log")
+    [[ "$summary_pid" =~ ^[0-9]+$ ]] || fail "could not identify Valgrind log PID"
+    heap_summary_count=$(grep -E -c "^==$summary_pid== HEAP SUMMARY:$" "$log" || true)
+    [[ "$heap_summary_count" -eq 1 ]] ||
+      fail "Valgrind log lacks exactly one heap summary: $log"
+    in_use_count=$(grep -E -c \
+      "^==$summary_pid== +in use at exit: [0-9,]+ bytes in [0-9,]+ blocks$" \
+      "$log" || true)
+    total_usage_count=$(grep -E -c \
+      "^==$summary_pid== +total heap usage: [0-9,]+ allocs, [0-9,]+ frees, [0-9,]+ bytes allocated$" \
+      "$log" || true)
+    [[ "$in_use_count" -eq 1 && "$total_usage_count" -eq 1 ]] ||
+      fail "Valgrind log has an incomplete heap summary: $log"
+    leak_header_count=$(grep -E -c "^==$summary_pid== LEAK SUMMARY:$" "$log" || true)
+    all_freed_count=$(grep -E -c \
+      "^==$summary_pid== All heap blocks were freed -- no leaks are possible$" \
+      "$log" || true)
+    leak_shape_count=$((leak_header_count + all_freed_count))
+    [[ "$leak_shape_count" -eq 1 ]] ||
+      fail "Valgrind log lacks one unambiguous leak result: $log"
+    if [[ "$all_freed_count" -eq 1 ]]; then
+      [[ $(grep -E -c \
+        "^==$summary_pid== +in use at exit: 0 bytes in 0 blocks$" \
+        "$log" || true) -eq 1 ]] ||
+        fail "Valgrind all-freed result contradicts heap usage: $log"
+    else
+      leak_line_count=0
+      for leak_pattern in \
+          'definitely lost: +0 bytes in 0 blocks' \
+          'indirectly lost: +0 bytes in 0 blocks' \
+          'possibly lost: +0 bytes in 0 blocks' \
+          'still reachable: +[0-9,]+ bytes in [0-9,]+ blocks' \
+          'suppressed: +0 bytes in 0 blocks'; do
+        [[ $(grep -E -c "^==$summary_pid== +$leak_pattern$" "$log" || true) -eq 1 ]] ||
+          fail "Valgrind leak summary is incomplete or nonzero: $log"
+        leak_line_count=$((leak_line_count + 1))
+      done
+      [[ "$leak_line_count" -eq 5 ]] || fail "internal leak-summary validation error"
+    fi
+    printf '%s\t%s\n' "$(basename "$log")" \
+      "$(sha256sum "$log" | cut -d ' ' -f 1)" \
+      >> "$diagnostic_report.inventory.tsv"
+    grep -E -H -n \
+      'Invalid (read|write|free)|Conditional jump or move depends on uninitialised|Use of uninitialised|Syscall param .* uninitialised|Mismatched free|Source and destination overlap|ERROR SUMMARY: +[1-9][0-9,]* errors|definitely lost: +[1-9][0-9,]*|indirectly lost: +[1-9][0-9,]*|possibly lost: +[1-9][0-9,]*' \
+      "$log" >> "$diagnostic_report" || true
+  done
+  if [[ -s "$diagnostic_report" ]]; then
+    cat "$diagnostic_report" >&2
+    fail "Valgrind diagnostics were found"
+  fi
+  printf 'valgrind_logs=%s\n' "${#logs[@]}"
+}
+
+readonly RCHK_EMPTY_SHA256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+readonly RCHK_ERROR_STRPTIME="ERROR: too many states (abstraction error?) in function strptime_internal"
+readonly RCHK_ERROR_EVAL="ERROR: too many states (abstraction error?) in function bcEval_loop"
+readonly RCHK_ERROR_GC="ERROR: too many states (abstraction error?) in function RunGenCollect"
+
+canonical_positive_integer() {
+  [[ "$1" =~ ^[1-9][0-9]{0,8}$ ]]
+}
+
+canonical_nonnegative_integer() {
+  [[ "$1" == 0 || "$1" =~ ^[1-9][0-9]{0,8}$ ]]
+}
+
+require_regular_file() {
+  [[ -f "$1" && ! -L "$1" ]] || fail "$2 is missing or symbolic"
+}
+
+validate_rchk_policy_directory_identity() {
+  [[ $# -eq 2 ]] ||
+    fail "rchk-policy-directory requires TRUSTED_DIRECTORY SOURCE_DIRECTORY"
+  local trusted=$1 source=$2 directory label inventory policy_file
+  local expected_inventory=$'blocks.tsv\npolicy.tsv\nrationales.tsv'
+  for label in trusted source; do
+    if [[ "$label" == trusted ]]; then
+      directory=$trusted
+    else
+      directory=$source
+    fi
+    [[ -d "$directory" && ! -L "$directory" ]] ||
+      fail "$label rchk policy directory is absent, non-directory, or symbolic"
+    inventory=$(find "$directory" -mindepth 1 -maxdepth 1 \
+      -printf '%f\n' | LC_ALL=C sort)
+    [[ "$inventory" == "$expected_inventory" ]] ||
+      fail "$label rchk policy directory has an unexpected inventory"
+    for policy_file in blocks.tsv policy.tsv rationales.tsv; do
+      require_regular_file "$directory/$policy_file" \
+        "$label rchk policy $policy_file"
+    done
+  done
+  for policy_file in blocks.tsv policy.tsv rationales.tsv; do
+    cmp -s "$trusted/$policy_file" "$source/$policy_file" ||
+      fail "source rchk policy differs from trusted current $policy_file"
+  done
+  printf 'rchk_policy_directory=matched\n'
+  printf 'rchk_policy_files=3\n'
+}
+
+read_rchk_identity() {
+  local identity=$1 index key value extra
+  local -a expected_keys=(
+    schema bounded_bcheck_sha256 bcheck_max_states callocators_max_states
+    image_bcheck_sha256 maacheck_sha256 fficheck_sha256
+    address_space_limit_bytes
+  )
+  local -a lines=()
+  require_regular_file "$identity" "rchk analyzer identity"
+  mapfile -t lines < "$identity"
+  [[ ${#lines[@]} -eq $((${#expected_keys[@]} + 1)) &&
+      "${lines[0]}" == $'key\tvalue' ]] ||
+    fail "rchk analyzer identity has an unexpected shape"
+  declare -ga RCHK_IDENTITY_VALUES=()
+  for ((index = 0; index < ${#expected_keys[@]}; ++index)); do
+    IFS=$'\t' read -r key value extra <<< "${lines[$((index + 1))]}"
+    [[ "$key" == "${expected_keys[$index]}" && -n "$value" &&
+        -z "$extra" ]] ||
+      fail "rchk analyzer identity key order or value shape is invalid"
+    RCHK_IDENTITY_VALUES+=("$value")
+  done
+  [[ "${RCHK_IDENTITY_VALUES[0]}" == 2 ]] ||
+    fail "rchk analyzer identity has an invalid schema"
+  for index in 1 4 5 6; do
+    [[ "${RCHK_IDENTITY_VALUES[$index]}" =~ ^[0-9a-f]{64}$ ]] ||
+      fail "rchk analyzer identity has a malformed executable SHA-256"
+  done
+  [[ "${RCHK_IDENTITY_VALUES[2]}" == 3000000 ]] ||
+    fail "rchk bounded-bcheck identity is not the reviewed 3000000-state build"
+  [[ "${RCHK_IDENTITY_VALUES[3]}" == 3000000 ]] ||
+    fail "rchk allocator identity is not the reviewed 3000000-state build"
+  [[ "${RCHK_IDENTITY_VALUES[7]}" == 21474836480 ]] ||
+    fail "rchk analyzer identity does not bind the reviewed 20-GiB limit"
+  RCHK_IDENTITY_BCHECK_SHA256=${RCHK_IDENTITY_VALUES[1]}
+  RCHK_IDENTITY_BCHECK_MAX_STATES=${RCHK_IDENTITY_VALUES[2]}
+  RCHK_IDENTITY_CALLOCATORS_MAX_STATES=${RCHK_IDENTITY_VALUES[3]}
+  RCHK_IDENTITY_SHA256=$(sha256sum "$identity" | cut -d ' ' -f 1)
+}
+
+extract_error_substrings() {
+  awk '
+    {
+      position = index($0, "ERROR:")
+      if (position != 0) print substr($0, position)
+    }
+  ' "$1"
+}
+
+expected_rchk_errors() {
+  printf '%s\n' "$RCHK_ERROR_STRPTIME" "$RCHK_ERROR_EVAL" "$RCHK_ERROR_GC"
+}
+
+extract_rchk_bcheck_semantics() {
+  local bcheck=$1 output=$2
+  printf 'ordinal\tfunction\tup_count\tpb_count\n' > "$output"
+  LC_ALL=C awk -v block_output="$output" '
+    function reject() { invalid = 1; exit 1 }
+    function emit_semantic_record(kind, owner, payload) {
+      # Length-prefix every field before line-delimited sorting. Report records
+      # cannot contain a newline, and LC_ALL=C makes lengths byte-stable.
+      # Repeated records remain repeated, so this binds a multiset, not a set.
+      printf "%d:%s%d:%s%d:%s\n", length(kind), kind, length(owner), owner,
+        length(payload), payload
+    }
+    function emit_block() {
+      if (up_count + pb_count == 0) reject()
+      block_count++
+      printf "%d\t%s\t%d\t%d\n", block_count, function_name,
+        up_count, pb_count >> block_output
+      function_name = ""
+      in_block = 0
+    }
+    index($0, "\r") != 0 { reject() }
+    /^Function / {
+      if (in_block || summary_seen) reject()
+      function_name = substr($0, 10)
+      if (function_name !~ /^[A-Za-z_][A-Za-z0-9_.]*$/ ||
+          seen[function_name]++) reject()
+      up_count = 0
+      pb_count = 0
+      in_block = 1
+      next
+    }
+    /^Analyzed [1-9][0-9]* functions, traversed [1-9][0-9]* states\.$/ {
+      if (summary_seen || block_count == 0 && !in_block) reject()
+      if (in_block) emit_block()
+      emit_semantic_record("summary", "", $0)
+      summary_seen = 1
+      next
+    }
+    in_block {
+      if ($0 == "") {
+        emit_block()
+        next
+      }
+      marker_count = gsub(/\[UP\]/, "&") + gsub(/\[PB\]/, "&")
+      if ($0 !~ /^  \[(UP|PB)\] / || marker_count != 1) reject()
+      if ($0 ~ /^  \[UP\] /) up_count++
+      else pb_count++
+      emit_semantic_record("diagnostic", function_name, $0)
+      next
+    }
+    summary_seen && $0 != "" { reject() }
+    $0 == "" { next }
+    index($0, "ERROR:") != 0 {
+      emit_semantic_record("error", "", $0)
+      next
+    }
+    { reject() }
+    END {
+      if (invalid) exit 1
+      if (in_block) emit_block()
+      if (!summary_seen || block_count == 0) exit 1
+      close(block_output)
+    }
+  ' "$bcheck" ||
+    fail "rchk bcheck diagnostic blocks are malformed"
+}
+
+validate_rchk_report_set() {
+  local report_directory=$1 observed_blocks=$2
+  local report_type report_path report_count status_receipt expected_line
+  local actual_line last_nonempty analysis_summary key value extra
+  local -a receipt_lines=() fficheck_lines=()
+  [[ -d "$report_directory" && ! -L "$report_directory" ]] ||
+    fail "rchk report directory is missing or symbolic"
+  for report_type in bcheck maacheck fficheck; do
+    report_path="$report_directory/paradox.so.$report_type"
+    require_regular_file "$report_path" "host-side rchk $report_type report"
+  done
+  status_receipt="$report_directory/tool-status.tsv"
+  require_regular_file "$status_receipt" "host-side rchk tool-status receipt"
+  report_count=$(find "$report_directory" -maxdepth 1 -type f \
+    -name 'paradox.so.*check' | wc -l)
+  [[ "$report_count" -eq 3 ]] ||
+    fail "rchk retained an unexpected number of reports"
+
+  mapfile -t receipt_lines < "$status_receipt"
+  [[ ${#receipt_lines[@]} -eq 4 &&
+      "${receipt_lines[0]}" == $'tool\tstatus\treport\tsha256' ]] ||
+    fail "rchk tool-status receipt has an unexpected shape"
+  local receipt_index=1
+  for report_type in bcheck maacheck fficheck; do
+    report_path="$report_directory/paradox.so.$report_type"
+    expected_line=$(printf '%s\t0\tparadox.so.%s\t%s' \
+      "$report_type" "$report_type" \
+      "$(sha256sum "$report_path" | cut -d ' ' -f 1)")
+    actual_line=${receipt_lines[$receipt_index]}
+    [[ "$actual_line" == "$expected_line" ]] ||
+      fail "rchk tool-status receipt does not bind successful $report_type output"
+    receipt_index=$((receipt_index + 1))
+  done
+
+  RCHK_MAACHECK_SHA256=$(sha256sum \
+    "$report_directory/paradox.so.maacheck" | cut -d ' ' -f 1)
+  RCHK_FFICHECK_SHA256=$(sha256sum \
+    "$report_directory/paradox.so.fficheck" | cut -d ' ' -f 1)
+  [[ ! -s "$report_directory/paradox.so.maacheck" &&
+      "$RCHK_MAACHECK_SHA256" == "$RCHK_EMPTY_SHA256" ]] ||
+    fail "rchk maacheck report is not exactly empty"
+
+  analysis_summary=$(grep -E \
+    '^Analyzed [0-9]+ functions, traversed [0-9]+ states\.$' \
+    "$report_directory/paradox.so.bcheck" || true)
+  [[ $(printf '%s\n' "$analysis_summary" | awk 'NF { count++ } END { print count + 0 }') \
+      -eq 1 ]] || fail "rchk bcheck lacks one unique analysis summary"
+  if [[ "$analysis_summary" =~ ^Analyzed\ ([0-9]+)\ functions,\ traversed\ ([0-9]+)\ states\.$ ]]; then
+    RCHK_ANALYZED_FUNCTIONS=${BASH_REMATCH[1]}
+    RCHK_TRAVERSED_STATES=${BASH_REMATCH[2]}
+  else
+    fail "rchk bcheck analysis summary is malformed"
+  fi
+  canonical_positive_integer "$RCHK_ANALYZED_FUNCTIONS" ||
+    fail "rchk bcheck analyzed zero or noncanonical functions"
+  canonical_positive_integer "$RCHK_TRAVERSED_STATES" ||
+    fail "rchk bcheck traversed zero or noncanonical states"
+  last_nonempty=$(awk 'NF { line = $0 } END { print line }' \
+    "$report_directory/paradox.so.bcheck")
+  [[ "$last_nonempty" == "$analysis_summary" ]] ||
+    fail "rchk bcheck analysis summary is not the final nonempty line"
+
+  [[ "$(extract_error_substrings \
+      "$report_directory/paradox.so.bcheck")" == "$(expected_rchk_errors)" ]] ||
+    fail "rchk bcheck error-substring inventory differs from the three base-R limits"
+  if ! RCHK_BCHECK_SEMANTIC_SHA256=$(
+      extract_rchk_bcheck_semantics \
+        "$report_directory/paradox.so.bcheck" "$observed_blocks" |
+        LC_ALL=C sort |
+        sha256sum |
+        cut -d ' ' -f 1
+    ); then
+    fail "could not canonicalize rchk bcheck semantics"
+  fi
+  [[ "$RCHK_BCHECK_SEMANTIC_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "rchk bcheck semantic SHA-256 is malformed"
+  RCHK_FUNCTION_BLOCKS=$(( $(wc -l < "$observed_blocks") - 1 ))
+  RCHK_UP_DIAGNOSTICS=$(awk -F '\t' 'NR > 1 { total += $3 } \
+    END { print total + 0 }' "$observed_blocks")
+  RCHK_PB_DIAGNOSTICS=$(awk -F '\t' 'NR > 1 { total += $4 } \
+    END { print total + 0 }' "$observed_blocks")
+  canonical_positive_integer "$RCHK_FUNCTION_BLOCKS" ||
+    fail "rchk bcheck contains no reviewed Function blocks"
+  canonical_nonnegative_integer "$RCHK_UP_DIAGNOSTICS" ||
+    fail "rchk bcheck UP count is noncanonical"
+  canonical_nonnegative_integer "$RCHK_PB_DIAGNOSTICS" ||
+    fail "rchk bcheck PB count is noncanonical"
+  ((RCHK_UP_DIAGNOSTICS + RCHK_PB_DIAGNOSTICS > 0)) ||
+    fail "rchk bcheck contains no reviewable UP/PB diagnostics"
+
+  mapfile -t fficheck_lines < "$report_directory/paradox.so.fficheck"
+  [[ ${#fficheck_lines[@]} -eq 4 &&
+      "${fficheck_lines[0]}" == \
+        'Library name (usually package name): paradox' &&
+      "${fficheck_lines[1]}" == 'Initialization function: R_init_paradox' &&
+      "${fficheck_lines[3]}" == 'Checked call to R_registerRoutines: 1' ]] ||
+    fail "rchk fficheck report has an unexpected structure"
+  if [[ "${fficheck_lines[2]}" =~ ^Functions:\ ([0-9]+)$ ]]; then
+    RCHK_REGISTERED_FUNCTIONS=${BASH_REMATCH[1]}
+  else
+    fail "rchk fficheck has no unique registered-function count"
+  fi
+  canonical_positive_integer "$RCHK_REGISTERED_FUNCTIONS" ||
+    fail "rchk fficheck inspected zero or noncanonical functions"
+  RCHK_CHECKED_REGISTRATION_CALLS=1
+}
+
+read_rchk_policy() {
+  local policy=$1 index key value extra
+  local -a lines=() expected_keys=(
+    schema package bounded_bcheck_sha256 bcheck_max_states
+    analyzer_identity_sha256 bcheck_semantic_sha256 maacheck_report_sha256
+    fficheck_report_sha256
+    analyzed_functions traversed_states registered_functions
+    checked_registration_calls function_blocks up_diagnostics pb_diagnostics
+    blocks_sha256 rationales_sha256
+  )
+  require_regular_file "$policy" "rchk policy.tsv"
+  mapfile -t lines < "$policy"
+  [[ ${#lines[@]} -eq $((${#expected_keys[@]} + 1)) &&
+      "${lines[0]}" == $'key\tvalue' ]] ||
+    fail "rchk policy.tsv has an unexpected shape"
+  RCHK_POLICY_VALUES=()
+  for ((index = 0; index < ${#expected_keys[@]}; ++index)); do
+    IFS=$'\t' read -r key value extra <<< "${lines[$((index + 1))]}"
+    [[ "$key" == "${expected_keys[$index]}" && -n "$value" && -z "$extra" ]] ||
+      fail "rchk policy.tsv key order or value shape is invalid"
+    RCHK_POLICY_VALUES+=("$value")
+  done
+  [[ "${RCHK_POLICY_VALUES[0]}" == 2 &&
+      "${RCHK_POLICY_VALUES[1]}" == paradox ]] ||
+    fail "rchk policy schema or package is invalid"
+  for index in 2 4 5 6 7 15 16; do
+    [[ "${RCHK_POLICY_VALUES[$index]}" =~ ^[0-9a-f]{64}$ ]] ||
+      fail "rchk policy contains a malformed SHA-256"
+  done
+  [[ "${RCHK_POLICY_VALUES[3]}" == 3000000 ]] ||
+    fail "rchk policy does not select the reviewed 3000000-state analyzer"
+  for index in 8 9 10 11 12; do
+    canonical_positive_integer "${RCHK_POLICY_VALUES[$index]}" ||
+      fail "rchk policy contains a nonpositive or noncanonical count"
+  done
+  for index in 13 14; do
+    canonical_nonnegative_integer "${RCHK_POLICY_VALUES[$index]}" ||
+      fail "rchk policy contains a noncanonical diagnostic count"
+  done
+}
+
+validate_rationale_catalog() {
+  local catalog=$1 previous= rationale_id rationale extra
+  require_regular_file "$catalog" "rchk rationale catalog"
+  declare -gA RCHK_RATIONALES=()
+  declare -ga RCHK_RATIONALE_IDS=()
+  local header=true
+  while IFS=$'\t' read -r rationale_id rationale extra ||
+      [[ -n "$rationale_id$rationale${extra:-}" ]]; do
+    if [[ "$header" == true ]]; then
+      [[ "$rationale_id" == rationale_id && "$rationale" == rationale &&
+          -z "$extra" ]] || fail "rchk rationale catalog header is invalid"
+      header=false
+      continue
+    fi
+    [[ "$rationale_id" =~ ^[A-Z][A-Z0-9_]{2,63}$ && -z "$extra" &&
+        ${#rationale} -ge 12 &&
+        ! "$rationale" =~ [[:cntrl:]] ]] ||
+      fail "rchk rationale catalog row is malformed"
+    [[ ! "${rationale^^}" =~ (TODO|TBD|FIXME|PLACEHOLDER|UNREVIEWED|UNKNOWN) ]] ||
+      fail "rchk rationale catalog contains a placeholder"
+    [[ -z "$previous" || "$rationale_id" > "$previous" ]] ||
+      fail "rchk rationale catalog IDs are not unique and ordered"
+    RCHK_RATIONALES["$rationale_id"]=$rationale
+    RCHK_RATIONALE_IDS+=("$rationale_id")
+    previous=$rationale_id
+  done < "$catalog"
+  [[ "$header" == false && ${#RCHK_RATIONALE_IDS[@]} -gt 0 ]] ||
+    fail "rchk rationale catalog is empty"
+}
+
+validate_rchk_block_policy() {
+  local observed=$1 blocks=$2 catalog=$3 index
+  local ordinal function_name up_count pb_count rationale_id extra
+  local observed_ordinal observed_function observed_up observed_pb
+  local -a observed_lines=() block_lines=()
+  validate_rationale_catalog "$catalog"
+  require_regular_file "$blocks" "rchk block policy"
+  mapfile -t observed_lines < "$observed"
+  mapfile -t block_lines < "$blocks"
+  [[ ${#observed_lines[@]} -eq ${#block_lines[@]} &&
+      "${block_lines[0]}" == \
+        $'ordinal\tfunction\tup_count\tpb_count\trationale_id' ]] ||
+    fail "rchk block policy has a missing or extra Function block"
+  declare -gA RCHK_USED_RATIONALES=()
+  for ((index = 1; index < ${#block_lines[@]}; ++index)); do
+    IFS=$'\t' read -r observed_ordinal observed_function observed_up \
+      observed_pb extra <<< "${observed_lines[$index]}"
+    [[ -z "$extra" ]] || fail "observed rchk block table is malformed"
+    IFS=$'\t' read -r ordinal function_name up_count pb_count rationale_id \
+      extra <<< "${block_lines[$index]}"
+    [[ -z "$extra" && "$ordinal" == "$index" &&
+        "$ordinal" == "$observed_ordinal" &&
+        "$function_name" == "$observed_function" &&
+        "$up_count" == "$observed_up" && "$pb_count" == "$observed_pb" ]] ||
+      fail "rchk block policy order or exact UP/PB count differs"
+    [[ -n "${RCHK_RATIONALES[$rationale_id]+present}" ]] ||
+      fail "rchk block policy uses an unknown rationale ID"
+    RCHK_USED_RATIONALES["$rationale_id"]=1
+  done
+  for rationale_id in "${RCHK_RATIONALE_IDS[@]}"; do
+    [[ -n "${RCHK_USED_RATIONALES[$rationale_id]+present}" ]] ||
+      fail "rchk rationale catalog contains an unused rationale ID"
+  done
+}
+
+validate_rchk_policy_directory() {
+  local policy_directory=$1 observed=$2 inventory blocks rationales
+  [[ -d "$policy_directory" && ! -L "$policy_directory" ]] ||
+    fail "rchk policy directory is missing or symbolic"
+  inventory=$(find "$policy_directory" -mindepth 1 -maxdepth 1 \
+    -printf '%f\n' | LC_ALL=C sort)
+  [[ "$inventory" == $'blocks.tsv\npolicy.tsv\nrationales.tsv' ]] ||
+    fail "rchk policy directory has an unexpected inventory"
+  blocks="$policy_directory/blocks.tsv"
+  rationales="$policy_directory/rationales.tsv"
+  read_rchk_policy "$policy_directory/policy.tsv"
+  [[ "${RCHK_POLICY_VALUES[2]}" == "$RCHK_IDENTITY_BCHECK_SHA256" &&
+      "${RCHK_POLICY_VALUES[3]}" == "$RCHK_IDENTITY_BCHECK_MAX_STATES" &&
+      "${RCHK_POLICY_VALUES[4]}" == "$RCHK_IDENTITY_SHA256" &&
+      "${RCHK_POLICY_VALUES[5]}" == "$RCHK_BCHECK_SEMANTIC_SHA256" &&
+      "${RCHK_POLICY_VALUES[6]}" == "$RCHK_MAACHECK_SHA256" &&
+      "${RCHK_POLICY_VALUES[6]}" == "$RCHK_EMPTY_SHA256" &&
+      "${RCHK_POLICY_VALUES[7]}" == "$RCHK_FFICHECK_SHA256" &&
+      "${RCHK_POLICY_VALUES[8]}" == "$RCHK_ANALYZED_FUNCTIONS" &&
+      "${RCHK_POLICY_VALUES[9]}" == "$RCHK_TRAVERSED_STATES" &&
+      "${RCHK_POLICY_VALUES[10]}" == "$RCHK_REGISTERED_FUNCTIONS" &&
+      "${RCHK_POLICY_VALUES[11]}" == "$RCHK_CHECKED_REGISTRATION_CALLS" &&
+      "${RCHK_POLICY_VALUES[12]}" == "$RCHK_FUNCTION_BLOCKS" &&
+      "${RCHK_POLICY_VALUES[13]}" == "$RCHK_UP_DIAGNOSTICS" &&
+      "${RCHK_POLICY_VALUES[14]}" == "$RCHK_PB_DIAGNOSTICS" ]] ||
+    fail "rchk policy does not bind the exact analyzer semantics and counts"
+  [[ "${RCHK_POLICY_VALUES[15]}" == \
+      "$(sha256sum "$blocks" | cut -d ' ' -f 1)" &&
+      "${RCHK_POLICY_VALUES[16]}" == \
+      "$(sha256sum "$rationales" | cut -d ' ' -f 1)" ]] ||
+    fail "rchk policy does not bind its block/rationale tables"
+  validate_rchk_block_policy "$observed" "$blocks" "$rationales"
+}
+
+generate_rchk_policy() {
+  [[ $# -eq 5 ]] || fail \
+    "rchk-policy-generate requires REPORT_DIRECTORY IDENTITY ASSIGNMENTS CATALOG OUTPUT_DIRECTORY"
+  local report_directory=$1 identity=$2 assignments=$3 catalog=$4 output=$5
+  local parent stage observed index ordinal function_name rationale_id extra
+  local observed_ordinal observed_function observed_up observed_pb
+  local blocks_sha rationales_sha
+  local -a observed_lines=() assignment_lines=()
+  require_regular_file "$assignments" "rchk rationale assignments"
+  validate_rationale_catalog "$catalog"
+  read_rchk_identity "$identity"
+  parent=$(dirname "$output")
+  [[ -d "$parent" && ! -L "$parent" && ! -e "$output" && ! -L "$output" ]] ||
+    fail "rchk policy output must be an absent path below a real directory"
+  stage=$(mktemp -d "$parent/.rchk-policy.XXXXXX")
+  trap "rm -rf -- $(printf '%q' "$stage")" EXIT
+  observed="$stage/observed.tsv"
+  validate_rchk_report_set "$report_directory" "$observed"
+  mapfile -t observed_lines < "$observed"
+  mapfile -t assignment_lines < "$assignments"
+  [[ ${#observed_lines[@]} -eq ${#assignment_lines[@]} &&
+      "${assignment_lines[0]}" == $'ordinal\tfunction\trationale_id' ]] ||
+    fail "rchk rationale assignments do not cover every Function block"
+  printf 'ordinal\tfunction\tup_count\tpb_count\trationale_id\n' \
+    > "$stage/blocks.tsv"
+  declare -gA RCHK_USED_RATIONALES=()
+  for ((index = 1; index < ${#assignment_lines[@]}; ++index)); do
+    IFS=$'\t' read -r observed_ordinal observed_function observed_up \
+      observed_pb extra <<< "${observed_lines[$index]}"
+    [[ -z "$extra" ]] || fail "observed rchk block table is malformed"
+    IFS=$'\t' read -r ordinal function_name rationale_id extra \
+      <<< "${assignment_lines[$index]}"
+    [[ -z "$extra" && "$ordinal" == "$index" &&
+        "$ordinal" == "$observed_ordinal" &&
+        "$function_name" == "$observed_function" &&
+        -n "${RCHK_RATIONALES[$rationale_id]+present}" ]] ||
+      fail "rchk rationale assignments are reordered, stale, or unknown"
+    printf '%s\t%s\t%s\t%s\t%s\n' "$ordinal" "$function_name" \
+      "$observed_up" "$observed_pb" "$rationale_id" >> "$stage/blocks.tsv"
+    RCHK_USED_RATIONALES["$rationale_id"]=1
+  done
+  for rationale_id in "${RCHK_RATIONALE_IDS[@]}"; do
+    [[ -n "${RCHK_USED_RATIONALES[$rationale_id]+present}" ]] ||
+      fail "rchk rationale catalog contains an unused rationale ID"
+  done
+  cp -p "$catalog" "$stage/rationales.tsv"
+  blocks_sha=$(sha256sum "$stage/blocks.tsv" | cut -d ' ' -f 1)
+  rationales_sha=$(sha256sum "$stage/rationales.tsv" | cut -d ' ' -f 1)
+  {
+    printf 'key\tvalue\n'
+    printf 'schema\t2\n'
+    printf 'package\tparadox\n'
+    printf 'bounded_bcheck_sha256\t%s\n' "$RCHK_IDENTITY_BCHECK_SHA256"
+    printf 'bcheck_max_states\t%s\n' "$RCHK_IDENTITY_BCHECK_MAX_STATES"
+    printf 'analyzer_identity_sha256\t%s\n' "$RCHK_IDENTITY_SHA256"
+    printf 'bcheck_semantic_sha256\t%s\n' \
+      "$RCHK_BCHECK_SEMANTIC_SHA256"
+    printf 'maacheck_report_sha256\t%s\n' "$RCHK_MAACHECK_SHA256"
+    printf 'fficheck_report_sha256\t%s\n' "$RCHK_FFICHECK_SHA256"
+    printf 'analyzed_functions\t%s\n' "$RCHK_ANALYZED_FUNCTIONS"
+    printf 'traversed_states\t%s\n' "$RCHK_TRAVERSED_STATES"
+    printf 'registered_functions\t%s\n' "$RCHK_REGISTERED_FUNCTIONS"
+    printf 'checked_registration_calls\t%s\n' \
+      "$RCHK_CHECKED_REGISTRATION_CALLS"
+    printf 'function_blocks\t%s\n' "$RCHK_FUNCTION_BLOCKS"
+    printf 'up_diagnostics\t%s\n' "$RCHK_UP_DIAGNOSTICS"
+    printf 'pb_diagnostics\t%s\n' "$RCHK_PB_DIAGNOSTICS"
+    printf 'blocks_sha256\t%s\n' "$blocks_sha"
+    printf 'rationales_sha256\t%s\n' "$rationales_sha"
+  } > "$stage/policy.tsv"
+  rm "$observed"
+  chmod 0444 "$stage/policy.tsv" "$stage/blocks.tsv" "$stage/rationales.tsv"
+  mv "$stage" "$output"
+  trap - EXIT
+  printf 'policy_directory=%s\n' "$output"
+  printf 'policy_sha256=%s\n' \
+    "$(sha256sum "$output/policy.tsv" | cut -d ' ' -f 1)"
+}
+
+validate_rchk() {
+  [[ $# -eq 4 ]] || fail \
+    "rchk requires REPORT_DIRECTORY RCHK_LOG ARTIFACT_DIRECTORY POLICY_DIRECTORY"
+  local report_directory=$1 rchk_log=$2 artifacts=$3 policy_directory=$4
+  local identity observed abstraction_inventory objdump_22 objdump_23
+  local actual_line
+  require_regular_file "$rchk_log" "rchk log"
+  mkdir -p "$artifacts"
+  identity="$report_directory/analyzer-identity.tsv"
+  read_rchk_identity "$identity"
+  observed="$artifacts/observed-function-blocks.tsv"
+  validate_rchk_report_set "$report_directory" "$observed"
+  validate_rchk_policy_directory "$policy_directory" "$observed"
+  cp -p "$identity" "$artifacts/analyzer-identity.tsv"
+
+  abstraction_inventory=$(
+    extract_error_substrings "$report_directory/paradox.so.bcheck"
+    extract_error_substrings "$report_directory/paradox.so.maacheck"
+    extract_error_substrings "$report_directory/paradox.so.fficheck"
+    extract_error_substrings "$rchk_log"
+  )
+  [[ "$abstraction_inventory" == "$(expected_rchk_errors)" ]] ||
+    fail "rchk evidence contains a missing, duplicate, or package ERROR: substring"
+  {
+    printf 'source\tdiagnostic\n'
+    for actual_line in "$RCHK_ERROR_STRPTIME" "$RCHK_ERROR_EVAL" \
+        "$RCHK_ERROR_GC"; do
+      printf 'paradox.so.bcheck\t%s\n' "$actual_line"
+    done
+  } > "$artifacts/accepted-abstraction-errors.tsv"
+
+  objdump_22='objdump: Warning: Unrecognized form: 0x22'
+  objdump_23='objdump: Warning: Unrecognized form: 0x23'
+  {
+    printf 'line\tdiagnostic\n'
+    awk -v warning_22="$objdump_22" -v warning_23="$objdump_23" \
+      '$0 == warning_22 || $0 == warning_23 {
+        printf "%d\t%s\n", FNR, $0
+      }' "$rchk_log"
+  } > "$artifacts/accepted-infrastructure-warnings.tsv"
+  awk -v warning_22="$objdump_22" -v warning_23="$objdump_23" \
+    '$0 != warning_22 && $0 != warning_23 &&
+     tolower($0) ~ /(^|[^[:alpha:]])warning([[:space:]]|:)/ {
+       printf "%s:%d:%s\n", FILENAME, FNR, $0
+     }' "$rchk_log" > "$artifacts/diagnostics.txt" ||
+    fail "could not scan the rchk transcript for warning diagnostics"
+  if [[ -s "$artifacts/diagnostics.txt" ]]; then
+    cat "$artifacts/diagnostics.txt" >&2
+    fail "rchk transcript contains an unreviewed warning diagnostic"
+  fi
+
+  sha256sum "$report_directory/paradox.so.bcheck" \
+    "$report_directory/paradox.so.maacheck" \
+    "$report_directory/paradox.so.fficheck" \
+    "$report_directory/tool-status.tsv" > "$artifacts/reports.sha256"
+  sha256sum "$policy_directory/policy.tsv" "$policy_directory/blocks.tsv" \
+    "$policy_directory/rationales.tsv" > "$artifacts/policy-files.sha256"
+  grep -E '^Analyzed [1-9][0-9]* functions, traversed [1-9][0-9]* states\.$' \
+    "$report_directory/paradox.so.bcheck" > "$artifacts/analysis-evidence.txt"
+  cat "$report_directory/paradox.so.fficheck" \
+    > "$artifacts/registration-evidence.txt"
+  {
+    printf 'key\tvalue\n'
+    printf 'schema\t2\n'
+    printf 'bounded_bcheck_sha256\t%s\n' "$RCHK_IDENTITY_BCHECK_SHA256"
+    printf 'bcheck_max_states\t%s\n' "$RCHK_IDENTITY_BCHECK_MAX_STATES"
+    printf 'callocators_max_states\t%s\n' \
+      "$RCHK_IDENTITY_CALLOCATORS_MAX_STATES"
+    printf 'policy_sha256\t%s\n' \
+      "$(sha256sum "$policy_directory/policy.tsv" | cut -d ' ' -f 1)"
+    printf 'function_blocks\t%s\n' "$RCHK_FUNCTION_BLOCKS"
+    printf 'up_diagnostics\t%s\n' "$RCHK_UP_DIAGNOSTICS"
+    printf 'pb_diagnostics\t%s\n' "$RCHK_PB_DIAGNOSTICS"
+  } > "$artifacts/rchk-policy-evidence.tsv"
+  printf 'analyzed_functions=%s\n' "$RCHK_ANALYZED_FUNCTIONS"
+  printf 'traversed_states=%s\n' "$RCHK_TRAVERSED_STATES"
+  printf 'registered_functions=%s\n' "$RCHK_REGISTERED_FUNCTIONS"
+  printf 'checked_registration_calls=1\n'
+  printf 'reviewed_function_blocks=%s\n' "$RCHK_FUNCTION_BLOCKS"
+}
+
+case "$COMMAND" in
+  metadata-fingerprint) write_metadata_fingerprint "$@" ;;
+  native-probes) validate_native_probes "$@" ;;
+  valgrind) validate_valgrind "$@" ;;
+  rchk-policy-directory) validate_rchk_policy_directory_identity "$@" ;;
+  rchk) validate_rchk "$@" ;;
+  rchk-policy-generate) generate_rchk_policy "$@" ;;
+  -h|--help|help) usage ;;
+  *) fail "unknown command: $COMMAND" ;;
+esac

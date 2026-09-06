@@ -1,0 +1,16 @@
+file	test	mode	coverage
+test-characterization-paramset-values.R	values getters and setters survive gctorture	not-cran	collection-lifetime,gc-rooting
+test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	not-cran	callback-reentry,gc-rooting
+test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	not-cran	gc-rooting,optional-binding
+test-native-gctorture.R	every allocating native entry point survives forced collection	not-cran	collection-lifetime,gc-rooting,optional-binding
+test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	not-cran	gc-rooting,trafo-lifetime
+test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	not-cran	collection-lifetime,gc-rooting,trafo-lifetime
+test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	not-cran	collection-lifetime,gc-rooting,trafo-lifetime
+test-native-paramset-value-mutation.R	an intervening reentrant commit aborts the enclosing assignment	companion	callback-reentry,optional-binding
+test-native-paramset-value-mutation.R	post-callback generation checks do not force delayed core bindings	companion	callback-reentry,optional-binding
+test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	not-cran	collection-lifetime,gc-rooting
+test-native-plain-binding-snapshot.R	plain binding snapshots distinguish locked and absent bindings	companion	optional-binding
+test-native-plain-binding-snapshot.R	plain binding snapshots never evaluate delayed expressions	companion	optional-binding
+test-native-plain-binding-snapshot.R	plain binding snapshots reject exact delayed literal values	companion	optional-binding
+test-native-plain-binding-snapshot.R	plain binding snapshots retain ordinary realized values exactly	companion	optional-binding
+test_to_tune.R	TuneToken snapshots revalidate after allocation finalizers	companion	finalizer,gc-rooting

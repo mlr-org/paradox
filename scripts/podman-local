@@ -1,0 +1,312 @@
+#!/usr/bin/env sh
+
+set -eu
+
+SCRIPT_DIRECTORY=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+ROOT=$(CDPATH='' cd -- "$SCRIPT_DIRECTORY/.." && pwd -P)
+
+fail() {
+  printf '%s\n' "podman-local: $*" >&2
+  exit 1
+}
+
+assert_plain_directory_chain() {
+  _plain_path=$1
+  case "$_plain_path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed path escaped the repository: $_plain_path" ;;
+  esac
+  [ -d "$ROOT" ] && [ ! -L "$ROOT" ] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  _plain_current=$ROOT
+  _plain_remainder=${_plain_path#"$ROOT"}
+  while [ -n "$_plain_remainder" ]; do
+    _plain_remainder=${_plain_remainder#/}
+    _plain_component=${_plain_remainder%%/*}
+    case "$_plain_remainder" in
+      */*) _plain_remainder=${_plain_remainder#*/} ;;
+      *) _plain_remainder= ;;
+    esac
+    [ -n "$_plain_component" ] || continue
+    _plain_current="$_plain_current/$_plain_component"
+    [ ! -L "$_plain_current" ] ||
+      fail "refusing symbolic managed directory: $_plain_current"
+    [ ! -e "$_plain_current" ] || [ -d "$_plain_current" ] ||
+      fail "managed path is not a directory: $_plain_current"
+  done
+}
+
+require_plain_directory() {
+  _required_directory=$1
+  assert_plain_directory_chain "$_required_directory"
+  [ -d "$_required_directory" ] && [ ! -L "$_required_directory" ] ||
+    fail "required directory is missing, non-directory, or symbolic: $_required_directory"
+  [ "$(CDPATH='' cd -- "$_required_directory" && pwd -P)" = \
+      "$_required_directory" ] ||
+    fail "required directory is not canonical: $_required_directory"
+}
+
+assert_plain_file_or_absent() {
+  _plain_file=$1
+  assert_plain_directory_chain "${_plain_file%/*}"
+  [ ! -L "$_plain_file" ] || fail "refusing symbolic managed file: $_plain_file"
+  [ ! -e "$_plain_file" ] || [ -f "$_plain_file" ] ||
+    fail "managed path is not a regular file: $_plain_file"
+}
+
+require_plain_file() {
+  _required_file=$1
+  require_plain_directory "${_required_file%/*}"
+  [ -f "$_required_file" ] && [ ! -L "$_required_file" ] ||
+    fail "required input is absent or symbolic: $_required_file"
+}
+
+require_plain_executable() {
+  _required_executable=$1
+  require_plain_file "$_required_executable"
+  [ -x "$_required_executable" ] ||
+    fail "required input is not executable: $_required_executable"
+}
+
+verify_open_lock() {
+  _lock_descriptor=$1
+  _lock_path=$2
+  _lock_label=$3
+  [ -f "$_lock_path" ] && [ ! -L "$_lock_path" ] ||
+    fail "$_lock_label changed while it was opened: $_lock_path"
+  _lock_fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$_lock_descriptor")
+  _lock_path_identity=$(/usr/bin/stat -Lc '%d:%i' "$_lock_path")
+  [ "$_lock_fd_identity" = "$_lock_path_identity" ] ||
+    fail "$_lock_label path was substituted while opening: $_lock_path"
+}
+
+if [ "${PARADOX_ACTIVE_ROOT:-}" != "$ROOT" ]; then
+  printf '%s\n' \
+    "podman-local: activate the repository environment first: . scripts/activate" \
+    >&2
+  exit 1
+fi
+
+MANIFEST="$ROOT/environment/podman-toolchain.tsv"
+TREE_HELPER="$ROOT/scripts/environment/podman-tree-manifest"
+CONTAINERS_TEMPLATE="$ROOT/environment/podman-containers.conf.in"
+STORAGE_TEMPLATE="$ROOT/environment/podman-storage.conf.in"
+REGISTRIES_TEMPLATE="$ROOT/environment/podman-registries.conf"
+for required in "$MANIFEST" "$TREE_HELPER" "$CONTAINERS_TEMPLATE" \
+    "$STORAGE_TEMPLATE" "$REGISTRIES_TEMPLATE"; do
+  require_plain_file "$required"
+done
+require_plain_executable "$TREE_HELPER"
+
+EXPECTED_HEADER='version	platform	archive_url	archive_sha256	tree_manifest_sha256'
+[ "$(sed -n '1p' "$MANIFEST")" = "$EXPECTED_HEADER" ] ||
+  fail "unexpected pinned Podman manifest header"
+row_count=$(awk -F '\t' 'NR > 1 && NF { count += 1 } END { print count + 0 }' \
+  "$MANIFEST")
+[ "$row_count" -eq 1 ] || fail "Podman manifest must contain exactly one data row"
+
+tab=$(printf '\t')
+old_ifs=$IFS
+IFS="$tab" read -r version platform archive_url archive_sha tree_sha <<EOF
+$(sed -n '2p' "$MANIFEST")
+EOF
+IFS=$old_ifs
+if [ "$version" != 5.8.2 ] || [ "$platform" != linux-amd64 ]; then
+  printf '%s\n' "podman-local: unexpected pinned Podman manifest" >&2
+  exit 1
+fi
+case "$archive_sha" in
+  *[!0-9a-f]*|'')
+    printf '%s\n' "podman-local: malformed Podman archive digest" >&2
+    exit 1
+    ;;
+esac
+case "$tree_sha" in
+  *[!0-9a-f]*|'')
+    printf '%s\n' "podman-local: malformed Podman tree digest" >&2
+    exit 1
+    ;;
+esac
+if [ "${#archive_sha}" -ne 64 ] || [ "${#tree_sha}" -ne 64 ] || \
+    [ "$archive_url" != \
+      'https://github.com/mgoltzsche/podman-static/releases/download/v5.8.2/podman-linux-amd64.tar.gz' ]; then
+  printf '%s\n' "podman-local: malformed Podman manifest row" >&2
+  exit 1
+fi
+
+PODMAN_PREFIX="$ROOT/.local/podman/$version"
+PODMAN="$PODMAN_PREFIX/usr/local/bin/podman"
+PODMAN_BIN="$PODMAN_PREFIX/usr/local/bin"
+PODMAN_HELPERS="$PODMAN_PREFIX/usr/local/lib/podman"
+for managed_directory in \
+  "$ROOT/.local" "$ROOT/.local/podman" "$PODMAN_PREFIX" \
+  "$ROOT/.local/locks" "$ROOT/.local/containers"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+if [ ! -e "$PODMAN" ] && [ ! -L "$PODMAN" ]; then
+  printf '%s\n' \
+    "podman-local: project-local Podman is missing; run scripts/bootstrap-podman" \
+    >&2
+  exit 1
+fi
+require_plain_executable "$PODMAN"
+
+LOCK_DIRECTORY="$ROOT/.local/locks"
+assert_plain_file_or_absent "$LOCK_DIRECTORY/podman-toolchain.lock"
+mkdir -p "$LOCK_DIRECTORY"
+require_plain_directory "$LOCK_DIRECTORY"
+exec 9>"$LOCK_DIRECTORY/podman-toolchain.lock"
+verify_open_lock 9 "$LOCK_DIRECTORY/podman-toolchain.lock" \
+  "Podman toolchain lock"
+flock -s 9
+
+mkdir -p "$ROOT/.local/containers"
+require_plain_directory "$ROOT/.local/containers"
+TREE_MANIFEST=$(mktemp "$ROOT/.local/containers/podman-tree-manifest.XXXXXX.tsv")
+trap 'rm -f "$TREE_MANIFEST"' EXIT HUP INT TERM
+"$TREE_HELPER" "$PODMAN_PREFIX" > "$TREE_MANIFEST"
+actual_tree_sha=$(sha256sum "$TREE_MANIFEST" | cut -d ' ' -f 1)
+if [ "$actual_tree_sha" != "$tree_sha" ]; then
+  printf '%s\n' \
+    "podman-local: project-local Podman tree failed verification; rerun scripts/bootstrap-podman" \
+    >&2
+  exit 1
+fi
+
+# Rootless Podman's ordinary defaults live below HOME and consult user-wide
+# containers.conf files. Keep the executable, every helper, configuration,
+# image store, mutable state, locks, auth path, and temporary extraction files
+# inside this repository. vfs is slower and larger than overlay, but it avoids
+# a host mount helper and works reliably on this older kernel.
+CONTAINER_ROOT="$ROOT/.local/containers/storage"
+CONTAINER_RUNROOT="$ROOT/.local/containers/runroot"
+CONTAINER_TMP="$ROOT/.local/containers/tmp"
+CONTAINER_HOME="$ROOT/.local/containers/home"
+CONTAINER_CONFIG="$ROOT/.local/containers/config"
+CONTAINER_XDG_CONFIG="$ROOT/.local/containers/xdg-config"
+CONTAINER_XDG_DATA="$ROOT/.local/containers/xdg-data"
+CONTAINER_XDG_CACHE="$ROOT/.local/containers/xdg-cache"
+CONTAINER_XDG_RUNTIME="$ROOT/.local/containers/xdg-runtime"
+CONTAINER_NETWORKS="$ROOT/.local/containers/networks"
+CONTAINER_VOLUMES="$CONTAINER_ROOT/volumes"
+EMPTY_HOOKS="$ROOT/.local/containers/empty-hooks"
+EMPTY_CDI="$ROOT/.local/containers/empty-cdi"
+AUTH_DIRECTORY="$CONTAINER_CONFIG/auth"
+for managed_directory in \
+  "$CONTAINER_ROOT" "$CONTAINER_RUNROOT" "$CONTAINER_TMP" \
+  "$CONTAINER_HOME" "$CONTAINER_CONFIG" "$CONTAINER_XDG_CONFIG" \
+  "$CONTAINER_XDG_DATA" "$CONTAINER_XDG_CACHE" "$CONTAINER_XDG_RUNTIME" \
+  "$CONTAINER_XDG_RUNTIME/libpod" "$CONTAINER_XDG_RUNTIME/libpod/tmp" \
+  "$CONTAINER_NETWORKS" "$CONTAINER_VOLUMES" "$EMPTY_HOOKS" "$EMPTY_CDI" \
+  "$AUTH_DIRECTORY"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+mkdir -p "$CONTAINER_ROOT" "$CONTAINER_RUNROOT" "$CONTAINER_TMP" \
+  "$CONTAINER_HOME" "$CONTAINER_CONFIG" "$CONTAINER_XDG_CONFIG" \
+  "$CONTAINER_XDG_DATA" "$CONTAINER_XDG_CACHE" "$CONTAINER_XDG_RUNTIME" \
+  "$CONTAINER_XDG_RUNTIME/libpod/tmp" \
+  "$CONTAINER_NETWORKS" "$CONTAINER_VOLUMES" "$EMPTY_HOOKS" "$EMPTY_CDI" \
+  "$AUTH_DIRECTORY"
+for managed_directory in \
+  "$CONTAINER_ROOT" "$CONTAINER_RUNROOT" "$CONTAINER_TMP" \
+  "$CONTAINER_HOME" "$CONTAINER_CONFIG" "$CONTAINER_XDG_CONFIG" \
+  "$CONTAINER_XDG_DATA" "$CONTAINER_XDG_CACHE" "$CONTAINER_XDG_RUNTIME" \
+  "$CONTAINER_XDG_RUNTIME/libpod" "$CONTAINER_XDG_RUNTIME/libpod/tmp" \
+  "$CONTAINER_NETWORKS" "$CONTAINER_VOLUMES" "$EMPTY_HOOKS" "$EMPTY_CDI" \
+  "$AUTH_DIRECTORY"
+do
+  require_plain_directory "$managed_directory"
+done
+chmod 700 "$CONTAINER_HOME" "$CONTAINER_CONFIG" "$CONTAINER_XDG_CONFIG" \
+  "$CONTAINER_XDG_DATA" "$CONTAINER_XDG_CACHE" "$CONTAINER_XDG_RUNTIME" \
+  "$AUTH_DIRECTORY"
+
+case "$ROOT" in
+  *[\\\"'&|']*)
+    printf '%s\n' "podman-local: unsupported character in repository path" >&2
+    exit 1
+    ;;
+esac
+
+assert_plain_file_or_absent "$LOCK_DIRECTORY/podman-config.lock"
+exec 8>"$LOCK_DIRECTORY/podman-config.lock"
+verify_open_lock 8 "$LOCK_DIRECTORY/podman-config.lock" "Podman config lock"
+flock -x 8
+containers_conf="$CONTAINER_CONFIG/containers.conf"
+storage_conf="$CONTAINER_CONFIG/storage.conf"
+registries_conf="$CONTAINER_CONFIG/registries.conf"
+for managed_file in \
+  "$containers_conf" "$storage_conf" "$registries_conf" \
+  "$containers_conf.new.$$" "$storage_conf.new.$$" "$registries_conf.new.$$" \
+  "$AUTH_DIRECTORY/auth.json"
+do
+  assert_plain_file_or_absent "$managed_file"
+done
+sed "s|@PODMAN_PREFIX@|$PODMAN_PREFIX|g" "$CONTAINERS_TEMPLATE" \
+  > "$containers_conf.new.$$"
+sed \
+  -e "s|@CONTAINER_RUNROOT@|$CONTAINER_RUNROOT|g" \
+  -e "s|@CONTAINER_ROOT@|$CONTAINER_ROOT|g" \
+  "$STORAGE_TEMPLATE" > "$storage_conf.new.$$"
+cp "$REGISTRIES_TEMPLATE" "$registries_conf.new.$$"
+select_generated_config() {
+  destination=$1
+  candidate="$destination.new.$$"
+  if [ ! -f "$destination" ] || ! cmp -s "$candidate" "$destination"; then
+    mv "$candidate" "$destination"
+  else
+    rm -f "$candidate"
+  fi
+}
+select_generated_config "$containers_conf"
+select_generated_config "$storage_conf"
+select_generated_config "$registries_conf"
+chmod 600 "$containers_conf" "$storage_conf" "$registries_conf"
+flock -u 8
+exec 8>&-
+
+# newuidmap/newgidmap are the deliberate host bridge: their setuid semantics
+# cannot be reproduced safely by copying a binary into the repository.
+for bridge in /usr/bin/newuidmap /usr/bin/newgidmap /usr/bin/nsenter; do
+  if [ ! -x "$bridge" ]; then
+    printf '%s\n' "podman-local: required host bridge is missing: $bridge" >&2
+    exit 1
+  fi
+done
+
+unset CONTAINER_HOST CONTAINER_CONNECTION CONTAINER_SSHKEY \
+  CONTAINERS_CONF_OVERRIDE DOCKER_HOST DOCKER_CONFIG VALGRIND_OPTS
+export HOME="$CONTAINER_HOME"
+export XDG_CONFIG_HOME="$CONTAINER_XDG_CONFIG"
+export XDG_DATA_HOME="$CONTAINER_XDG_DATA"
+export XDG_CACHE_HOME="$CONTAINER_XDG_CACHE"
+export XDG_RUNTIME_DIR="$CONTAINER_XDG_RUNTIME"
+export TMPDIR="$CONTAINER_TMP"
+export CONTAINERS_CONF="$containers_conf"
+export CONTAINERS_STORAGE_CONF="$storage_conf"
+export CONTAINERS_REGISTRIES_CONF="$registries_conf"
+export REGISTRIES_CONFIG_PATH="$registries_conf"
+export CONTAINERS_POLICY="$PODMAN_PREFIX/etc/containers/policy.json"
+export REGISTRY_AUTH_FILE="$AUTH_DIRECTORY/auth.json"
+export DBUS_SESSION_BUS_ADDRESS=
+export PODMAN_IGNORE_CGROUPSV1_WARNING=1
+export PATH="$PODMAN_BIN:$PODMAN_HELPERS:/usr/bin:/bin"
+
+exec "$PODMAN" \
+  --cdi-spec-dir "$EMPTY_CDI" \
+  --cgroup-manager cgroupfs \
+  --config "$AUTH_DIRECTORY" \
+  --conmon "$PODMAN_HELPERS/conmon" \
+  --events-backend file \
+  --hooks-dir "$EMPTY_HOOKS" \
+  --network-cmd-path "$PODMAN_BIN/pasta" \
+  --network-config-dir "$CONTAINER_NETWORKS" \
+  --root "$CONTAINER_ROOT" \
+  --runroot "$CONTAINER_RUNROOT" \
+  --runtime "$PODMAN_BIN/crun" \
+  --tmpdir "$CONTAINER_TMP" \
+  --storage-driver vfs \
+  --volumepath "$CONTAINER_VOLUMES" \
+  "$@"

@@ -5,9 +5,13 @@
 \title{Sampler Class}
 \description{
 This is the abstract base class for sampling objects like \link{Sampler1D}, \link{SamplerHierarchical} or \link{SamplerJointIndep}.
+The Sampler family is intentionally subclassable: custom subclasses
+implement \code{private$.sample()} (and optionally \code{private$.print()}). The
+additive-only inheritance restriction of Paradox 2 applies to the ParamSet
+family, not to this documented Sampler extension point.
 }
 \seealso{
-Other Sampler: 
+Other Sampler:
 \code{\link{Sampler1D}},
 \code{\link{Sampler1DCateg}},
 \code{\link{Sampler1DNormal}},
@@ -19,113 +23,123 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{param_set}}{(\code{\link{ParamSet}})\cr
 Domain / support of the distribution we want to sample from.}
-}
-\if{html}{\out{</div>}}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-Sampler-new}{\code{Sampler$new()}}
-\item \href{#method-Sampler-sample}{\code{Sampler$sample()}}
-\item \href{#method-Sampler-format}{\code{Sampler$format()}}
-\item \href{#method-Sampler-print}{\code{Sampler$print()}}
-\item \href{#method-Sampler-clone}{\code{Sampler$clone()}}
-}
+  \itemize{
+    \item \href{#method-Sampler-initialize}{\code{Sampler$new()}}
+    \item \href{#method-Sampler-sample}{\code{Sampler$sample()}}
+    \item \href{#method-Sampler-format}{\code{Sampler$format()}}
+    \item \href{#method-Sampler-print}{\code{Sampler$print()}}
+    \item \href{#method-Sampler-clone}{\code{Sampler$clone()}}
+  }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Sampler-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Sampler-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
+\if{html}{\out{<a id="method-Sampler-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler-initialize}{}}}
+\subsection{\code{Sampler$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
 
 Note that this object is typically constructed via derived classes,
 e.g., \link{Sampler1D}.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler$new(param_set)}\if{html}{\out{</div>}}
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler$new(param_set)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param_set}}{(\code{\link{ParamSet}})\cr
+The \code{\link{ParamSet}} to associate with this \code{Sampler}.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
-The \code{\link{ParamSet}} to associated with this \code{Sampler}.}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Sampler-sample"></a>}}
 \if{latex}{\out{\hypertarget{method-Sampler-sample}{}}}
-\subsection{Method \code{sample()}}{
-Sample \code{n} values from the distribution.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler$sample(n)}\if{html}{\out{</div>}}
+\subsection{\code{Sampler$sample()}}{
+  Sample \code{n} values from the distribution.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler$sample(n)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{n}}{(\code{integer(1)}).}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    \code{\link{Design}}.
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{n}}{(\code{integer(1)}).}
-}
-\if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-\code{\link{Design}}.
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Sampler-format"></a>}}
 \if{latex}{\out{\hypertarget{method-Sampler-format}{}}}
-\subsection{Method \code{format()}}{
-Helper for print outputs.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler$format(...)}\if{html}{\out{</div>}}
+\subsection{\code{Sampler$format()}}{
+  Helper for print outputs.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler$format(...)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{(ignored).}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{(ignored).}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Sampler-print"></a>}}
 \if{latex}{\out{\hypertarget{method-Sampler-print}{}}}
-\subsection{Method \code{print()}}{
-Printer.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler$print(...)}\if{html}{\out{</div>}}
+\subsection{\code{Sampler$print()}}{
+  Printer.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler$print(...)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{(ignored).}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{(ignored).}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Sampler-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-Sampler-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{Sampler$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

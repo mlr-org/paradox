@@ -1,0 +1,429 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run registered runtime-matrix stages under one resource admission
+# decision.  Every sibling is waited and recorded before a failing result is
+# returned.  GNU timeout bounds each whole stage, while util-linux setsid makes
+# descendant cleanup independent of the worker's cooperation.
+
+# Keep stage output off GNU timeout's diagnostic descriptor.  This same
+# content-bound file is the deliberately tiny wrapper so no second execution
+# implementation can drift from the scheduler.  Only timeout/setsid and the
+# scheduler itself can write the supervisor log.
+if [[ "${1:-}" == --internal-task-wrapper ]]; then
+  (($# == 7)) || exit 125
+  task_log=$2
+  worker_bash=$3
+  worker=$4
+  root=$5
+  run_root=$6
+  version=$7
+  [[ "$task_log" == /* && -f "$task_log" && ! -L "$task_log" &&
+     "$worker_bash" == /* && -f "$worker_bash" &&
+     -x "$worker_bash" && ! -L "$worker_bash" &&
+     "$worker" == /* && -f "$worker" && ! -L "$worker" &&
+     "$root" == /* && -d "$root" && ! -L "$root" &&
+     "$run_root" == /* && -d "$run_root" && ! -L "$run_root" &&
+     "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 125
+  exec "$worker_bash" "$worker" "$root" "$run_root" "$version" \
+    >> "$task_log" 2>&1
+fi
+
+fail() {
+  printf 'run-runtime-matrix-wave: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: run-runtime-matrix-wave --jobs N --admission-report FILE
+       --task-list FILE --output-directory DIRECTORY --worker FILE
+       --root DIRECTORY --run-root DIRECTORY --bash PATH --setsid PATH
+       --timeout-tool PATH --task-timeout-seconds N
+       [--kill-after-seconds N] [--termination-grace-tenths N]
+EOF
+}
+
+positive_integer() { [[ "$1" =~ ^[1-9][0-9]{0,8}$ ]]; }
+nonnegative_integer() { [[ "$1" =~ ^(0|[1-9][0-9]{0,8})$ ]]; }
+sha256_file() { sha256sum -- "$1" | cut -d ' ' -f 1; }
+
+JOBS=
+ADMISSION_REPORT=
+TASK_LIST=
+OUTPUT_DIRECTORY=
+WORKER=
+ROOT=
+RUN_ROOT=
+BASH_PATH=
+SETSID=
+TIMEOUT_TOOL=
+TASK_TIMEOUT_SECONDS=
+KILL_AFTER_SECONDS=10
+TERMINATION_GRACE_TENTHS=50
+while (($#)); do
+  case "$1" in
+    --jobs|--admission-report|--task-list|--output-directory|--worker|--root|--run-root|--bash|--setsid|--timeout-tool|--task-timeout-seconds|--kill-after-seconds|--termination-grace-tenths)
+      (($# >= 2)) || fail "$1 requires a value"
+      case "$1" in
+        --jobs) JOBS=$2 ;;
+        --admission-report) ADMISSION_REPORT=$2 ;;
+        --task-list) TASK_LIST=$2 ;;
+        --output-directory) OUTPUT_DIRECTORY=$2 ;;
+        --worker) WORKER=$2 ;;
+        --root) ROOT=$2 ;;
+        --run-root) RUN_ROOT=$2 ;;
+        --bash) BASH_PATH=$2 ;;
+        --setsid) SETSID=$2 ;;
+        --timeout-tool) TIMEOUT_TOOL=$2 ;;
+        --task-timeout-seconds) TASK_TIMEOUT_SECONDS=$2 ;;
+        --kill-after-seconds) KILL_AFTER_SECONDS=$2 ;;
+        --termination-grace-tenths) TERMINATION_GRACE_TENTHS=$2 ;;
+      esac
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+
+if ! positive_integer "${JOBS:-}"; then
+  fail "--jobs must be a positive integer"
+fi
+if ! positive_integer "${TASK_TIMEOUT_SECONDS:-}" ||
+    ((TASK_TIMEOUT_SECONDS > 86400)); then
+  fail "--task-timeout-seconds must be a bounded positive integer"
+fi
+if ! nonnegative_integer "$TERMINATION_GRACE_TENTHS" ||
+    ((TERMINATION_GRACE_TENTHS > 100)); then
+  fail "--termination-grace-tenths must be between zero and 100"
+fi
+if ! positive_integer "$KILL_AFTER_SECONDS" || ((KILL_AFTER_SECONDS > 60)); then
+  fail "--kill-after-seconds must be between one and 60"
+fi
+for path in "$ADMISSION_REPORT" "$TASK_LIST" "$WORKER" "$BASH_PATH" \
+    "$SETSID" "$TIMEOUT_TOOL"; do
+  [[ "$path" == /* && -f "$path" && ! -L "$path" ]] ||
+    fail "required input is not one plain absolute regular file: $path"
+done
+for path in "$BASH_PATH" "$SETSID" "$TIMEOUT_TOOL"; do
+  [[ -x "$path" && "$(readlink -f -- "$path")" == "$path" ]] ||
+    fail "tool is not one canonical executable: $path"
+done
+for directory in "$ROOT" "$RUN_ROOT"; do
+  [[ "$directory" == /* && -d "$directory" && ! -L "$directory" &&
+    "$(cd "$directory" && pwd -P)" == "$directory" ]] ||
+    fail "required directory is not canonical: $directory"
+done
+RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
+[[ -x "$RESOURCE_JOBS" && -f "$RESOURCE_JOBS" &&
+  ! -L "$RESOURCE_JOBS" ]] ||
+  fail "resource admission verifier is absent or symbolic"
+[[ "$OUTPUT_DIRECTORY" == /* && ! -e "$OUTPUT_DIRECTORY" &&
+  ! -L "$OUTPUT_DIRECTORY" ]] ||
+  fail "output directory must be one absent absolute path"
+[[ "$($BASH_PATH --version 2>&1 | head -n 1)" == 'GNU bash, version '* ]] ||
+  fail "--bash is not GNU Bash"
+LC_ALL=C "$SETSID" --version 2>&1 | head -n 1 | grep -Fq 'setsid from util-linux' ||
+  fail "--setsid is not util-linux setsid"
+LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1 | grep -Fq 'timeout (GNU coreutils)' ||
+  fail "--timeout-tool is not GNU coreutils timeout"
+
+report_value() {
+  local key=$1
+  awk -F '\t' -v key="$key" '$1 == key {print $2}' "$ADMISSION_REPORT"
+}
+[[ $(head -n 1 "$ADMISSION_REPORT") == $'field\tvalue' ]] ||
+  fail "admission report has the wrong header"
+awk -F '\t' 'NR == 1 {next} NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}' \
+  "$ADMISSION_REPORT" || fail "admission report is malformed"
+admitted_jobs=$(report_value jobs)
+[[ $(report_value schema) == 2 && $(report_value profile) == light-test ]] ||
+  fail "admission report is not the light-test schema"
+"$RESOURCE_JOBS" light-test --verify-report "$ADMISSION_REPORT" >/dev/null
+positive_integer "$admitted_jobs" || fail "admission report jobs are malformed"
+((JOBS == admitted_jobs)) ||
+  fail "requested jobs differ from the lowering-only admission report"
+
+[[ $(head -n 1 "$TASK_LIST") == $'ordinal\tversion' ]] ||
+  fail "task list has the wrong header"
+mapfile -t task_rows < <(tail -n +2 "$TASK_LIST")
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+[[ -x "$REGISTRY" ]] || fail "runtime registry helper is absent"
+mapfile -t registered_versions < <("$REGISTRY" versions)
+((${#task_rows[@]} >= 1 &&
+  ${#task_rows[@]} <= ${#registered_versions[@]})) ||
+  fail "task list exceeds the registered runtime count"
+declare -a versions=()
+for ((index = 0; index < ${#task_rows[@]}; index++)); do
+  IFS=$'\t' read -r ordinal version extra <<< "${task_rows[index]}"
+  [[ -z "${extra:-}" && "$ordinal" == "$((index + 1))" ]] ||
+    fail "task list order or field count is malformed"
+  "$REGISTRY" contains "$version" ||
+    fail "unknown task runtime: $version"
+  [[ " ${versions[*]-} " != *" $version "* ]] || fail "duplicate task runtime"
+  versions+=("$version")
+done
+((JOBS <= ${#versions[@]})) || fail "jobs exceed the task count"
+
+mkdir -p -- "$OUTPUT_DIRECTORY/tasks"
+task_wrapper=$(readlink -f -- "${BASH_SOURCE[0]}")
+[[ "$task_wrapper" == /* && -f "$task_wrapper" &&
+  -x "$task_wrapper" && ! -L "$task_wrapper" ]] ||
+  fail "task wrapper is not one canonical plain executable"
+task_wrapper_sha256=$(sha256_file "$task_wrapper")
+worker_sha256=$(sha256_file "$WORKER")
+bash_sha256=$(sha256_file "$BASH_PATH")
+setsid_sha256=$(sha256_file "$SETSID")
+timeout_sha256=$(sha256_file "$TIMEOUT_TOOL")
+bash_identity=$(LC_ALL=C "$BASH_PATH" --version 2>&1 | head -n 1)
+setsid_identity=$(LC_ALL=C "$SETSID" --version 2>&1 | head -n 1)
+timeout_identity=$(LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1)
+{
+  printf 'field\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'jobs\t%s\n' "$JOBS"
+  printf 'tasks\t%s\n' "${#versions[@]}"
+  printf 'admission_report_path\t%s\n' "$ADMISSION_REPORT"
+  printf 'admission_report_sha256\t%s\n' "$(sha256_file "$ADMISSION_REPORT")"
+  printf 'task_list_path\t%s\n' "$TASK_LIST"
+  printf 'task_list_sha256\t%s\n' "$(sha256_file "$TASK_LIST")"
+  printf 'worker_path\t%s\n' "$WORKER"
+  printf 'worker_sha256\t%s\n' "$worker_sha256"
+  printf 'task_wrapper_path\t%s\n' "$task_wrapper"
+  printf 'task_wrapper_sha256\t%s\n' "$task_wrapper_sha256"
+  printf 'bash_path\t%s\n' "$BASH_PATH"
+  printf 'bash_sha256\t%s\n' "$bash_sha256"
+  printf 'bash_identity_sha256\t%s\n' "$(printf '%s\n' "$bash_identity" | sha256sum | cut -d ' ' -f 1)"
+  printf 'setsid_path\t%s\n' "$SETSID"
+  printf 'setsid_sha256\t%s\n' "$setsid_sha256"
+  printf 'setsid_identity_sha256\t%s\n' "$(printf '%s\n' "$setsid_identity" | sha256sum | cut -d ' ' -f 1)"
+  printf 'timeout_tool_path\t%s\n' "$TIMEOUT_TOOL"
+  printf 'timeout_tool_sha256\t%s\n' "$timeout_sha256"
+  printf 'timeout_tool_identity_sha256\t%s\n' "$(printf '%s\n' "$timeout_identity" | sha256sum | cut -d ' ' -f 1)"
+  printf 'task_timeout_seconds\t%s\n' "$TASK_TIMEOUT_SECONDS"
+  printf 'kill_after_seconds\t%s\n' "$KILL_AFTER_SECONDS"
+  printf 'termination_grace_tenths\t%s\n' "$TERMINATION_GRACE_TENTHS"
+  printf 'nested_parallelism\t1\n'
+} > "$OUTPUT_DIRECTORY/wave-plan.tsv"
+
+declare -a pids=() statuses=()
+declare -a started_flags=()
+declare -A active=()
+interrupted_status=0
+
+tool_identities_unchanged() {
+  [[ $(sha256_file "$task_wrapper") == "$task_wrapper_sha256" &&
+    $(sha256_file "$WORKER") == "$worker_sha256" &&
+    $(sha256_file "$BASH_PATH") == "$bash_sha256" &&
+    $(sha256_file "$SETSID") == "$setsid_sha256" &&
+    $(sha256_file "$TIMEOUT_TOOL") == "$timeout_sha256" &&
+    "$(LC_ALL=C "$BASH_PATH" --version 2>&1 | head -n 1)" == "$bash_identity" &&
+    "$(LC_ALL=C "$SETSID" --version 2>&1 | head -n 1)" == "$setsid_identity" &&
+    "$(LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1)" == "$timeout_identity" ]]
+}
+
+terminate_one_group() {
+  local pid=$1 attempt any
+  kill -0 -- "-$pid" 2>/dev/null || return 1
+  kill -TERM -- "-$pid" 2>/dev/null || true
+  for ((attempt = 0; attempt < TERMINATION_GRACE_TENTHS; attempt++)); do
+    any=false
+    if kill -0 -- "-$pid" 2>/dev/null; then any=true; fi
+    [[ "$any" == false ]] && break
+    sleep 0.1
+  done
+  kill -KILL -- "-$pid" 2>/dev/null || true
+  return 0
+}
+
+terminate_active_groups() {
+  local pid
+  trap - HUP INT TERM
+  for pid in "${!active[@]}"; do
+    terminate_one_group "$pid" || true
+  done
+}
+
+on_signal() {
+  local signal=$1
+  case "$signal" in HUP) interrupted_status=129 ;; INT) interrupted_status=130 ;; TERM) interrupted_status=143 ;; esac
+  terminate_active_groups
+}
+on_exit() {
+  if ((${#active[@]})); then terminate_active_groups; fi
+}
+trap 'on_signal HUP' HUP
+trap 'on_signal INT' INT
+trap 'on_signal TERM' TERM
+trap on_exit EXIT
+
+next=0
+completed=0
+while ((completed < ${#versions[@]})); do
+  ((interrupted_status == 0)) || break
+  while ((next < ${#versions[@]} && ${#active[@]} < JOBS &&
+      interrupted_status == 0)); do
+    task=$((next + 1))
+    version=${versions[next]}
+    log=$(printf '%s/tasks/%04d.log' "$OUTPUT_DIRECTORY" "$task")
+    supervisor_log=$(printf '%s/tasks/%04d.supervisor.log' "$OUTPUT_DIRECTORY" "$task")
+    : > "$log"
+    : > "$supervisor_log"
+    [[ ! -L "$log" && ! -L "$supervisor_log" ]] ||
+      fail "task output unexpectedly became symbolic"
+    tool_identities_unchanged ||
+      fail "worker or supervision tool changed before task $task was launched"
+    LC_ALL=C "$SETSID" --wait "$TIMEOUT_TOOL" --foreground --verbose --signal=TERM \
+      --kill-after="${KILL_AFTER_SECONDS}s" "${TASK_TIMEOUT_SECONDS}s" \
+      "$BASH_PATH" "$task_wrapper" --internal-task-wrapper \
+      "$log" "$BASH_PATH" "$WORKER" "$ROOT" "$RUN_ROOT" "$version" \
+      > "$supervisor_log" 2>&1 &
+    pid=$!
+    pids[next]=$pid
+    started_flags[next]=true
+    active[$pid]=1
+    next=$((next + 1))
+  done
+
+  # Bash 5.0 has `wait -n` but not `wait -n -p`, so it cannot report which
+  # child supplied the status. Poll the shell's own running-job table at a
+  # bounded interval instead. This reaps whichever sibling finishes first,
+  # keeps a slot occupied when later tasks remain, and emits no progress noise.
+  collect=-1
+  while ((collect < 0 && ${#active[@]} != 0 &&
+      interrupted_status == 0)); do
+    mapfile -t running_pids < <(jobs -pr)
+    for ((index = 0; index < next; index++)); do
+      [[ -n "${pids[index]+x}" && -z "${statuses[index]+x}" ]] || continue
+      pid=${pids[index]}
+      running=false
+      for running_pid in "${running_pids[@]}"; do
+        if [[ "$running_pid" == "$pid" ]]; then
+          running=true
+          break
+        fi
+      done
+      if [[ "$running" == false ]]; then
+        collect=$index
+        break
+      fi
+    done
+    ((collect >= 0)) || sleep 0.25 || true
+  done
+  ((interrupted_status == 0)) || break
+  ((collect >= 0)) || continue
+  pid=${pids[collect]}
+  status=0
+  wait "$pid" || status=$?
+  if terminate_one_group "$pid"; then
+    if ((status == 0)); then
+      status=125
+      printf 'runtime-matrix supervisor: cleaned a lingering successful worker process group\n' \
+        >> "$(printf '%s/tasks/%04d.supervisor.log' "$OUTPUT_DIRECTORY" "$((collect + 1))")"
+    fi
+  fi
+  statuses[collect]=$status
+  unset 'active[$pid]'
+  completed=$((completed + 1))
+done
+
+# An interrupt may leave launched siblings uncollected and later siblings
+# unstarted. Retain one deterministic ledger row for every registered task.
+for ((index = 0; index < ${#versions[@]}; index++)); do
+  [[ -n "${statuses[index]+x}" ]] && continue
+  if [[ -z "${pids[index]+x}" ]]; then
+    statuses[index]=125
+    started_flags[index]=false
+    : > "$(printf '%s/tasks/%04d.log' "$OUTPUT_DIRECTORY" "$((index + 1))")"
+    printf 'runtime-matrix supervisor: task was not started after interruption\n' \
+      > "$(printf '%s/tasks/%04d.supervisor.log' "$OUTPUT_DIRECTORY" "$((index + 1))")"
+    continue
+  fi
+  pid=${pids[index]}
+  status=0
+  wait "$pid" || status=$?
+  if terminate_one_group "$pid"; then
+    if ((status == 0)); then
+      status=125
+      printf 'runtime-matrix supervisor: cleaned a lingering successful worker process group\n' \
+        >> "$(printf '%s/tasks/%04d.supervisor.log' "$OUTPUT_DIRECTORY" "$((index + 1))")"
+    fi
+  fi
+  statuses[index]=$status
+  unset 'active[$pid]'
+done
+
+trap - HUP INT TERM EXIT
+tool_identities_unchanged || fail "worker or supervision tool changed during the wave"
+
+failures=0
+exact_timeouts=0
+invalid_supervisor_evidence=0
+{
+  printf 'schema\tordinal\tversion\texit_status\ttimed_out\tstarted\ttask_log_relative\ttask_log_sha256\tsupervisor_log_relative\tsupervisor_log_sha256\n'
+  for ((index = 0; index < ${#versions[@]}; index++)); do
+    task=$((index + 1))
+    log=$(printf '%s/tasks/%04d.log' "$OUTPUT_DIRECTORY" "$task")
+    supervisor_log=$(printf '%s/tasks/%04d.supervisor.log' "$OUTPUT_DIRECTORY" "$task")
+    timeout_name=${TIMEOUT_TOOL##*/}
+    marker="$TIMEOUT_TOOL: sending signal TERM to command '$BASH_PATH'"
+    marker_short="$timeout_name: sending signal TERM to command '$BASH_PATH'"
+    kill_marker="$TIMEOUT_TOOL: sending signal KILL to command '$BASH_PATH'"
+    kill_marker_short="$timeout_name: sending signal KILL to command '$BASH_PATH'"
+    marker_count=0
+    kill_marker_count=0
+    supervisor_valid=true
+    while IFS= read -r supervisor_line || [[ -n "$supervisor_line" ]]; do
+      case "$supervisor_line" in
+        "$marker"|"$marker_short")
+          marker_count=$((marker_count + 1))
+          ;;
+        "$kill_marker"|"$kill_marker_short")
+          kill_marker_count=$((kill_marker_count + 1))
+          ;;
+        *) supervisor_valid=false ;;
+      esac
+    done < "$supervisor_log"
+    is_timeout=false
+    evidence_valid=false
+    if [[ "$supervisor_valid" == true && "$marker_count" -eq 0 &&
+        "$kill_marker_count" -eq 0 ]]; then
+      evidence_valid=true
+    elif [[ "$supervisor_valid" == true && "$marker_count" -eq 1 &&
+        "$kill_marker_count" -le 1 ]] &&
+        { [[ "${statuses[index]}" -eq 124 ]] ||
+          [[ "${statuses[index]}" -eq 137 &&
+             "$kill_marker_count" -eq 1 ]]; }; then
+      is_timeout=true
+      evidence_valid=true
+      exact_timeouts=$((exact_timeouts + 1))
+    fi
+    if [[ "$evidence_valid" == false ]]; then
+      invalid_supervisor_evidence=$((invalid_supervisor_evidence + 1))
+    fi
+    [[ "${statuses[index]}" -eq 0 ]] || failures=$((failures + 1))
+    printf '1\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+      "$task" "${versions[index]}" "${statuses[index]}" "$is_timeout" \
+      "${started_flags[index]}" \
+      "tasks/$(printf '%04d.log' "$task")" "$(sha256_file "$log")" \
+      "tasks/$(printf '%04d.supervisor.log' "$task")" \
+      "$(sha256_file "$supervisor_log")"
+  done
+} > "$OUTPUT_DIRECTORY/task-ledger.tsv"
+
+if ((interrupted_status)); then
+  printf 'run-runtime-matrix-wave: interrupted after collecting %s sibling result(s)\n' \
+    "${#versions[@]}" >&2
+  exit "$interrupted_status"
+fi
+if ((invalid_supervisor_evidence)); then
+  printf 'run-runtime-matrix-wave: %s task(s) retained invalid supervisor evidence; every sibling result was retained\n' \
+    "$invalid_supervisor_evidence" >&2
+  exit 1
+fi
+if ((failures)); then
+  printf 'run-runtime-matrix-wave: %s of %s stage(s) failed (%s exact timeout(s)); every sibling result was retained\n' \
+    "$failures" "${#versions[@]}" "$exact_timeouts" >&2
+  exit 1
+fi

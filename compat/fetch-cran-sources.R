@@ -1,0 +1,19 @@
+#!/usr/bin/env Rscript
+
+command <- commandArgs(trailingOnly = FALSE)
+file_argument <- grep("^--file=", command, value = TRUE)
+if (length(file_argument) != 1L) {
+  stop("could not identify fetch-cran-sources.R", call. = FALSE)
+}
+script <- normalizePath(sub("^--file=", "", file_argument), winslash = "/", mustWork = TRUE)
+helper <- file.path(dirname(script), "source-fetch-common.R")
+helper_info <- file.info(helper)
+helper_regular <- suppressWarnings(system2(
+  "/usr/bin/test", c("-f", shQuote(helper)), stdout = FALSE, stderr = FALSE
+))
+if (nzchar(Sys.readlink(helper)) || !identical(as.integer(helper_regular), 0L) ||
+    is.na(helper_info$isdir) || helper_info$isdir) {
+  stop("source-fetch-common.R is missing, non-regular, or symbolic", call. = FALSE)
+}
+sys.source(helper, envir = environment(), keep.source = FALSE)
+compat_fetch_entry("CRAN", "cran-sources")

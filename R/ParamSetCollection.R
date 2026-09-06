@@ -1,3 +1,413 @@
+# The native detachment planner reduces a nested collection graph to tiny
+# callback carriers and a leaf-to-visible ID translation. Authoritative graph
+# check/assignment code filters activity before invoking these schema-free
+# carriers; the carriers must not grow a second activity engine. Returned
+# callbacks retain an ordinary immutable plan and enter the native evaluator
+# immediately; there is no second R implementation of collection callback
+# semantics.
+param_set_collection_constraint_closure = function(plan) {
+  # Assignment after forcing stores the plan as a direct frame value. These
+  # carriers are retained in user-serialized ParamSets, and a formal promise
+  # cell would manufacture R 4.5's fail-closed recursive-migration promise
+  # boundary inside a package-owned callback (see `.make_p_fct_trafo`).
+  plan = force(plan)
+  .paradox_strip_srcref(function(x) {
+    .Call(C_param_set_collection_detached_constraint, plan, x)
+  })
+}
+
+param_set_collection_constraint_factory = function(
+    translation,
+    constraint_indices,
+    constraint_sets) {
+  if (!length(constraint_indices)) return(NULL)
+  param_set_collection_constraint_closure(list(
+    translation = translation,
+    indices = constraint_indices,
+    sets = constraint_sets
+  ))
+}
+
+param_set_collection_extra_trafo_closure = function(plan) {
+  # Same direct-value rule as the constraint closure above.
+  plan = force(plan)
+  .paradox_strip_srcref(function(x) {
+    .Call(C_param_set_collection_detached_extra_trafo, plan, x)
+  })
+}
+
+param_set_collection_extra_trafo_factory = function(
+    translation,
+    trafo_indices,
+    trafo_sets) {
+  if (!length(trafo_indices)) return(NULL)
+  for (index in seq_along(trafo_sets)) {
+    carrier = trafo_sets[[index]]
+    unit = trafo_indices[[index]]
+    ids = unique(translation$original_id[
+      translation$owner_ps_index == unit
+    ])
+    token = .Call(
+      C_param_set_collection_owner_subset_state,
+      carrier$extra_trafo,
+      carrier$.core,
+      ids
+    )
+    carrier["param_set"] = list(
+      if (is.null(token)) NULL else ParamSet$new(token)
+    )
+    carrier$.core = NULL
+    trafo_sets[[index]] = carrier
+  }
+  param_set_collection_extra_trafo_closure(list(
+    translation = translation,
+    indices = trafo_indices,
+    sets = trafo_sets
+  ))
+}
+
+param_set_collection_in_tune_fn_factory = function(
+    in_tune_fn,
+    prefix,
+    prefixed_set_ids
+) {
+  force(in_tune_fn)
+  force(prefix)
+  force(prefixed_set_ids)
+  crate(.paradox_strip_srcref(function(domain, param_vals) {
+    param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
+    names(param_vals) = gsub(
+      sprintf("^\\Q%s.\\E", prefix),
+      "",
+      names(param_vals)
+    )
+    in_tune_fn(domain, param_vals)
+  }), in_tune_fn, prefix, prefixed_set_ids)
+}
+
+# New Paradox-2 flattening never infers a leaf ID from its printed collection
+# ID.  The native detachment planner has already authenticated the complete
+# graph and returns the exact visible-to-leaf translation; retain that tiny
+# translation in the detached callback.  The legacy prefix-only factory above
+# deliberately remains unchanged because the v1 upgrader authenticates and
+# rebuilds its historical three-binding crate.
+param_set_collection_in_tune_fn_exact_factory = function(
+    in_tune_fn,
+    visible_ids,
+    original_ids,
+    hidden_values = named_list()
+) {
+  force(in_tune_fn)
+  force(visible_ids)
+  force(original_ids)
+  force(hidden_values)
+  crate(.paradox_strip_srcref(function(domain, param_vals) {
+    translated = match(names(param_vals), visible_ids, nomatch = 0L)
+    present = translated != 0L
+    param_vals = param_vals[present]
+    names(param_vals) = original_ids[translated[present]]
+    if (length(hidden_values)) {
+      param_vals = c(hidden_values, param_vals)
+    }
+    in_tune_fn(domain, param_vals)
+  }), in_tune_fn, visible_ids, original_ids, hidden_values)
+}
+
+# Capture root cargo, exact Collection/Shadow routes, and every ultimate BASE
+# value generation in one admitted native graph snapshot. The receipt is a
+# cold-operation barrier for flatten/disable; conversion deliberately keeps
+# using the immutable entry snapshot if a callback later mutates live state.
+param_set_internal_tuning_plan = function(
+    param_set,
+    ids,
+    include_root_values = FALSE
+) {
+  .Call(
+    C_param_set_internal_tuning_snapshot,
+    get_private(param_set),
+    param_set,
+    ids,
+    include_root_values
+  )
+}
+
+param_set_internal_tuning_convert = function(
+    param_set,
+    private,
+    search_space
+) {
+  assert_class(search_space, "ParamSet")
+  domains = search_space$domains
+  plan = param_set_internal_tuning_plan(param_set, names(domains))
+  converters = lapply(seq_along(domains), function(row) {
+    converter = plan$cargo[[row]]$in_tune_fn
+    if (!is.function(converter)) {
+      stopf("No converter exists for parameter '%s'", plan$id[[row]])
+    }
+    converter
+  })
+  names(converters) = names(domains)
+
+  imap(domains, function(token, .id) {
+    row = match(.id, plan$id)
+    converters[[.id]](
+      token,
+      plan$owner_values[[plan$owner_ps_index[[row]]]]
+    )
+  })
+}
+
+param_set_internal_tuning_append_updates = function(current, updates) {
+  if (!length(updates)) return(current)
+  for (index in seq_along(updates)) {
+    position = match(names(updates)[[index]], names(current))
+    if (is.na(position)) {
+      position = length(current) + 1L
+      current[position] = updates[index]
+      names(current)[[position]] = names(updates)[[index]]
+    } else {
+      current[position] = updates[index]
+    }
+  }
+  current
+}
+
+param_set_internal_tuning_disable = function(
+    param_set,
+    private,
+    ids,
+    receipts = list(),
+    validate = NULL
+) {
+  plan = param_set_internal_tuning_plan(
+    param_set,
+    NULL,
+    include_root_values = TRUE
+  )
+  receipts[[length(receipts) + 1L]] = plan$receipt
+  if (is.null(validate)) {
+    validate = plan$assert_values
+  }
+  assert_subset(ids, plan$id[plan$internal_tuning])
+  if (!length(ids)) return(invisible(param_set))
+
+  root_updates = named_list()
+  owner_updates = lapply(plan$owners, function(owner) named_list())
+  has_hidden_control = FALSE
+  for (id in ids) {
+    row = match(id, plan$id)
+    updates = plan$cargo[[row]]$disable_in_tune
+    if (!length(updates)) next
+
+    owner = plan$owner_ps_index[[row]]
+    unknown = match(names(updates), plan$owner_ids[[owner]])
+    if (anyNA(unknown)) {
+      stopf(
+        paste(
+          "Cannot disable internal tuning for parameter '%s':",
+          "control parameter '%s' is not available in its owner"
+        ),
+        id,
+        names(updates)[which(is.na(unknown))[[1L]]]
+      )
+    }
+    # Selected IDs are processed in caller order. If two internal-tuning
+    # parameters intentionally target the same control, the later selected ID
+    # wins deterministically instead of leaking a duplicate-name error from
+    # the structural value boundary.
+    owner_updates[[owner]] = param_set_internal_tuning_append_updates(
+      owner_updates[[owner]],
+      updates
+    )
+
+    route_rows = which(plan$route_index == plan$route_index[[row]])
+    controls = match(names(updates), plan$original_id[route_rows])
+    if (anyNA(controls)) {
+      has_hidden_control = TRUE
+    } else {
+      names(updates) = plan$id[route_rows][controls]
+      root_updates = param_set_internal_tuning_append_updates(
+        root_updates,
+        updates
+      )
+    }
+  }
+
+  if (has_hidden_control && inherits(param_set, "ParamSetShadow")) {
+    # A direct Shadow's origin is the complete semantic schema. Re-enter this
+    # planner there, but retain the outer receipt through the origin's final
+    # atomic commit so neither view can move in between.
+    origin = param_set$origin
+    param_set_internal_tuning_disable(
+      origin,
+      get_private(origin),
+      ids,
+      receipts,
+      validate
+    )
+    return(invisible(param_set))
+  }
+
+  if (has_hidden_control) {
+    if (isTRUE(plan$has_constraint)) {
+      stop(
+        paste(
+          "Cannot atomically disable internal tuning through a nested",
+          "ParamSetShadow when the composed graph has a constraint;",
+          "disable it through the Shadow origin instead"
+        ),
+        call. = FALSE
+      )
+    }
+    affected = which(lengths(owner_updates) != 0L)
+    complete = lapply(affected, function(owner) {
+      .Call(
+        C_param_set_values_merge,
+        list(),
+        owner_updates[[owner]],
+        plan$owner_values[[owner]],
+        TRUE
+      )
+    })
+    invisible(.Call(
+      C_param_set_internal_tuning_store_owners,
+      plan$owners[affected],
+      complete,
+      validate,
+      receipts
+    ))
+    return(invisible(param_set))
+  }
+
+  complete = .Call(
+    C_param_set_values_merge,
+    list(),
+    root_updates,
+    plan$root_values,
+    TRUE
+  )
+  invisible(.Call(
+    C_param_set_internal_tuning_store,
+    private,
+    param_set,
+    complete,
+    validate,
+    receipts
+  ))
+  invisible(param_set)
+}
+
+param_set_shadow_disable_internal_tuning = function(param_set, ids) {
+  param_set_internal_tuning_disable(
+    param_set,
+    get_private(param_set),
+    ids
+  )
+}
+
+param_set_internal_tuning_rows = function(params) {
+  which(vapply(params$cargo, function(cargo) {
+    # Only plain list cargo can name internal tuning: on a classed cargo the
+    # `$` and `length()` reads below would dispatch user methods inside this
+    # orchestration path, before any plan receipt exists.
+    is.list(cargo) && !is.object(cargo) &&
+      (!is.null(cargo$in_tune_fn) || length(cargo$disable_in_tune))
+  }, logical(1L)))
+}
+
+# Rebind only cargo rows whose internal-tuning metadata names a detached graph
+# context.  Unrelated cargo leaves remain pointer-identical.  Hidden Shadow
+# values are snapshotted exactly as a detached flatten operation requires;
+# visible values supplied later by the flattened ParamSet take precedence.
+param_set_internal_tuning_rebind_flat = function(flatps, plan) {
+  flat_private = get_private(flatps)
+  flat_state = param_set_core_state(flat_private, flatps)
+  flat_params = param_set_table_rows(
+    flat_state$.params,
+    seq_len(nrow(flat_state$.params))
+  )
+  rows = param_set_internal_tuning_rows(flat_params)
+  if (!length(rows)) return(flatps)
+  if (is.null(plan)) {
+    stop(
+      "Internal-tuning metadata changed while the ParamSet was flattened",
+      call. = FALSE
+    )
+  }
+
+  for (row in rows) {
+    plan_row = match(flat_params$id[[row]], plan$id)
+    route = plan$route_index[[plan_row]]
+    route_rows = which(plan$route_index == route)
+    visible_ids = plan$id[route_rows]
+    original_ids = plan$original_id[route_rows]
+    route_owners = unique(plan$owner_ps_index[route_rows])
+    if (length(route_owners) != 1L) {
+      stop(
+        "Internal error: internal-tuning route has multiple owners",
+        call. = FALSE
+      )
+    }
+
+    values = plan$owner_values[[route_owners]]
+    hidden_values = values[!names(values) %in% original_ids]
+    cargo = flat_params$cargo[[row]]
+    if (is.function(cargo$in_tune_fn) &&
+        (!identical(visible_ids, original_ids) ||
+          length(hidden_values))) {
+      cargo$in_tune_fn = param_set_collection_in_tune_fn_exact_factory(
+        cargo$in_tune_fn,
+        visible_ids,
+        original_ids,
+        hidden_values
+      )
+    }
+
+    if (length(cargo$disable_in_tune)) {
+      controls = match(names(cargo$disable_in_tune), original_ids)
+      if (anyNA(controls)) {
+        stop(
+          "Cannot flatten internal-tuning metadata that disables a hidden parameter",
+          call. = FALSE
+        )
+      }
+      names(cargo$disable_in_tune) = visible_ids[controls]
+    }
+    flat_params$cargo[[row]] = cargo
+  }
+
+  param_set_core_replace(flat_private, params = flat_params)
+  flatps
+}
+
+param_set_graph_flatten = function(param_set, private) {
+  state = param_set_core_state(private, param_set)
+  rows = param_set_internal_tuning_rows(state$.params)
+  if (!length(rows)) {
+    # The no-callback path still selects every ID inside the native subset
+    # transaction. A preliminary R-side ID vector could become stale if a
+    # Collection/Shadow derived schema moved before the subset began.
+    bundle = .Call(C_param_set_flatten_state, private, param_set)
+    flatps = param_set_from_subset_bundle(bundle)
+    return(param_set_internal_tuning_rebind_flat(flatps, NULL))
+  }
+
+  # NULL is the package-private "select every current root ID" request. The
+  # native plan chooses those IDs, routes, cargo, hidden owner values, and the
+  # complete graph receipt from one generation.
+  plan = param_set_internal_tuning_plan(param_set, NULL)
+  flatps = param_set$subset(
+    plan$id,
+    allow_dangling_dependencies = TRUE
+  )
+  .Call(C_param_set_internal_tuning_receipt, plan$receipt)
+  param_set_internal_tuning_rebind_flat(flatps, plan)
+}
+
+param_set_shadow_flatten = function(param_set) {
+  param_set_graph_flatten(param_set, get_private(param_set))
+}
+
 #' @title ParamSetCollection
 #'
 #' @description
@@ -8,10 +418,21 @@
 #'   Parameters from [`ParamSet`] with empty (i.e. `""`) `set_id` are referenced
 #'   directly. Multiple [`ParamSet`]s with `set_id` `""` can be combined, but their parameter names
 #'   may not overlap to avoid name clashes.
-#' * When you either ask for 'values' or set them, the operation is delegated to the individual,
-#'   contained [`ParamSet`] references. The collection itself does not maintain a `values` state.
-#'   This also implies that if you directly change `values` in one of the referenced sets,
-#'   this change is reflected in the collection.
+#' * Value reads reflect the current contained [`ParamSet`] references; the
+#'   collection does not maintain a second value state. Assignments are planned
+#'   over the complete collection/shadow graph and committed atomically to the
+#'   ultimate base sets. Direct child mutations remain visible through the
+#'   collection. `$values` is the translated raw store and may include dormant
+#'   values. The default `$get_values()` view filters activity across the
+#'   complete collection graph. A collection-level cross-set dependency is
+#'   therefore applied when reading the collection, not when reading either
+#'   child directly.
+#' * Checked assignment validates every supplied value but may store it while
+#'   dependency-inactive. If constraints are present, activity is computed
+#'   over the complete translated resulting configuration. Each child
+#'   constraint receives only its active child-scope entries, with collection
+#'   prefixes or postfixes removed. The graph transaction remains atomic if a
+#'   callback fails or mutates a planned target.
 #' * Dependencies: It is possible to currently handle dependencies
 #'      * regarding parameters inside of the same set - in this case simply
 #'        add the dependency to the set, best before adding the set to the collection
@@ -28,8 +449,16 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
     #' @param sets (named `list()` of [ParamSet])\cr
+    #'   The outer set list, names, and list metadata must be ordinary
+    #'   non-S4; a top-level ALTREP plain list is materialized exactly once.
     #'   ParamSet objects are not cloned.
     #'   Names are used as "set_id" for the naming scheme of delegated parameters.
+    #'   A name is therefore part of every parameter ID it contributes and must
+    #'   keep that ID inside the ID grammar: a prefix must itself match
+    #'   `^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$`, while a postfix (see `postfix_names`)
+    #'   only has to use ASCII letters, digits, `.`, and `_`.
+    #'   The empty name is also allowed and delegates the set's parameters
+    #'   without affixing them.
     #' @param tag_sets (`logical(1)`)\cr
     #'   Whether to add tags of the form `"set_<set_id>"` to each parameter originating from a given `ParamSet` given with name `<set_id>`.
     #' @param tag_params (`logical(1)`)\cr
@@ -37,106 +466,37 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @param postfix_names (`logical(1)`)\cr
     #'   Whether to use the names inside `sets` as postfixes, rather than prefixes.
     initialize = function(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE) {
-      assert_list(sets, types = "ParamSet")
-      assert_flag(tag_sets)
-      assert_flag(tag_params)
-      private$.postfix = assert_flag(postfix_names)
-
-      if (is.null(names(sets))) names(sets) = rep("", length(sets))
-
-      assert_names(names(sets)[names(sets) != ""], type = "strict")
-
-      paramtbl = rbindlist_proto(map(seq_along(sets), function(i) {
-        s = sets[[i]]
-        n = names(sets)[[i]]
-        params_child = s$.__enclos_env__$private$.params
-        if (nrow(params_child)) {
-          params_child = copy(params_child)
-          set(params_child, , "original_id", params_child$id)
-          set(params_child, , "owner_ps_index", i)
-          set(params_child, , "owner_name", n)
-          if (n != "") {
-            set(params_child, , "id",
-              private$.add_name_prefix(n, params_child$id)
-            )
-          }
-          params_child
-        }
-      }), prototype = {
-        paramtbl = copy(empty_domain)
-        set(paramtbl, , "original_id", character(0))
-        set(paramtbl, , "owner_ps_index", integer(0))
-        set(paramtbl, , "owner_name", character(0))
-      })
-
-      dups = duplicated(paramtbl$id)
-      if (any(dups)) {
-        stopf("ParamSetCollection would contain duplicated parameter names: %s",
-          str_collapse(unique(paramtbl$id[dups])))
+      if (typeof(sets) == "list" && is.null(names(sets))) {
+        # `names<-` has to duplicate the referenced argument, and R returns a
+        # wrapper ALTREP for a list of 64 or more elements. The native
+        # boundary admits only ordinary containers, so take the ordinary copy
+        # explicitly instead of relying on the duplicate's representation.
+        # `$search_space()` reaches this through `ps_union()` with one part per
+        # TuneToken, so without it a set with 64 tuned parameters cannot
+        # produce a search space at all.
+        sets = sets[seq_along(sets)]
+        names(sets) = rep("", length(sets))
       }
 
-      alltagstables = map(seq_along(sets), function(i) {
-        s = sets[[i]]
-        n = names(sets)[[i]]
-        if (tag_sets || tag_params) {
-          ids = s$.__enclos_env__$private$.params$id
-          newids = ids
-          if (n != "") newids = private$.add_name_prefix(n, ids)
-        }
-        tags_child = s$.__enclos_env__$private$.tags
-        list(
-          if (nrow(tags_child)) {
-            tags_child = copy(tags_child)
-            if (n != "") set(tags_child, , "id", private$.add_name_prefix(n, tags_child$id))
-            tags_child
-          },
-          if (tag_sets && n != "" && length(newids)) {
-            structure(list(id = newids, tag = rep_len(sprintf("set_%s", n), length(ids))),
-              class = c("data.table", "data.frame"))
-          },
-          if (tag_params && length(newids)) {
-            structure(list(id = newids, tag = sprintf("param_%s", ids)),
-              class = c("data.table", "data.frame"))
-          }
-        )
-      })
-
-      # this may introduce duplicate tags, if param_... or set_... is present before...
-      private$.tags = rbindlist_proto(unlist(alltagstables, recursive = FALSE, use.names = FALSE),
-        prototype = structure(list(
-            id = character(0), tag = character(0)
-          ), class = c("data.table", "data.frame")
-        )
+      native = .Call(
+        C_param_set_collection_construct,
+        sets,
+        tag_sets,
+        tag_params,
+        postfix_names
       )
-      setkeyv(private$.tags, "id")
-
-      private$.trafos = rbindlist_proto(map(seq_along(sets), function(i) {
-        s = sets[[i]]
-        n = names(sets)[[i]]
-        trafos_child = s$.__enclos_env__$private$.trafos
-        if (nrow(trafos_child)) {
-          trafos_child = copy(trafos_child)
-          if (n != "" && nrow(trafos_child)) set(trafos_child, , "id", private$.add_name_prefix(n, trafos_child$id))
-          trafos_child
-        }
-      }), prototype = structure(list(
-            id = character(0), trafo = list()
-          ), class = c("data.table", "data.frame")
-        )
+      private$.core = param_set_core_new(
+        2L,
+        params = native$params,
+        tags = native$tags,
+        deps = new_empty_deps(),
+        trafos = native$trafos,
+        sets = native$sets,
+        translation = native$translation,
+        postfix = postfix_names,
+        edges = native$edges
       )
-      setkeyv(private$.trafos, "id")
-
-      private$.translation = structure(unclass(copy(paramtbl))[c("id", "original_id", "owner_ps_index", "owner_name")],
-        class = c("data.table", "data.frame"))
-      setkeyv(private$.translation, "id")
-      setindexv(private$.translation, "original_id")
-
-      set(paramtbl, , setdiff(colnames(paramtbl), domain_names_permanent), NULL)
-      assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
-      setindexv(paramtbl, c("id", "cls", "grouping"))
-      private$.params = paramtbl
-
-      private$.sets = sets
+      invisible(sets)
     },
 
     #' @description
@@ -144,57 +504,24 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'
     #' @param p ([ParamSet]).
     #' @param n (`character(1)`)\cr
-    #'   Name to use. Default `""`.
+    #'   Name to use. Must keep the IDs it creates inside the ID grammar --
+    #'   `^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$` when this collection prefixes, ASCII
+    #'   letters, digits, `.`, and `_` when it postfixes -- or be `""` to
+    #'   delegate `p`'s parameters without affixing them. Default `""`.
     #' @param tag_sets (`logical(1)`)\cr
     #'   Whether to add tags of the form `"set_<n>"` to the newly added parameters.
     #' @param tag_params (`logical(1)`)\cr
     #'   Whether to add tags of the form `"param_<param_id>"` to each parameter with original ID `<param_id>`.
     add = function(p, n = "", tag_sets = FALSE, tag_params = FALSE) {
-      assert_r6(p, "ParamSet")
-      if (n != "" && n %in% names(private$.sets)) {
-        stopf("Set name '%s' already present in collection!", n)
-      }
-      pnames = p$ids()
-      nameclashes = intersect(
-        ifelse(n != "", private$.add_name_prefix(n, pnames), pnames),
-        self$ids()
-      )
-      if (length(nameclashes)) {
-        stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
-      }
-
-      new_index = length(private$.sets) + 1
-      paramtbl = p$params[, `:=`(original_id = id, owner_ps_index = new_index, owner_name = n)]
-      if (n != "") set(paramtbl, , "id", private$.add_name_prefix(n, paramtbl$id))
-
-      if (!nrow(paramtbl)) {
-        # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
-        paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
-      }
-      if (tag_sets && n != "") paramtbl[, .tags := map(.tags, function(x) c(x, sprintf("set_%s", n)))]
-      if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
-      newtags = paramtbl[, .(tag = unique(unlist(.tags, use.names = FALSE))), by = "id"]
-      if (nrow(newtags)) {
-        private$.tags = setkeyv(rbind(private$.tags, newtags), "id")
-      }
-
-      newtrafos = paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)]
-      if (nrow(newtrafos)) {
-        private$.trafos = setkeyv(rbind(private$.trafos, newtrafos), "id")
-      }
-
-      private$.translation = rbind(private$.translation, paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE])
-      setkeyv(private$.translation, "id")
-      setindexv(private$.translation, "original_id")
-
-      set(paramtbl, , setdiff(colnames(paramtbl), domain_names_permanent), NULL)
-      assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
-      private$.params = rbind(private$.params, paramtbl)
-      setindexv(private$.params, c("id", "cls", "grouping"))
-
-      entry = if (n == "") length(private$.sets) + 1 else n
-      private$.sets[[n]] = p
-      invisible(self)
+      invisible(.Call(
+        C_param_set_collection_add,
+        private,
+        self,
+        p,
+        n,
+        tag_sets,
+        tag_params
+      ))
     },
 
     #' @description
@@ -205,13 +532,19 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their `"on"` will not be present).
     #' @param keep_constraint (`logical(1)`)\cr
     #'   Whether to keep the `$constraint` function.
+    #' @param keep_trafo (`logical(1)`)\cr
+    #'   Whether to keep per-parameter transformations and the `$extra_trafo`
+    #'   function. All three subset control flags must be unclassed,
+    #'   attribute-free, non-missing logical scalars.
     #' @return `ParamSet`.
-    subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
-      # need to take care of extra_trafo and constraint.
-      result = super$subset(ids, allow_dangling_dependencies = allow_dangling_dependencies, keep_constraint = keep_constraint)
-      if (keep_constraint) result$constraint = private$.get_constraint_detached(ids)
-      result$extra_trafo = private$.get_extra_trafo_detached(ids)
-      result
+    subset = function(ids, allow_dangling_dependencies = FALSE,
+      keep_constraint = TRUE, keep_trafo = TRUE) {
+      super$subset(
+        ids,
+        allow_dangling_dependencies = allow_dangling_dependencies,
+        keep_constraint = keep_constraint,
+        keep_trafo = keep_trafo
+      )
     },
 
     #' @description
@@ -222,31 +555,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   The ids of the parameters for which to disable internal tuning.
     #' @return `Self`
     disable_internal_tuning = function(ids) {
-      assert_subset(ids, self$ids(tags = "internal_tuning"))
-
-      full_prefix = function(param_set, id_, prefix = "") {
-        info = get_private(param_set)$.translation[id_, c("owner_name", "original_id", "owner_ps_index"), on = "id"]
-        subset = get_private(param_set)$.sets[[info$owner_ps_index]]
-        prefix = if (info$owner_name == "") {
-          prefix
-        } else if (prefix == "") {
-          info$owner_name
-        } else {
-          private$.add_name_prefix(prefix, info$owner_name)
-        }
-
-        if (!test_class(subset, "ParamSetCollection")) return(prefix)
-
-        full_prefix(subset, info$original_id, prefix)
-      }
-
-      pvs = Reduce(c, map(ids, function(id_) {
-        xs = private$.params[list(id_), "cargo", on = "id"][[1]][[1]]$disable_in_tune
-        prefix = full_prefix(self, id_)
-        if (prefix == "") return(xs)
-        set_names(xs, private$.add_name_prefix(full_prefix(self, id_), names(xs)))
-      })) %??% named_list()
-      self$set_values(.values = pvs)
+      param_set_internal_tuning_disable(self, private, ids)
     },
 
     #' @description
@@ -256,256 +565,97 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   The internal search space.
     #' @return (named `list()`)
     convert_internal_search_space = function(search_space) {
-      assert_class(search_space, "ParamSet")
-      imap(search_space$domains, function(token, .id) {
-        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
-        if (!is.function(converter)) {
-          stopf("No converter exists for parameter '%s'", .id)
-        }
-        set_index = private$.translation[list(.id), "owner_ps_index", on = "id"][[1L]]
-        converter(token, private$.sets[[set_index]]$values)
-      })
+      param_set_internal_tuning_convert(self, private, search_space)
     },
 
     #' @description
     #' Create a `ParamSet` from this `ParamSetCollection`.
     flatten = function() {
-      flatps = super$flatten()
-
-      # This function is a mistake. It should not have been written. Sorry for allowing it to be merged.
-
-      recurse_prefix = function(id_, param_set, prefix = "") {
-        info = get_private(param_set)$.translation[list(id_), c("owner_name", "owner_ps_index"), on = "id"]
-        prefix = if (info$owner_name == "") {
-          prefix
-        } else if (prefix == "") {
-          info$owner_name
-        } else {
-          private$.add_name_prefix(prefix, info$owner_name)
-        }
-        subset = get_private(param_set)$.sets[[info$owner_ps_index]]
-        if (!test_class(subset, "ParamSetCollection")) {
-          return(list(prefix = prefix, ids = subset$ids()))
-        }
-        if (prefix != "") {
-          id_ = gsub(sprintf("^\\Q%s.\\E", prefix), "", id_)
-        }
-        recurse_prefix(id_, get_private(param_set)$.sets[[info$owner_ps_index]], prefix)
-      }
-
-      flatps$.__enclos_env__$private$.params[, let(
-        cargo = pmap(list(cargo = cargo, id_ = id), function(cargo, id_) {
-          if (all(map_lgl(cargo[c("disable_in_tune", "in_tune_fn")], is.null))) return(cargo)
-
-          info = recurse_prefix(id_, self)
-          prefix = info$prefix
-          if (prefix == "") return(cargo)
-
-          in_tune_fn = cargo$in_tune_fn
-
-          prefixed_set_ids = private$.add_name_prefix(prefix, info$ids)
-          cargo$in_tune_fn = crate(function(domain, param_vals) {
-            param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
-            names(param_vals) = gsub(sprintf("^\\Q%s.\\E", prefix), "", names(param_vals))
-            in_tune_fn(domain, param_vals)
-          }, in_tune_fn, prefix, prefixed_set_ids)
-
-          if (length(cargo$disable_in_tune)) {
-            cargo$disable_in_tune = set_names(
-              cargo$disable_in_tune,
-              private$.add_name_prefix(prefix, names(cargo$disable_in_tune))
-            )
-          }
-          cargo
-        })
-      )]
-
-      flatps
+      param_set_graph_flatten(self, private)
     }
   ),
 
   active = list(
+    #' @template field_params
+    params = function(rhs) {
+      if (!missing(rhs)) {
+        if (params_data_table_temporary_reassignment()) {
+          return(rhs)
+        }
+        stop("params is read-only.")
+      }
+
+      .Call(C_param_set_collection_params, private, self)
+    },
+
     #' @template field_deps
     deps = function(v) {
       if (!missing(v)) {
         stop("deps is read-only in ParamSetCollection.")
       }
-      d_all = imap(private$.sets, function(s, id) {
-        # copy all deps and rename ids to prefixed versions
-        dd = s$deps
-        if (id != "" && nrow(dd)) {
-          ids_old = s$ids()
-          ids_new = private$.add_name_prefix(id, ids_old)
-          dd$id = map_values(dd$id, ids_old, ids_new)
-          dd$on = map_values(dd$on, ids_old, ids_new)
-        }
-        dd
-      })
-      rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
+      .Call(C_param_set_collection_deps, private, self)
     },
 
     #' @template field_extra_trafo
     extra_trafo = function(f) {
       if (!missing(f)) stop("extra_trafo is read-only in ParamSetCollection.")
-      if (!length(private$.children_with_trafos())) return(NULL)
+      if (!.Call(
+          C_param_set_collection_has_callback,
+          private,
+          self,
+          0L
+        )) return(NULL)
 
-      # The reason why we don't crate a function here is that the extra_trafo of private$.sets could change.
+      # The private method reselects the capsule graph on every invocation, so
+      # child callback replacement remains live without exposing R semantics.
       private$.extra_trafo_explicit
     },
 
     #' @template field_constraint
     constraint = function(f) {
       if (!missing(f)) stop("constraint is read-only in ParamSetCollection.")
-      if (!length(private$.children_with_constraints())) return(NULL)
+      if (!.Call(
+          C_param_set_collection_has_callback,
+          private,
+          self,
+          1L
+        )) return(NULL)
       private$.constraint_explicit
     },
 
     #' @field sets (named `list()`)\cr
     #' Read-only `list` of of [`ParamSet`]s contained in this `ParamSetCollection`.
-    #' This field provides direct references to the [`ParamSet`] objects.
+    #' The list shell and names are detached; its elements are the exact
+    #' contained [`ParamSet`] objects.
     sets = function(v) {
-      if (!missing(v) && !identical(v, private$.sets)) stop("sets is read-only")
-      private$.sets
+      sets = private$.state()$.sets
+      detached = sets[seq_along(sets)]
+      if (!missing(v) && !identical(v, detached)) stop("sets is read-only")
+      detached
     }
   ),
 
   private = list(
-    .postfix = FALSE,
     .add_name_prefix = function(owner, id) {
-      if (private$.postfix) sprintf("%s.%s", id, owner) else sprintf("%s.%s", owner, id)
+      if (private$.state()$.postfix) sprintf("%s.%s", id, owner) else sprintf("%s.%s", owner, id)
     },
     .get_values = function() {
-      if (private$.postfix && !is.null(names(private$.sets))) {
-        vals = imap(private$.sets, function(x, n) {
-          vals_subset = x$values
-          if (nchar(n)) {
-            names(vals_subset) = sprintf("%s.%s", names(vals_subset), n)
-          }
-          vals_subset
-        })
-        vals = unlist(unname(vals), recursive = FALSE)
-      } else {
-        vals = unlist(map(private$.sets, "values"), recursive = FALSE)
-      }
-      if (length(vals)) vals else named_list()
+      .Call(C_param_set_collection_values, private, self)
     },
     .store_values = function(xs) {
-      sets = private$.sets
-      # %??% character(0) in case xs is an empty unnamed list
-      idx = match(names(xs) %??% character(0), private$.translation$id)
-      translate = private$.translation[idx, c("original_id", "owner_ps_index"), with = FALSE]
-      set(translate, , j = "values", list(xs))
-      for (xtl in split(translate, f = translate$owner_ps_index)) {
-        sets[[xtl$owner_ps_index[[1]]]]$.__enclos_env__$private$.store_values(set_names(xtl$values, xtl$original_id))
-      }
-      # clear the values of all sets that are not touched by xs
-      for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
-        sets[[clearing]]$.__enclos_env__$private$.store_values(named_list())
-      }
-    },
-    .sets = NULL,
-    .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
-    .children_with_trafos = function() {
-      which(!map_lgl(map(private$.sets, "extra_trafo"), is.null))
-    },
-    .children_with_constraints = function() {
-      which(!map_lgl(map(private$.sets, "constraint"), is.null))
+      invisible(.Call(C_param_set_store_values, private, self, xs))
     },
     .extra_trafo_explicit = function(x) {
-      children_with_trafos = private$.children_with_trafos()
-      sets_with_trafos = private$.sets[children_with_trafos]
-      translation = private$.translation
-      psc_extra_trafo(x, children_with_trafos, sets_with_trafos, translation, private$.postfix)
-    },
-    # get an extra_trafo function that does not have any references to the PSC object or any of its contained sets.
-    # This is used for flattening.
-    # `ids`: subset of params to consider
-    .get_extra_trafo_detached = function(ids = NULL) {
-      translation = if (is.null(ids)) copy(private$.translation) else private$.translation[id %in% ids]
-      children_with_trafos = private$.children_with_trafos()  # just an integer vector, no need to worry here
-      if (!is.null(ids)) {
-        children_with_trafos = intersect(children_with_trafos, translation$owner_ps_index)
-      }
-      if (!length(children_with_trafos)) return(NULL)
-      sets_with_trafos = lapply(private$.sets[children_with_trafos], function(x) x$clone(deep = TRUE))  # get new objects that are detached from PSC
-      postfix = private$.postfix
-      crate(function(x) psc_extra_trafo(x, children_with_trafos, sets_with_trafos, translation, postfix), children_with_trafos, sets_with_trafos, translation, psc_extra_trafo, postfix)
+      .Call(C_param_set_collection_extra_trafo, private, self, x)
     },
     .constraint_explicit = function(x) {
-      children_with_constraints = private$.children_with_constraints()
-      sets_with_constraints = private$.sets[children_with_constraints]
-      translation = private$.translation
-      psc_constraint(x, children_with_constraints, sets_with_constraints, translation)
-    },
-    # same as with extra_trafo above
-    .get_constraint_detached = function(ids = NULL) {
-      translation = if (is.null(ids)) copy(private$.translation) else private$.translation[id %in% ids]
-      children_with_constraints = private$.children_with_constraints()
-      if (!is.null(ids)) {
-        children_with_constraints = intersect(children_with_constraints, translation$owner_ps_index)
-      }
-      if (!length(children_with_constraints)) return(NULL)
-      sets_with_constraints = lapply(private$.sets[children_with_constraints], function(x) x$clone(deep = TRUE))
-      crate(function(x) psc_constraint(x, children_with_constraints, sets_with_constraints, translation), children_with_constraints, sets_with_constraints, translation, psc_constraint)
+      .Call(C_param_set_collection_constraint, private, self, x)
     },
     deep_clone = function(name, value) {
       switch(name,
-        .deps = copy(value),
-        .sets = map(value, function(x) {
-          x$clone(deep = TRUE)
-        }),
+        .core = param_set_core_deep_clone(self, value),
         value
       )
     }
   )
 )
-
-# extra_trafo function for ParamSetCollection
-# This function is used as extra_trafo for ParamSetCollection, in the case that any of its children has an extra_trafo.
-# Arguments:
-# - children_with_trafos: set-indices (i.e. index inside PSC's private$.sets, and inside `translation`) of children with extra_trafo
-# - sets_with_trafos: subset of PSC's private$.sets of children with extra_trafo
-# - translation: PSC's private$.translation
-#
-# We have this functoin outside of the ParamSetCollection class, because we anticipate that PSC can be "flattened", i.e. turned into
-# a normal ParamSet. In that case, the resulting ParamSet's extra_trafo should be a function that can stand on its own, without
-# referring to private$<anything>.
-psc_extra_trafo = function(x, children_with_trafos, sets_with_trafos, translation, postfix) {
-  changed = unlist(lapply(seq_along(children_with_trafos), function(i) {
-    set_index = children_with_trafos[[i]]
-    changing_ids = translation[J(set_index), id, on = "owner_ps_index"]
-    trafo = sets_with_trafos[[i]]$extra_trafo
-    changing_values_in = x[names(x) %in% changing_ids]
-    names(changing_values_in) = translation[names(changing_values_in), original_id]
-    # input of trafo() must not be changed after the call; otherwise the trafo would have to `force()` it in
-    # some circumstances.
-    if (test_function(trafo, args = c("x", "param_set"))) {
-      changing_values = trafo(x = changing_values_in, param_set = sets_with_trafos[[i]])
-    } else {
-      changing_values = trafo(changing_values_in)
-    }
-    changing_values = trafo(changing_values_in)
-    prefix = names(sets_with_trafos)[[i]]
-    if (prefix != "") {
-      names(changing_values) = if (postfix) sprintf("%s.%s", names(changing_values), prefix) else sprintf("%s.%s", prefix, names(changing_values))
-    }
-    changing_values
-  }), recursive = FALSE)
-  unchanged_ids = translation[!J(children_with_trafos), id, on = "owner_ps_index"]
-  unchanged = x[names(x) %in% unchanged_ids]
-  c(unchanged, changed)
-}
-
-psc_constraint = function(x, children_with_constraints, sets_with_constraints, translation) {
-  for (i in seq_along(children_with_constraints)) {
-    set_index = children_with_constraints[[i]]
-    constraining_ids = translation[J(set_index), id, on = "owner_ps_index"]
-    constraint = sets_with_constraints[[i]]$constraint
-    constraining_values = x[names(x) %in% constraining_ids]
-    names(constraining_values) = translation[names(constraining_values), original_id]
-    if (!constraint(x)) return(FALSE)
-  }
-  TRUE
-}
-
-

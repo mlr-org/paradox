@@ -1,0 +1,634 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+CONFIG="$ROOT/environment/rchk-bounded-bcheck.tsv"
+COMMAND_INPUT="$ROOT/environment/rchk-bounded-bcheck-command.tsv"
+ENVIRONMENT_INPUT="$ROOT/environment/rchk-bounded-bcheck-environment.tsv"
+TOOL_IDENTITY_INPUT="$ROOT/environment/rchk-bounded-bcheck-tool-identity.tsv"
+AUXILIARY_IMAGES="$ROOT/environment/auxiliary-images.tsv"
+BUILD_DRIVER="$ROOT/scripts/environment/build-bounded-rchk-bcheck"
+TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+PODMAN_LOCAL="$ROOT/scripts/podman-local"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+LOCAL_R="$ROOT/.local/toolchain/bin/R"
+LOCAL_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+CACHE_ROOT="$ROOT/.local/rchk-bounded-bcheck"
+LOCK_ROOT="$ROOT/.local/locks"
+REFERENCE_DOCS="$ROOT/.local/reference/R-4.6.1"
+
+fail() {
+  printf '%s\n' "prepare-bounded-rchk-bcheck: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/prepare-bounded-rchk-bcheck [--verify]
+       scripts/prepare-bounded-rchk-bcheck --verify-entry DIRECTORY
+       scripts/prepare-bounded-rchk-bcheck --print-input-receipt
+
+Build bcheck once from the pinned bounded-state rchk fork inside the exact
+local rchk image, or verify an existing cache without building it.  The
+internal --verify-entry form supports the cache tamper test; it is read-only.
+USAGE
+}
+
+MODE=prepare
+VERIFY_ENTRY=
+case $# in
+  0) ;;
+  1)
+    case $1 in
+      --verify) MODE=verify ;;
+      --print-input-receipt) MODE=print-input-receipt ;;
+      -h|--help) usage; exit 0 ;;
+      *) usage >&2; fail "unknown option: $1" ;;
+    esac
+    ;;
+  2)
+    [[ "$1" == --verify-entry ]] || {
+      usage >&2
+      fail "unknown option: $1"
+    }
+    MODE=verify-entry
+    VERIFY_ENTRY=$2
+    ;;
+  *) usage >&2; fail "too many arguments" ;;
+esac
+
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+[[ "$(command -v R)" == "$LOCAL_R" &&
+   "$(command -v Rscript)" == "$LOCAL_RSCRIPT" &&
+   "$(command -v git)" == "$LOCAL_GIT" &&
+   "$("$LOCAL_R" RHOME)" == "$ROOT/.local/toolchain/lib/R" ]] ||
+  fail "the exact repository-local R/toolchain activation is not selected"
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed path escaped the repository: $path" ;;
+  esac
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "the repository root is invalid or symbolic"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] ||
+      fail "refusing symbolic managed directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed path is not a directory: $current"
+  done
+}
+
+require_plain_directory() {
+  local path=$1
+  assert_plain_directory_chain "$path"
+  [[ -d "$path" && ! -L "$path" &&
+     "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "required directory is absent, invalid, or non-canonical: $path"
+}
+
+require_plain_file() {
+  local path=$1
+  require_plain_directory "${path%/*}"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "required file is absent, non-regular, or symbolic: $path"
+}
+
+require_plain_executable() {
+  local path=$1
+  require_plain_file "$path"
+  [[ -x "$path" ]] || fail "required file is not executable: $path"
+}
+
+sha256_value() {
+  sha256sum "$1" | cut -d ' ' -f 1
+}
+
+for required_input in "$CONFIG" "$COMMAND_INPUT" "$ENVIRONMENT_INPUT" \
+    "$TOOL_IDENTITY_INPUT" "$AUXILIARY_IMAGES" "$BUILD_DRIVER" \
+    "$TREE_RECEIPT_HELPER" "$PODMAN_LOCAL"; do
+  require_plain_file "$required_input"
+done
+require_plain_executable "$BUILD_DRIVER"
+require_plain_executable "$PODMAN_LOCAL"
+
+expected_config_keys=$'schema\nsource_name\nsource_origin\nsource_commit\nsource_tree\nsource_date_epoch\nsource_receipt_sha256\nimage_repository\nimage_digest\nimage_id\nimage_os\nimage_architecture\ncompiler_path\nllvm_prefix\nmake_path\nbcheck_max_states\ncallocators_max_states\nmake_jobs\ncompiler_version_sha256\nllvm_config_identity_sha256\nmake_version_sha256'
+[[ "$(sed -n '1p' "$CONFIG")" == $'key\tvalue' ]] ||
+  fail "bounded-bcheck configuration has an unexpected header"
+awk -F '\t' '
+  NR == 1 { next }
+  NF != 2 || $1 == "" || $2 == "" || seen[$1]++ { exit 1 }
+  END { if (NR != 22) exit 1 }
+' "$CONFIG" || fail "bounded-bcheck configuration is malformed"
+[[ "$(awk -F '\t' 'NR > 1 { print $1 }' "$CONFIG")" == \
+   "$expected_config_keys" ]] ||
+  fail "bounded-bcheck configuration keys are missing or reordered"
+
+declare -A config=()
+while IFS=$'\t' read -r key value; do
+  [[ "$key" == key ]] && continue
+  config["$key"]=$value
+done < "$CONFIG"
+
+[[ "${config[schema]}" == 1 &&
+   "${config[source_name]}" == rchk-bounded &&
+   "${config[source_origin]}" == https://github.com/gaborcsardi/rchk.git &&
+   "${config[source_commit]}" == 56b621a4e7112246d7b640bee6219ee9c6eb4bf8 &&
+   "${config[source_tree]}" == d08d5b88ab6c469ac1b6d9c4beeece322e223ac5 &&
+   "${config[source_date_epoch]}" == 1730804165 &&
+   "${config[source_receipt_sha256]}" == 1d70ba05f3f910c907431f18a4749e2b49ddf8e040ce66a76ebc2d7e264e83c0 &&
+   "${config[image_repository]}" == ghcr.io/r-hub/containers/rchk &&
+   "${config[image_digest]}" == sha256:f4127ff2f9ec0bffcc4e83653606a0c030cb6e8a0b7f4de0b5798be04369a39e &&
+   "${config[image_id]}" =~ ^[0-9a-f]{64}$ &&
+   "${config[image_os]}" == linux &&
+   "${config[image_architecture]}" == amd64 &&
+   "${config[compiler_path]}" == /usr/bin/clang++ &&
+   "${config[llvm_prefix]}" == /usr/lib/llvm-14 &&
+   "${config[make_path]}" == /usr/bin/make &&
+   "${config[bcheck_max_states]}" == 3000000 &&
+   "${config[callocators_max_states]}" == 3000000 &&
+   "${config[make_jobs]}" == 1 ]] ||
+  fail "bounded-bcheck configuration identity is unexpected"
+for digest_key in compiler_version_sha256 llvm_config_identity_sha256 \
+    make_version_sha256; do
+  [[ "${config[$digest_key]}" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "bounded-bcheck configuration has a malformed $digest_key"
+done
+
+[[ "$(sed -n '1p' "$COMMAND_INPUT")" == $'ordinal\targument' ]] ||
+  fail "bounded-bcheck command has an unexpected header"
+awk -F '\t' '
+  NR == 1 { next }
+  NF != 2 || $1 != NR - 1 || $2 == "" { exit 1 }
+  END { if (NR != 12) exit 1 }
+' "$COMMAND_INPUT" || fail "bounded-bcheck command inventory is malformed"
+command_argument() {
+  awk -F '\t' -v ordinal="$1" '$1 == ordinal { print $2 }' "$COMMAND_INPUT"
+}
+[[ "$(command_argument 1)" == "${config[make_path]}" &&
+   "$(command_argument 4)" == /work/source/src &&
+   "$(command_argument 5)" == "--jobs=${config[make_jobs]}" &&
+   "$(command_argument 6)" == bcheck &&
+   "$(command_argument 8)" == "CXX=${config[compiler_path]}" &&
+   "$(command_argument 9)" == "LLVM=${config[llvm_prefix]}" &&
+   "$(command_argument 10)" == "BCHECK_MAX_STATES=${config[bcheck_max_states]}" &&
+   "$(command_argument 11)" == "CALLOCATORS_MAX_STATES=${config[callocators_max_states]}" ]] ||
+  fail "bounded-bcheck command does not match the pinned inputs"
+
+[[ "$(sed -n '1p' "$ENVIRONMENT_INPUT")" == $'key\tvalue' ]] ||
+  fail "bounded-bcheck environment has an unexpected header"
+awk -F '\t' '
+  NR == 1 { next }
+  NF != 2 || $1 !~ /^[A-Z_][A-Z0-9_]*$/ || $2 == "" || seen[$1]++ {
+    exit 1
+  }
+  END { if (NR != 8) exit 1 }
+' "$ENVIRONMENT_INPUT" || fail "bounded-bcheck environment is malformed"
+environment_value() {
+  awk -F '\t' -v key="$1" '$1 == key { print $2 }' "$ENVIRONMENT_INPUT"
+}
+[[ "$(environment_value SOURCE_DATE_EPOCH)" == "${config[source_date_epoch]}" &&
+   "$(environment_value HOME)" == /work/home &&
+   "$(environment_value TMPDIR)" == /work/tmp &&
+   "$(environment_value PATH)" == /usr/bin:/bin &&
+   "$(environment_value LC_ALL)" == C.UTF-8 &&
+   "$(environment_value TZ)" == UTC ]] ||
+  fail "bounded-bcheck environment does not match the pinned inputs"
+
+[[ "$(sed -n '1p' "$TOOL_IDENTITY_INPUT")" == $'key\tvalue' ]] ||
+  fail "bounded-bcheck tool identity has an unexpected header"
+awk -F '\t' '
+  NR == 1 { next }
+  NF != 2 || $1 == "" || $2 == "" || seen[$1]++ { exit 1 }
+  END { if (NR != 17) exit 1 }
+' "$TOOL_IDENTITY_INPUT" || fail "bounded-bcheck tool identity is malformed"
+tool_value() {
+  awk -F '\t' -v key="$1" '$1 == key { print $2 }' "$TOOL_IDENTITY_INPUT"
+}
+[[ "$(tool_value compiler_invoked_path)" == "${config[compiler_path]}" &&
+   "$(tool_value llvm_prefix)" == "${config[llvm_prefix]}" &&
+   "$(tool_value make_invoked_path)" == "${config[make_path]}" &&
+   "$(tool_value compiler_version_sha256)" == "${config[compiler_version_sha256]}" &&
+   "$(tool_value llvm_config_identity_sha256)" == "${config[llvm_config_identity_sha256]}" &&
+   "$(tool_value make_version_sha256)" == "${config[make_version_sha256]}" ]] ||
+  fail "bounded-bcheck tool identity does not match the pinned configuration"
+
+[[ "$(sed -n '1p' "$AUXILIARY_IMAGES")" == \
+   $'purpose\timage\tdigest\tsource_commit\tresolved_utc' ]] ||
+  fail "auxiliary image manifest has an unexpected header"
+rchk_image_rows=$(awk -F '\t' '$1 == "rchk" { count++ } END { print count + 0 }' \
+  "$AUXILIARY_IMAGES")
+[[ "$rchk_image_rows" -eq 1 ]] ||
+  fail "auxiliary image manifest must contain exactly one rchk row"
+rchk_image_row=$(awk -F '\t' '$1 == "rchk" { print }' "$AUXILIARY_IMAGES")
+IFS=$'\t' read -r purpose manifest_image manifest_digest \
+  manifest_source_commit manifest_resolved_utc manifest_extra <<< "$rchk_image_row"
+[[ "$purpose" == rchk && "$manifest_image" == "${config[image_repository]}" &&
+   "$manifest_digest" == "${config[image_digest]}" &&
+   "$manifest_source_commit" =~ ^[0-9a-f]{40}$ &&
+   "$manifest_resolved_utc" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ &&
+   -z "${manifest_extra:-}" ]] ||
+  fail "the pinned rchk image differs between manifests"
+
+IMAGE_REFERENCE="${config[image_repository]}@${config[image_digest]}"
+assert_local_image() {
+  "$PODMAN_LOCAL" image exists "$IMAGE_REFERENCE" >/dev/null 2>&1 ||
+    fail "the exact rchk image is absent; run scripts/fetch-auxiliary-images"
+  local inspection expected
+  inspection=$("$PODMAN_LOCAL" image inspect \
+    --format '{{.Id}}|{{.Os}}|{{.Architecture}}|{{range .RepoDigests}}{{.}} {{end}}' \
+    "$IMAGE_REFERENCE") || fail "could not inspect the exact local rchk image"
+  expected="${config[image_id]}|${config[image_os]}|${config[image_architecture]}|${IMAGE_REFERENCE} "
+  [[ "$inspection" == "$expected" ]] ||
+    fail "the local rchk image identity differs from the pinned digest"
+}
+
+write_input_receipt() {
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'source_origin\t%s\n' "${config[source_origin]}"
+  printf 'source_commit\t%s\n' "${config[source_commit]}"
+  printf 'source_tree\t%s\n' "${config[source_tree]}"
+  printf 'source_receipt_sha256\t%s\n' "${config[source_receipt_sha256]}"
+  printf 'image_reference\t%s\n' "$IMAGE_REFERENCE"
+  printf 'image_id\t%s\n' "${config[image_id]}"
+  printf 'tool_identity_sha256\t%s\n' "$(sha256_value "$TOOL_IDENTITY_INPUT")"
+  printf 'command_sha256\t%s\n' "$(sha256_value "$COMMAND_INPUT")"
+  printf 'environment_sha256\t%s\n' "$(sha256_value "$ENVIRONMENT_INPUT")"
+  printf 'build_driver_sha256\t%s\n' "$(sha256_value "$BUILD_DRIVER")"
+  printf 'bcheck_max_states\t%s\n' "${config[bcheck_max_states]}"
+  printf 'callocators_max_states\t%s\n' "${config[callocators_max_states]}"
+  printf 'make_jobs\t%s\n' "${config[make_jobs]}"
+}
+
+CACHE_KEY=$(write_input_receipt | sha256sum | cut -d ' ' -f 1)
+[[ "$CACHE_KEY" =~ ^[0-9a-f]{64}$ ]] || fail "could not derive a cache key"
+CACHE_DIRECTORY="$CACHE_ROOT/$CACHE_KEY"
+
+if [[ "$MODE" == print-input-receipt ]]; then
+  write_input_receipt
+  exit 0
+fi
+
+write_image_identity() {
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'reference\t%s\n' "$IMAGE_REFERENCE"
+  printf 'image_id\t%s\n' "${config[image_id]}"
+  printf 'os\t%s\n' "${config[image_os]}"
+  printf 'architecture\t%s\n' "${config[image_architecture]}"
+}
+
+verify_entry() {
+  local entry=$1 expected_key=$2 expected_root_mode=$3
+  local payload receipts source_receipt payload_receipt
+  local input_sha source_sha payload_sha binary binary_sha expected_seal
+  require_plain_directory "$entry"
+  [[ "${entry##*/}" == "$expected_key" ]] ||
+    fail "cache entry name does not equal its authenticated input key"
+  [[ -z "$(find "$entry" -type l -print -quit)" ]] ||
+    fail "cache entry contains a symbolic link"
+  [[ "$(find "$entry" -mindepth 1 -maxdepth 1 -printf '%f\t%y\n' | sort)" == \
+     $'payload\td\nreceipts\td' ]] ||
+    fail "cache entry has an unexpected top-level inventory"
+  payload="$entry/payload"
+  receipts="$entry/receipts"
+  require_plain_directory "$payload"
+  require_plain_directory "$receipts"
+  [[ "$(find "$receipts" -mindepth 1 -maxdepth 1 -printf '%f\t%y\n' | sort)" == \
+     $'input.tsv\tf\npayload-tree.tsv\tf\nseal.tsv\tf\nsource-tree.tsv\tf' ]] ||
+    fail "cache receipt inventory is incomplete or has additions"
+  for receipt in input.tsv payload-tree.tsv seal.tsv source-tree.tsv; do
+    require_plain_file "$receipts/$receipt"
+  done
+  cmp -s "$receipts/input.tsv" <(write_input_receipt) ||
+    fail "cache input receipt differs from the current pinned inputs"
+  input_sha=$(sha256_value "$receipts/input.tsv")
+  [[ "$input_sha" == "$expected_key" ]] ||
+    fail "cache input receipt does not hash to its directory key"
+
+  source_receipt="$receipts/source-tree.tsv"
+  source_sha=$(sha256_value "$source_receipt")
+  [[ "$source_sha" == "${config[source_receipt_sha256]}" ]] ||
+    fail "cached bounded-rchk source receipt differs from the pinned receipt"
+  "$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" verify \
+    "$payload/source" "$source_receipt" >/dev/null ||
+    fail "cached bounded-rchk source differs from its complete receipt"
+
+  payload_receipt="$receipts/payload-tree.tsv"
+  "$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" verify \
+    "$payload" "$payload_receipt" >/dev/null ||
+    fail "bounded-bcheck payload differs from its complete receipt"
+  payload_sha=$(sha256_value "$payload_receipt")
+
+  [[ "$(find "$payload" -mindepth 1 -maxdepth 1 -printf '%f\t%y\n' | sort)" == \
+     $'bin\td\nbuild-command.tsv\tf\nbuild-environment.tsv\tf\nbuild-status.tsv\tf\nidentity\td\nlogs\td\nsource\td' ]] ||
+    fail "bounded-bcheck payload inventory is incomplete or has additions"
+  cmp -s "$payload/build-command.tsv" "$COMMAND_INPUT" ||
+    fail "retained bounded-bcheck command differs from its exact input"
+  cmp -s "$payload/build-environment.tsv" "$ENVIRONMENT_INPUT" ||
+    fail "retained bounded-bcheck environment differs from its exact input"
+  [[ "$(cat "$payload/build-status.tsv")" == $'key\tvalue\nschema\t1\nexit_status\t0' ]] ||
+    fail "bounded-bcheck build did not retain exact success"
+
+  [[ "$(find "$payload/identity" -mindepth 1 -maxdepth 1 -printf '%f\t%y\n' | sort)" == \
+     $'auxiliary-image.tsv\tf\ncompiler-version.txt\tf\nimage.tsv\tf\nllvm-config-identity.tsv\tf\nmake-version.txt\tf\ntools.tsv\tf' ]] ||
+    fail "bounded-bcheck identity inventory is incomplete or has additions"
+  cmp -s "$payload/identity/tools.tsv" "$TOOL_IDENTITY_INPUT" ||
+    fail "retained compiler/LLVM/make identity differs from the pinned image identity"
+  [[ "$(sha256_value "$payload/identity/compiler-version.txt")" == \
+       "${config[compiler_version_sha256]}" &&
+     "$(sha256_value "$payload/identity/llvm-config-identity.tsv")" == \
+       "${config[llvm_config_identity_sha256]}" &&
+     "$(sha256_value "$payload/identity/make-version.txt")" == \
+       "${config[make_version_sha256]}" ]] ||
+    fail "retained raw compiler/LLVM/make identity differs"
+  cmp -s "$payload/identity/auxiliary-image.tsv" <(printf '%s\n%s\n' \
+    $'purpose\timage\tdigest\tsource_commit\tresolved_utc' "$rchk_image_row") ||
+    fail "retained auxiliary-image row differs from its pinned manifest"
+  cmp -s "$payload/identity/image.tsv" <(write_image_identity) ||
+    fail "retained local image identity differs from the pinned digest"
+
+  [[ "$(find "$payload/logs" -mindepth 1 -maxdepth 1 -printf '%f\t%y\n' | sort)" == \
+     $'build.log\tf\ncontainer.log\tf' ]] ||
+    fail "bounded-bcheck log inventory is incomplete or has additions"
+  [[ -s "$payload/logs/build.log" ]] || fail "bounded-bcheck build log is empty"
+  grep -F -- '-DBCHECK_MAX_STATES=3000000' "$payload/logs/build.log" >/dev/null ||
+    fail "build log does not prove the pinned bcheck state macro"
+  grep -F -- '-DCALLOCATORS_MAX_STATES=3000000' "$payload/logs/build.log" >/dev/null ||
+    fail "build log does not prove the pinned callocators state macro"
+  grep -F -- '/usr/bin/clang++' "$payload/logs/build.log" >/dev/null ||
+    fail "build log does not prove the explicit compiler"
+
+  binary="$payload/bin/bcheck"
+  require_plain_file "$binary"
+  [[ -x "$binary" && "$(stat -c '%a' "$binary")" == 555 ]] ||
+    fail "cached bcheck mode is not exactly 0555"
+  [[ "$(od -An -tx1 -N4 "$binary" | tr -d ' \n')" == 7f454c46 ]] ||
+    fail "cached bcheck is not an ELF executable"
+  binary_sha=$(sha256_value "$binary")
+  expected_seal=$(printf \
+    'key\tvalue\nschema\t1\ncache_key\t%s\ninput_receipt_sha256\t%s\nsource_receipt_sha256\t%s\npayload_receipt_sha256\t%s\nbinary_sha256\t%s\nbinary_mode\t0555\n' \
+    "$expected_key" "$input_sha" "$source_sha" "$payload_sha" \
+    "$binary_sha")
+  [[ "$(cat "$receipts/seal.tsv")" == "$expected_seal" ]] ||
+    fail "bounded-bcheck seal is absent, malformed, or inconsistent"
+  # This older filesystem denies rename(2) of a mode-0555 directory.  Staging
+  # is therefore verified at 0755, renamed while the per-key lock is held, and
+  # changed immediately to the required final 0555 before lock-free use.
+  [[ "$expected_root_mode" == 555 || "$expected_root_mode" == 755 ]] ||
+    fail "internal cache root-mode policy is invalid"
+  [[ "$(stat -c '%a' "$entry")" == "$expected_root_mode" &&
+     -z "$(find "$entry" -mindepth 1 -perm /222 -print -quit)" ]] ||
+    fail "bounded-bcheck cache payload or receipt is mutable"
+}
+
+if [[ "$MODE" == verify-entry ]]; then
+  case "$VERIFY_ENTRY" in
+    /*) ;;
+    *) VERIFY_ENTRY="$ROOT/$VERIFY_ENTRY" ;;
+  esac
+  assert_plain_directory_chain "$VERIFY_ENTRY"
+  verify_entry "$VERIFY_ENTRY" "$CACHE_KEY" \
+    "$(stat -c '%a' "$VERIFY_ENTRY")"
+  printf 'cache_directory=%s\n' "$VERIFY_ENTRY"
+  printf 'bcheck=%s\n' "$VERIFY_ENTRY/payload/bin/bcheck"
+  exit 0
+fi
+
+if [[ "$MODE" == verify ]]; then
+  verify_entry "$CACHE_DIRECTORY" "$CACHE_KEY" 555
+  printf 'cache_directory=%s\n' "$CACHE_DIRECTORY"
+  printf 'bcheck=%s\n' "$CACHE_DIRECTORY/payload/bin/bcheck"
+  exit 0
+fi
+
+# Receipt printing and cache verification are intentionally offline: the
+# pinned config and retained image identity are sufficient to authenticate
+# their bytes.  Only a real build needs the corresponding local OCI payload.
+assert_local_image
+
+REFERENCE_SOURCE="$ROOT/.local/sources/${config[source_name]}"
+REFERENCE_CHECKOUTS="$REFERENCE_DOCS/git-checkouts.tsv"
+REFERENCE_COMMIT="$REFERENCE_DOCS/${config[source_name]}-commit.txt"
+REFERENCE_SUMS="$REFERENCE_DOCS/SHA256SUMS"
+for reference_input in "$REFERENCE_CHECKOUTS" "$REFERENCE_COMMIT" \
+    "$REFERENCE_SUMS"; do
+  require_plain_file "$reference_input"
+done
+require_plain_directory "$REFERENCE_SOURCE"
+[[ "$(cat "$REFERENCE_COMMIT")" == "${config[source_commit]}" ]] ||
+  fail "local bounded-rchk commit note differs from the pinned commit"
+expected_checkout_row=$(printf '%s\t%s\t%s\t%s' \
+  "${config[source_name]}" "${config[source_origin]}" \
+  "${config[source_commit]}" "${config[source_tree]}")
+[[ "$(awk -F '\t' -v name="${config[source_name]}" \
+  '$1 == name { count++; row=$0 } END { if (count == 1) print row }' \
+  "$REFERENCE_CHECKOUTS")" == "$expected_checkout_row" ]] ||
+  fail "local reference checkout receipt does not authenticate bounded rchk"
+expected_commit_sum=$(printf '%s  %s' "$(sha256_value "$REFERENCE_COMMIT")" \
+  "${config[source_name]}-commit.txt")
+[[ "$(awk -v name="${config[source_name]}-commit.txt" \
+  '$2 == name { count++; row=$0 } END { if (count == 1) print row }' \
+  "$REFERENCE_SUMS")" == "$expected_commit_sum" ]] ||
+  fail "local reference checksum inventory does not authenticate bounded rchk"
+
+reference_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_QUARANTINE_PATH \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 \
+    GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 "$LOCAL_GIT" \
+      -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+      -c core.untrackedCache=false "$@"
+}
+
+[[ -d "$REFERENCE_SOURCE/.git" && ! -L "$REFERENCE_SOURCE/.git" ]] ||
+  fail "bounded-rchk checkout has no plain Git directory"
+[[ "$(reference_git -C "$REFERENCE_SOURCE" rev-parse --show-toplevel)" == \
+   "$REFERENCE_SOURCE" &&
+   "$(reference_git -C "$REFERENCE_SOURCE" rev-parse 'HEAD^{commit}')" == \
+   "${config[source_commit]}" &&
+   "$(reference_git -C "$REFERENCE_SOURCE" rev-parse 'HEAD^{tree}')" == \
+   "${config[source_tree]}" ]] ||
+  fail "bounded-rchk checkout commit or tree differs"
+[[ "$(reference_git -C "$REFERENCE_SOURCE" remote get-url origin)" == \
+   "${config[source_origin]}" &&
+   -z "$(reference_git -C "$REFERENCE_SOURCE" status --porcelain=v1 \
+     --untracked-files=all --ignored=matching)" ]] ||
+  fail "bounded-rchk checkout origin or clean state differs"
+[[ -z "$(reference_git -C "$REFERENCE_SOURCE" for-each-ref \
+  --format='%(refname)' refs/replace)" &&
+   ! -e "$REFERENCE_SOURCE/.git/info/grafts" &&
+   ! -e "$REFERENCE_SOURCE/.git/objects/info/alternates" &&
+   "$(reference_git -C "$REFERENCE_SOURCE" ls-tree -r \
+     "${config[source_commit]}" | awk '$1 == "160000" { count++ } END { print count + 0 }')" -eq 0 ]] ||
+  fail "bounded-rchk checkout uses unsupported object rewriting or submodules"
+
+for managed_directory in "$ROOT/.local" "$CACHE_ROOT" "$LOCK_ROOT"; do
+  assert_plain_directory_chain "$managed_directory"
+done
+mkdir -p "$CACHE_ROOT" "$LOCK_ROOT"
+require_plain_directory "$CACHE_ROOT"
+require_plain_directory "$LOCK_ROOT"
+
+LOCK_FILE="$LOCK_ROOT/rchk-bounded-bcheck-$CACHE_KEY.lock"
+[[ ! -L "$LOCK_FILE" && (! -e "$LOCK_FILE" || -f "$LOCK_FILE") ]] ||
+  fail "bounded-bcheck cache lock is invalid"
+exec 9>"$LOCK_FILE"
+flock -x 9
+
+if [[ -e "$CACHE_DIRECTORY" || -L "$CACHE_DIRECTORY" ]]; then
+  [[ -d "$CACHE_DIRECTORY" && ! -L "$CACHE_DIRECTORY" ]] ||
+    fail "bounded-bcheck cache path exists but is not a plain directory"
+  verify_entry "$CACHE_DIRECTORY" "$CACHE_KEY" 555 ||
+    fail "existing cache is invalid; move it aside explicitly before rebuilding"
+  printf 'bounded-rchk bcheck cache hit\n'
+  printf 'cache_directory=%s\n' "$CACHE_DIRECTORY"
+  printf 'bcheck=%s\n' "$CACHE_DIRECTORY/payload/bin/bcheck"
+  exit 0
+fi
+
+STAGING_PARENT=$(mktemp -d "$CACHE_ROOT/.staging-$CACHE_KEY.XXXXXX")
+PROMOTION_PARENT=
+PRESERVE_STAGING=false
+cleanup() {
+  if [[ -n "${PROMOTION_PARENT:-}" && -e "$PROMOTION_PARENT" ]]; then
+    find "$PROMOTION_PARENT" -type d -exec chmod u+rwx {} + 2>/dev/null || true
+    find "$PROMOTION_PARENT" -type f -exec chmod u+rw {} + 2>/dev/null || true
+    rm -rf -- "$PROMOTION_PARENT"
+  fi
+  if [[ "$PRESERVE_STAGING" == true && -e "$STAGING_PARENT" ]]; then
+    printf 'prepare-bounded-rchk-bcheck: verified staging retained at %s\n' \
+      "$STAGING_PARENT" >&2
+  elif [[ -n "${STAGING_PARENT:-}" && -e "$STAGING_PARENT" ]]; then
+    find "$STAGING_PARENT" -type d -exec chmod u+rwx {} + 2>/dev/null || true
+    find "$STAGING_PARENT" -type f -exec chmod u+rw {} + 2>/dev/null || true
+    rm -rf -- "$STAGING_PARENT"
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+ENTRY="$STAGING_PARENT/$CACHE_KEY"
+SOURCE_EXPORT="$ENTRY/payload/source"
+GENERATED="$STAGING_PARENT/generated"
+WORK="$STAGING_PARENT/work"
+mkdir -p "$ENTRY/receipts" "$SOURCE_EXPORT" "$GENERATED" "$WORK"
+
+reference_git -C "$REFERENCE_SOURCE" archive --format=tar \
+  "${config[source_commit]}" |
+  /usr/bin/tar --no-same-owner --no-same-permissions -xf - -C "$SOURCE_EXPORT"
+[[ -z "$(find "$SOURCE_EXPORT" -type l -print -quit)" ]] ||
+  fail "bounded-rchk source unexpectedly contains a symbolic link"
+find "$SOURCE_EXPORT" -type d -exec chmod 0755 {} +
+find "$SOURCE_EXPORT" -type f -perm /111 -exec chmod 0555 {} +
+find "$SOURCE_EXPORT" -type f ! -perm /111 -exec chmod 0444 {} +
+find "$SOURCE_EXPORT" -type d -exec chmod 0555 {} +
+"$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" create \
+  "$SOURCE_EXPORT" "$ENTRY/receipts/source-tree.tsv" >/dev/null
+[[ "$(sha256_value "$ENTRY/receipts/source-tree.tsv")" == \
+   "${config[source_receipt_sha256]}" ]] ||
+  fail "exported bounded-rchk source differs from its pinned complete receipt"
+write_input_receipt > "$ENTRY/receipts/input.tsv"
+[[ "$(sha256_value "$ENTRY/receipts/input.tsv")" == "$CACHE_KEY" ]] ||
+  fail "staged bounded-bcheck input receipt has the wrong key"
+
+CONTAINER_LOG="$STAGING_PARENT/container.log"
+set +e
+"$PODMAN_LOCAL" run --rm --network none --pull=never --read-only \
+  --cap-drop=all --security-opt no-new-privileges --pids-limit 512 \
+  --hostname paradox-bcheck-build \
+  --tmpfs /tmp:rw,nosuid,nodev,size=268435456 \
+  --volume "$SOURCE_EXPORT:/source:ro" \
+  --volume "$WORK:/work:rw" \
+  --volume "$GENERATED:/output:rw" \
+  --volume "$BUILD_DRIVER:/driver:ro" \
+  --volume "$COMMAND_INPUT:/build-command.tsv:ro" \
+  --volume "$ENVIRONMENT_INPUT:/build-environment.tsv:ro" \
+  "$IMAGE_REFERENCE" /bin/bash /driver build /source /work /output \
+    /build-command.tsv /build-environment.tsv \
+  > "$CONTAINER_LOG" 2>&1
+container_status=$?
+set -e
+if [[ "$container_status" -ne 0 ]]; then
+  [[ ! -f "$GENERATED/logs/build.log" ]] || tail -n 80 "$GENERATED/logs/build.log" >&2
+  [[ ! -s "$CONTAINER_LOG" ]] || tail -n 80 "$CONTAINER_LOG" >&2
+  fail "bounded-bcheck image build failed with status $container_status"
+fi
+
+find "$GENERATED" -mindepth 1 -maxdepth 1 -exec mv {} "$ENTRY/payload/" \;
+mv "$CONTAINER_LOG" "$ENTRY/payload/logs/container.log"
+write_image_identity > "$ENTRY/payload/identity/image.tsv"
+{
+  printf '%s\n' $'purpose\timage\tdigest\tsource_commit\tresolved_utc'
+  printf '%s\n' "$rchk_image_row"
+} > "$ENTRY/payload/identity/auxiliary-image.tsv"
+
+cmp -s "$ENTRY/payload/identity/tools.tsv" "$TOOL_IDENTITY_INPUT" ||
+  fail "image compiler/LLVM/make identity differs from the pinned identity"
+[[ "$(sha256_value "$ENTRY/payload/identity/compiler-version.txt")" == \
+     "${config[compiler_version_sha256]}" &&
+   "$(sha256_value "$ENTRY/payload/identity/llvm-config-identity.tsv")" == \
+     "${config[llvm_config_identity_sha256]}" &&
+   "$(sha256_value "$ENTRY/payload/identity/make-version.txt")" == \
+     "${config[make_version_sha256]}" ]] ||
+  fail "image raw compiler/LLVM/make identity differs from the pin"
+
+rm -rf "$WORK"
+WORK=
+find "$ENTRY/payload" -type f -perm /111 -exec chmod 0555 {} +
+find "$ENTRY/payload" -type f ! -perm /111 -exec chmod 0444 {} +
+find "$ENTRY/payload" -type d -exec chmod 0555 {} +
+"$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" create \
+  "$ENTRY/payload" "$ENTRY/receipts/payload-tree.tsv" >/dev/null
+input_sha=$(sha256_value "$ENTRY/receipts/input.tsv")
+source_sha=$(sha256_value "$ENTRY/receipts/source-tree.tsv")
+payload_sha=$(sha256_value "$ENTRY/receipts/payload-tree.tsv")
+binary_sha=$(sha256_value "$ENTRY/payload/bin/bcheck")
+{
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'cache_key\t%s\n' "$CACHE_KEY"
+  printf 'input_receipt_sha256\t%s\n' "$input_sha"
+  printf 'source_receipt_sha256\t%s\n' "$source_sha"
+  printf 'payload_receipt_sha256\t%s\n' "$payload_sha"
+  printf 'binary_sha256\t%s\n' "$binary_sha"
+  printf 'binary_mode\t0555\n'
+} > "$ENTRY/receipts/seal.tsv"
+find "$ENTRY/receipts" -type f -exec chmod 0444 {} +
+find "$ENTRY/receipts" -type d -exec chmod 0555 {} +
+chmod 0755 "$ENTRY"
+
+verify_entry "$ENTRY" "$CACHE_KEY" 755
+PRESERVE_STAGING=true
+PROMOTION_PARENT=$(mktemp -d "$CACHE_ROOT/.promotion-$CACHE_KEY.XXXXXX")
+cp -a --reflink=auto "$ENTRY" "$PROMOTION_PARENT/$CACHE_KEY"
+verify_entry "$PROMOTION_PARENT/$CACHE_KEY" "$CACHE_KEY" 755
+[[ ! -e "$CACHE_DIRECTORY" && ! -L "$CACHE_DIRECTORY" ]] ||
+  fail "cache destination appeared while the per-key lock was held"
+mv -T "$PROMOTION_PARENT/$CACHE_KEY" "$CACHE_DIRECTORY"
+chmod 0555 "$CACHE_DIRECTORY"
+rm -rf "$PROMOTION_PARENT"
+PROMOTION_PARENT=
+verify_entry "$CACHE_DIRECTORY" "$CACHE_KEY" 555
+PRESERVE_STAGING=false
+printf 'bounded-rchk bcheck cache prepared\n'
+printf 'cache_directory=%s\n' "$CACHE_DIRECTORY"
+printf 'bcheck=%s\n' "$CACHE_DIRECTORY/payload/bin/bcheck"

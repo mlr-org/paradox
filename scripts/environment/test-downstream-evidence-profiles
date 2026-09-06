@@ -1,0 +1,495 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+R=$ROOT/.local/toolchain/bin/Rscript
+R_CMD=$ROOT/.local/toolchain/bin/R
+RESOLVER=$ROOT/compat/resolve-downstream-evidence-profile.R
+PROFILE=release-refresh-20260720
+
+fail() {
+  printf '%s\n' "test-downstream-evidence-profiles: $*" >&2
+  exit 1
+}
+
+[[ -x $R && -x $R_CMD && -f $RESOLVER && ! -L $RESOLVER ]] ||
+  fail "profile test inputs are absent or symbolic"
+
+resolve() {
+  "$R" --vanilla "$RESOLVER" "$@"
+}
+
+profile_output=$(resolve "$ROOT" "$PROFILE" paradox2)
+legacy_output=$(resolve "$ROOT" "$PROFILE" paradox1)
+value() {
+  local input=$1 key=$2
+  awk -F '\t' -v key="$key" '$1 == key { if (seen++) exit 2; print $2 }' \
+    <<<"$input"
+}
+[[ $(value "$profile_output" suffix) == -release-refresh-20260720-paradox2 &&
+   $(value "$profile_output" axis) == paradox2 &&
+   $(value "$legacy_output" suffix) == -release-refresh-20260720-paradox1 &&
+   $(value "$legacy_output" version_major) == 1 &&
+   $(value "$profile_output" candidate_ref) == \
+     refs/paradox-release/candidate-20260905T212019Z &&
+   $(value "$profile_output" candidate_commit) == \
+     75f85f5be79a0da2dba268b0a7562839f7f9177c &&
+   $(value "$profile_output" candidate_tree) == \
+     f18cf53d2430278b78ee76d222c71c1040378242 &&
+   $(value "$legacy_output" candidate_commit) == \
+     cdcc8e616afe243cd7c54e15713c86f818a52626 &&
+   $(value "$profile_output" checkout_namespace) == \
+     github-release-refresh-20260720 &&
+   $(value "$profile_output" dependency_checkout_namespace) == github ]] ||
+  fail "profile/axis identities do not produce distinct exact suffixes"
+[[ $(value "$profile_output" install_order) == \
+   bbotk,mlr3,mlr3tuning,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx,mlr3fda,mlr3forecast ]] ||
+  fail "refreshed install order is incomplete"
+[[ $(value "$profile_output" snapshot_sha256) == \
+   $(sha256sum "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv" | awk '{print $1}') &&
+   $(value "$profile_output" bridge_provenance_sha256) == \
+   $(sha256sum "$ROOT/compat/github-bridge-provenance.release-refresh-20260720.tsv" | awk '{print $1}') ]] ||
+  fail "resolved profile hashes do not bind exact manifest content"
+"$R" --vanilla - "$ROOT" "$PROFILE" <<'RSCRIPT'
+arguments <- commandArgs(TRUE)
+sys.source(file.path(arguments[[1L]], "compat", "downstream-evidence-profile.R"),
+  envir = environment())
+profile <- downstream_evidence_profile(arguments[[1L]], arguments[[2L]],
+  "paradox2")
+downstream_evidence_assert_candidate(profile, profile$candidate_ref,
+  profile$candidate_commit, profile$candidate_tree, profile$candidate_version)
+rejected <- inherits(try(downstream_evidence_assert_candidate(profile,
+  profile$candidate_ref, sub("^.", "0", profile$candidate_commit),
+  profile$candidate_tree, profile$candidate_version), silent = TRUE), "try-error")
+if (!rejected) stop("candidate substitution was accepted", call. = FALSE)
+selection <- data.frame(
+  repository = c(
+    "consumer_a", "provider_a", "consumer_b", "provider_b", "fallback_a"
+  ),
+  relation = c(
+    "Imports", "ExactDependency", "Suggests", "ExactDependency", "Dependency"
+  ),
+  priority = c(0L, 0L, 0L, 0L, 0L),
+  action = rep("clone", 5L),
+  stringsAsFactors = FALSE
+)
+ordered <- downstream_evidence_dependency_selection(selection, 0L)
+if (!identical(
+    ordered$repository,
+    c("provider_a", "provider_b", "consumer_a", "consumer_b")
+)) {
+  stop("exact providers are not ordered first or fallback entered selection",
+    call. = FALSE)
+}
+invalid_exact <- selection
+invalid_exact$action[invalid_exact$relation == "ExactDependency"] <- "skip"
+if (!inherits(try(
+    downstream_evidence_dependency_selection(invalid_exact, 0L),
+    silent = TRUE
+  ), "try-error")) {
+  stop("an un-cloned exact provider was admitted", call. = FALSE)
+}
+RSCRIPT
+
+for binding in \
+    $'bbotk\t09dafa6c3048f9be5b6961739787d201f6600a6f' \
+    $'mlr3tuning\t0ec4f40033a393d41c7842541c2d5f8173dfb6bd' \
+    $'mlr3\tf70c001d526213d80059744b81fcbc420bb83017' \
+    $'miesmuschel\t3c4bf94788b9259878b1fa067d216823d0771681' \
+    $'mlr3pipelines\ta7954067061f20a45dd9e6c03129dca0ba0f1753' \
+    $'mlr3fselect\tcd12d7717f31701edc6ebcf7f2cbe1168cae1ecb' \
+    $'mlr3mbo\t85dd8a5ada86aacafe93637711e3b1f2e91ba219' \
+    $'celecx\t5a094a391ae11a8ae23ce4abf98eaf63e36bb3f1' \
+    $'mlr3fda\t0df56f51b5d7fd751e16575fbd897b1c7f449c5e' \
+    $'mlr3forecast\t35e4bdc914a913508450866e629309f8364077ec'; do
+  repository=${binding%%$'\t'*}
+  commit=${binding#*$'\t'}
+  [[ $(awk -F '\t' -v repository="$repository" \
+    '$1 == repository { print $4 }' \
+    "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv") == "$commit" ]] ||
+    fail "refreshed snapshot does not bind reviewed $repository to $commit"
+done
+
+for snapshot in \
+    "$ROOT/compat/github-snapshot.tsv" \
+    "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv"; do
+  [[ $(awk -F '\t' '$1 == "rush" { print $4 }' "$snapshot") == \
+     939886b43d5e48afacf2f0e1b06a45ab3c006e19 ]] ||
+    fail "release profile does not bind the exact rush transitive provider"
+done
+[[ $(awk -F '\t' '$1 == "rush" { print $3 "\t" $4 "\t" $5 }' \
+    "$ROOT/compat/github-repositories.release-refresh-dependencies.tsv") == \
+    $'ExactDependency\t0\tclone' ]] ||
+  fail "release dependency manifest does not select rush as an exact provider"
+[[ $(awk -F '\t' '$1 == "rush" {
+      print $3 "\t" $4 "\t" $9 "\t" $10 "\t" $11 "\t" \
+        $12 "\t" $13 "\t" $14 "\t" $15 "\t" $16 "\t" $17
+    }' "$ROOT/compat/mlr-org-review.tsv") == \
+    $'939886b43d5e48afacf2f0e1b06a45ab3c006e19\tca34e7a22145816437161e79a84b7b7a0eb1a0f4\tconsumer-corpus\t50\t5e9bf41f5ac25cde3e991218e98252be01bd49a215bbe79576035819ab0876fa\t0\t5\t5\t8\tno-use\texclude-no-use' ]] ||
+  fail "mlr-org census does not authenticate the exact rush provider as reviewed non-use"
+
+fixture=$(mktemp -d "$ROOT/.local/tmp/downstream-profile.XXXXXX")
+cleanup() {
+  chmod -R u+w "$fixture" 2>/dev/null || true
+  rm -rf -- "$fixture"
+}
+trap cleanup EXIT
+mkdir "$fixture/compat"
+for input in \
+    downstream-evidence-profile.R downstream-evidence-profiles.tsv \
+    paradox-evidence-axes.tsv github-repositories.tsv \
+    github-repositories.release-refresh-dependencies.tsv github-snapshot.tsv \
+    github-bridge-provenance.tsv \
+    github-snapshot.release-refresh-20260720.tsv \
+    github-bridge-provenance.release-refresh-20260720.tsv; do
+  cp "$ROOT/compat/$input" "$fixture/compat/$input"
+done
+
+expect_reject() {
+  local label=$1
+  shift
+  if "$@" >/dev/null 2>&1; then
+    fail "$label was accepted"
+  fi
+}
+expect_reject "unknown profile" resolve "$fixture" absent paradox2
+expect_reject "unknown axis" resolve "$fixture" "$PROFILE" absent
+
+cp "$fixture/compat/downstream-evidence-profiles.tsv" "$fixture/registry.good"
+awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $4="../escape.tsv" } { print }' \
+  "$fixture/registry.good" >"$fixture/compat/downstream-evidence-profiles.tsv"
+expect_reject "profile path escape" resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/registry.good" "$fixture/compat/downstream-evidence-profiles.tsv"
+
+snapshot=$fixture/compat/github-snapshot.release-refresh-20260720.tsv
+mv "$snapshot" "$snapshot.real"
+ln -s "$(basename "$snapshot.real")" "$snapshot"
+expect_reject "symbolic profile snapshot" resolve "$fixture" "$PROFILE" paradox2
+rm "$snapshot"
+mv "$snapshot.real" "$snapshot"
+
+cp "$snapshot" "$fixture/snapshot.good"
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "mlr3fda" { $4=sprintf("%040d", 0) } { print }' \
+  "$fixture/snapshot.good" >"$snapshot"
+expect_reject "snapshot/provenance head mismatch" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/snapshot.good" "$snapshot"
+
+awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $9=$9 ",mlr3fda" } { print }' \
+  "$fixture/registry.good" >"$fixture/compat/downstream-evidence-profiles.tsv"
+expect_reject "duplicate install-order head" resolve "$fixture" "$PROFILE" paradox2
+
+cp "$fixture/registry.good" "$fixture/compat/downstream-evidence-profiles.tsv"
+
+dependency_manifest=$fixture/compat/github-repositories.release-refresh-dependencies.tsv
+cp "$dependency_manifest" "$fixture/dependency-manifest.good"
+awk -F '\t' '$1 != "mlr3tuning" { print }' OFS='\t' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "incomplete non-default dependency manifest" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "rush" { $3="Imports" } { print }' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "dependency provider colliding with the consumer closure" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "rush" { $3="Documentation" } { print }' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "unsupported dependency relation" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "rush" { $5="skip" } { print }' \
+  "$fixture/dependency-manifest.good" >"$dependency_manifest"
+expect_reject "un-cloned exact dependency provider" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/dependency-manifest.good" "$dependency_manifest"
+
+cp "$fixture/compat/paradox-evidence-axes.tsv" "$fixture/axes.good"
+awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $5=sprintf("%040d", 0) } { print }' \
+  "$fixture/axes.good" >"$fixture/compat/paradox-evidence-axes.tsv"
+tampered_axis=$(resolve "$fixture" "$PROFILE" paradox1)
+[[ $(value "$tampered_axis" candidate_commit) == $(printf '%040d' 0) ]] ||
+  fail "axis candidate substitution was not explicit in resolver output"
+cp "$fixture/axes.good" "$fixture/compat/paradox-evidence-axes.tsv"
+
+for script in \
+    compat/install-downstream-bridges \
+    compat/install-repository-test-dependencies.R \
+    compat/test-repositories-resumable.R compat/check-downstream-profile \
+    compat/test-documentation; do
+  grep -Fq 'evidence_profile' "$ROOT/$script" ||
+    fail "$script does not retain the named evidence profile"
+done
+grep -Fq 'active evidence tooling is not one clean commit' \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "bridge installer does not authenticate the post-freeze tooling commit"
+grep -Fq 'post-freeze tooling changes a package-facing path' \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "Paradox-2 profile does not protect frozen package bytes"
+grep -Fq 'install_exact_dependency_provider' \
+  "$ROOT/compat/install-repository-test-dependencies.R" ||
+  fail "dependency preparation does not install exact selected providers"
+grep -Fq 'benchmarks/*' "$ROOT/compat/install-downstream-bridges" ||
+  fail "Paradox-2 profile does not admit post-freeze benchmark tooling"
+grep -Fq 'verification/*' "$ROOT/compat/install-downstream-bridges" ||
+  fail "Paradox-2 profile does not admit the package-excluded verification harness"
+grep -Fq "completion_value tooling_commit) == \"\$TOOLING_COMMIT\"" \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "profile overlay is not bound to the exact active tooling commit"
+grep -Fq "completion_value tooling_tree) == \"\$TOOLING_TREE\"" \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "profile overlay is not bound to the exact active tooling tree"
+grep -Fq 'profile$suffix' "$ROOT/compat/test-repositories-resumable.R" ||
+  fail "repository stage does not use a profile/axis-specific identity"
+grep -Fq 'profile$profile_suffix' \
+  "$ROOT/compat/install-repository-test-dependencies.R" ||
+  fail "dependency evidence is not explicitly profile-only and axis-neutral"
+grep -Fq 'label = "dependency run schema probe"' \
+  "$ROOT/compat/test-repositories-resumable.R" ||
+  fail "dependency run schema probe is not passed as a named label"
+grep -Fq 'one or more downstream R CMD checks failed' \
+  "$ROOT/compat/check-downstream-profile" ||
+  fail "full-check verifier does not fail closed on failed rows"
+status_helper=$(sed -n '/^check_status_is_release_clean()/,/^}/p' \
+  "$ROOT/compat/check-downstream-profile")
+[[ -n $status_helper ]] || fail "full-check status classifier is absent"
+eval "$status_helper"
+printf '%s\n' '* checking examples ... OK' 'Status: OK' >"$fixture/check-clean.log"
+printf '%s\n' '* checking examples ... WARNING' 'Status: 1 WARNING' \
+  >"$fixture/check-warning.log"
+printf '%s\n' '* checking examples ... NOTE' 'Status: 1 NOTE' >"$fixture/check-note.log"
+printf '%s\n' 'Status: OK' 'unexpected trailing output' >"$fixture/check-trailing.log"
+check_status_is_release_clean "$fixture/check-clean.log" ||
+  fail "clean R CMD check status was rejected"
+check_status_is_release_clean "$fixture/check-note.log" ||
+  fail "NOTE-only R CMD check status was rejected"
+expect_reject "R CMD check WARNING status" \
+  check_status_is_release_clean "$fixture/check-warning.log"
+expect_reject "non-final R CMD check status" \
+  check_status_is_release_clean "$fixture/check-trailing.log"
+
+full_check_harness=$ROOT/compat/check-downstream-profile
+grep -Fq '"$R" CMD build --no-manual "$row/source"' \
+  "$full_check_harness" ||
+  fail "full-check harness does not build vignettes into the exact archived source"
+grep -Fq '"$R" CMD check --no-manual --no-build-vignettes "$package_tarball"' \
+  "$full_check_harness" ||
+  fail "full-check harness does not check the built package tarball"
+if grep -Fq '"$R" CMD check --no-manual --no-build-vignettes "$row/source"' \
+    "$full_check_harness"; then
+  fail "full-check harness still checks a raw source directory"
+fi
+row_environment_source=$(sed -n '/^  row_environment=(/,/^  )/p' \
+  "$full_check_harness")
+[[ -n $row_environment_source ]] ||
+  fail "full-check row environment is absent"
+for binding in LC_ALL=C.UTF-8 LANG=C.UTF-8 LANGUAGE=C TZ=UTC; do
+  [[ $row_environment_source == *"$binding"* ]] ||
+    fail "full-check row environment omits $binding"
+  binding_remainder=${row_environment_source#*"$binding"}
+  [[ $binding_remainder != *"$binding"* ]] ||
+    fail "full-check row environment duplicates $binding"
+done
+
+authors_package=$fixture/authorsonlyfixture
+authors_build=$fixture/authors-build
+authors_check=$fixture/authors-check
+mkdir -p "$authors_package/R" "$authors_package/man" "$authors_build" \
+  "$authors_check" "$fixture/authors-home" "$fixture/authors-tmp"
+# Exercise the common UTF-8 Authors@R source-package boundary under the exact
+# locale that the production env -i build and check rows must preserve.
+printf '%s\n' \
+  'Package: authorsonlyfixture' \
+  'Type: Package' \
+  'Title: Authors at R Build Boundary Fixture' \
+  'Version: 0.0.1' \
+  'Authors@R: person("Ada", "Lovelace", email = "ada@example.org", role = c("aut", "cre"))' \
+  'Description: Verifies that full downstream checks consume a package tarball built from an Authors at R only source.' \
+  'License: GPL-3' \
+  'Encoding: UTF-8' >"$authors_package/DESCRIPTION"
+awk '$0 == "Encoding: UTF-8" { count++ } END { exit count != 1 }' \
+  "$authors_package/DESCRIPTION" ||
+  fail "Authors@R fixture does not declare UTF-8 exactly once"
+printf '%s\n' 'export(answer)' >"$authors_package/NAMESPACE"
+printf '%s\n' 'answer <- function() 42L' >"$authors_package/R/answer.R"
+printf '%s\n' \
+  '\name{answer}' \
+  '\alias{answer}' \
+  '\title{Return the fixture answer}' \
+  '\usage{answer()}' \
+  '\value{The integer 42.}' \
+  '\description{Returns the fixture answer.}' >"$authors_package/man/answer.Rd"
+authors_environment=(
+  HOME="$fixture/authors-home" USER=paradox LOGNAME=paradox PATH="$PATH"
+  R_LIBS= R_LIBS_USER= R_LIBS_SITE= R_ENVIRON=/dev/null
+  R_ENVIRON_USER=/dev/null R_PROFILE=/dev/null R_PROFILE_USER=/dev/null
+  R_TESTS= NOT_CRAN=true _R_CHECK_FORCE_SUGGESTS_=false
+  _R_CHECK_CRAN_INCOMING_=false TMPDIR="$fixture/authors-tmp" MAKEFLAGS=-j1
+  LC_ALL=C.UTF-8 LANG=C.UTF-8 LANGUAGE=C TZ=UTC
+)
+(
+  cd "$authors_build"
+  env -i "${authors_environment[@]}" \
+    "$R_CMD" CMD build --no-manual "$authors_package"
+) >"$fixture/authors-build.log" 2>&1 ||
+  { sed -n '1,160p' "$fixture/authors-build.log" >&2
+    fail "Authors@R-only fixture could not be built"
+  }
+shopt -s nullglob
+authors_tarballs=("$authors_build"/*.tar.gz)
+shopt -u nullglob
+[[ ${#authors_tarballs[@]} -eq 1 && -f ${authors_tarballs[0]} &&
+   ! -L ${authors_tarballs[0]} ]] ||
+  fail "Authors@R-only fixture did not produce one package tarball"
+authors_description=$(tar -xOf "${authors_tarballs[0]}" \
+  authorsonlyfixture/DESCRIPTION) ||
+  fail "Authors@R-only built DESCRIPTION is absent"
+if grep -Eq '^(Author|Maintainer):' "$authors_package/DESCRIPTION"; then
+  fail "Authors@R-only source fixture unexpectedly has expanded metadata"
+fi
+if ! grep -Eq '^Author:' <<<"$authors_description" ||
+    ! grep -Eq '^Maintainer:' <<<"$authors_description"; then
+  fail "R CMD build did not expand Authors@R metadata in the package tarball"
+fi
+(
+  cd "$authors_check"
+  env -i "${authors_environment[@]}" \
+    "$R_CMD" CMD check --no-manual --no-build-vignettes "${authors_tarballs[0]}"
+) >"$fixture/authors-check.log" 2>&1 ||
+  { sed -n '1,160p' "$fixture/authors-check.log" >&2
+    fail "built Authors@R-only fixture did not complete R CMD check"
+  }
+check_status_is_release_clean \
+  "$authors_check/authorsonlyfixture.Rcheck/00check.log" ||
+  fail "built Authors@R-only fixture did not have a release-clean check status"
+
+date_helper=$(sed -n '/^canonical_git_date()/,/^}/p' \
+  "$ROOT/compat/install-downstream-bridges")
+[[ -n $date_helper ]] || fail "Git date canonicalizer is absent"
+eval "$date_helper"
+[[ $(canonical_git_date 2025-03-19T17:33:36Z) == \
+     2025-03-19T17:33:36+00:00 &&
+   $(canonical_git_date 2026-07-19T23:24:07+02:00) == \
+     2026-07-19T23:24:07+02:00 ]] ||
+  fail "Git UTC date spelling is not narrowly canonicalized"
+for binding in \
+    'CONSUMER_ROOT=$(profile_value consumer_root)' \
+    '.git/info/grafts' '.git/info/attributes' \
+    '.git/objects/info/alternates' 'replacement refs' \
+    'profile checkout hides index state' \
+    'status --porcelain=v1 --untracked-files=all' \
+    'BRIDGE_BASE_BRANCH' 'BRIDGE_BASE_DATE' \
+    'branch --show-current' 'show -s --format=%cI'; do
+  grep -Fq "$binding" "$ROOT/compat/install-downstream-bridges" ||
+    fail "bridge profile Git authentication omits: $binding"
+done
+for binding in \
+    'expected_keys=' 'retained_names=(' 'library_inputs_sha256' \
+    'PROTECTED_BEFORE=$(library_inputs)' 'protected_content_sha256' \
+    'result_sha256' 'PUBLISHED_EVIDENCE_ID' 'directory_identity' \
+    'build_exit_status' 'package_sha256' '$repository.build.log' \
+    'CMD check --no-manual --no-build-vignettes "$package_tarball"'; do
+  grep -Fq "$binding" "$ROOT/compat/check-downstream-profile" ||
+    fail "full-check immutability verifier omits: $binding"
+done
+
+dependency_producer=$ROOT/compat/install-repository-test-dependencies.R
+dependency_replay=$ROOT/compat/test-repositories-resumable.R
+dependency_bridge=$ROOT/compat/install-downstream-bridges
+
+# Schema 5 removes run-local pak provenance from newly produced exact-provider
+# installations.  Keep these bindings static and narrow: the real two-install
+# proof lives in test-repository-runner.R below this gate, while this section
+# catches accidental schema or orchestration drift without running a dependency
+# solve. Installed-byte checks bind absolute run/stage/source paths, not a bare
+# run-ID substring that could occur innocently in binary data.
+[[ $(grep -Fc '"5", "repository_dependencies"' "$dependency_producer") == 2 ]] ||
+  fail "dependency producer does not bind schema 5 in run and completion ledgers"
+for binding in \
+    repository_runner_assert_git_environment \
+    repository_runner_authenticate_consumer \
+    repository_runner_create_archive \
+    repository_runner_validate_extraction \
+    exact_provider_sources_sha256 \
+    exact-provider-installs.tsv \
+    'exact_provider_sources$install_source' \
+    exact-provider-sources-v1 \
+    'install_method = "r_cmd_install_built_timestamp"' \
+    'install_source = install_source' \
+    '--built-timestamp=' \
+    '--without-keep.source' \
+    'timeout = 3600L' \
+    assert_provider_install_state_empty \
+    'before R CMD INSTALL' \
+    'after R CMD INSTALL' \
+    canonical_snapshot_timestamp \
+    'second > 59L' \
+    'offset_seconds <- hour * 3600 + minute * 60' \
+    acquire_dependency_writer_lock \
+    'compat_root, library, run_id, started_utc' \
+    .repository-dependency-writer-lock \
+    'writer_lock$release(strict = TRUE)' \
+    initial_content_sha256 \
+    final_content_sha256; do
+  grep -Fq -- "$binding" "$dependency_producer" ||
+    fail "schema-5 exact-provider producer omits: $binding"
+done
+
+lock_acquire_line=$(grep -Fn 'writer_lock <- acquire_dependency_writer_lock' \
+  "$dependency_producer" | cut -d: -f1)
+provider_install_line=$(grep -Fn \
+  'install_exact_dependency_provider(repository, checkout)' \
+  "$dependency_producer" | cut -d: -f1)
+lock_release_line=$(grep -Fn 'writer_lock$release(strict = TRUE)' \
+  "$dependency_producer" | cut -d: -f1)
+[[ $lock_acquire_line =~ ^[0-9]+$ && $provider_install_line =~ ^[0-9]+$ &&
+   $lock_release_line =~ ^[0-9]+$ &&
+   $lock_acquire_line -lt $provider_install_line &&
+   $provider_install_line -lt $lock_release_line ]] ||
+  fail "dependency writer lock does not cover exact-provider installation"
+
+for binding in \
+    'dependency_schema %in% c("4", "5")' \
+    'deterministic_provider_dependency <- identical(dependency_schema, "5")' \
+    'install_method !=' \
+    '"r_cmd_install_built_timestamp"' \
+    'exact_provider_sources$install_source' \
+    exact-provider-sources-v1 \
+    expected_install_source \
+    installed_tree_contains \
+    deterministic_built_timestamp \
+    'second > 59L' \
+    'offset_seconds <- offset_hour * 3600 + offset_minute * 60' \
+    repository_runner_authenticate_consumer \
+    repository_runner_validate_extraction \
+    reproduced_archive_sha256 \
+    exact-provider-installs.tsv \
+    initial_content_sha256 \
+    final_content_sha256; do
+  grep -Fq -- "$binding" "$dependency_replay" ||
+    fail "schema-5 dependency evidence replay omits: $binding"
+done
+if grep -Fq '%z' "$dependency_producer" ||
+    grep -Fq '%z' "$dependency_replay"; then
+  fail "schema-5 timestamp conversion delegates UTC offsets to platform parsing"
+fi
+
+# Retained schema-4 evidence remains readable and keeps its old pak-local
+# columns.  New production is schema 5, but old sealed runs must not become
+# uninterpretable while the release ledger still cites them.
+for binding in \
+    '"remote_type", "remote_pkg_ref"' \
+    RemoteType RemotePkgRef \
+    'if (!legacy_dependency)' \
+    'allow_empty = TRUE'; do
+  grep -Fq -- "$binding" "$dependency_replay" ||
+    fail "schema-4 dependency evidence compatibility omits: $binding"
+done
+grep -Fq 'DEPENDENCY_SCHEMA == 4 || $DEPENDENCY_SCHEMA == 5' \
+  "$dependency_bridge" ||
+  fail "bridge installer does not accept both profile schemas 4 and 5"
+
+printf '%s\n' 'downstream evidence profile fixtures: PASS'

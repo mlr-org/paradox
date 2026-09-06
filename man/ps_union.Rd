@@ -8,7 +8,10 @@ ps_union(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE)
 }
 \arguments{
 \item{sets}{(\code{list} of \code{\link{ParamSet}})\cr
-This may be a named list, in which case non-empty names are prefixed to parameters in the corresponding \code{\link{ParamSet}}.}
+This may be a named list, in which case non-empty names are prefixed to parameters in the corresponding \code{\link{ParamSet}}.
+A name becomes part of every parameter ID it creates: a prefix must itself
+match the ID grammar \verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$}, a postfix (see
+\code{postfix_names}) only has to use ASCII letters, digits, \code{.}, and \verb{_}.}
 
 \item{tag_sets}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"set_<set_id>"} to each parameter originating from a given \code{ParamSet} given with name \verb{<name in "sets">}.}
@@ -29,7 +32,7 @@ This emulates \code{ParamSetCollection$new(sets)}, which in particular means tha
 from the input \code{sets}, but some \verb{$id}s are changed: If the \code{\link{ParamSet}} is given in \code{sets} with a name, then the \code{\link{Domain}}s will
 have their \verb{<id>} changed to \verb{<name in "sets">.<id>}. This is also reflected in deps.
 
-The \code{c()} operator, applied to \code{\link{ParamSet}}s, is a synony for \code{ps_union()}.
+The \code{c()} operator, applied to \code{\link{ParamSet}}s, is a synonym for \code{ps_union()}.
 The named arguments \code{tag_sets}, \code{tag_params}, and \code{postfix_names} are also available in the \code{c()} operator, but need to be
 used with a preceding dot instead: \code{.tag_sets}, \code{.tag_params}, and \code{.postfix_names}.
 }

@@ -1,0 +1,2298 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+
+fail() {
+  printf 'test-runtime-matrix: %s\n' "$*" >&2
+  exit 1
+}
+
+scripts=(
+  scripts/bootstrap-runtime-matrix
+  scripts/activate-runtime-matrix
+  scripts/test-runtime-matrix
+  scripts/verify-runtime-matrix-evidence
+  scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/runtime-matrix-prefix-handoff
+  scripts/environment/runtime-matrix-prefix-repair
+  scripts/environment/runtime-matrix-registry
+  scripts/environment/runtime-matrix-trusted-inputs
+  scripts/environment/runtime-matrix-managed-path
+  scripts/environment/runtime-matrix-library
+  scripts/environment/runtime-matrix-git
+  scripts/environment/mbo-config-fixtures
+  scripts/environment/run-runtime-matrix-cross-serialization
+  scripts/environment/run-runtime-matrix-stage
+  scripts/environment/run-runtime-matrix-wave
+  scripts/environment/verify-r36-declared-check-log
+  scripts/environment/test-runtime-matrix
+  scripts/environment/test-runtime-matrix-managed-paths
+  scripts/environment/test-runtime-matrix-installed
+)
+for script in "${scripts[@]}"; do
+  bash -n "$ROOT/$script"
+done
+if rg -q '^BUILD=' "$ROOT/scripts/environment/run-runtime-matrix-stage"; then
+  echo "Runtime stage reuses activation's BUILD compiler-triplet variable" >&2
+  exit 1
+fi
+
+"$ROOT/scripts/bootstrap-runtime-matrix" --help >/dev/null
+"$ROOT/scripts/test-runtime-matrix" --help >/dev/null
+"$ROOT/scripts/verify-runtime-matrix-evidence" --help >/dev/null
+assert_default_package_isolation() {
+  local activation=$1
+  shift
+  (
+    export R_DEFAULT_PACKAGES=checkmate
+    # shellcheck disable=SC1090
+    . "$activation" "$@" >/dev/null
+    [[ -z "${R_DEFAULT_PACKAGES+x}" ]]
+    Rscript --vanilla -e '
+      stopifnot(
+        !"checkmate" %in% loadedNamespaces(),
+        is.na(Sys.getenv(
+          "R_DEFAULT_PACKAGES",
+          unset = NA_character_
+        ))
+      )
+    '
+  )
+}
+assert_default_package_isolation "$ROOT/scripts/activate"
+assert_default_package_isolation "$ROOT/scripts/activate-runtime-matrix" 3.6.3
+if activation_error=$(
+    PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT="$ROOT/.local" \
+      bash -c 'cd "$1"; . scripts/activate-runtime-matrix 3.6.3' \
+        stage-state-without-input "$ROOT" 2>&1
+  ); then
+  echo "Runtime activation accepted stage-private state without staged inputs" >&2
+  exit 1
+fi
+[[ "$activation_error" == *"Stage-private runtime state requires its matching input root"* ]] ||
+  fail "Runtime state-only activation fixture failed before its intended guard"
+if activation_error=$(
+    PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$ROOT/environment" \
+      bash -c 'cd "$1"; . scripts/activate-runtime-matrix 3.6.3' \
+        stage-input-without-state "$ROOT" 2>&1
+  ); then
+  echo "Runtime activation accepted staged inputs without stage-private state" >&2
+  exit 1
+fi
+[[ "$activation_error" == *"Stage-private R inputs require their matching stage-state root"* ]] ||
+  fail "Runtime input-only activation fixture failed before its intended guard"
+if activation_error=$(
+    PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT="$ROOT/.local" \
+      PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$ROOT/.local" \
+      PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF=\
+"$ROOT/.local/bootstrap-receipt" \
+      bash -c 'cd "$1"; . scripts/activate-runtime-matrix 3.6.3' \
+        stage-without-dependency-handoff "$ROOT" 2>&1
+  ); then
+  echo "Runtime activation accepted a source-library stage without its dependency handoff" >&2
+  exit 1
+fi
+[[ "$activation_error" == *"Source-library stage requires its authenticated dependency handoff"* ]] ||
+  fail "Runtime missing-dependency activation fixture failed before its intended guard"
+if activation_error=$(
+    PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF=\
+"$ROOT/.local/bootstrap-receipt" \
+      bash -c 'cd "$1"; . scripts/activate-runtime-matrix 3.6.3' \
+        handoff-without-stage-roots "$ROOT" 2>&1
+  ); then
+  echo "Runtime activation accepted a retained handoff without stage roots" >&2
+  exit 1
+fi
+[[ "$activation_error" == *"Verified receipt handoffs require stage-private state and inputs"* ]] ||
+  fail "Runtime handoff-only activation fixture failed before its intended guard"
+rg -Fq 'R_LIBS_SITE R_DEFAULT_PACKAGES' \
+  "$ROOT/scripts/environment/runtime-matrix-library"
+R_DEFAULT_PACKAGES=checkmate \
+  "$ROOT/scripts/bootstrap-runtime-matrix" --verify-locks >/dev/null
+rg -Fq 'R_DEFAULT_PACKAGES' "$ROOT/scripts/bootstrap-runtime-matrix"
+registry="$ROOT/scripts/environment/runtime-matrix-registry"
+"$registry" validate >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-library" \
+  --runtime 3.6.3 --profile declared-floor --verify-lock >/dev/null
+if "$ROOT/scripts/environment/runtime-matrix-library" \
+    --runtime 4.0.5 --profile declared-floor --verify-lock >/dev/null 2>&1; then
+  echo "Declared-floor library profile accepted a non-R-3.6 runtime" >&2
+  exit 1
+fi
+Rscript --vanilla \
+  "$ROOT/scripts/environment/test-r36-declared-floor-smoke.R" \
+  "$ROOT" >/dev/null
+mapfile -t registered_runtimes < <("$registry" versions)
+[[ ${#registered_runtimes[@]} -eq 7 &&
+  "${registered_runtimes[*]}" == \
+    "3.6.3 4.0.5 4.1.3 4.2.3 4.3.3 4.4.3 4.5.2" ]] || {
+  echo "Runtime registry differs from the reviewed compatibility axes" >&2
+  exit 1
+}
+trusted_input_helper="$ROOT/scripts/environment/runtime-matrix-trusted-inputs"
+mapfile -t trusted_inputs < <("$trusted_input_helper")
+[[ ${#trusted_inputs[@]} -eq \
+    "$(printf '%s\n' "${trusted_inputs[@]}" | LC_ALL=C sort -u | wc -l)" ]] ||
+  {
+    echo "Runtime trusted-input policy contains a duplicate" >&2
+    exit 1
+  }
+for required_trusted_input in \
+    scripts/environment/runtime-matrix-prefix-repair \
+    scripts/environment/runtime-matrix-prefix-handoff \
+    scripts/environment/runtime-matrix-managed-path \
+    scripts/environment/enter-hosted-r36-windows.ps1 \
+    environment/r-packages-linux-64.lock \
+    environment/runtime-r-3.6.3-prefix-repair.lock \
+    environment/runtime-r-4.0.5-linux-64.lock \
+    environment/runtime-r-4.0.5-packages.lock \
+    environment/runtime-r-4.1.3-linux-64.lock \
+    environment/runtime-r-4.1.3-packages.lock \
+    environment/runtime-r-4.2.3-linux-64.lock \
+    environment/runtime-r-4.2.3-packages.lock \
+    environment/runtime-r-4.4.3-linux-64.lock \
+    environment/runtime-matrix-old-r-stress.tsv \
+    scripts/environment/runtime-matrix-cross-serialization.R \
+    scripts/environment/run-r36-declared-floor-smoke.R \
+    scripts/environment/test-r36-declared-floor-smoke.R \
+    scripts/environment/runtime-matrix-old-r-stress-policy.R \
+    scripts/environment/runtime-matrix-test-support.R \
+    scripts/environment/run-runtime-matrix-cross-serialization \
+    scripts/environment/run-runtime-matrix-old-r-stress.R \
+    scripts/environment/verify-r36-declared-check-log \
+    environment/Renviron \
+    environment/Rprofile.R \
+    environment/Makevars \
+    environment/runtime-r-3.6.3-declared-floor-packages.lock; do
+  [[ " ${trusted_inputs[*]} " == *" $required_trusted_input "* ]] || {
+    echo "Runtime trusted-input policy omits $required_trusted_input" >&2
+    exit 1
+  }
+done
+
+exclusions="$ROOT/environment/runtime-matrix-pre46-exclusions.tsv"
+whole_skips="$ROOT/environment/runtime-matrix-whole-file-skips.tsv"
+result_skips="$ROOT/environment/runtime-matrix-result-skips.tsv"
+old_r_stress="$ROOT/environment/runtime-matrix-old-r-stress.tsv"
+for manifest in "$exclusions" "$whole_skips" "$result_skips" \
+    "$old_r_stress"; do
+  [[ -f "$manifest" && ! -L "$manifest" ]] || {
+    echo "Runtime source-scope manifest is absent or symbolic: $manifest" >&2
+    exit 1
+  }
+done
+awk -F '\t' '
+  NR == 1 {if ($0 != "context\treason") exit 1; next}
+  NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
+  END {if (NR != 1) exit 1}
+' "$exclusions"
+expected_exclusions=()
+mapfile -t actual_exclusions < <(tail -n +2 "$exclusions" | cut -f 1)
+[[ "${actual_exclusions[*]}" == "${expected_exclusions[*]}" ]] || {
+  echo "Runtime pre-R-4.6 exclusion policy differs from the reviewed contexts" >&2
+  exit 1
+}
+for context in "${actual_exclusions[@]}"; do
+  test_file="$ROOT/tests/testthat/test-$context.R"
+  [[ -f "$test_file" && ! -L "$test_file" ]] || {
+    echo "Runtime exclusion names an absent or symbolic test: $context" >&2
+    exit 1
+  }
+done
+awk -F '\t' '
+  NR == 1 {
+    if ($0 != "file\tcontext\tmissing_package\tleading_guards\treason") exit 1
+    next
+  }
+  NF != 5 || $1 !~ /^test[^/]*[.][Rr]$/ ||
+    $2 == "" || $3 !~ /^[A-Za-z][A-Za-z0-9.]*$/ ||
+    $4 !~ /^[A-Za-z0-9_:.,-]+$/ || $5 == "" || seen[$1]++ {exit 1}
+  END {if (NR != 3) exit 1}
+' "$whole_skips"
+mapfile -t actual_whole_skips < <(tail -n +2 "$whole_skips" | cut -f 1)
+expected_whole_skips=(test_paramset_to_configspace.R test_paramset_to_configspace_old.R)
+[[ "${actual_whole_skips[*]}" == "${expected_whole_skips[*]}" ]] || {
+  echo "Runtime whole-file skip policy differs from the reviewed files" >&2
+  exit 1
+}
+for test_name in "${actual_whole_skips[@]}"; do
+  [[ -f "$ROOT/tests/testthat/$test_name" && ! -L "$ROOT/tests/testthat/$test_name" ]] || {
+    echo "Runtime whole-file skip names an absent or symbolic test: $test_name" >&2
+    exit 1
+  }
+done
+[[ $(awk -F '\t' 'NR == 2 {print $4}' "$whole_skips") == \
+    skip_if_not_installed:reticulate,skip_on_cran &&
+  $(awk -F '\t' 'NR == 3 {print $4}' "$whole_skips") == \
+    skip_if_not_installed:callr,skip_if_not_installed:reticulate,skip_on_cran ]] || {
+  echo "Runtime whole-file leading-guard policy differs from review" >&2
+  exit 1
+}
+awk -F '\t' '
+  NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
+  NF != 4 ||
+    $1 !~ /^(3[.]6[.]3|4[.]0[.]5|4[.]1[.]3|4[.]2[.]3|4[.]3[.]3|4[.]4[.]3|4[.]5[.]2)$/ ||
+    $2 !~ /^test[^/]*[.][Rr]$/ || $3 == "" ||
+    ($4 != "Reason: On CRAN" &&
+      $4 != "Reason: R < 4.0 cannot safely inspect active-binding functions" &&
+      $4 != "Reason: R < 4.3 cannot construct list ALTREP test fixtures" &&
+      $4 != "Reason: R >= 4.2 has a public non-evaluating binding-existence operation") ||
+    seen[$1 FS $2 FS $3]++ {exit 1}
+  $4 == "Reason: On CRAN" {exit 1}
+  $4 == "Reason: R < 4.0 cannot safely inspect active-binding functions" {
+    active[$1]++
+  }
+  $4 == "Reason: R < 4.3 cannot construct list ALTREP test fixtures" {
+    list_altrep[$1]++
+  }
+  $4 == "Reason: R >= 4.2 has a public non-evaluating binding-existence operation" {
+    old_binding_existence[$1]++
+  }
+  END {
+    if (active["3.6.3"] < 1 ||
+        list_altrep["3.6.3"] < 1 ||
+        list_altrep["4.0.5"] < 1 || list_altrep["4.1.3"] < 1 ||
+        list_altrep["4.2.3"] < 1 ||
+        active["4.0.5"] || active["4.1.3"] || active["4.2.3"] ||
+        active["4.3.3"] || active["4.4.3"] || active["4.5.2"] ||
+        list_altrep["4.3.3"] || list_altrep["4.4.3"] ||
+        list_altrep["4.5.2"] ||
+        old_binding_existence["3.6.3"] ||
+        old_binding_existence["4.0.5"] ||
+        old_binding_existence["4.1.3"] ||
+        old_binding_existence["4.2.3"] != 1 ||
+        old_binding_existence["4.3.3"] != 1 ||
+        old_binding_existence["4.4.3"] != 1 ||
+        old_binding_existence["4.5.2"] != 1) exit 1
+  }
+' "$result_skips"
+for peer_runtime in 4.1.3; do
+  diff -u \
+    <(awk -F '\t' '$1 == "4.0.5" {print $2 "\t" $3 "\t" $4}' \
+      "$result_skips") \
+    <(awk -F '\t' -v runtime="$peer_runtime" \
+      '$1 == runtime {print $2 "\t" $3 "\t" $4}' "$result_skips") \
+    >/dev/null || {
+    echo "Runtime result-skip inventories differ among R 4.0--4.1" >&2
+    exit 1
+  }
+done
+diff -u \
+  <(awk -F '\t' '$1 == "4.1.3" {print $2 "\t" $3 "\t" $4}' \
+    "$result_skips") \
+  <(awk -F '\t' '
+      $1 == "4.2.3" &&
+        $4 != "Reason: R >= 4.2 has a public non-evaluating binding-existence operation" {
+        print $2 "\t" $3 "\t" $4
+      }
+    ' "$result_skips") \
+  >/dev/null || {
+  echo "R 4.2 result skips differ from R 4.1 beyond its old-path exclusion" >&2
+  exit 1
+}
+for peer_runtime in 4.4.3 4.5.2; do
+  diff -u \
+    <(awk -F '\t' '$1 == "4.3.3" {print $2 "\t" $3 "\t" $4}' \
+      "$result_skips") \
+    <(awk -F '\t' -v runtime="$peer_runtime" \
+      '$1 == runtime {print $2 "\t" $3 "\t" $4}' "$result_skips") \
+    >/dev/null || {
+    echo "Runtime result-skip inventories differ among R 4.3--4.5" >&2
+    exit 1
+  }
+done
+diff -u <(tail -n +2 "$result_skips") \
+  <(tail -n +2 "$result_skips" | LC_ALL=C sort) >/dev/null || {
+  echo "Runtime result-skip manifest is not byte-sorted" >&2
+  exit 1
+}
+while IFS=$'\t' read -r runtime test_name _; do
+  [[ "$runtime" == runtime ]] && continue
+  [[ -f "$ROOT/tests/testthat/$test_name" && ! -L "$ROOT/tests/testthat/$test_name" ]] || {
+    echo "Runtime result skip names an absent or symbolic test: $test_name" >&2
+    exit 1
+  }
+done < "$result_skips"
+Rscript --vanilla \
+  "$ROOT/scripts/environment/runtime-matrix-old-r-stress-policy.R" \
+  "$ROOT" >/dev/null
+[[ -z $(find "$ROOT/tests/testthat" -mindepth 1 -maxdepth 1 \
+    ! -type f ! -type d -print -quit) &&
+  $(find "$ROOT/tests/testthat" -maxdepth 1 -type f \
+    \( -name 'test*.R' -o -name 'test*.r' \) | wc -l) -gt 0 ]] || {
+  echo "Runtime source-test inventory is empty or contains a non-regular input" >&2
+  exit 1
+}
+rg -q 'Sys.setenv\(NOT_CRAN = "true"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -q 'Sys.unsetenv\("PARADOX_SKIP_CHARACTERIZATION_GCT"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -q 'Sys.unsetenv\("LC_ALL"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -q 'Sys.setenv\(NOT_CRAN = "true"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R"
+rg -q 'Sys.unsetenv\("LC_ALL"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R"
+rg -Fq 'helper_zz_runtime_old_r_stress_filter.R' \
+  "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R"
+rg -Fq 'runtime_matrix_old_r_stress_filter_self_test(scope_directory)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R"
+rg -Fq 'NOT_CRAN=true Rscript --vanilla' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'verify_old_r_stress "$version" "$artifacts" "$metadata"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq '"$CROSS_SERIALIZATION_WORKER" "$ROOT" "$run_root"' \
+  "$ROOT/scripts/test-runtime-matrix"
+rg -Fq \
+  'verify_cross_runtime_serialization "$top_metadata" "${versions[@]}"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq -- '--profile declared-floor' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  '"$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor --verify' \
+  "$ROOT/scripts/bootstrap-runtime-matrix"
+rg -Fq \
+  'library_args=(--runtime 3.6.3 --profile declared-floor)' \
+  "$ROOT/scripts/bootstrap-runtime-matrix"
+if rg -Fq \
+    '"$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor >/dev/null' \
+    "$ROOT/scripts/test-runtime-matrix"; then
+  echo "Runtime coordinator provisions the declared-floor cache after read-only bootstrap verification" >&2
+  exit 1
+fi
+rg -Fq \
+  'export R_ENVIRON_USER="$runtime_matrix_r_input_root/Renviron"' \
+  "$ROOT/scripts/activate-runtime-matrix"
+rg -Fq \
+  'export R_PROFILE_USER="$runtime_matrix_r_input_root/Rprofile.R"' \
+  "$ROOT/scripts/activate-runtime-matrix"
+rg -Fq \
+  'export R_MAKEVARS_USER="$runtime_matrix_r_input_root/Makevars"' \
+  "$ROOT/scripts/activate-runtime-matrix"
+rg -Fq \
+  'export PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$STAGE_INPUTS"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  'runtime_matrix_r_input_root="$PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT/environment"' \
+  "$ROOT/scripts/activate-runtime-matrix"
+rg -Fq \
+  'export PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$stage_inputs"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-cross-serialization"
+for command_environ in R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON; do
+  rg -Fq \
+    "export $command_environ=\"\$runtime_matrix_r_input_root/Renviron\"" \
+    "$ROOT/scripts/activate-runtime-matrix"
+done
+rg -Fq \
+  'fail "stage-aware activation did not retain authenticated R startup inputs"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'sep = intToUtf8(9L)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage" || {
+  echo "Runtime package inventory is not safe for the old R launcher codec" >&2
+  exit 1
+}
+if rg -Fq 'sep = "\t"' \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage"; then
+  echo "Runtime stage retains an old-R-unsafe inline tab escape" >&2
+  exit 1
+fi
+declared_floor_create_line=$(rg -nF \
+  'ensure_stage_directory "$declared_floor_candidate" 0700' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage" | cut -d : -f 1)
+stage_descriptor_close_line=$(rg -nF \
+  'exec {stage_artifacts_descriptor}<&-' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage" | cut -d : -f 1)
+[[ "$declared_floor_create_line" =~ ^[0-9]+$ &&
+  "$stage_descriptor_close_line" =~ ^[0-9]+$ &&
+  "$declared_floor_create_line" -lt "$stage_descriptor_close_line" ]] || {
+  echo "Declared-floor directory is not pinned before the stage descriptor closes" >&2
+  exit 1
+}
+rg -Fq \
+  '"$STAGE_SOURCE/scripts/environment/run-r36-declared-floor-smoke.R" smoke' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq '"$inputs/declared-floor-library-receipt"' \
+  "$ROOT/scripts/test-runtime-matrix"
+rg -Fq \
+  'verify_declared_floor_smoke "$version" "$artifacts" "$metadata"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq \
+  'validate "$artifacts/source" "$source_lock"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq 'cross_runtime_serialization_status' \
+  "$ROOT/scripts/test-runtime-matrix"
+rg -Fq 'current-v2-from-r-4.0.5.rds' \
+  "$ROOT/scripts/environment/run-runtime-matrix-cross-serialization"
+rg -q 'PARADOX_MBO_CONFIG_ROOT is required by the complete runtime suite' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -Fq 'NOT_CRAN=true PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'verify_mbo_config_evidence "$top_metadata"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq '"$MBO_CONFIG_FIXTURE_HELPER" stage "$SOURCE_DIRECTORY"' \
+  "$ROOT/scripts/native-check"
+if rg -q 'MBO_CONFIG_CHECKOUT/common|git -C "[$]MBO_CONFIG_CHECKOUT"' \
+    "$ROOT/scripts/native-check"; then
+  echo "Native verification retains a second worktree-based mbo_config authority" >&2
+  exit 1
+fi
+if rg -q 'minimum_expectations_required|4900L else 6000L|\b(79|57|22|55)\b' \
+    "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
+    "$ROOT/scripts/verify-runtime-matrix-evidence"; then
+  echo "Runtime verification retains an obsolete count floor" >&2
+  exit 1
+fi
+if rg -q 'pre-4.5-evaluated-public-fallback|authenticated-r-fallback' \
+    "$ROOT/scripts/environment/runtime-matrix-probe.R" \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage" \
+    "$ROOT/scripts/verify-runtime-matrix-evidence"; then
+  echo "Runtime verification retains the deleted R-evaluation shim contract" >&2
+  exit 1
+fi
+extract_runtime_symbols() {
+  awk -v selector="$2" '
+    $0 ~ /"\$version" == [0-9]+\.[0-9]+\.[0-9]+/ {
+      delete versions
+      version_count = 0
+      condition = $0
+      while (match(condition, /[0-9]+\.[0-9]+\.[0-9]+/)) {
+        versions[++version_count] = substr(condition, RSTART, RLENGTH)
+        condition = substr(condition, RSTART + RLENGTH)
+      }
+    }
+    index($0, selector "=(") {
+      capture = 1
+    }
+    capture {
+      line = $0
+      start = index(line, selector "=(")
+      if (start) {
+        line = substr(line, start + length(selector) + 2)
+      }
+      closed = index(line, ")") != 0
+      sub(/\).*/, "", line)
+      count = split(line, fields, /[[:space:]]+/)
+      for (field_index = 1; field_index <= count; field_index++) {
+        if (fields[field_index] ~ /^[A-Za-z_][A-Za-z0-9_]*$/) {
+          for (version_index = 1;
+              version_index <= version_count; version_index++) {
+            print versions[version_index] "\t" fields[field_index]
+          }
+        }
+      }
+      if (closed) capture = 0
+    }
+  ' "$1"
+}
+stage_required=$(mktemp)
+verifier_required=$(mktemp)
+stage_forbidden=$(mktemp)
+verifier_forbidden=$(mktemp)
+extract_runtime_symbols \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage" required \
+  > "$stage_required"
+extract_runtime_symbols \
+  "$ROOT/scripts/verify-runtime-matrix-evidence" required \
+  > "$verifier_required"
+extract_runtime_symbols \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage" \
+  forbidden \
+  > "$stage_forbidden"
+extract_runtime_symbols \
+  "$ROOT/scripts/verify-runtime-matrix-evidence" \
+  forbidden \
+  > "$verifier_forbidden"
+cmp -s "$stage_required" "$verifier_required" || {
+  echo "Runtime producer/verifier required-symbol policies differ" >&2
+  rm -f -- "$stage_required" "$verifier_required" \
+    "$stage_forbidden" "$verifier_forbidden"
+  exit 1
+}
+cmp -s "$stage_forbidden" "$verifier_forbidden" || {
+  echo "Runtime producer/verifier forbidden-symbol policies differ" >&2
+  rm -f -- "$stage_required" "$verifier_required" \
+    "$stage_forbidden" "$verifier_forbidden"
+  exit 1
+}
+{
+  awk -F '\t' '{print "required\t" $0}' "$stage_required"
+  awk -F '\t' '{print "forbidden\t" $0}' "$stage_forbidden"
+} | awk -F '\t' '
+  {
+    count[$1 SUBSEP $2 SUBSEP $3]++
+  }
+  function exact(symbol, version, is_required, required_count, forbidden_count) {
+    required_count = count["required" SUBSEP version SUBSEP symbol]
+    forbidden_count = count["forbidden" SUBSEP version SUBSEP symbol]
+    return is_required ?
+      required_count == 1 && forbidden_count == 0 :
+      required_count == 0 && forbidden_count == 1
+  }
+  END {
+    split("3.6.3 4.0.5 4.1.3 4.2.3 4.3.3 4.4.3 4.5.2",
+      versions, " ")
+    for (version_index = 1; version_index <= 7; version_index++) {
+      version = versions[version_index]
+      if (!exact("R_getVar", version, 0) ||
+          !exact("Rf_GetOption1", version, version_index == 7) ||
+          !exact("ANY_ATTRIB", version, version_index == 7) ||
+          !exact("FORMALS", version, version_index <= 6) ||
+          !exact("R_ClosureExpr", version, 1) ||
+          !exact("CLOENV", version, version_index <= 6) ||
+          !exact("R_ClosureEnv", version, version_index == 7) ||
+          !exact("R_HasFancyBindings", version, version_index <= 3) ||
+          !exact("R_ActiveBindingFunction", version, version_index >= 2) ||
+          !exact("R_existsVarInFrame", version, version_index >= 4) ||
+          !exact("SET_COMPLEX_ELT", version, version_index >= 4) ||
+          !exact("SET_RAW_ELT", version, version_index >= 4) ||
+          !exact("R_PromiseExpr", version, version_index <= 6) ||
+          !exact("PRENV", version, version_index <= 6) ||
+          !exact("PRVALUE", version, version_index <= 6)) {
+        exit 1
+      }
+    }
+  }
+' || {
+  echo "Runtime R-API symbol transition policy is incomplete" >&2
+  rm -f -- "$stage_required" "$verifier_required" \
+    "$stage_forbidden" "$verifier_forbidden"
+  exit 1
+}
+rm -f -- "$stage_required" "$verifier_required" \
+  "$stage_forbidden" "$verifier_forbidden"
+rg -Fq 'tools:::check_compiled_code(package_directory)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'compiled_code_policy=passed' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'verify_r45_compiled_code_policy "$version" "$artifacts" "$metadata"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq 'policy_source=tools:::check_compiled_code' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+[[ "$("$registry" field 4.3.3 api_branch)" == \
+    pre-4.5-ledgered-compatibility ]]
+[[ "$("$registry" field 4.4.3 api_branch)" == \
+    pre-4.5-ledgered-compatibility ]]
+[[ "$("$registry" field 4.2.3 api_branch)" == \
+    pre-4.5-ledgered-compatibility ]]
+[[ "$("$registry" field 4.1.3 api_branch)" == \
+    r-4.0-active-binding-pre-4.2-ledgered-compatibility ]]
+[[ "$("$registry" field 4.0.5 api_branch)" == \
+    r-4.0-active-binding-pre-4.2-ledgered-compatibility ]]
+[[ "$("$registry" field 3.6.3 api_branch)" == \
+    r-3.6-ledgered-compatibility ]]
+rg -Fq 'branch=$("$REGISTRY" field "$version" api_branch)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  'r_api_compatibility_policy=public-current-ledgered-old-runtime-exceptions' \
+  "$ROOT/scripts/environment/runtime-matrix-probe.R"
+rg -Fq 'verify_package_cache' \
+  "$ROOT/scripts/environment/runtime-matrix-library"
+rg -Fq -- '--silent --show-error' \
+  "$ROOT/scripts/environment/runtime-matrix-library"
+for prefix_handoff_consumer in \
+    "$ROOT/scripts/test-runtime-matrix" \
+    "$ROOT/scripts/verify-runtime-matrix-evidence"; do
+  rg -Fq '"$PREFIX_HANDOFF" "$version" "$inputs/bootstrap-receipt"' \
+    "$prefix_handoff_consumer" || {
+    echo "Runtime coordination or evidence replay omits the staged prefix receipt" >&2
+    exit 1
+  }
+done
+source_library_key=$(sed -n '/^key=[$]($/,/^)/p' \
+  "$ROOT/scripts/environment/runtime-matrix-library")
+for selected_build_input in \
+    SOURCE_LIBRARY_BUILD_SCHEMA runtime_lock_sha256 prefix_manifest_sha256 \
+    dependency_lock_sha256; do
+  grep -Fq "$selected_build_input" <<<"$source_library_key" || {
+    echo "Source-library cache key omits $selected_build_input" >&2
+    exit 1
+  }
+done
+if grep -Eq \
+    'registry_sha256|registry_helper_sha256|library_manager_sha256|library_helper_sha256|tree_receipt_helper_sha256|runtime_receipt_sha256|runtime_seal_sha256' \
+    <<<"$source_library_key"; then
+  echo "Source-library cache key still depends on verification provenance" >&2
+  exit 1
+fi
+for receipt_provenance in \
+    registry_sha256 registry_helper_sha256 library_manager_sha256 \
+    library_helper_sha256 tree_receipt_helper_sha256 \
+    runtime_receipt_sha256 runtime_seal_sha256; do
+  rg -Fq "${receipt_provenance}" \
+    "$ROOT/scripts/environment/runtime-matrix-library" || {
+    echo "Source-library receipt omits $receipt_provenance" >&2
+    exit 1
+  }
+done
+if rg -Fq 'tools::sha256sum' \
+    "$ROOT/scripts/environment/runtime-matrix-library.R"; then
+  echo "R 3.6 dependency bootstrap depends on an unavailable tools API" >&2
+  exit 1
+fi
+[[ $(rg -Fc '_R_CHECK_FORCE_SUGGESTS_=false' \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage") -eq 1 ]]
+rg -Fq \
+  'check_nm_directory="$PARADOX_RUNTIME_MATRIX_PREFIX/$CONDA_TOOLCHAIN_HOST/bin"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  'PATH="$check_nm_directory:$PATH" _R_CHECK_FORCE_SUGGESTS_=false' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  '"$(readlink -- "$check_nm_alias")" ==' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'R CMD check --no-tests --ignore-vignettes --no-manual "$archive"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq \
+  'PATH=authenticated-target-tool-bin _R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --ignore-vignettes --no-manual ARCHIVE' \
+  "$ROOT/scripts/test-runtime-matrix"
+rg -Fq 'verify_declared_minimum_check "$version" "$artifacts" "$metadata"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq '"$DECLARED_CHECK_LOG_VERIFIER" "$check_log"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq '"$DECLARED_CHECK_LOG_VERIFIER" "$check_log"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq -- '--refresh-receipts' "$ROOT/scripts/bootstrap-runtime-matrix"
+"$ROOT/scripts/environment/test-runtime-matrix-managed-paths" >/dev/null
+
+if command -v Rscript >/dev/null 2>&1; then
+  Rscript --vanilla -e 'for (path in commandArgs(TRUE)) parse(path)' \
+    "$ROOT/scripts/environment/runtime-matrix-inventory.R" \
+    "$ROOT/scripts/environment/runtime-matrix-cross-serialization.R" \
+    "$ROOT/scripts/environment/runtime-matrix-old-r-stress-policy.R" \
+    "$ROOT/scripts/environment/runtime-matrix-probe.R" \
+    "$ROOT/scripts/environment/runtime-matrix-skip-policy.R" \
+    "$ROOT/scripts/environment/runtime-matrix-test-support.R" \
+    "$ROOT/scripts/environment/runtime-matrix-testthat-audit.R" \
+    "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R" \
+    "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+  Rscript --vanilla - "$ROOT" <<'RSCRIPT'
+root <- commandArgs(trailingOnly = TRUE)[[1L]]
+helper <- file.path(
+  root, "scripts", "environment", "runtime-matrix-test-support.R"
+)
+receipt_helper <- file.path(
+  root, "scripts", "environment", "runtime-matrix-prefix-receipt"
+)
+sys.source(helper, envir = environment())
+
+expect_error <- function(expression) {
+  result <- try(
+    suppressWarnings(eval.parent(substitute(expression))),
+    silent = TRUE
+  )
+  stopifnot(inherits(result, "try-error"))
+}
+
+local({
+  temporary_root <- tempfile(
+    "runtime-matrix-test-support.",
+    tmpdir = file.path(root, ".local", "tmp")
+  )
+  stopifnot(dir.create(temporary_root, mode = "0700"))
+  on.exit({
+    cleanup_directories <- list.dirs(
+      temporary_root, full.names = TRUE, recursive = TRUE
+    )
+    if (length(cleanup_directories)) {
+      Sys.chmod(cleanup_directories, mode = "0700")
+    }
+    unlink(temporary_root, recursive = TRUE)
+    stopifnot(!file.exists(temporary_root))
+  })
+  source_tree <- file.path(temporary_root, "source")
+  scope <- file.path(temporary_root, "scope")
+  staged <- file.path(scope, "testthat")
+  stopifnot(dir.create(source_tree, mode = "0700"))
+  for (relative in c(
+    "_problems", "fixtures", "fixtures/nested", "empty-support",
+    "read-only-support"
+  )) {
+    stopifnot(dir.create(
+      file.path(source_tree, relative),
+      mode = "0700"
+    ))
+  }
+  writeLines("selected", file.path(source_tree, "test-a.R"), useBytes = TRUE)
+  writeLines("excluded", file.path(source_tree, "test_b.r"), useBytes = TRUE)
+  writeLines("helper", file.path(source_tree, "helper.R"), useBytes = TRUE)
+  file.create(file.path(source_tree, "empty-file"))
+  writeLines(
+    "nested test-shaped support",
+    file.path(source_tree, "_problems", "test-nested.R"),
+    useBytes = TRUE
+  )
+  writeBin(
+    as.raw(c(0L, 1L, 127L, 255L)),
+    file.path(source_tree, "fixtures", "blob.bin")
+  )
+  writeLines(
+    "same basename, first path",
+    file.path(source_tree, "fixtures", "shared.txt"),
+    useBytes = TRUE
+  )
+  writeLines(
+    "same basename, second path",
+    file.path(source_tree, "fixtures", "nested", "shared.txt"),
+    useBytes = TRUE
+  )
+  writeLines(
+    "member below a read-only source directory",
+    file.path(source_tree, "read-only-support", "member.txt"),
+    useBytes = TRUE
+  )
+  runtime_matrix_test_tree_chmod_exact(
+    file.path(source_tree, "fixtures"), "0751"
+  )
+  runtime_matrix_test_tree_chmod_exact(
+    file.path(source_tree, "fixtures", "blob.bin"), "0640"
+  )
+  runtime_matrix_test_tree_chmod_exact(
+    file.path(source_tree, "read-only-support"), "0555"
+  )
+
+  discovered <- runtime_matrix_test_tree_discover(source_tree)
+  stopifnot(
+    identical(discovered$tests, c("test-a.R", "test_b.r")),
+    "_problems/test-nested.R" %in% discovered$support,
+    "empty-file" %in% discovered$support,
+    "fixtures/blob.bin" %in% discovered$support,
+    "read-only-support/member.txt" %in% discovered$support,
+    "empty-support" %in% discovered$directories
+  )
+  previous_umask <- Sys.umask("0777")
+  on.exit(Sys.umask(previous_umask), add = TRUE)
+  runtime_matrix_test_tree_create_private_directory(scope)
+  runtime_matrix_test_tree_create_private_directory(staged)
+  staged_result <- runtime_matrix_test_tree_stage(
+    source_tree, staged, "test-a.R"
+  )
+  Sys.umask(previous_umask)
+  stopifnot(
+    !file.exists(file.path(staged, "test_b.r")),
+    file.exists(file.path(staged, "_problems", "test-nested.R")),
+    file.exists(file.path(staged, "empty-file")),
+    file.exists(file.path(staged, "fixtures", "blob.bin")),
+    file.exists(file.path(staged, "read-only-support", "member.txt")),
+    dir.exists(file.path(staged, "empty-support")),
+    identical(
+      readBin(
+        file.path(staged, "fixtures", "blob.bin"),
+        what = "raw",
+        n = 4L
+      ),
+      as.raw(c(0L, 1L, 127L, 255L))
+    ),
+    runtime_matrix_test_tree_mode(file.path(staged, "fixtures")) ==
+      runtime_matrix_test_tree_mode(file.path(source_tree, "fixtures")),
+    runtime_matrix_test_tree_mode(
+      file.path(staged, "read-only-support")
+    ) == runtime_matrix_test_tree_mode(
+      file.path(source_tree, "read-only-support")
+    ),
+    runtime_matrix_test_tree_mode(
+      file.path(staged, "fixtures", "blob.bin")
+    ) == runtime_matrix_test_tree_mode(
+      file.path(source_tree, "fixtures", "blob.bin")
+    ),
+    length(staged_result$staged_files) ==
+      length(staged_result$support_files) + 1L
+  )
+  receipt <- file.path(scope, "testthat-tree.manifest.tsv")
+  runtime_matrix_test_tree_receipt(
+    receipt_helper, "create", staged, receipt
+  )
+  runtime_matrix_test_tree_receipt(
+    receipt_helper, "verify", staged, receipt
+  )
+  writeLines(
+    "tampered",
+    file.path(staged, "fixtures", "shared.txt"),
+    useBytes = TRUE
+  )
+  expect_error(runtime_matrix_test_tree_receipt(
+    receipt_helper, "verify", staged, receipt
+  ))
+
+  nonempty <- file.path(temporary_root, "nonempty")
+  stopifnot(dir.create(nonempty, mode = "0700"))
+  writeLines("occupied", file.path(nonempty, "member"), useBytes = TRUE)
+  expect_error(runtime_matrix_test_tree_stage(
+    source_tree, nonempty, "test-a.R"
+  ))
+
+  overlap_source <- file.path(temporary_root, "overlap-source")
+  overlap_staged <- file.path(overlap_source, "staged")
+  stopifnot(
+    dir.create(overlap_source, mode = "0700"),
+    dir.create(overlap_staged, mode = "0700")
+  )
+  writeLines(
+    "selected",
+    file.path(overlap_source, "test-overlap.R"),
+    useBytes = TRUE
+  )
+  expect_error(runtime_matrix_test_tree_stage(
+    overlap_source, overlap_staged, "test-overlap.R"
+  ))
+
+  special <- file.path(temporary_root, "special")
+  stopifnot(dir.create(special, mode = "0700"))
+  writeLines("plain", file.path(special, "plain"), useBytes = TRUE)
+  stopifnot(file.symlink("plain", file.path(special, "file-link")))
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(file.path(special, "file-link"))
+  external_directory <- file.path(temporary_root, "external-directory")
+  stopifnot(dir.create(external_directory, mode = "0700"))
+  stopifnot(file.symlink(
+    normalizePath(external_directory, mustWork = TRUE),
+    file.path(special, "directory-link")
+  ))
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(file.path(special, "directory-link"))
+  stopifnot(file.symlink(
+    "absent-target",
+    file.path(special, "dangling-link")
+  ))
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(file.path(special, "dangling-link"))
+
+  control_path <- file.path(
+    special, paste0("control", intToUtf8(9L), "name")
+  )
+  writeLines("control", control_path, useBytes = TRUE)
+  expect_error(runtime_matrix_test_tree_discover(special))
+  unlink(control_path)
+  mkfifo <- Sys.which("mkfifo")
+  if (length(mkfifo) == 1L && nzchar(mkfifo)) {
+    fifo <- file.path(special, "fifo")
+    stopifnot(system2(mkfifo, shQuote(fifo)) == 0L)
+    expect_error(runtime_matrix_test_tree_discover(special))
+    unlink(fifo)
+  }
+})
+
+real_tree <- runtime_matrix_test_tree_discover(
+  file.path(root, "tests", "testthat")
+)
+ordinary_tests <- dir(
+  file.path(root, "tests", "testthat"),
+  pattern = "^test.*\\.[rR]$",
+  full.names = FALSE
+)
+stopifnot(
+  identical(
+    real_tree$tests,
+    runtime_matrix_test_tree_byte_sort(ordinary_tests)
+  ),
+  "fixtures/README.md" %in% real_tree$support,
+  "_problems/test_ParamSet-80.R" %in% real_tree$support,
+  length(real_tree$files) ==
+    length(real_tree$tests) + length(real_tree$support)
+)
+cat("runtime_matrix_test_support_self_test=passed\n")
+RSCRIPT
+  Rscript --vanilla - "$ROOT" <<'RSCRIPT'
+root <- commandArgs(trailingOnly = TRUE)[[1L]]
+whole_policy <- read.delim(
+  file.path(root, "environment", "runtime-matrix-whole-file-skips.tsv"),
+  quote = "", comment.char = "", colClasses = "character",
+  check.names = FALSE
+)
+guard_label <- function(expression) {
+  if (!is.call(expression) || !is.name(expression[[1L]])) return(NA_character_)
+  name <- as.character(expression[[1L]])
+  if (identical(name, "skip_on_cran") && length(expression) == 1L) {
+    return("skip_on_cran")
+  }
+  if (identical(name, "skip_if_not_installed") &&
+      length(expression) == 2L && is.character(expression[[2L]]) &&
+      length(expression[[2L]]) == 1L) {
+    return(paste0("skip_if_not_installed:", expression[[2L]]))
+  }
+  NA_character_
+}
+for (i in seq_len(nrow(whole_policy))) {
+  expressions <- parse(file.path(
+    root, "tests", "testthat", whole_policy$file[[i]]
+  ))
+  first_test <- which(vapply(expressions, function(expression) {
+    is.call(expression) && is.name(expression[[1L]]) &&
+      identical(as.character(expression[[1L]]), "test_that")
+  }, logical(1L)))[[1L]]
+  observed <- vapply(
+    expressions[seq_len(first_test - 1L)], guard_label, character(1L)
+  )
+  stopifnot(
+    !anyNA(observed),
+    identical(
+      paste(observed, collapse = ","), whole_policy$leading_guards[[i]]
+    )
+  )
+}
+
+policy_environment <- new.env(parent = globalenv())
+sys.source(
+  file.path(root, "scripts", "environment", "runtime-matrix-skip-policy.R"),
+  envir = policy_environment
+)
+invisible(
+  policy_environment$runtime_matrix_validate_pre46_exclusion_policy(root)
+)
+invisible(policy_environment$runtime_matrix_validate_result_skip_policy(root))
+
+stress_policy_environment <- new.env(parent = globalenv())
+sys.source(
+  file.path(
+    root, "scripts", "environment",
+    "runtime-matrix-old-r-stress-policy.R"
+  ),
+  envir = stress_policy_environment
+)
+stress_validator <- get(
+  "runtime_matrix_validate_old_r_stress_policy",
+  envir = stress_policy_environment,
+  inherits = FALSE
+)
+stress_policy <- stress_validator(root)
+stress_filter <- get(
+  "runtime_matrix_old_r_stress_filter_lines",
+  envir = stress_policy_environment,
+  inherits = FALSE
+)(stress_policy)
+stopifnot(
+  nrow(stress_policy) > 0L,
+  length(parse(text = stress_filter)) == 2L,
+  all(vapply(
+    stress_policy$test,
+    function(title) any(grepl(title, stress_filter, fixed = TRUE)),
+    logical(1L)
+  )),
+  all(c("not-cran", "companion") %in% stress_policy$mode),
+  all(c(
+    "callback-reentry", "collection-lifetime", "finalizer", "gc-rooting",
+    "optional-binding", "trafo-lifetime"
+  ) %in% unlist(strsplit(stress_policy$coverage, ",", fixed = TRUE)))
+)
+if (requireNamespace("testthat", quietly = TRUE)) {
+  get(
+    "runtime_matrix_old_r_stress_filter_self_test",
+    envir = stress_policy_environment,
+    inherits = FALSE
+  )(tempdir())
+}
+local({
+  stress_fixture <- tempfile("runtime-old-r-stress-policy-")
+  dir.create(file.path(stress_fixture, "environment"), recursive = TRUE)
+  dir.create(file.path(stress_fixture, "tests", "testthat"), recursive = TRUE)
+  file.copy(
+    file.path(root, "environment", "runtime-matrix-old-r-stress.tsv"),
+    file.path(stress_fixture, "environment"),
+    copy.mode = TRUE
+  )
+  file.copy(
+    file.path(root, "tests", "testthat", unique(stress_policy$file)),
+    file.path(stress_fixture, "tests", "testthat"),
+    copy.mode = TRUE
+  )
+  on.exit(unlink(stress_fixture, recursive = TRUE, force = TRUE), add = TRUE)
+  fixture_policy <- stress_validator(stress_fixture)
+  stopifnot(identical(fixture_policy, stress_policy))
+  bypass_file <- file.path(
+    stress_fixture, "tests", "testthat", stress_policy$file[[1L]]
+  )
+  bypass_source <- readLines(bypass_file, warn = FALSE)
+  writeLines(c(
+    bypass_source,
+    'testthat::test_that("qualified selector bypass", {})'
+  ), bypass_file, useBytes = TRUE)
+  stopifnot(inherits(try(
+    stress_validator(stress_fixture),
+    silent = TRUE
+  ), "try-error"))
+  writeLines(bypass_source, bypass_file, useBytes = TRUE)
+  writeLines(c(
+    "test_that <- testthat::test_that",
+    bypass_source
+  ), bypass_file, useBytes = TRUE)
+  stopifnot(inherits(try(
+    stress_validator(stress_fixture),
+    silent = TRUE
+  ), "try-error"))
+  writeLines(bypass_source, bypass_file, useBytes = TRUE)
+  fixture_manifest <- file.path(
+    stress_fixture, "environment", "runtime-matrix-old-r-stress.tsv"
+  )
+  stale <- stress_policy
+  stale$test[[1L]] <- paste(stale$test[[1L]], "stale")
+  write.table(
+    stale, fixture_manifest, sep = "\t", quote = FALSE,
+    row.names = FALSE, col.names = TRUE
+  )
+  stopifnot(inherits(try(
+    stress_validator(stress_fixture),
+    silent = TRUE
+  ), "try-error"))
+})
+
+audit_environment <- new.env(parent = globalenv())
+sys.source(
+  file.path(
+    root, "scripts", "environment", "runtime-matrix-testthat-audit.R"
+  ),
+  envir = audit_environment
+)
+make_expectation <- function(type) {
+  structure(
+    list(message = paste(type, "fixture")),
+    class = c(
+      paste0("expectation_", type),
+      "expectation",
+      if (identical(type, "error")) "error",
+      if (identical(type, "warning")) "warning",
+      "condition"
+    )
+  )
+}
+raw_results <- structure(
+  list(list(
+    file = "test-fixture.R",
+    context = "fixture",
+    test = "error followed by warning",
+    user = 0,
+    system = 0,
+    real = 0,
+    results = list(make_expectation("error"), make_expectation("warning"))
+  )),
+  class = "testthat_results"
+)
+# testthat 3.2.1.1 can summarize this sequence as clean. The retained audit
+# must instead classify each raw expectation and preserve both diagnostics.
+misleading_summary <- data.frame(
+  file = "test-fixture.R",
+  context = "fixture",
+  test = "error followed by warning",
+  nb = 2L,
+  failed = 0L,
+  skipped = FALSE,
+  error = FALSE,
+  warning = 0L,
+  user = 0,
+  system = 0,
+  real = 0,
+  stringsAsFactors = FALSE
+)
+audited <- audit_environment$runtime_matrix_audit_testthat_results(
+  raw_results, misleading_summary
+)
+stopifnot(identical(audited$expectation_types, c("error", "warning")))
+malformed <- raw_results
+malformed[[1L]]$results[[1L]] <- structure(
+  list(message = "ambiguous fixture"),
+  class = c(
+    "expectation_error", "expectation_warning", "expectation",
+    "error", "warning", "condition"
+  )
+)
+malformed_error <- tryCatch(
+  audit_environment$runtime_matrix_audit_testthat_results(
+    malformed, misleading_summary
+  ),
+  error = identity
+)
+stopifnot(
+  inherits(malformed_error, "error"),
+  grepl("ambiguous expectation class", conditionMessage(malformed_error))
+)
+
+local({
+  temporary_parent <- file.path(root, ".local", "tmp")
+  dir.create(temporary_parent, recursive = TRUE, showWarnings = FALSE)
+  fixture <- tempfile("runtime-skip-policy.", tmpdir = temporary_parent)
+  dir.create(file.path(fixture, "tests", "testthat"), recursive = TRUE)
+  dir.create(file.path(fixture, "environment"), recursive = TRUE)
+  on.exit(unlink(fixture, recursive = TRUE, force = TRUE), add = TRUE)
+  fixture_source_lines <- c(
+    'test_that("fixture result skip", {',
+    '  skip_on_cran()',
+    '  expect_true(TRUE)',
+    '})',
+    'test_that("fixture list ALTREP skip", {',
+    '  skip_if_no_list_altrep()',
+    '  expect_true(TRUE)',
+    '})',
+    'test_that("fixture old binding-existence path skip", {',
+    '  skip_if_no_old_r_binding_existence_path()',
+    '  expect_true(TRUE)',
+    '})',
+    'test_that("fixture locale skip", {',
+    '  skip_if(is.na(latin1_fixture))',
+    '  expect_true(TRUE)',
+    '})'
+  )
+  fixture_source_path <- file.path(
+    fixture, "tests", "testthat", "test-fixture.R"
+  )
+  writeLines(fixture_source_lines, fixture_source_path)
+  manifest_path <- file.path(
+    fixture, "environment", "runtime-matrix-result-skips.tsv"
+  )
+  exclusion_path <- file.path(
+    fixture, "environment", "runtime-matrix-pre46-exclusions.tsv"
+  )
+  valid <- rbind(
+    data.frame(
+      runtime = c("3.6.3", "4.0.5", "4.1.3", "4.2.3"),
+      file = "test-fixture.R",
+      test = "fixture list ALTREP skip",
+      reason = "Reason: R < 4.3 cannot construct list ALTREP test fixtures",
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      runtime = c("4.2.3", "4.3.3", "4.4.3", "4.5.2"),
+      file = "test-fixture.R",
+      test = "fixture old binding-existence path skip",
+      reason = paste0(
+        "Reason: R >= 4.2 has a public non-evaluating ",
+        "binding-existence operation"
+      ),
+      stringsAsFactors = FALSE
+    )
+  )
+  valid <- valid[do.call(order, c(
+    valid[c("runtime", "file", "test", "reason")], list(method = "radix")
+  )), , drop = FALSE]
+  row.names(valid) <- NULL
+  write.table(
+    data.frame(
+      ordinal = as.character(seq_len(7L)),
+      runtime = c(
+        "3.6.3", "4.0.5", "4.1.3", "4.2.3", "4.3.3", "4.4.3",
+        "4.5.2"
+      ),
+      platform = rep("linux-64", 7L),
+      runtime_lock = paste0(
+        "environment/runtime-r-",
+        c(
+          "3.6.3", "4.0.5", "4.1.3", "4.2.3", "4.3.3", "4.4.3",
+          "4.5.2"
+        ),
+        "-linux-64.lock"
+      ),
+      dependency_mode = c(
+        "source-library", "source-library", "source-library",
+        "source-library", "data-table-overlay", "prefix-library",
+        "prefix-library"
+      ),
+      dependency_lock = c(
+        "environment/runtime-r-3.6.3-packages.lock",
+        "environment/runtime-r-4.0.5-packages.lock",
+        "environment/runtime-r-4.1.3-packages.lock",
+        "environment/runtime-r-4.2.3-packages.lock", "-", "-", "-"
+      ),
+      api_branch = c(
+        "r-3.6-ledgered-compatibility",
+        "r-4.0-active-binding-pre-4.2-ledgered-compatibility",
+        "r-4.0-active-binding-pre-4.2-ledgered-compatibility",
+        "pre-4.5-ledgered-compatibility",
+        "pre-4.5-ledgered-compatibility",
+        "pre-4.5-ledgered-compatibility",
+        "r-4.5-policy-clean-promise-fail-closed"
+      ),
+      prefix_repair = c(
+        "environment/runtime-r-3.6.3-prefix-repair.lock",
+        "-", "-", "-", "-", "-", "-"
+      ),
+      stringsAsFactors = FALSE
+    ),
+    file.path(fixture, "environment", "runtime-matrix.tsv"),
+    sep = "\t", quote = FALSE, row.names = FALSE, col.names = TRUE
+  )
+  write_policy <- function(value) {
+    write.table(
+      value, manifest_path, sep = "\t", quote = FALSE,
+      row.names = FALSE, col.names = TRUE
+    )
+  }
+  expect_policy_error <- function(value, pattern) {
+    write_policy(value)
+    error <- tryCatch(
+      policy_environment$runtime_matrix_validate_result_skip_policy(fixture),
+      error = identity
+    )
+    stopifnot(inherits(error, "error"), grepl(pattern, conditionMessage(error)))
+  }
+  write_policy(valid)
+  writeLines("context\treason", exclusion_path)
+  exclusions <-
+    policy_environment$runtime_matrix_validate_pre46_exclusion_policy(fixture)
+  stopifnot(
+    identical(names(exclusions), c("context", "reason")),
+    nrow(exclusions) == 0L
+  )
+  invisible(
+    policy_environment$runtime_matrix_validate_result_skip_policy(fixture)
+  )
+  raw_version_skip_variants <- list(
+    c(
+      'test_that("fixture raw version skip", {',
+      '  skip_if(getRversion() < "4.6.0")',
+      '  expect_true(TRUE)',
+      '})'
+    ),
+    c(
+      'test_that("fixture namespaced raw version skip", {',
+      '  testthat::skip_if(',
+      '    message = "old R",',
+      '    condition = base::getRversion() < "4.6.0"',
+      '  )',
+      '  expect_true(TRUE)',
+      '})'
+    ),
+    c(
+      'test_that("fixture conditional raw version skip", {',
+      '  if (R.version$major < "4") testthat::skip("old R")',
+      '  expect_true(TRUE)',
+      '})'
+    )
+  )
+  for (variant in raw_version_skip_variants) {
+    writeLines(c(fixture_source_lines, variant), fixture_source_path)
+    raw_version_error <- tryCatch(
+      policy_environment$runtime_matrix_validate_result_skip_policy(fixture),
+      error = identity
+    )
+    stopifnot(
+      inherits(raw_version_error, "error"),
+      grepl(
+        "raw version-conditioned skips must use a reviewed capability helper",
+        conditionMessage(raw_version_error),
+        fixed = TRUE
+      )
+    )
+  }
+  writeLines(fixture_source_lines, fixture_source_path)
+  preflight <- capture.output(
+    policy_environment$runtime_matrix_skip_policy_main(fixture)
+  )
+  stopifnot(
+    "runtime_matrix_skip_policy_preflight=passed" %in% preflight,
+    "reviewed_pre46_exclusion_row_count=0" %in% preflight
+  )
+  writeLines(c(
+    "context\treason",
+    "native-fixture\tobsolete exclusion"
+  ), exclusion_path)
+  exclusion_error <- tryCatch(
+    policy_environment$runtime_matrix_validate_pre46_exclusion_policy(fixture),
+    error = identity
+  )
+  stopifnot(
+    inherits(exclusion_error, "error"),
+    grepl("exclusion manifest is malformed", conditionMessage(exclusion_error))
+  )
+  writeLines("context\treason", exclusion_path)
+  unexpected_cran_skip <- rbind(
+    valid,
+    data.frame(
+      runtime = "3.6.3",
+      file = "test-fixture.R",
+      test = "fixture result skip",
+      reason = "Reason: On CRAN",
+      stringsAsFactors = FALSE
+    )
+  )
+  unexpected_cran_skip <- unexpected_cran_skip[do.call(order, c(
+    unexpected_cran_skip[c("runtime", "file", "test", "reason")],
+    list(method = "radix")
+  )), , drop = FALSE]
+  expect_policy_error(
+    unexpected_cran_skip,
+    "unreviewed version-specific skip"
+  )
+  wrong_version <- rbind(
+    valid,
+    transform(
+      valid[
+        valid$runtime == "4.0.5" &
+          valid$reason ==
+            "Reason: R < 4.3 cannot construct list ALTREP test fixtures",
+        ,
+        drop = FALSE
+      ],
+      runtime = "4.3.3"
+    )
+  )
+  wrong_version <- wrong_version[do.call(order, c(
+    wrong_version[c("runtime", "file", "test", "reason")],
+    list(method = "radix")
+  )), , drop = FALSE]
+  expect_policy_error(
+    wrong_version,
+    "unreviewed version-specific skip"
+  )
+  wrong_old_path_version <- rbind(
+    valid,
+    transform(
+      valid[
+        valid$runtime == "4.2.3" &
+          valid$reason ==
+            paste0(
+              "Reason: R >= 4.2 has a public non-evaluating ",
+              "binding-existence operation"
+            ),
+        ,
+        drop = FALSE
+      ],
+      runtime = "4.1.3"
+    )
+  )
+  wrong_old_path_version <- wrong_old_path_version[do.call(order, c(
+    wrong_old_path_version[c("runtime", "file", "test", "reason")],
+    list(method = "radix")
+  )), , drop = FALSE]
+  expect_policy_error(
+    wrong_old_path_version,
+    "unreviewed version-specific skip"
+  )
+  missing_old_path_row <- valid[-which(
+    valid$runtime == "4.5.2" &
+      valid$test == "fixture old binding-existence path skip"
+  ), , drop = FALSE]
+  expect_policy_error(
+    missing_old_path_row,
+    "result skips differ from current guarded tests"
+  )
+  write_policy(valid)
+  writeLines(
+    sub(
+      "  skip_if_no_old_r_binding_existence_path()",
+      "  if (FALSE) skip_if_no_old_r_binding_existence_path()",
+      fixture_source_lines,
+      fixed = TRUE
+    ),
+    fixture_source_path
+  )
+  dead_guard_error <- tryCatch(
+    policy_environment$runtime_matrix_validate_result_skip_policy(fixture),
+    error = identity
+  )
+  stopifnot(
+    inherits(dead_guard_error, "error"),
+    grepl("unique leading guards", conditionMessage(dead_guard_error))
+  )
+  writeLines(fixture_source_lines, fixture_source_path)
+  writeLines(
+    sub(
+      "  skip_if_no_old_r_binding_existence_path()",
+      paste(
+        "  skip_if_no_old_r_binding_existence_path()",
+        "  skip_if_no_list_altrep()",
+        sep = "\n"
+      ),
+      fixture_source_lines,
+      fixed = TRUE
+    ),
+    fixture_source_path
+  )
+  wrong_guard_order_error <- tryCatch(
+    policy_environment$runtime_matrix_validate_result_skip_policy(fixture),
+    error = identity
+  )
+  stopifnot(
+    inherits(wrong_guard_order_error, "error"),
+    grepl(
+      "list-ALTREP skip must precede the old-binding-existence skip",
+      conditionMessage(wrong_guard_order_error)
+    )
+  )
+  writeLines(fixture_source_lines, fixture_source_path)
+  tampered <- valid
+  tampered$reason[[1L]] <- "Reason: Tampered"
+  expect_policy_error(
+    tampered,
+    "unreviewed version-specific skip"
+  )
+})
+RSCRIPT
+fi
+
+preflight_line=$(rg -n \
+  'preflight_source/scripts/environment/runtime-matrix-skip-policy[.]R' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+resource_line=$(rg -n '^resource_report=' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+worker_line=$(rg -n '^"[$]WAVE_RUNNER" ' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+mapfile -t trusted_input_lines < <(rg -n '^verify_live_trusted_inputs$' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+fixture_line=$(rg -n '^"[$]MBO_CONFIG_FIXTURE_HELPER" stage ' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+[[ "$fixture_line" =~ ^[0-9]+$ && "$preflight_line" =~ ^[0-9]+$ &&
+  "$resource_line" =~ ^[0-9]+$ && "$worker_line" =~ ^[0-9]+$ &&
+  ${#trusted_input_lines[@]} -eq 2 &&
+  "$fixture_line" -lt "$preflight_line" && "$preflight_line" -lt "$resource_line" &&
+  "$resource_line" -lt "${trusted_input_lines[0]}" &&
+  "${trusted_input_lines[0]}" -lt "$worker_line" &&
+  "$worker_line" -lt "${trusted_input_lines[1]}" ]] || {
+  echo "Runtime immutable-input and skip-policy preflights do not precede stage work" >&2
+  exit 1
+}
+
+mkdir -p "$ROOT/.local/tmp"
+fixture=$(mktemp -d "$ROOT/.local/tmp/runtime-matrix-receipt.XXXXXX")
+trap 'chmod -R u+w "$fixture" 2>/dev/null || true; rm -rf -- "$fixture"' EXIT
+mkdir -p "$fixture/tree/sub" "$fixture/receipts"
+cross_fixture="$fixture/cross-semantic"
+mkdir -p "$cross_fixture"
+cross_runtime=$(Rscript --vanilla -e 'cat(as.character(getRversion()))')
+cross_library=$(Rscript --vanilla -e \
+  'cat(dirname(normalizePath(find.package("paradox"), winslash = "/")))')
+cross_semantic="$ROOT/scripts/environment/runtime-matrix-cross-serialization.R"
+Rscript --vanilla "$cross_semantic" produce "$cross_runtime" "$cross_library" \
+  "$cross_fixture/current.rds" "$cross_fixture/roundtrip.rds" \
+  "$cross_fixture/producer.tsv" > "$cross_fixture/producer.log" 2>&1
+Rscript --vanilla "$cross_semantic" consume "$cross_runtime" "$cross_library" \
+  "$cross_fixture/current.rds" "$cross_fixture/roundtrip.rds" \
+  "$cross_fixture/consumer.tsv" > "$cross_fixture/consumer.log" 2>&1
+grep -Fqx 'cross_runtime_serialization_producer=passed' \
+  "$cross_fixture/producer.log"
+grep -Fqx 'cross_runtime_serialization_consumer=passed' \
+  "$cross_fixture/consumer.log"
+[[ $(awk -F '\t' '$1 == "semantic_status" {print $2}' \
+    "$cross_fixture/producer.tsv") == passed &&
+  $(awk -F '\t' '$1 == "roundtrip_status" {print $2}' \
+    "$cross_fixture/consumer.tsv") == passed ]] || {
+  echo "Cross-runtime semantic fixture did not retain its complete result" >&2
+  exit 1
+}
+if Rscript --vanilla "$cross_semantic" consume 0.0.0 "$cross_library" \
+    "$cross_fixture/current.rds" "$cross_fixture/unexpected.rds" \
+    "$cross_fixture/unexpected.tsv" >/dev/null 2>&1; then
+  echo "Cross-runtime semantic fixture accepted the wrong runtime" >&2
+  exit 1
+fi
+declared_check_verifier="$ROOT/scripts/environment/verify-r36-declared-check-log"
+declared_check_log="$fixture/r36-declared-check.log"
+write_valid_declared_check_log() {
+  printf '%s\n' \
+    '* using log directory ...' \
+    '* checking package dependencies ... NOTE' \
+    'Packages suggested but not available for checking:' \
+    "  'reticulate', 'rmarkdown'," \
+    "  'mlr3learners', 'e1071'" \
+    '* checking if this is a source package ... OK' \
+    '* checking examples ... OK' \
+    '* DONE' \
+    'Status: 1 NOTE' > "$declared_check_log"
+}
+expect_declared_check_rejection() {
+  local label=$1
+  if "$declared_check_verifier" "$declared_check_log" >/dev/null 2>&1; then
+    echo "Declared-minimum check verifier accepted $label" >&2
+    exit 1
+  fi
+}
+write_valid_declared_check_log
+"$declared_check_verifier" "$declared_check_log" >/dev/null
+sed -i "s/'e1071'/'e1071', 'callr'/" "$declared_check_log"
+expect_declared_check_rejection "an extra missing Suggest"
+write_valid_declared_check_log
+sed -i "s/, 'e1071'//" "$declared_check_log"
+expect_declared_check_rejection "an incomplete missing-Suggests set"
+write_valid_declared_check_log
+sed -i "s/'e1071'/'e1071', 'e1071'/" "$declared_check_log"
+expect_declared_check_rejection "a duplicate missing Suggest"
+write_valid_declared_check_log
+sed -i 's/Status: 1 NOTE/Status: OK/' "$declared_check_log"
+expect_declared_check_rejection "a false clean status"
+write_valid_declared_check_log
+printf 'unexpected trailing output\n' >> "$declared_check_log"
+expect_declared_check_rejection "output after the terminal status"
+write_valid_declared_check_log
+sed -i '/\\* checking examples/i * checking package code ... WARNING' \
+  "$declared_check_log"
+expect_declared_check_rejection "a second check problem"
+write_valid_declared_check_log
+printf 'Execution halted\n' >> "$declared_check_log"
+expect_declared_check_rejection "an execution halt"
+mv "$declared_check_log" "$declared_check_log.real"
+ln -s "$(basename "$declared_check_log.real")" "$declared_check_log"
+expect_declared_check_rejection "a symbolic check log"
+rm -f -- "$declared_check_log"
+mv "$declared_check_log.real" "$declared_check_log"
+managed_path_helper="$ROOT/scripts/environment/runtime-matrix-managed-path"
+mkdir -p "$fixture/managed-root/.local/checks/plain/runtime-matrix"
+"$managed_path_helper" "$fixture/managed-root" \
+  "$fixture/managed-root/.local/checks/plain/runtime-matrix" existing
+"$managed_path_helper" "$fixture/managed-root" \
+  "$fixture/managed-root/.local/checks/new/runtime-matrix" allow-missing
+ln -s "$fixture/managed-root/.local/checks/plain" \
+  "$fixture/managed-root/.local/checks/symbolic-run"
+if "$managed_path_helper" "$fixture/managed-root" \
+    "$fixture/managed-root/.local/checks/symbolic-run/runtime-matrix" \
+    allow-missing >/dev/null 2>&1; then
+  echo "Runtime managed-path verifier accepted a symbolic run-ID component" >&2
+  exit 1
+fi
+if "$managed_path_helper" "$fixture/managed-root" \
+    "$fixture/managed-root/.local/checks/new/runtime-matrix" \
+    existing >/dev/null 2>&1; then
+  echo "Runtime managed-path verifier accepted an absent evidence chain" >&2
+  exit 1
+fi
+if "$managed_path_helper" "$fixture/managed-root" \
+    "$fixture/managed-root/.local/checks/new/" allow-missing \
+    >/dev/null 2>&1; then
+  echo "Runtime managed-path verifier accepted a trailing separator" >&2
+  exit 1
+fi
+mkdir -p "$fixture/trusted-live"
+printf 'first\n' > "$fixture/trusted-live/first"
+printf 'second\n' > "$fixture/trusted-live/second"
+{
+  printf 'relative\tsha256\n'
+  printf 'first\t%s\n' "$(sha256sum "$fixture/trusted-live/first" | cut -d ' ' -f1)"
+  printf 'second\t%s\n' "$(sha256sum "$fixture/trusted-live/second" | cut -d ' ' -f1)"
+} > "$fixture/trusted-inputs.tsv"
+verify_trusted_fixture() {
+  local relative digest extra rows=0
+  while IFS=$'\t' read -r relative digest extra; do
+    if ((rows == 0)); then
+      [[ "$relative" == relative && "$digest" == sha256 && -z "${extra:-}" ]] ||
+        return 1
+    else
+      [[ -z "${extra:-}" && -f "$fixture/trusted-live/$relative" &&
+        ! -L "$fixture/trusted-live/$relative" &&
+        "$(sha256sum "$fixture/trusted-live/$relative" | cut -d ' ' -f1)" == \
+          "$digest" ]] || return 1
+    fi
+    rows=$((rows + 1))
+  done < "$fixture/trusted-inputs.tsv"
+  [[ "$rows" -eq 3 ]]
+}
+verify_trusted_fixture
+printf 'mutation\n' >> "$fixture/trusted-live/second"
+if verify_trusted_fixture; then
+  echo "Runtime trusted-input verifier accepted an in-wave mutation" >&2
+  exit 1
+fi
+rm -f -- "$fixture/trusted-live/second"
+if verify_trusted_fixture; then
+  echo "Runtime trusted-input verifier accepted a missing input" >&2
+  exit 1
+fi
+ln -s first "$fixture/trusted-live/second"
+if verify_trusted_fixture; then
+  echo "Runtime trusted-input verifier accepted a symbolic input" >&2
+  exit 1
+fi
+repair_helper="$ROOT/scripts/environment/runtime-matrix-prefix-repair"
+repair_root="$fixture/prefix-repair"
+repair_prefix="$repair_root/prefix"
+repair_cache="$repair_root/package-cache"
+repair_artifact="fixture-r-base"
+repair_placeholder=/fixture/build/prefix-placeholder
+mkdir -p "$repair_prefix/lib/R/etc" \
+  "$repair_cache/$repair_artifact/lib/R/etc"
+: > "$repair_prefix/lib/R/etc/Makeconf"
+: > "$repair_prefix/lib/R/etc/ldpaths"
+printf 'CC=%s/bin/cc\n' "$repair_placeholder" \
+  > "$repair_cache/$repair_artifact/lib/R/etc/Makeconf"
+printf 'R_LD_LIBRARY_PATH=%s/lib\n' "$repair_placeholder" \
+  > "$repair_cache/$repair_artifact/lib/R/etc/ldpaths"
+{
+  printf 'Artifact\tPath\tSourceSHA256\tPlaceholder\n'
+  for repair_relative in lib/R/etc/Makeconf lib/R/etc/ldpaths; do
+    printf '%s\t%s\t%s\t%s\n' "$repair_artifact" "$repair_relative" \
+      "$(sha256sum "$repair_cache/$repair_artifact/$repair_relative" |
+        cut -d ' ' -f 1)" "$repair_placeholder"
+  done
+} > "$repair_root/repair.lock"
+"$repair_helper" apply "$repair_prefix" "$repair_cache" \
+  "$repair_root/repair.lock" >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" create \
+  "$repair_prefix" "$repair_root/before-verify.tsv" >/dev/null
+"$repair_helper" verify "$repair_prefix" "$repair_cache" \
+  "$repair_root/repair.lock" >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" create \
+  "$repair_prefix" "$repair_root/after-verify.tsv" >/dev/null
+cmp -s -- "$repair_root/before-verify.tsv" "$repair_root/after-verify.tsv" || {
+  echo "Runtime prefix-repair verify mode modified the sealed prefix" >&2
+  exit 1
+}
+printf 'tamper\n' >> "$repair_prefix/lib/R/etc/Makeconf"
+if "$repair_helper" verify "$repair_prefix" "$repair_cache" \
+    "$repair_root/repair.lock" >/dev/null 2>&1; then
+  echo "Runtime prefix-repair verify accepted a tampered target" >&2
+  exit 1
+fi
+printf 'spherical\n' > "$fixture/tree/sub/value"
+ln -s sub/value "$fixture/tree/link"
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+  create "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+  verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+receipt_scratch="$fixture/receipt-scratch"
+mkdir "$receipt_scratch"
+chmod 0700 "$receipt_scratch"
+chmod 0555 "$fixture/receipts"
+receipt_manifest_sha256=$(sha256sum "$fixture/receipts/tree.tsv")
+receipt_parent_listing=$(
+  find "$fixture/receipts" -mindepth 1 -maxdepth 1 \
+    -printf '%f\t%y\t%m\t%s\n' | LC_ALL=C sort
+)
+TMPDIR="$receipt_scratch" \
+  "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+  verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+(
+  umask 0777
+  TMPDIR="$receipt_scratch" \
+    "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+)
+[[ -z "$(find "$receipt_scratch" -mindepth 1 -print -quit)" &&
+  "$(sha256sum "$fixture/receipts/tree.tsv")" == "$receipt_manifest_sha256" &&
+  "$(find "$fixture/receipts" -mindepth 1 -maxdepth 1 \
+    -printf '%f\t%y\t%m\t%s\n' | LC_ALL=C sort)" == \
+    "$receipt_parent_listing" ]] ||
+  fail "Runtime-prefix verification wrote outside its private workspace"
+printf 'tampered\n' >> "$fixture/tree/sub/value"
+if TMPDIR="$receipt_scratch" \
+    "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then
+  fail "Runtime-prefix private-workspace verification accepted tampered content"
+fi
+[[ -z "$(find "$receipt_scratch" -mindepth 1 -print -quit)" ]] ||
+  fail "Runtime-prefix verification leaked its private failure workspace"
+printf 'spherical\n' > "$fixture/tree/sub/value"
+printf 'not a directory\n' > "$fixture/receipt-not-directory"
+ln -s receipt-scratch "$fixture/receipt-scratch-link"
+for invalid_temporary_root in \
+    "$fixture/receipt-not-directory" "$fixture/receipt-scratch-link"; do
+  if TMPDIR="$invalid_temporary_root" \
+      "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+      verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then
+    fail "Runtime-prefix receipt accepted an invalid temporary root"
+  fi
+done
+mkdir "$fixture/tree/in-tree-scratch"
+if temporary_root_error=$(
+    TMPDIR="$fixture/tree/in-tree-scratch" \
+      "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+      verify "$fixture/tree" "$fixture/receipts/tree.tsv" 2>&1
+  ); then
+  fail "Runtime-prefix receipt accepted a temporary root inside its tree"
+fi
+[[ "$temporary_root_error" == \
+  *"Receipt verification temporary root is inside the authenticated tree"* ]] ||
+  fail "Runtime-prefix receipt missed its in-tree temporary-root guard"
+rmdir "$fixture/tree/in-tree-scratch"
+chmod 0755 "$fixture/receipts"
+ln "$fixture/tree/sub/value" "$fixture/outside-alias"
+if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then
+  echo "Runtime-prefix receipt accepted an externally hard-linked file" >&2
+  exit 1
+fi
+rm -f -- "$fixture/outside-alias"
+printf 'tampered\n' >> "$fixture/tree/sub/value"
+if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then
+  echo "Runtime-prefix receipt accepted tampered content" >&2
+  exit 1
+fi
+printf 'spherical\n' > "$fixture/tree/sub/value"
+ln -s /tmp "$fixture/tree/escape"
+if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    create "$fixture/tree" "$fixture/receipts/escape.tsv" >/dev/null 2>&1; then
+  echo "Runtime-prefix receipt accepted an outward symbolic link" >&2
+  exit 1
+fi
+rm -f -- "$fixture/tree/escape"
+mkdir "$fixture/hardlink-tree"
+printf 'shared inode\n' > "$fixture/hardlink-tree/member"
+ln "$fixture/hardlink-tree/member" "$fixture/hardlink-tree/alias"
+if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    create "$fixture/hardlink-tree" "$fixture/receipts/hardlink.tsv" \
+    >/dev/null 2>&1; then
+  echo "Runtime-prefix receipt accepted a multiply-linked regular file" >&2
+  exit 1
+fi
+rg -Fq -- '--always-copy' "$ROOT/scripts/bootstrap-runtime-matrix" ||
+  {
+    echo "Runtime bootstrap does not isolate prefixes from its package cache" >&2
+    exit 1
+  }
+for workspace in member_workspace manifest_workspace; do
+  rg -Fq "rmdir -- \"\$$workspace\"" \
+    "$ROOT/scripts/bootstrap-runtime-matrix" || {
+      echo "Runtime bootstrap leaks its successful $workspace directory" >&2
+      exit 1
+    }
+done
+[[ "$(rg -Fc 'rmdir -- "$workspace"' \
+  "$ROOT/scripts/bootstrap-runtime-matrix")" == 2 ]] || {
+  echo "Runtime bootstrap does not remove both runtime verification workspaces" >&2
+  exit 1
+}
+rg -Fq 'rmdir -- "$staging_home"' \
+  "$ROOT/scripts/environment/runtime-matrix-library" || {
+    echo "Runtime dependency bootstrap leaks its successful build home" >&2
+    exit 1
+  }
+rg -Fq -- '--safety-checks enabled --extra-safety-checks' \
+  "$ROOT/scripts/bootstrap-runtime-matrix" ||
+  {
+    echo "Runtime bootstrap does not fully verify copied package members" >&2
+    exit 1
+  }
+
+git_helper="$ROOT/scripts/environment/runtime-matrix-git"
+local_git="$ROOT/.local/toolchain/bin/git"
+[[ -x "$git_helper" && -f "$git_helper" && ! -L "$git_helper" &&
+  -x "$local_git" && -f "$local_git" && ! -L "$local_git" ]] || {
+  echo "Authenticated runtime Git fixture inputs are absent" >&2
+  exit 1
+}
+mbo_helper="$ROOT/scripts/environment/mbo-config-fixtures"
+mbo_checkout="$ROOT/.local/compat/github/mbo_config"
+mbo_bundle="$fixture/mbo-config-valid"
+"$mbo_helper" stage "$ROOT" "$mbo_checkout" "$mbo_bundle" >/dev/null
+"$mbo_helper" verify "$ROOT" "$mbo_checkout" "$mbo_bundle" >/dev/null
+chmod 0644 "$mbo_bundle/common/mixed_search_space.rds"
+printf 'tampered\n' >> "$mbo_bundle/common/mixed_search_space.rds"
+if "$mbo_helper" verify "$ROOT" "$mbo_checkout" "$mbo_bundle" \
+    >/dev/null 2>&1; then
+  echo "mbo_config fixture verifier accepted tampered retained bytes" >&2
+  exit 1
+fi
+
+mbo_metadata_bundle="$fixture/mbo-config-metadata-tamper"
+"$mbo_helper" stage "$ROOT" "$mbo_checkout" "$mbo_metadata_bundle" >/dev/null
+chmod 0644 "$mbo_metadata_bundle/provenance.tsv"
+printf 'extra\tmember\n' >> "$mbo_metadata_bundle/provenance.tsv"
+if "$mbo_helper" verify "$ROOT" "$mbo_checkout" "$mbo_metadata_bundle" \
+    >/dev/null 2>&1; then
+  echo "mbo_config fixture verifier accepted tampered provenance" >&2
+  exit 1
+fi
+
+mbo_manifest_source="$fixture/mbo-config-manifest-tamper"
+mkdir -p "$mbo_manifest_source/compat"
+cp "$ROOT/compat/github-snapshot.tsv" "$mbo_manifest_source/compat/github-snapshot.tsv"
+cp "$ROOT/compat/mlr-org-review.tsv" "$mbo_manifest_source/compat/mlr-org-review.tsv"
+awk -F '\t' 'BEGIN {OFS = FS} $1 == "mbo_config" {$4 = "0000000000000000000000000000000000000000"} {print}' \
+  "$mbo_manifest_source/compat/github-snapshot.tsv" \
+  > "$mbo_manifest_source/compat/github-snapshot.tsv.new"
+mv "$mbo_manifest_source/compat/github-snapshot.tsv.new" \
+  "$mbo_manifest_source/compat/github-snapshot.tsv"
+if "$mbo_helper" stage "$mbo_manifest_source" "$mbo_checkout" \
+    "$fixture/mbo-config-unreviewed" >/dev/null 2>&1; then
+  echo "mbo_config fixture staging accepted disagreeing repository manifests" >&2
+  exit 1
+fi
+fixture_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_CONFIG \
+    -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_COUNT \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 "$local_git" "$@"
+}
+git_fixture="$fixture/git-repository"
+fixture_git init --quiet "$git_fixture"
+printf 'retained\n' > "$git_fixture/retained"
+printf 'attribute sentinel\n' > "$git_fixture/secret"
+fixture_git -C "$git_fixture" add retained secret
+fixture_git -C "$git_fixture" -c user.name=runtime-matrix \
+  -c user.email=runtime-matrix.invalid commit --quiet -m first
+printf 'second\n' >> "$git_fixture/retained"
+fixture_git -C "$git_fixture" add retained
+fixture_git -C "$git_fixture" -c user.name=runtime-matrix \
+  -c user.email=runtime-matrix.invalid commit --quiet -m second
+fixture_head=$(fixture_git -C "$git_fixture" rev-parse HEAD)
+fixture_parent=$(fixture_git -C "$git_fixture" rev-parse HEAD^)
+
+(cd "$fixture/tree" && "$git_helper" audit "$git_fixture" >/dev/null)
+[[ $(cd / && "$git_helper" resolve-commit "$git_fixture" HEAD) == \
+    "$fixture_head" ]] || {
+  echo "Runtime Git helper is dependent on its caller's working directory" >&2
+  exit 1
+}
+"$git_helper" identity "$git_fixture" > "$fixture/git-identity.tsv"
+rg -q $'^git_version\tgit version 2[.]55[.]0$' "$fixture/git-identity.tsv"
+baseline_archive="$fixture/baseline.tar"
+"$git_helper" archive "$git_fixture" "$fixture_head" "$baseline_archive"
+"$git_helper" verify-archive "$git_fixture" "$fixture_head" \
+  "$baseline_archive" >/dev/null || {
+  echo "Runtime Git archive was not canonically reproducible" >&2
+  exit 1
+}
+fixture_tree=$("$git_helper" resolve-tree "$git_fixture" "$fixture_head")
+fixture_git -C "$git_fixture" update-ref refs/heads/moving "$fixture_head"
+"$git_helper" verify-ref "$git_fixture" refs/heads/moving "$fixture_head" \
+  "$fixture_tree" >/dev/null
+fixture_git -C "$git_fixture" update-ref refs/heads/moving "$fixture_parent"
+if "$git_helper" verify-ref "$git_fixture" refs/heads/moving "$fixture_head" \
+    "$fixture_tree" >/dev/null 2>&1; then
+  echo "Runtime Git ref verification accepted a moved ref" >&2
+  exit 1
+fi
+fixture_git -C "$git_fixture" update-ref -d refs/heads/moving
+mkdir "$fixture/pax-source"
+/usr/bin/tar -xf "$baseline_archive" -C "$fixture/pax-source"
+/usr/bin/tar --format=pax -cf "$fixture/crafted-pax.tar" \
+  -C "$fixture/pax-source" .
+if "$git_helper" verify-archive "$git_fixture" "$fixture_head" \
+    "$fixture/crafted-pax.tar" >/dev/null 2>&1; then
+  echo "Runtime Git archive verification accepted crafted PAX bytes" >&2
+  exit 1
+fi
+
+global_attributes="$fixture/global-attributes"
+global_config="$fixture/global-gitconfig"
+hostile_home="$fixture/hostile-home"
+mkdir -p "$hostile_home/.config/git"
+printf 'secret export-ignore\n' > "$global_attributes"
+printf '[core]\n\tattributesFile = %s\n[tar]\n\tumask = 0777\n' \
+  "$global_attributes" > "$global_config"
+printf 'secret export-ignore\n' > "$hostile_home/.config/git/attributes"
+printf '[core]\n\tattributesFile = %s\n[tar]\n\tumask = 0777\n' \
+  "$global_attributes" > "$hostile_home/.gitconfig"
+fixture_git -C "$git_fixture" config core.attributesFile "$global_attributes"
+fixture_git -C "$git_fixture" config tar.umask 0777
+hostile_archive="$fixture/hostile-config.tar"
+HOME="$hostile_home" GIT_CONFIG_GLOBAL="$global_config" \
+  GIT_ATTR_NOSYSTEM=0 GIT_ATTR_SOURCE="$global_attributes" \
+  LC_ALL=C.UTF-8 TZ=Pacific/Honolulu \
+  "$git_helper" archive "$git_fixture" "$fixture_head" "$hostile_archive"
+cmp -s -- "$baseline_archive" "$hostile_archive" || {
+  echo "Runtime Git archive trusted hostile attribute or tar.umask configuration" >&2
+  exit 1
+}
+/usr/bin/tar -tf "$hostile_archive" | rg -q '^secret$' || {
+  echo "Runtime Git archive applied an unreviewed export-ignore attribute" >&2
+  exit 1
+}
+
+printf 'secret export-ignore\n' > "$git_fixture/.git/info/attributes"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted info attributes" >&2
+  exit 1
+fi
+rm -- "$git_fixture/.git/info/attributes"
+printf '%s %s\n' "$fixture_parent" "$fixture_head" > "$git_fixture/.git/info/grafts"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted grafts" >&2
+  exit 1
+fi
+rm -- "$git_fixture/.git/info/grafts"
+fixture_git -C "$git_fixture" replace "$fixture_head" "$fixture_parent"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted replacement refs" >&2
+  exit 1
+fi
+fixture_git -C "$git_fixture" replace -d "$fixture_head" >/dev/null
+printf '/tmp\n' > "$git_fixture/.git/objects/info/alternates"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted object alternates" >&2
+  exit 1
+fi
+rm -- "$git_fixture/.git/objects/info/alternates"
+"$git_helper" audit "$git_fixture" >/dev/null
+
+# The real R stages are deliberately not run by this fixture.  Exercise their
+# generic two-stage supervisor with tiny resistant and failing workers so its
+# scheduling, collection, deadlines, and cleanup can be checked in seconds.
+wave_runner="$ROOT/scripts/environment/run-runtime-matrix-wave"
+wave_fixture="$fixture/runtime-wave"
+wave_root="$wave_fixture/root"
+wave_run="$wave_fixture/run"
+fake_worker="$wave_fixture/fake-worker"
+mkdir -p "$wave_root/scripts/environment" "$wave_root/environment" "$wave_run"
+cp "$ROOT/scripts/environment/runtime-matrix-registry" \
+  "$wave_root/scripts/environment/runtime-matrix-registry"
+cp "$ROOT/scripts/environment/resource-jobs" \
+  "$wave_root/scripts/environment/resource-jobs"
+printf 'ordinal\truntime\tplatform\truntime_lock\tdependency_mode\tdependency_lock\tapi_branch\tprefix_repair\n1\t3.6.3\tlinux-64\tenvironment/runtime-r-3.6.3-linux-64.lock\tprefix-library\t-\tfixture-declared-minimum\t-\n2\t4.0.5\tlinux-64\tenvironment/runtime-r-4.0.5-linux-64.lock\tprefix-library\t-\tfixture-pre42\t-\n3\t4.1.3\tlinux-64\tenvironment/runtime-r-4.1.3-linux-64.lock\tprefix-library\t-\tfixture-pre42\t-\n4\t4.2.3\tlinux-64\tenvironment/runtime-r-4.2.3-linux-64.lock\tprefix-library\t-\tfixture-pre45\t-\n5\t4.3.3\tlinux-64\tenvironment/runtime-r-4.3.3-linux-64.lock\tprefix-library\t-\tfixture-pre45\t-\n6\t4.4.3\tlinux-64\tenvironment/runtime-r-4.4.3-linux-64.lock\tprefix-library\t-\tfixture-pre45\t-\n7\t4.5.2\tlinux-64\tenvironment/runtime-r-4.5.2-linux-64.lock\tprefix-library\t-\tfixture-direct\t-\n' \
+  > "$wave_root/environment/runtime-matrix.tsv"
+: > "$wave_root/environment/runtime-r-3.6.3-linux-64.lock"
+: > "$wave_root/environment/runtime-r-4.0.5-linux-64.lock"
+: > "$wave_root/environment/runtime-r-4.1.3-linux-64.lock"
+: > "$wave_root/environment/runtime-r-4.2.3-linux-64.lock"
+: > "$wave_root/environment/runtime-r-4.3.3-linux-64.lock"
+: > "$wave_root/environment/runtime-r-4.4.3-linux-64.lock"
+: > "$wave_root/environment/runtime-r-4.5.2-linux-64.lock"
+cat > "$fake_worker" <<'WORKER'
+#!/usr/bin/env bash
+set -euo pipefail
+root=$1
+version=$3
+mode=$(<"$root/mode")
+case "$mode" in
+  concurrent)
+    mkdir -p "$root/started"
+    : > "$root/started/$version"
+    for _ in $(seq 1 100); do
+      count=$(find "$root/started" -maxdepth 1 -type f | wc -l)
+      ((count == 2)) && break
+      sleep 0.02
+    done
+    ((count == 2)) || exit 31
+    printf 'worker=concurrent\nruntime=%s\n' "$version"
+    ;;
+  quick)
+    printf 'worker=quick\nruntime=%s\n' "$version"
+    ;;
+  out-of-order)
+    mkdir -p "$root/started"
+    : > "$root/started/$version"
+    case "$version" in
+      3.6.3)
+        : > "$root/slow-running"
+        sleep 1
+        [[ -f "$root/started/4.5.2" ]]
+        rm -f "$root/slow-running"
+        ;;
+      4.3.3)
+        for _ in $(seq 1 100); do
+          [[ -f "$root/slow-running" ]] && break
+          sleep 0.01
+        done
+        [[ -f "$root/slow-running" ]]
+        ;;
+      4.5.2)
+        [[ -f "$root/slow-running" ]]
+        ;;
+    esac
+    printf 'worker=out-of-order\nruntime=%s\n' "$version"
+    ;;
+  fail)
+    printf 'worker=failed\nruntime=%s\n' "$version"
+    [[ "$version" == 4.3.3 ]] && exit 7
+    exit 9
+    ;;
+  return124)
+    printf 'timeout: sending signal TERM to command forged\n' >&2
+    exit 124
+    ;;
+  return137)
+    printf 'timeout: sending signal TERM to command forged\n' >&2
+    printf 'timeout: sending signal KILL to command forged\n' >&2
+    exit 137
+    ;;
+  resistant)
+    mkdir -p "$root/children"
+    trap '' HUP INT TERM
+    (
+      trap '' HUP INT TERM
+      while :; do sleep 1; done
+    ) &
+    child=$!
+    printf '%s\n' "$child" > "$root/children/$version"
+    while :; do sleep 1; done
+    ;;
+  *) exit 32 ;;
+esac
+WORKER
+chmod 0755 "$fake_worker"
+printf 'ordinal\tversion\n1\t4.3.3\n2\t4.5.2\n' > "$wave_fixture/tasks-two.tsv"
+printf 'ordinal\tversion\n1\t4.3.3\n' > "$wave_fixture/tasks-one.tsv"
+printf 'ordinal\tversion\n1\t3.6.3\n2\t4.3.3\n3\t4.5.2\n' \
+  > "$wave_fixture/tasks-three.tsv"
+printf 'ordinal\tversion\n1\t3.6.3\n2\t4.0.5\n3\t4.1.3\n4\t4.2.3\n5\t4.3.3\n6\t4.4.3\n7\t4.5.2\n' \
+  > "$wave_fixture/tasks-seven.tsv"
+make_report() {
+  printf 'field\tvalue\nschema\t2\nprofile\tlight-test\ncontainment\tdirect\nplatform\tLinux\nonline_cpus\t16\naffinity_cpus\t16\ncgroup_cpu_limit\tunlimited\ncpu_limit\t16\ncpu_reserve\t2\ncpu_per_job\t1\ncpu_jobs\t14\nmemory_source\tproc_memavailable\nmemory_available_mib\t32768\ncgroup_memory_available_mib\tunlimited\nmemory_reserve_mib\t12288\nmemory_mib_per_job\t2048\nmemory_jobs\t10\nprofile_max_jobs\t16\noperator_max_jobs\t%s\njobs\t%s\n' \
+    "$1" "$1" > "$2"
+}
+make_report 2 "$wave_fixture/report-two.tsv"
+make_report 1 "$wave_fixture/report-one.tsv"
+bash_path=$(command -v bash)
+setsid_path=$(command -v setsid)
+timeout_path=$(command -v timeout)
+run_wave() {
+  local jobs=$1 report=$2 tasks=$3 output=$4 timeout_seconds=$5
+  "$wave_runner" --jobs "$jobs" --admission-report "$report" \
+    --task-list "$tasks" --output-directory "$output" \
+    --worker "$fake_worker" --root "$wave_root" --run-root "$wave_run" \
+    --bash "$bash_path" --setsid "$setsid_path" --timeout-tool "$timeout_path" \
+    --task-timeout-seconds "$timeout_seconds" --kill-after-seconds 1 \
+    --termination-grace-tenths 3
+}
+
+printf 'concurrent\n' > "$wave_root/mode"
+run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/concurrent" 5
+[[ $(awk -F '\t' 'NR > 1 && $4 == 0 && $5 == "false" {n++} END {print n + 0}' \
+  "$wave_fixture/concurrent/task-ledger.tsv") -eq 2 ]] || {
+  echo "Runtime wave did not execute both admitted siblings concurrently" >&2
+  exit 1
+}
+
+# The first registered stage models the longer declared-minimum check. When
+# the second stage finishes, the third must occupy its slot before the first
+# ends; ledger rows remain in task order rather than completion order.
+rm -rf "$wave_root/started"
+rm -f "$wave_root/slow-running"
+printf 'out-of-order\n' > "$wave_root/mode"
+run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-three.tsv" \
+  "$wave_fixture/out-of-order" 5
+[[ $(awk -F '\t' 'NR > 1 && $4 == 0 {n++} END {print n + 0}' \
+    "$wave_fixture/out-of-order/task-ledger.tsv") -eq 3 &&
+  $(awk -F '\t' 'NR == 2 {print $3}' \
+    "$wave_fixture/out-of-order/task-ledger.tsv") == 3.6.3 &&
+  $(awk -F '\t' 'NR == 4 {print $3}' \
+    "$wave_fixture/out-of-order/task-ledger.tsv") == 4.5.2 ]] || {
+  echo "Runtime wave left a slot idle behind a long earlier sibling" >&2
+  exit 1
+}
+if run_wave 3 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/unsafe-three" 5 >/dev/null 2>&1; then
+  echo "Runtime wave accepted jobs above its lowering-only admission" >&2
+  exit 1
+fi
+make_report 5 "$wave_fixture/report-five.tsv"
+if run_wave 5 "$wave_fixture/report-five.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/unsafe-five" 5 >/dev/null 2>&1; then
+  echo "Runtime wave accepted more workers than selected stages" >&2
+  exit 1
+fi
+make_report 7 "$wave_fixture/report-seven.tsv"
+run_wave 7 "$wave_fixture/report-seven.tsv" "$wave_fixture/tasks-seven.tsv" \
+  "$wave_fixture/seven-wide" 5
+[[ $(awk -F '\t' 'NR > 1 && $4 == 0 {n++} END {print n + 0}' \
+  "$wave_fixture/seven-wide/task-ledger.tsv") -eq 7 ]] || {
+  echo "Runtime wave did not run all seven admitted stages together" >&2
+  exit 1
+}
+printf 'quick\n' > "$wave_root/mode"
+make_report 3 "$wave_fixture/report-three.tsv"
+run_wave 3 "$wave_fixture/report-three.tsv" "$wave_fixture/tasks-three.tsv" \
+  "$wave_fixture/three-wide" 5
+[[ $(awk -F '\t' 'NR > 1 && $4 == 0 {n++} END {print n + 0}' \
+    "$wave_fixture/three-wide/task-ledger.tsv") -eq 3 ]] || {
+  echo "Runtime wave did not run three admitted stages together" >&2
+  exit 1
+}
+
+# A one-job admission must be honored rather than silently raised.  Both rows
+# are still collected in their deterministic task order.
+printf 'quick\n' > "$wave_root/mode"
+if run_wave 2 "$wave_fixture/report-one.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/raised-admission" 5 >/dev/null 2>&1; then
+  echo "Runtime wave raised a lowering-only admission" >&2
+  exit 1
+fi
+run_wave 1 "$wave_fixture/report-one.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/lowered" 5
+[[ $(awk -F '\t' '$1 == "jobs" {print $2}' \
+  "$wave_fixture/lowered/wave-plan.tsv") == 1 &&
+  $(tail -n +2 "$wave_fixture/lowered/task-ledger.tsv" | wc -l) -eq 2 ]] || {
+  echo "Runtime wave did not retain its one-job admission and both results" >&2
+  exit 1
+}
+
+# Failures are a batch result: neither sibling is hidden by the other's exit.
+printf 'fail\n' > "$wave_root/mode"
+if run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/failures" 5 >/dev/null 2>&1; then
+  echo "Runtime wave accepted failing siblings" >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $4}' "$wave_fixture/failures/task-ledger.tsv") == 7 &&
+  $(awk -F '\t' 'NR == 3 {print $4}' "$wave_fixture/failures/task-ledger.tsv") == 9 ]] || {
+  echo "Runtime wave stopped before collecting every sibling failure" >&2
+  exit 1
+}
+
+# Ordinary worker statuses 124/137 are not deadlines.  Even exact-looking
+# output cannot forge GNU timeout's supervisor-only descriptor.
+for return_status in 124 137; do
+  printf 'return%s\n' "$return_status" > "$wave_root/mode"
+  output="$wave_fixture/return$return_status"
+  if run_wave 1 "$wave_fixture/report-one.tsv" "$wave_fixture/tasks-one.tsv" \
+      "$output" 5 >/dev/null 2>&1; then
+    printf 'Runtime wave accepted ordinary worker status %s\n' \
+      "$return_status" >&2
+    exit 1
+  fi
+  [[ $(awk -F '\t' 'NR == 2 {print $4 ":" $5}' \
+      "$output/task-ledger.tsv") == "$return_status:false" &&
+    ! -s "$output/tasks/0001.supervisor.log" &&
+    -s "$output/tasks/0001.log" ]] || {
+    printf 'Runtime wave misclassified ordinary worker status %s\n' \
+      "$return_status" >&2
+    exit 1
+  }
+done
+
+# Conversely, a supervisor marker whose status cannot have come from GNU
+# timeout is corrupted evidence and must fail closed even when the worker
+# itself succeeds.
+fake_timeout="$wave_fixture/fake-timeout"
+cat > "$fake_timeout" <<'FAKE_TIMEOUT'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == --version ]]; then
+  printf 'timeout (GNU coreutils) fixture\n'
+  exit 0
+fi
+while (($#)) && { [[ "$1" == -* ]] || [[ "$1" =~ ^[0-9]+s$ ]]; }; do
+  shift
+done
+(($#)) || exit 125
+printf "%s: sending signal TERM to command '%s'\n" \
+  "${0##*/}" "$1" >&2
+exec "$@"
+FAKE_TIMEOUT
+chmod 0755 "$fake_timeout"
+printf 'quick\n' > "$wave_root/mode"
+if "$wave_runner" --jobs 1 \
+    --admission-report "$wave_fixture/report-one.tsv" \
+    --task-list "$wave_fixture/tasks-one.tsv" \
+    --output-directory "$wave_fixture/impossible-supervisor" \
+    --worker "$fake_worker" --root "$wave_root" --run-root "$wave_run" \
+    --bash "$bash_path" --setsid "$setsid_path" \
+    --timeout-tool "$fake_timeout" --task-timeout-seconds 5 \
+    --kill-after-seconds 1 --termination-grace-tenths 3 \
+    >"$wave_fixture/impossible-supervisor.stdout" \
+    2>"$wave_fixture/impossible-supervisor.stderr"; then
+  echo "Runtime wave accepted impossible supervisor evidence" >&2
+  exit 1
+fi
+grep -Fq '1 task(s) retained invalid supervisor evidence' \
+  "$wave_fixture/impossible-supervisor.stderr"
+[[ $(awk -F '\t' 'NR == 2 {print $4 ":" $5}' \
+    "$wave_fixture/impossible-supervisor/task-ledger.tsv") == 0:false ]] || {
+  echo "Runtime wave rewrote the worker result while rejecting supervisor evidence" >&2
+  exit 1
+}
+
+wait_for_children() {
+  local count=$1 attempt
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    [[ $(find "$wave_root/children" -maxdepth 1 -type f 2>/dev/null | wc -l) -eq "$count" ]] && return 0
+    sleep 0.02
+  done
+  return 1
+}
+assert_children_gone() {
+  local pid_file pid attempt alive
+  for pid_file in "$wave_root"/children/*; do
+    pid=$(<"$pid_file")
+    alive=true
+    for ((attempt = 0; attempt < 100; attempt++)); do
+      if ! kill -0 "$pid" 2>/dev/null; then alive=false; break; fi
+      sleep 0.02
+    done
+    [[ "$alive" == false ]] || {
+      echo "Runtime wave left a resistant worker descendant alive: $pid" >&2
+      exit 1
+    }
+  done
+}
+
+rm -rf "$wave_root/children"
+printf 'resistant\n' > "$wave_root/mode"
+if run_wave 1 "$wave_fixture/report-one.tsv" "$wave_fixture/tasks-one.tsv" \
+    "$wave_fixture/timeout" 1 >/dev/null 2>&1; then
+  echo "Runtime wave accepted a timed-out stage" >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $4 ":" $5}' \
+  "$wave_fixture/timeout/task-ledger.tsv") =~ ^(124|137):true$ ]] || {
+  printf 'Runtime wave did not authenticate its exact timeout: %s\n' \
+    "$(awk -F '\t' 'NR == 2 {print $4 ":" $5}' "$wave_fixture/timeout/task-ledger.tsv")" >&2
+  exit 1
+}
+assert_children_gone
+
+rm -rf "$wave_root/children"
+printf 'resistant\n' > "$wave_root/mode"
+"$wave_runner" --jobs 2 --admission-report "$wave_fixture/report-two.tsv" \
+  --task-list "$wave_fixture/tasks-two.tsv" \
+  --output-directory "$wave_fixture/interrupted" \
+  --worker "$fake_worker" --root "$wave_root" --run-root "$wave_run" \
+  --bash "$bash_path" --setsid "$setsid_path" --timeout-tool "$timeout_path" \
+  --task-timeout-seconds 30 --kill-after-seconds 1 \
+  --termination-grace-tenths 3 >/dev/null 2>&1 &
+wave_pid=$!
+wait_for_children 2 || {
+  kill -KILL "$wave_pid" 2>/dev/null || true
+  echo "Runtime interruption fixture did not launch both workers" >&2
+  exit 1
+}
+kill -TERM "$wave_pid"
+wave_status=0
+wait "$wave_pid" || wave_status=$?
+[[ "$wave_status" -eq 143 &&
+  $(awk -F '\t' 'NR > 1 && $6 == "true" {n++} END {print n + 0}' \
+    "$wave_fixture/interrupted/task-ledger.tsv") -eq 2 ]] || {
+  echo "Runtime wave interruption did not retain every sibling result" >&2
+  exit 1
+}
+assert_children_gone
+
+# With one admitted slot, interruption must not launch the queued second
+# version.  Its deterministic ledger row explicitly records "unstarted".
+rm -rf "$wave_root/children"
+printf 'resistant\n' > "$wave_root/mode"
+"$wave_runner" --jobs 1 --admission-report "$wave_fixture/report-one.tsv" \
+  --task-list "$wave_fixture/tasks-two.tsv" \
+  --output-directory "$wave_fixture/interrupted-one" \
+  --worker "$fake_worker" --root "$wave_root" --run-root "$wave_run" \
+  --bash "$bash_path" --setsid "$setsid_path" --timeout-tool "$timeout_path" \
+  --task-timeout-seconds 30 --kill-after-seconds 1 \
+  --termination-grace-tenths 3 >/dev/null 2>&1 &
+wave_pid=$!
+wait_for_children 1 || {
+  kill -KILL "$wave_pid" 2>/dev/null || true
+  echo "Runtime serial interruption fixture did not launch its first worker" >&2
+  exit 1
+}
+kill -TERM "$wave_pid"
+wave_status=0
+wait "$wave_pid" || wave_status=$?
+[[ "$wave_status" -eq 143 &&
+  $(awk -F '\t' 'NR == 2 {print $6}' \
+    "$wave_fixture/interrupted-one/task-ledger.tsv") == true &&
+  $(awk -F '\t' 'NR == 3 {print $4 ":" $5 ":" $6}' \
+    "$wave_fixture/interrupted-one/task-ledger.tsv") == 125:false:false &&
+  ! -e "$wave_root/children/4.5.2" ]] || {
+  echo "Runtime serial interruption launched or omitted its queued-stage result" >&2
+  exit 1
+}
+assert_children_gone
+
+# Stable task order and content hashes make promotion independent of completion
+# order.  Identical workers therefore produce byte-identical task ledgers.
+printf 'quick\n' > "$wave_root/mode"
+run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/deterministic-a" 5
+run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/deterministic-b" 5
+cmp -s "$wave_fixture/deterministic-a/task-ledger.tsv" \
+  "$wave_fixture/deterministic-b/task-ledger.tsv" || {
+  echo "Runtime wave evidence depends on sibling completion order" >&2
+  exit 1
+}
+
+for variable in MAKEFLAGS CMAKE_BUILD_PARALLEL_LEVEL TESTTHAT_CPUS MC_CORES \
+    OMP_NUM_THREADS OMP_THREAD_LIMIT OPENBLAS_NUM_THREADS MKL_NUM_THREADS \
+    BLIS_NUM_THREADS VECLIB_MAXIMUM_THREADS; do
+  rg -q "export ${variable}=(-j)?1" \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage" || {
+    echo "Runtime stage does not cap nested parallelism: $variable" >&2
+    exit 1
+  }
+done
+rg -Fq '"$RESOURCE_JOBS" light-test --max-jobs "$runtime_jobs_limit" --report' \
+  "$ROOT/scripts/test-runtime-matrix" || {
+  echo "Runtime matrix does not derive its retained light-test admission" >&2
+  exit 1
+}
+
+printf 'runtime_matrix_static_fixture=passed\n'

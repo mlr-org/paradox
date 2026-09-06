@@ -20,10 +20,6 @@ A Python \code{ConfigSpace.ConfigurationSpace} object representing the given par
 \description{
 Translates a \link{ParamSet} into a Python \code{ConfigSpace.ConfigurationSpace} via \CRANpkg{reticulate}.
 This function performs strict validation to ensure the \link{ParamSet} can be represented in ConfigSpace:
-\itemize{
-\item Defaults are optional. If a parameter has no default, ConfigSpace will auto-assign one
-(e.g. midpoint for numeric parameters, first level for categoricals).
-}
 
 Supported parameter mappings:
 \itemize{
@@ -35,6 +31,17 @@ Supported parameter mappings:
 
 Dependency conditions (\code{CondEqual}, \code{CondAnyOf}) are preserved.
 Multiple conditions on the same child are combined using \code{ConfigSpace.AndConjunction}.
+
+Transformations are \emph{not} represented in the result: \code{logscale} and other
+\code{trafo} functions are not applied, so the exported bounds are the raw
+(pre-transformation) bounds stored in the \link{ParamSet}, and configurations
+drawn from the \code{ConfigurationSpace} live in that pre-transformation space.
+Apply the \link{ParamSet}\verb{$trafo()} to sampled configurations when
+transformations matter. A \verb{$constraint} or \verb{$extra_trafo} function is
+likewise not exported.
+
+Defaults are optional. If a parameter has no default, ConfigSpace will auto-assign one
+(e.g. midpoint for numeric parameters, first level for categoricals).
 
 The function auto-detects old ConfigSpace API (ConfigSpace < 0.6.0) vs. new ConfigSpace API (ConfigSpace >= 0.6.0).
 }

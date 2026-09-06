@@ -1,0 +1,766 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This is a deliberately narrow forward-compatibility gate.  It does not
+# replace the package's GNU C99 contract: one committed source archive is
+# installed with an explicit R --use-C23 override under two current compilers,
+# then the complete registered native-probe inventory is replayed for each DSO.
+
+umask 077
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/check-c23-compatibility --source-ref REF --run-id ID
+
+Build one exact committed Paradox source archive with repository-local
+R 4.6.1, install that same archive using explicit `R CMD INSTALL --use-C23`
+under the authenticated GCC 15.2 overlay and the repository-local Clang 22,
+and run the complete registered native-probe inventory for both installed
+DSOs. The command is networkless and retains sealed evidence below
+.local/checks/ID/c23-compatibility.
+
+REF must be one safe full refs/... Git ref. ID must contain only letters,
+digits, dots, underscores, and hyphens.
+EOF
+}
+
+fail() {
+  printf 'check-c23-compatibility: %s\n' "$*" >&2
+  exit 1
+}
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+require_plain_file() {
+  local path=$1 label=$2
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-regular, or symbolic: $path"
+}
+
+require_plain_directory() {
+  local path=$1 label=$2
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-directory, or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label does not resolve to its expected path: $path"
+}
+
+source_ref=
+run_id=
+while (($#)); do
+  case "$1" in
+    --source-ref)
+      (($# >= 2)) || fail "--source-ref requires a value"
+      source_ref=$2
+      shift 2
+      ;;
+    --source-ref=*)
+      source_ref=${1#--source-ref=}
+      shift
+      ;;
+    --run-id)
+      (($# >= 2)) || fail "--run-id requires a value"
+      run_id=$2
+      shift 2
+      ;;
+    --run-id=*)
+      run_id=${1#--run-id=}
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument: $1"
+      ;;
+  esac
+done
+
+[[ "$source_ref" =~ ^refs/[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
+  "$source_ref" != *..* && "$source_ref" != */ &&
+  "$source_ref" != *//* ]] ||
+  fail "--source-ref is required and must be one safe full refs/... ref"
+[[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
+  fail "--run-id is required and must have a safe shape"
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+[[ "$(pwd -P)" == "$ROOT" ]] ||
+  fail "run this command from the repository root"
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+
+TOOLCHAIN="$ROOT/.local/toolchain"
+DEPENDENCY_LIBRARY="$ROOT/.local/R/library"
+GCC_PREFIX="$ROOT/.local/c23-gcc"
+GCC_RECEIPTS="$ROOT/.local/receipts/c23-gcc"
+GCC="$GCC_PREFIX/bin/x86_64-conda-linux-gnu-gcc"
+CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
+R="$TOOLCHAIN/bin/R"
+RSCRIPT="$TOOLCHAIN/bin/Rscript"
+LOCAL_TARGET=x86_64-conda-linux-gnu
+LOCAL_SYSROOT="$TOOLCHAIN/$LOCAL_TARGET/sysroot"
+LOCAL_PATH="$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin"
+LOCAL_AR="$TOOLCHAIN/bin/$LOCAL_TARGET-ar"
+LOCAL_RANLIB="$TOOLCHAIN/bin/$LOCAL_TARGET-ranlib"
+LOCAL_AS="$TOOLCHAIN/bin/$LOCAL_TARGET-as"
+LOCAL_LD="$TOOLCHAIN/bin/$LOCAL_TARGET-ld"
+LOCAL_NM="$TOOLCHAIN/bin/$LOCAL_TARGET-nm"
+LOCAL_STRIP="$TOOLCHAIN/bin/$LOCAL_TARGET-strip"
+LOCAL_CPP="$TOOLCHAIN/bin/$LOCAL_TARGET-cpp"
+LOCAL_LD_LIBRARY_PATH="$TOOLCHAIN/lib"
+BOOTSTRAP_GCC="$ROOT/scripts/bootstrap-c23-gcc"
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+TREE_RECEIPT="$ROOT/scripts/environment/tree-receipt.R"
+EVIDENCE_VALIDATOR="$ROOT/scripts/environment/validate-c23-evidence"
+RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
+TOOLCHAIN_LOCK="$ROOT/environment/toolchain-linux-64.lock"
+GCC_LOCK="$ROOT/environment/c23-gcc-linux-64.lock"
+GCC_RECEIPT="$GCC_RECEIPTS/receipt.tsv"
+GCC_SEAL="$GCC_RECEIPTS/receipt.sha256"
+GCC_PREFIX_MANIFEST="$GCC_RECEIPTS/prefix.manifest.tsv"
+GCC_INSTALLED_LOCK="$GCC_RECEIPTS/installed-explicit.lock"
+
+for executable in "$R" "$RSCRIPT" "$GCC" "$CLANG" "$LOCAL_AR" \
+    "$LOCAL_RANLIB" "$LOCAL_AS" "$LOCAL_LD" "$LOCAL_NM" "$LOCAL_STRIP" \
+    "$LOCAL_CPP" "$BOOTSTRAP_GCC" "$MICROMAMBA" "$GIT_HELPER" \
+    "$PREFIX_RECEIPT" "$EVIDENCE_VALIDATOR" "$RESOURCE_JOBS"; do
+  [[ -x "$executable" ]] ||
+    fail "required repository-local executable is absent: $executable"
+done
+for input in "$TREE_RECEIPT" "$TOOLCHAIN_LOCK" "$GCC_LOCK" "$GCC_RECEIPT" \
+    "$GCC_SEAL" "$GCC_PREFIX_MANIFEST" "$GCC_INSTALLED_LOCK"; do
+  require_plain_file "$input" "required C23 gate input"
+done
+require_plain_directory "$TOOLCHAIN" "repository-local toolchain"
+require_plain_directory "$DEPENDENCY_LIBRARY" "repository-local R library"
+require_plain_directory "$GCC_PREFIX" "GCC 15.2 overlay"
+require_plain_directory "$GCC_RECEIPTS" "GCC 15.2 receipt directory"
+[[ "$(command -v R)" == "$R" && "$(command -v Rscript)" == "$RSCRIPT" &&
+  "$(R RHOME)" == "$TOOLCHAIN/lib/R" ]] ||
+  fail "R does not resolve to the activated repository-local toolchain"
+R_VERSION=$("$R" --vanilla --slave -e 'cat(as.character(getRversion()))')
+[[ "$R_VERSION" == 4.6.1 ]] ||
+  fail "the C23 gate requires repository-local R 4.6.1, found $R_VERSION"
+"$R" CMD INSTALL --help 2>&1 | grep -F -- '--use-C23' >/dev/null ||
+  fail "repository-local R does not expose the explicit --use-C23 override"
+
+"$BOOTSTRAP_GCC" --verify >/dev/null
+GCC_VERSION=$("$GCC" -dumpfullversion -dumpversion)
+[[ "$GCC_VERSION" == 15.2.0 ]] ||
+  fail "the authenticated GCC overlay is not GCC 15.2.0"
+CLANG_MAJOR=$("$CLANG" -dM -E -x c /dev/null |
+  awk '$2 == "__clang_major__" { print $3 }')
+[[ "$CLANG_MAJOR" == 22 ]] ||
+  fail "the repository-local recent-Clang lane requires Clang 22"
+CLANG_RESOLVED=$(readlink -f -- "$CLANG")
+require_plain_file "$CLANG_RESOLVED" "resolved Clang compiler"
+[[ "$CLANG_RESOLVED" == "$TOOLCHAIN/"* ]] ||
+  fail "the selected Clang compiler resolves outside the local toolchain"
+
+CHECKS_ROOT="$ROOT/.local/checks"
+require_plain_directory "$ROOT/.local" "repository-local state root"
+if [[ ! -e "$CHECKS_ROOT" && ! -L "$CHECKS_ROOT" ]]; then
+  mkdir -- "$CHECKS_ROOT"
+fi
+require_plain_directory "$CHECKS_ROOT" "managed checks root"
+RUN_PARENT="$CHECKS_ROOT/$run_id"
+if [[ ! -e "$RUN_PARENT" && ! -L "$RUN_PARENT" ]]; then
+  mkdir -- "$RUN_PARENT"
+fi
+require_plain_directory "$RUN_PARENT" "managed run parent"
+RUN="$RUN_PARENT/c23-compatibility"
+[[ ! -e "$RUN" && ! -L "$RUN" ]] ||
+  fail "C23 evidence directory already exists: $RUN"
+mkdir -- "$RUN"
+mkdir -- "$RUN/metadata" "$RUN/inputs" "$RUN/source" "$RUN/build" \
+  "$RUN/modes"
+
+COMPLETION_READY=false
+finish_run() {
+  local status=$?
+  trap - 0 HUP INT TERM
+  if [[ "$status" -eq 0 && "$COMPLETION_READY" == true &&
+    -f "$RUN/metadata/completion.txt" &&
+    -f "$RUN/metadata/completion.sha256" ]]; then
+    state=passed
+  else
+    state=failed
+    [[ "$status" -ne 0 ]] || status=1
+  fi
+  {
+    printf 'status=%s\n' "$state"
+    printf 'exit_code=%s\n' "$status"
+    printf 'finished_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$RUN/metadata/result.txt.new"
+  mv -- "$RUN/metadata/result.txt.new" "$RUN/metadata/result.txt"
+  exit "$status"
+}
+trap finish_run 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+COMMAND_LOG="$RUN/metadata/commands.sh"
+: > "$COMMAND_LOG"
+
+quote_argument() {
+  case "$1" in
+    '')
+      printf "''"
+      ;;
+    *[!A-Za-z0-9_./:=,+@%-]*)
+      printf "'"
+      printf '%s' "$1" | sed "s/'/'\\\\''/g"
+      printf "'"
+      ;;
+    *)
+      printf '%s' "$1"
+      ;;
+  esac
+}
+
+log_command() {
+  printf '$' >> "$COMMAND_LOG"
+  local argument
+  for argument in "$@"; do
+    printf ' ' >> "$COMMAND_LOG"
+    quote_argument "$argument" >> "$COMMAND_LOG"
+  done
+  printf '\n' >> "$COMMAND_LOG"
+}
+
+run_logged() {
+  local log=$1
+  shift
+  log_command "$@"
+  "$@" >> "$log" 2>&1
+}
+
+run_in_directory_logged() {
+  local log=$1 directory=$2
+  shift 2
+  {
+    printf '$ cd '
+    quote_argument "$directory"
+    printf '\n'
+  } >> "$COMMAND_LOG"
+  (
+    cd "$directory"
+    run_logged "$log" "$@"
+  )
+}
+
+authenticate_main_toolchain() {
+  local inventory_log=$1 output=$2 validation_log
+  validation_log=${inventory_log%.log}-validation.log
+  run_logged "$validation_log" \
+    "$EVIDENCE_VALIDATOR" toolchain-inventory \
+    "$MICROMAMBA" "$TOOLCHAIN" "$TOOLCHAIN_LOCK" "$RUN/metadata" \
+    "$LOCAL_PATH" "$ROOT/.local/micromamba" "$inventory_log" "$output"
+}
+
+select_compile_jobs() {
+  local report="$RUN/metadata/compile-admission.tsv"
+  local staged="$RUN/metadata/compile-admission.tsv.new"
+  local log="$RUN/metadata/compile-admission.log"
+  log_command "$RESOURCE_JOBS" compile --max-jobs 4 --report
+  if ! "$RESOURCE_JOBS" compile --max-jobs 4 --report \
+      > "$staged" 2> "$log"; then
+    rm -f -- "$staged"
+    fail "resource scheduler could not admit C23 compilation; see $log"
+  fi
+  mv -- "$staged" "$report"
+  log_command "$RESOURCE_JOBS" compile --verify-report "$report"
+  "$RESOURCE_JOBS" compile --verify-report "$report" >> "$log" 2>&1 ||
+    fail "resource scheduler could not verify C23 admission; see $log"
+  COMPILE_JOBS=$(awk -F '\t' '$1 == "jobs" {print $2}' "$report")
+  [[ "$COMPILE_JOBS" =~ ^[1-4]$ ]] ||
+    fail "resource scheduler returned an invalid C23 compile width"
+}
+
+declare -a ACTIVE_INPUTS=(
+  scripts/check-c23-compatibility
+  scripts/bootstrap-c23-gcc
+  scripts/environment/runtime-matrix-git
+  scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/tree-receipt.R
+  scripts/environment/validate-c23-evidence
+  scripts/environment/test-c23-evidence-validator
+  scripts/environment/resource-jobs
+  scripts/environment/run-native-probes.R
+  scripts/environment/verify-native-probes.R
+  environment/c23-gcc-linux-64.lock
+  environment/toolchain-linux-64.lock
+  environment/native-routine-coverage.tsv
+)
+ACTIVE_INPUT_MANIFEST="$RUN/metadata/active-inputs.tsv"
+{
+  printf 'relative\tsha256\n'
+  for relative in "${ACTIVE_INPUTS[@]}"; do
+    require_plain_file "$ROOT/$relative" "active C23 gate input"
+    printf '%s\t%s\n' "$relative" "$(sha256_file "$ROOT/$relative")"
+  done
+} > "$ACTIVE_INPUT_MANIFEST"
+ACTIVE_INPUT_MANIFEST_SHA256=$(sha256_file "$ACTIVE_INPUT_MANIFEST")
+
+verify_active_inputs() {
+  local index=0 relative digest extra
+  IFS=$'\t' read -r relative digest extra < "$ACTIVE_INPUT_MANIFEST"
+  [[ "$relative" == relative && "$digest" == sha256 &&
+    -z "${extra:-}" ]] ||
+    fail "active-input manifest has an unexpected header"
+  while IFS=$'\t' read -r relative digest extra; do
+    [[ -z "${extra:-}" && "$index" -lt "${#ACTIVE_INPUTS[@]}" &&
+      "$relative" == "${ACTIVE_INPUTS[index]}" &&
+      "$digest" =~ ^[0-9a-f]{64}$ &&
+      -f "$ROOT/$relative" && ! -L "$ROOT/$relative" &&
+      "$(sha256_file "$ROOT/$relative")" == "$digest" ]] ||
+      fail "active C23 gate input changed during execution: $relative"
+    index=$((index + 1))
+  done < <(tail -n +2 "$ACTIVE_INPUT_MANIFEST")
+  [[ "$index" -eq "${#ACTIVE_INPUTS[@]}" &&
+    "$(sha256_file "$ACTIVE_INPUT_MANIFEST")" == "$ACTIVE_INPUT_MANIFEST_SHA256" ]] ||
+    fail "active-input inventory changed during execution"
+}
+
+"$GIT_HELPER" audit "$ROOT" > "$RUN/metadata/git-audit.log"
+source_commit=$("$GIT_HELPER" resolve-commit "$ROOT" "$source_ref")
+source_tree=$("$GIT_HELPER" resolve-tree "$ROOT" "$source_commit")
+[[ "$source_commit" =~ ^[0-9a-f]{40}$ &&
+  "$source_tree" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "selected Git provenance is malformed"
+"$GIT_HELPER" verify-ref "$ROOT" "$source_ref" "$source_commit" \
+  "$source_tree" >/dev/null
+"$GIT_HELPER" identity "$ROOT" > "$RUN/inputs/git-identity.tsv"
+
+for input in receipt.tsv receipt.sha256 prefix.manifest.tsv \
+    installed-explicit.lock; do
+  cp -- "$GCC_RECEIPTS/$input" "$RUN/inputs/c23-gcc-$input"
+done
+cp -- "$GCC_LOCK" "$RUN/inputs/c23-gcc-linux-64.lock"
+cp -- "$TOOLCHAIN_LOCK" "$RUN/inputs/toolchain-linux-64.lock"
+authenticate_main_toolchain \
+  "$RUN/metadata/toolchain-inventory-initial.log" \
+  "$RUN/inputs/toolchain-installed-explicit.lock"
+
+SOURCE_GIT_ARCHIVE="$RUN/inputs/source.git.tar"
+"$GIT_HELPER" archive "$ROOT" "$source_commit" "$SOURCE_GIT_ARCHIVE"
+"$GIT_HELPER" verify-archive "$ROOT" "$source_commit" \
+  "$SOURCE_GIT_ARCHIVE" >/dev/null
+/usr/bin/tar -xf "$SOURCE_GIT_ARCHIVE" -C "$RUN/source"
+"$PREFIX_RECEIPT" create "$RUN/source" \
+  "$RUN/metadata/source.manifest.tsv" >/dev/null
+
+SOURCE_DATE_EPOCH=$("$ROOT/.local/toolchain/bin/git" show -s \
+  --format=%ct "$source_commit")
+[[ "$SOURCE_DATE_EPOCH" =~ ^[1-9][0-9]*$ ]] ||
+  fail "selected commit has a malformed timestamp"
+
+printf 'field\tvalue\n' > "$RUN/metadata/run.tsv"
+{
+  printf 'status\tfailed\n'
+  printf 'run_id\t%s\n' "$run_id"
+  printf 'source_ref\t%s\n' "$source_ref"
+  printf 'source_commit\t%s\n' "$source_commit"
+  printf 'source_tree\t%s\n' "$source_tree"
+  printf 'source_date_epoch\t%s\n' "$SOURCE_DATE_EPOCH"
+  printf 'R_version\t%s\n' "$R_VERSION"
+  printf 'gcc_version\t%s\n' "$GCC_VERSION"
+  printf 'clang_major\t%s\n' "$CLANG_MAJOR"
+  printf 'network\tunused\n'
+} >> "$RUN/metadata/run.tsv"
+
+build_log="$RUN/build/r-cmd-build.log"
+run_in_directory_logged "$build_log" "$RUN/build" \
+  env -i \
+  "HOME=$RUN/metadata" \
+  "PATH=$LOCAL_PATH" \
+  "CONDA_PREFIX=$TOOLCHAIN" \
+  "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+  "R_LIBS_USER=$DEPENDENCY_LIBRARY" \
+  "R_LIBS=$DEPENDENCY_LIBRARY" \
+  "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" \
+  "R_PROFILE_USER=/dev/null" \
+  "R_MAKEVARS_USER=/dev/null" \
+  "R_BUILD_ENVIRON=/dev/null" \
+  "R_CHECK_ENVIRON=/dev/null" \
+  "R_INSTALL_ENVIRON=/dev/null" \
+  "R_HISTFILE=/dev/null" \
+  "R_TESTS=" \
+  "TMPDIR=$RUN/metadata" \
+  "LC_ALL=C.UTF-8" \
+  "LANG=C.UTF-8" \
+  "LANGUAGE=" \
+  "TZ=UTC" \
+  "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+  "$R" CMD build --no-build-vignettes --no-manual "$RUN/source"
+
+mapfile -t SOURCE_PACKAGES < <(
+  find "$RUN/build" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print
+)
+[[ "${#SOURCE_PACKAGES[@]}" -eq 1 ]] ||
+  fail "R CMD build did not produce exactly one source package"
+SOURCE_PACKAGE=${SOURCE_PACKAGES[0]}
+SOURCE_PACKAGE_SHA256=$(sha256_file "$SOURCE_PACKAGE")
+SOURCE_GIT_ARCHIVE_SHA256=$(sha256_file "$SOURCE_GIT_ARCHIVE")
+SOURCE_MANIFEST_SHA256=$(sha256_file "$RUN/metadata/source.manifest.tsv")
+mapfile -t DESCRIPTION_MEMBERS < <(
+  /usr/bin/tar -tzf "$SOURCE_PACKAGE" |
+    awk -F / 'NF == 2 && $1 != "" && $2 == "DESCRIPTION" { print }'
+)
+[[ "${#DESCRIPTION_MEMBERS[@]}" -eq 1 &&
+  "${DESCRIPTION_MEMBERS[0]}" == paradox/DESCRIPTION ]] ||
+  fail "built package does not contain one canonical paradox/DESCRIPTION"
+BUILT_DESCRIPTION="$RUN/build/package-DESCRIPTION"
+/usr/bin/tar -xOzf "$SOURCE_PACKAGE" "${DESCRIPTION_MEMBERS[0]}" \
+  > "$BUILT_DESCRIPTION"
+require_plain_file "$BUILT_DESCRIPTION" "built package DESCRIPTION"
+BUILT_DESCRIPTION_SHA256=$(sha256_file "$BUILT_DESCRIPTION")
+"$EVIDENCE_VALIDATOR" description "$RSCRIPT" "$BUILT_DESCRIPTION" \
+  paradox 2.0.0 USE_C17
+
+verify_source_package() {
+  "$EVIDENCE_VALIDATOR" file-sha256 \
+    "$SOURCE_PACKAGE" "$SOURCE_PACKAGE_SHA256"
+}
+verify_source_package
+
+select_compile_jobs
+
+MODE_EVIDENCE="$RUN/metadata/mode-evidence.tsv"
+printf 'mode\tcompiler\tcompiler_sha256\tversion_sha256\tstdc_version\tfeature_sha256\tmakevars_sha256\tinstall_log_sha256\tdso_sha256\tprobe_sha256\tprobe_verify_log_sha256\n' \
+  > "$MODE_EVIDENCE"
+EXPECTED_C_SOURCES="$RUN/build/expected-c-sources.txt"
+find "$RUN/source/src" -maxdepth 1 -type f -name '*.c' -printf '%f\n' |
+  LC_ALL=C sort > "$EXPECTED_C_SOURCES"
+
+write_makevars() {
+  local mode=$1 compiler=$2 output=$3
+  local flags
+  {
+    printf '# Generated by scripts/check-c23-compatibility for %s.\n' "$mode"
+    printf 'CC = %s -std=gnu23\n' "$compiler"
+    printf 'CC17 = %s -std=gnu23\n' "$compiler"
+    printf 'CC23 = %s -std=gnu23\n' "$compiler"
+    printf 'SHLIB_LD = %s\n' "\$(CC23)"
+    printf 'CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem %s/include\n' \
+      "$TOOLCHAIN"
+    if [[ "$mode" == gcc15 ]]; then
+      flags='-O2 -g3 -fno-omit-frame-pointer -Wall -Wextra -Wpedantic -Werror -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -Wold-style-definition -Wbad-function-cast -Wformat=2 -Wformat-security -Wundef -Wshadow -Wconversion -Wsign-conversion -Wdouble-promotion -Wpointer-arith -Wcast-align=strict -Wcast-qual -Wwrite-strings -Wvla -Walloca -Walloc-zero -Wnull-dereference -Wduplicated-cond -Wduplicated-branches -Wlogical-op -Warray-bounds=2 -Wstringop-overflow=4 -Werror=implicit-function-declaration -Werror=incompatible-pointer-types'
+    else
+      flags='-O2 -g3 -fno-omit-frame-pointer -Wall -Wextra -Wpedantic -Werror -Wstrict-prototypes -Wmissing-prototypes -Wmissing-variable-declarations -Wformat=2 -Wformat-security -Wundef -Wshadow -Wconversion -Wsign-conversion -Wdouble-promotion -Wpointer-arith -Wcast-align -Wcast-qual -Wwrite-strings -Wvla -Walloca -Wnull-dereference -Warray-bounds -Wconditional-uninitialized -Wunreachable-code -Wcast-function-type-strict -Werror=implicit-function-declaration -Werror=incompatible-pointer-types'
+    fi
+    printf 'PARADOX_C23_FLAGS = %s\n' "$flags"
+    printf 'CFLAGS = %s\n' "\$(PARADOX_C23_FLAGS)"
+    printf 'C17FLAGS = %s\n' "\$(PARADOX_C23_FLAGS)"
+    printf 'C23FLAGS = %s\n' "\$(PARADOX_C23_FLAGS)"
+    printf 'LDFLAGS = -Wl,-O2 -Wl,--sort-common -Wl,--as-needed -Wl,-z,relro -Wl,-z,now -Wl,--disable-new-dtags -Wl,--gc-sections -Wl,--allow-shlib-undefined -Wl,-rpath,%s/lib -Wl,-rpath-link,%s/lib -L%s/lib\n' \
+      "$TOOLCHAIN" "$TOOLCHAIN" "$TOOLCHAIN"
+  } > "$output"
+}
+
+run_mode() {
+  local mode=$1 compiler=$2 mode_path mode_path_env compiler_path_env
+  local makevars compiler_version compiler_version_sha compiler_sha
+  local feature_source feature_binary feature_output stdc_version
+  local install_log dso dso_sha probe_result probe_run_log probe_verify_log
+
+  mode_path="$RUN/modes/$mode"
+  mkdir -- "$mode_path"
+  mkdir -- "$mode_path/artifacts" "$mode_path/home" "$mode_path/library" \
+    "$mode_path/logs" "$mode_path/tmp" "$mode_path/cache"
+  makevars="$mode_path/artifacts/Makevars-c23"
+  write_makevars "$mode" "$compiler" "$makevars"
+
+  if [[ "$mode" == gcc15 ]]; then
+    mode_path_env="$GCC_PREFIX/bin:$LOCAL_PATH"
+    compiler_path_env="$GCC_PREFIX/lib:$LOCAL_LD_LIBRARY_PATH"
+  else
+    mode_path_env="$LOCAL_PATH"
+    compiler_path_env="$LOCAL_LD_LIBRARY_PATH"
+  fi
+
+  compiler_version="$mode_path/artifacts/compiler-version.txt"
+  run_logged "$mode_path/logs/compiler-version.log" \
+    env -i "PATH=$mode_path_env" "LC_ALL=C" "LANG=C" "TZ=UTC" \
+    "$compiler" --version
+  cp -- "$mode_path/logs/compiler-version.log" "$compiler_version"
+  compiler_version_sha=$(sha256_file "$compiler_version")
+  compiler_sha=$(sha256_file "$(readlink -f -- "$compiler")")
+
+  stdc_version=$(
+    env -i "PATH=$mode_path_env" "LC_ALL=C" \
+      "$compiler" -std=gnu23 -dM -E -x c /dev/null |
+      awk '$2 == "__STDC_VERSION__" {print $3}'
+  )
+  [[ "$stdc_version" == 202311L ]] ||
+    fail "$mode does not report the final C23 __STDC_VERSION__"
+
+  feature_source="$mode_path/artifacts/c23-feature.c"
+  feature_binary="$mode_path/artifacts/c23-feature"
+  feature_output="$mode_path/artifacts/c23-feature.txt"
+  cat > "$feature_source" <<'EOF'
+#include <stdio.h>
+
+static_assert(__STDC_VERSION__ == 202311L, "final C23 is required");
+
+int
+main(void)
+{
+    bool selected = true;
+    typeof_unqual(selected) copied = selected;
+    printf("%ld\n", (long) __STDC_VERSION__);
+    return copied ? 0 : 1;
+}
+EOF
+  run_logged "$mode_path/logs/c23-feature-build.log" \
+    env -i "HOME=$mode_path/home" "PATH=$mode_path_env" \
+    "LD_LIBRARY_PATH=$compiler_path_env" "LC_ALL=C" "LANG=C" "TZ=UTC" \
+    "$compiler" -std=gnu23 -Wall -Wextra -Wpedantic -Werror \
+    "$feature_source" -o "$feature_binary"
+  run_logged "$mode_path/logs/c23-feature-run.log" \
+    env -i "HOME=$mode_path/home" "PATH=$mode_path_env" \
+    "LD_LIBRARY_PATH=$compiler_path_env" "LC_ALL=C" "LANG=C" "TZ=UTC" \
+    "$feature_binary"
+  cp -- "$mode_path/logs/c23-feature-run.log" "$feature_output"
+  [[ "$(<"$feature_output")" == 202311 ]] ||
+    fail "$mode C23 semantic probe returned an unexpected result"
+
+  install_log="$mode_path/logs/install.log"
+  verify_source_package
+  run_logged "$install_log" \
+    env -i \
+    "HOME=$mode_path/home" \
+    "USER=$(id -un)" \
+    "LOGNAME=$(id -un)" \
+    "PATH=$mode_path_env" \
+    "CONDA_PREFIX=$TOOLCHAIN" \
+    "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT" \
+    "HOST=$LOCAL_TARGET" \
+    "BUILD=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_HOST=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_BUILD=$LOCAL_TARGET" \
+    "AR=$LOCAL_AR" \
+    "RANLIB=$LOCAL_RANLIB" \
+    "AS=$LOCAL_AS" \
+    "LD=$LOCAL_LD" \
+    "NM=$LOCAL_NM" \
+    "STRIP=$LOCAL_STRIP" \
+    "CPP=$LOCAL_CPP" \
+    "LD_LIBRARY_PATH=$compiler_path_env" \
+    "R_LIBS_USER=$mode_path/library" \
+    "R_LIBS=$mode_path/library:$DEPENDENCY_LIBRARY" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=$makevars" \
+    "R_BUILD_ENVIRON=/dev/null" \
+    "R_CHECK_ENVIRON=/dev/null" \
+    "R_INSTALL_ENVIRON=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "R_TESTS=" \
+    "R_KEEP_PKG_SOURCE=yes" \
+    "MAKEFLAGS=-j$COMPILE_JOBS" \
+    "TMPDIR=$mode_path/tmp" \
+    "XDG_CACHE_HOME=$mode_path/cache" \
+    "R_USER_CACHE_DIR=$mode_path/cache/R" \
+    "LC_ALL=C.UTF-8" \
+    "LANG=C.UTF-8" \
+    "LANGUAGE=" \
+    "TZ=UTC" \
+    "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+    "http_proxy=" "https_proxy=" "HTTP_PROXY=" "HTTPS_PROXY=" \
+    "ALL_PROXY=" "NO_PROXY=*" \
+    "$R" CMD INSTALL --use-C23 --preclean --clean --no-multiarch \
+    --library="$mode_path/library" "$SOURCE_PACKAGE"
+  verify_source_package
+
+  "$EVIDENCE_VALIDATOR" install-log "$install_log" "$compiler" \
+    "$EXPECTED_C_SOURCES" paradox.so
+
+  dso="$mode_path/library/paradox/libs/paradox.so"
+  require_plain_file "$dso" "$mode installed Paradox DSO"
+  dso_sha=$(sha256_file "$dso")
+  printf '%s  %s\n' "$dso_sha" "${dso#"$mode_path/"}" \
+    > "$mode_path/artifacts/paradox.so.sha256"
+
+  probe_result="$mode_path/artifacts/native-probes.tsv"
+  probe_run_log="$mode_path/logs/native-probes.log"
+  probe_verify_log="$mode_path/logs/native-probes-verify.log"
+  run_logged "$probe_run_log" \
+    env -i \
+    "HOME=$mode_path/home" \
+    "PATH=$mode_path_env" \
+    "LD_LIBRARY_PATH=$compiler_path_env" \
+    "R_LIBS_USER=$mode_path/library" \
+    "R_LIBS=$mode_path/library:$DEPENDENCY_LIBRARY" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "R_TESTS=" \
+    "NOT_CRAN=true" \
+    "TMPDIR=$mode_path/tmp" \
+    "XDG_CACHE_HOME=$mode_path/cache" \
+    "R_USER_CACHE_DIR=$mode_path/cache/R" \
+    "LC_ALL=C.UTF-8" \
+    "LANG=C.UTF-8" \
+    "LANGUAGE=" \
+    "TZ=UTC" \
+    "$RSCRIPT" --vanilla \
+    "$RUN/source/scripts/environment/run-native-probes.R" \
+    --mode=plain \
+    "--manifest=$RUN/source/environment/native-routine-coverage.tsv" \
+    "--candidate-library=$mode_path/library" \
+    "--dependency-library=$DEPENDENCY_LIBRARY" \
+    "--output=$probe_result" \
+    "--expected-dso-sha256=$dso_sha" \
+    --expected-version=2.0.0 --rounds=1
+  run_logged "$probe_verify_log" \
+    env -i \
+    "HOME=$mode_path/home" \
+    "PATH=$mode_path_env" \
+    "LD_LIBRARY_PATH=$compiler_path_env" \
+    "R_LIBS_USER=$mode_path/library" \
+    "R_LIBS=$mode_path/library:$DEPENDENCY_LIBRARY" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "R_TESTS=" \
+    "TMPDIR=$mode_path/tmp" \
+    "LC_ALL=C.UTF-8" \
+    "LANG=C.UTF-8" \
+    "LANGUAGE=" \
+    "TZ=UTC" \
+    "$RSCRIPT" --vanilla \
+    "$RUN/source/scripts/environment/verify-native-probes.R" \
+    "--manifest=$RUN/source/environment/native-routine-coverage.tsv" \
+    "--result=$probe_result" --mode=plain \
+    "--expected-dso-sha256=$dso_sha"
+  grep -Fx -- 'targeted memory result verified' "$probe_verify_log" \
+    >/dev/null ||
+    fail "$mode native-probe verifier did not report completion"
+  verify_source_package
+
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$mode" "$compiler" "$compiler_sha" "$compiler_version_sha" \
+    "$stdc_version" "$(sha256_file "$feature_output")" \
+    "$(sha256_file "$makevars")" "$(sha256_file "$install_log")" \
+    "$dso_sha" "$(sha256_file "$probe_result")" \
+    "$(sha256_file "$probe_verify_log")" >> "$MODE_EVIDENCE"
+}
+
+run_mode gcc15 "$GCC"
+run_mode clang22 "$CLANG"
+
+[[ "$(awk 'END {print NR - 1}' "$MODE_EVIDENCE")" -eq 2 ]] ||
+  fail "C23 mode evidence does not contain exactly two compiler rows"
+verify_source_package
+authenticate_main_toolchain \
+  "$RUN/metadata/toolchain-inventory-final.log" \
+  "$RUN/metadata/toolchain-installed-explicit-final.lock"
+cmp -s -- "$RUN/inputs/toolchain-installed-explicit.lock" \
+  "$RUN/metadata/toolchain-installed-explicit-final.lock" ||
+  fail "main toolchain inventory changed during the C23 gate"
+"$BOOTSTRAP_GCC" --verify >/dev/null
+"$GIT_HELPER" verify-ref "$ROOT" "$source_ref" "$source_commit" \
+  "$source_tree" >/dev/null
+"$GIT_HELPER" verify-archive "$ROOT" "$source_commit" \
+  "$SOURCE_GIT_ARCHIVE" >/dev/null
+"$PREFIX_RECEIPT" verify "$RUN/source" \
+  "$RUN/metadata/source.manifest.tsv" >/dev/null
+verify_active_inputs
+for input in receipt.tsv receipt.sha256 prefix.manifest.tsv \
+    installed-explicit.lock; do
+  cmp -s -- "$GCC_RECEIPTS/$input" "$RUN/inputs/c23-gcc-$input" ||
+    fail "GCC C23 receipt input changed during execution: $input"
+done
+cmp -s -- "$GCC_LOCK" "$RUN/inputs/c23-gcc-linux-64.lock" ||
+  fail "GCC C23 lock changed during execution"
+cmp -s -- "$TOOLCHAIN_LOCK" "$RUN/inputs/toolchain-linux-64.lock" ||
+  fail "main toolchain lock changed during execution"
+
+{
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" create "$RUN/inputs" \
+    "$RUN/metadata/inputs-tree.tsv"
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" create "$RUN/source" \
+    "$RUN/metadata/source-tree.tsv"
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" create "$RUN/build" \
+    "$RUN/metadata/build-tree.tsv"
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" create "$RUN/modes" \
+    "$RUN/metadata/modes-tree.tsv"
+} > "$RUN/metadata/tree-receipts.log"
+run_logged "$RUN/metadata/tree-receipts-verify.log" \
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" verify "$RUN/inputs" \
+  "$RUN/metadata/inputs-tree.tsv"
+run_logged "$RUN/metadata/tree-receipts-verify.log" \
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" verify "$RUN/source" \
+  "$RUN/metadata/source-tree.tsv"
+run_logged "$RUN/metadata/tree-receipts-verify.log" \
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" verify "$RUN/build" \
+  "$RUN/metadata/build-tree.tsv"
+run_logged "$RUN/metadata/tree-receipts-verify.log" \
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT" verify "$RUN/modes" \
+  "$RUN/metadata/modes-tree.tsv"
+
+sed -i 's/^status\tfailed$/status\tpassed/' "$RUN/metadata/run.tsv"
+COMPLETION="$RUN/metadata/completion.txt"
+{
+  printf 'harness=check-c23-compatibility\n'
+  printf 'schema=1\n'
+  printf 'run_id=%s\n' "$run_id"
+  printf 'source_ref=%s\n' "$source_ref"
+  printf 'source_commit=%s\n' "$source_commit"
+  printf 'source_tree=%s\n' "$source_tree"
+  printf 'source_git_archive_sha256=%s\n' "$SOURCE_GIT_ARCHIVE_SHA256"
+  printf 'source_manifest_sha256=%s\n' "$SOURCE_MANIFEST_SHA256"
+  printf 'source_package_sha256=%s\n' "$SOURCE_PACKAGE_SHA256"
+  printf 'active_inputs_sha256=%s\n' "$ACTIVE_INPUT_MANIFEST_SHA256"
+  printf 'inputs_tree_sha256=%s\n' \
+    "$(sha256_file "$RUN/metadata/inputs-tree.tsv")"
+  printf 'source_tree_receipt_sha256=%s\n' \
+    "$(sha256_file "$RUN/metadata/source-tree.tsv")"
+  printf 'build_tree_sha256=%s\n' \
+    "$(sha256_file "$RUN/metadata/build-tree.tsv")"
+  printf 'modes_tree_sha256=%s\n' \
+    "$(sha256_file "$RUN/metadata/modes-tree.tsv")"
+  printf 'mode_evidence_sha256=%s\n' "$(sha256_file "$MODE_EVIDENCE")"
+  printf 'compile_admission_sha256=%s\n' \
+    "$(sha256_file "$RUN/metadata/compile-admission.tsv")"
+  printf 'commands_sha256=%s\n' "$(sha256_file "$COMMAND_LOG")"
+  printf 'gcc_receipt_sha256=%s\n' "$(sha256_file "$GCC_RECEIPT")"
+  printf 'gcc_receipt_seal_sha256=%s\n' "$(sha256_file "$GCC_SEAL")"
+  printf 'toolchain_lock_sha256=%s\n' "$(sha256_file "$TOOLCHAIN_LOCK")"
+  printf 'toolchain_inventory_sha256=%s\n' \
+    "$(sha256_file "$RUN/inputs/toolchain-installed-explicit.lock")"
+  printf 'gcc_lock_sha256=%s\n' "$(sha256_file "$GCC_LOCK")"
+  printf 'built_description_sha256=%s\n' "$BUILT_DESCRIPTION_SHA256"
+  printf 'system_requirements=USE_C17\n'
+  printf 'R_version=%s\n' "$R_VERSION"
+  printf 'gcc_version=%s\n' "$GCC_VERSION"
+  printf 'clang_major=%s\n' "$CLANG_MAJOR"
+  printf 'dialect=gnu23\n'
+  printf 'stdc_version=202311L\n'
+  printf 'install_override=--use-C23\n'
+  printf 'registered_native_probes=complete\n'
+} > "$COMPLETION"
+(
+  cd "$RUN/metadata"
+  sha256sum completion.txt
+) > "$RUN/metadata/completion.sha256"
+(
+  cd "$RUN/metadata"
+  sha256sum -c completion.sha256 >/dev/null
+)
+COMPLETION_READY=true
+
+printf 'C23 compatibility checks passed: %s\n' "$RUN"

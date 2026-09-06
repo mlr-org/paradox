@@ -1,0 +1,2502 @@
+graph_candidate = function(label) {
+  candidate = new.env(parent = emptyenv())
+  candidate$label = label
+  class(candidate) = c("ParamSet", "R6")
+  candidate
+}
+
+discover_upgrade_candidates = function(x) {
+  .Call(paradox:::C_upgrade_graph_discover, x)
+}
+
+same_environment_set = function(actual, expected) {
+  length(actual) == length(expected) &&
+    all(vapply(expected, function(target) {
+      sum(vapply(actual, identical, logical(1L), y = target)) == 1L
+    }, logical(1L)))
+}
+
+read_base64_serialized_fixture = function(path) {
+  encoded = paste(readLines(path, warn = FALSE), collapse = "")
+  characters = strsplit(encoded, "", fixed = TRUE)[[1L]]
+  alphabet = strsplit(
+    paste0(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+      "abcdefghijklmnopqrstuvwxyz",
+      "0123456789+/"
+    ),
+    "",
+    fixed = TRUE
+  )[[1L]]
+  padding = sum(characters == "=")
+  characters[characters == "="] = "A"
+  values = match(characters, alphabet) - 1L
+  stopifnot(
+    length(values) %% 4L == 0L,
+    !anyNA(values),
+    padding %in% 0:2
+  )
+  groups = matrix(values, ncol = 4L, byrow = TRUE)
+  decoded = cbind(
+    groups[, 1L] * 4L + groups[, 2L] %/% 16L,
+    (groups[, 2L] %% 16L) * 16L + groups[, 3L] %/% 4L,
+    (groups[, 3L] %% 4L) * 64L + groups[, 4L]
+  )
+  bytes = as.integer(t(decoded))
+  if (padding) {
+    bytes = head(bytes, -padding)
+  }
+  connection = gzcon(rawConnection(as.raw(bytes), open = "rb"))
+  on.exit(close(connection), add = TRUE)
+  unserialize(connection)
+}
+
+test_that("recursive discovery traverses a directly reached bytecode object", {
+  candidate = graph_candidate("bytecode-expression")
+  bytecode = compiler::compile(call("identity", candidate))
+
+  discovery = discover_upgrade_candidates(list(bytecode))
+
+  expect_identical(typeof(bytecode), "bytecode")
+  expect_true(same_environment_set(discovery$objects, list(candidate)))
+  expect_true("x[[1]].expression.cdr.car" %in% discovery$paths)
+})
+
+test_that("direct bytecode traversal never evaluates its expression", {
+  bytecode = compiler::compile(
+    quote(stop("bytecode traversal evaluated its expression")),
+    env = baseenv()
+  )
+
+  expect_silent(
+    discovery <- discover_upgrade_candidates(list(bytecode))
+  )
+  expect_identical(discovery$objects, list())
+  expect_identical(discovery$paths, character())
+})
+
+test_that("delayed-binding discovery is inert on every supported branch", {
+  candidate = graph_candidate("delayed-binding-environment")
+  sentinel = new.env(parent = emptyenv())
+  sentinel$forced = FALSE
+  evaluation_environment = new.env(parent = baseenv())
+  evaluation_environment$candidate = candidate
+  evaluation_environment$sentinel = sentinel
+  promise_host = new.env(parent = emptyenv())
+  delayedAssign(
+    "danger",
+    {
+      sentinel$forced = TRUE
+      stop("delayed binding was forced")
+    },
+    eval.env = evaluation_environment,
+    assign.env = promise_host
+  )
+
+  if (getRversion() >= "4.5.0" && getRversion() < "4.6.0") {
+    expect_error(
+      discover_upgrade_candidates(list(promise_host)),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
+  } else {
+    discovery = discover_upgrade_candidates(list(promise_host))
+    expect_true(same_environment_set(discovery$objects, list(candidate)))
+    expect_true(any(grepl(".promise.environment", discovery$paths, fixed = TRUE)))
+  }
+  expect_false(sentinel$forced)
+})
+
+test_that("factory-frame promises use the exact R 4.5 migration boundary", {
+  sentinel = new.env(parent = emptyenv())
+  sentinel$forced = FALSE
+  make_set = function(value) {
+    ps(x = p_int(trafo = function(x) x))
+  }
+  param_set = make_set({
+    sentinel$forced = TRUE
+    stop("factory promise was forced", call. = FALSE)
+  })
+  core = paradox:::param_set_core_state(mlr3misc::get_private(param_set))
+  values = param_set$values
+  carrier = list(param_set = param_set)
+
+  if (getRversion() >= "4.5.0" && getRversion() < "4.6.0") {
+    expect_error(
+      upgrade_paradox_object_graph(carrier),
+      "load and upgrade this object under R 4.0--4.4 or R >= 4.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_identical(upgrade_paradox_object_graph(carrier), carrier)
+  }
+  expect_false(sentinel$forced)
+  expect_identical(carrier$param_set, param_set)
+  expect_identical(
+    paradox:::param_set_core_state(mlr3misc::get_private(param_set)),
+    core
+  )
+  expect_identical(param_set$values, values)
+})
+
+test_that("object-retained generated callbacks store plain frame bindings", {
+  # The boundary above is documented for arbitrary user factories. The package
+  # must not manufacture it inside its own current objects: every generated
+  # frame below stores its captures as direct values, never as formal promise
+  # cells, so graphs made only of package-generated callbacks migrate on
+  # every supported runtime including exactly R 4.5.
+  expect_plain_cells = function(closure, cells) {
+    frame = environment(closure)
+    expect_setequal(ls(frame, all.names = TRUE), cells)
+    for (cell in cells) {
+      snapshot = paradox:::.paradox_plain_binding_snapshot(frame, cell)
+      expect_true(isTRUE(snapshot$ok), info = cell)
+    }
+  }
+  # Closures homed below the test frame would drag testthat's own promises
+  # into the walked graph; base-homed callbacks keep the carriers clean.
+  base_trafo = eval(quote(function(x, param_set) x), baseenv())
+  base_constraint = eval(quote(function(x) TRUE), baseenv())
+  base_in_tune = eval(quote(function(domain, param_vals) param_vals), baseenv())
+
+  logscale_set = ps(x = p_int(1, 10, logscale = TRUE))
+  logscale_trafo = logscale_set$params$.trafo[[1L]]
+  expect_plain_cells(logscale_trafo, c("lower", "upper"))
+  expect_identical(logscale_trafo(0), 1L)
+  expect_identical(logscale_trafo(100), 10L)
+
+  member = ps(a = p_dbl())
+  member$extra_trafo = base_trafo
+  member$constraint = base_constraint
+  flattened = c(member, ps(b = p_dbl()))$flatten()
+  expect_plain_cells(flattened$extra_trafo, "plan")
+  expect_plain_cells(flattened$constraint, "plan")
+  expect_true(flattened$test(list(a = 0.5, b = 0.5)))
+
+  shadow_origin = ps(hidden = p_int(), x = p_dbl())
+  shadow_origin$values = list(hidden = 2L)
+  shadow_origin$constraint = base_constraint
+  detached_shadow = ParamSetShadow$new(shadow_origin, "hidden")$flatten()
+  expect_plain_cells(detached_shadow$constraint, "plan")
+  expect_true(detached_shadow$test(list(x = 0.5)))
+
+  tuned = ps(a = p_int(1, 1000))
+  tuned$values$a = to_tune(ps(a = p_int(1, 5)))
+  search_space = tuned$search_space()
+  expect_plain_cells(search_space$extra_trafo, "plan")
+  renaming = paradox:::.make_tune_param_set_trafo(identity, "a")
+  expect_plain_cells(renaming, c("trafo", "pname"))
+  expect_identical(renaming(list(b = 2L), NULL), list(a = 2L))
+
+  legacy_in_tune = paradox:::param_set_collection_in_tune_fn_factory(
+    base_in_tune,
+    "left",
+    c("left.x")
+  )
+  exact_in_tune = paradox:::param_set_collection_in_tune_fn_exact_factory(
+    base_in_tune,
+    visible_ids = "x",
+    original_ids = "origin",
+    hidden_values = list(hidden = 2L)
+  )
+  expect_plain_cells(
+    legacy_in_tune,
+    c("in_tune_fn", "prefix", "prefixed_set_ids")
+  )
+  expect_plain_cells(
+    exact_in_tune,
+    c("hidden_values", "in_tune_fn", "original_ids", "visible_ids")
+  )
+  expect_identical(
+    legacy_in_tune(NULL, list(left.x = 1L, right = 3L)),
+    list(x = 1L)
+  )
+  expect_identical(
+    exact_in_tune(NULL, list(x = 1L, absent = 3L)),
+    list(hidden = 2L, origin = 1L)
+  )
+
+  root = list(
+    callbacks = list(
+      logscale = logscale_trafo,
+      collection_extra = flattened$extra_trafo,
+      collection_constraint = flattened$constraint,
+      shadow_constraint = detached_shadow$constraint,
+      search_extra = search_space$extra_trafo,
+      renaming = renaming,
+      legacy_in_tune = legacy_in_tune,
+      exact_in_tune = exact_in_tune
+    ),
+    carriers = list(
+      logscale = logscale_set,
+      collection = flattened,
+      shadow = detached_shadow,
+      search = search_space
+    )
+  )
+  expected_cells = list(
+    logscale = c("lower", "upper"),
+    collection_extra = "plan",
+    collection_constraint = "plan",
+    shadow_constraint = "plan",
+    search_extra = "plan",
+    renaming = c("trafo", "pname"),
+    legacy_in_tune = c("in_tune_fn", "prefix", "prefixed_set_ids"),
+    exact_in_tune = c(
+      "hidden_values", "in_tune_fn", "original_ids", "visible_ids"
+    )
+  )
+  roots = list(
+    current = root,
+    serialized = unserialize(serialize(root, NULL))
+  )
+  for (candidate in roots) {
+    for (name in names(expected_cells)) {
+      expect_plain_cells(
+        candidate$callbacks[[name]],
+        expected_cells[[name]]
+      )
+    }
+    expect_identical(upgrade_paradox_object_graph(candidate), candidate)
+  }
+})
+
+test_that("current ParamSet stubs bypass historical migration gateways", {
+  parameter_set = ps(x = p_dbl())
+  stub = paste(deparse(body(parameter_set$ids)), collapse = "\n")
+  expect_match(stub, ".__paradox2_ParamSet__ids", fixed = TRUE)
+  expect_false(grepl(".__ParamSet__ids", stub, fixed = TRUE))
+
+  namespace = asNamespace("paradox")
+  expect_true(exists(
+    ".__paradox2_ParamSet__ids",
+    envir = namespace,
+    inherits = FALSE
+  ))
+  gateway = get(
+    ".__ParamSet__ids",
+    envir = namespace,
+    inherits = FALSE
+  )
+  expect_match(
+    paste(deparse(body(gateway)), collapse = "\n"),
+    ".paradox_legacy_gateway_context",
+    fixed = TRUE
+  )
+})
+
+test_that("legacy gateways preserve omitted snapshot defaults", {
+  namespace = asNamespace("paradox")
+  parameter_set = ps(
+    tune = p_dbl(0, 1),
+    fixed = p_lgl()
+  )
+  parameter_set$values = list(
+    tune = to_tune(),
+    fixed = TRUE
+  )
+  private_forced = FALSE
+  super_forced = FALSE
+
+  search_gateway = get(
+    ".__ParamSet__search_space",
+    envir = namespace,
+    inherits = FALSE
+  )
+  old_search_stub = function(values = self$values) {
+    search_gateway(
+      self = self,
+      private = {
+        private_forced <<- TRUE
+        stop("detached private promise was forced")
+      },
+      super = {
+        super_forced <<- TRUE
+        stop("detached super promise was forced")
+      },
+      values = values
+    )
+  }
+  environment(old_search_stub) = list2env(
+    list(self = parameter_set, search_gateway = search_gateway),
+    parent = environment()
+  )
+  search_missing = testthat::with_mocked_bindings(
+    old_search_stub(),
+    `.__paradox2_ParamSet__search_space` =
+      function(self, private, super, values) missing(values),
+    .package = "paradox"
+  )
+  search_explicit = testthat::with_mocked_bindings(
+    old_search_stub(parameter_set$values),
+    `.__paradox2_ParamSet__search_space` =
+      function(self, private, super, values) missing(values),
+    .package = "paradox"
+  )
+  expect_true(search_missing)
+  expect_false(search_explicit)
+
+  subspaces_gateway = get(
+    ".__ParamSet__subspaces",
+    envir = namespace,
+    inherits = FALSE
+  )
+  old_subspaces_stub = function(ids = self$ids()) {
+    subspaces_gateway(
+      self = self,
+      private = {
+        private_forced <<- TRUE
+        stop("detached private promise was forced")
+      },
+      super = {
+        super_forced <<- TRUE
+        stop("detached super promise was forced")
+      },
+      ids = ids
+    )
+  }
+  environment(old_subspaces_stub) = list2env(
+    list(self = parameter_set, subspaces_gateway = subspaces_gateway),
+    parent = environment()
+  )
+  subspaces_missing = testthat::with_mocked_bindings(
+    old_subspaces_stub(),
+    `.__paradox2_ParamSet__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  )
+  subspaces_explicit = testthat::with_mocked_bindings(
+    old_subspaces_stub("fixed"),
+    `.__paradox2_ParamSet__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  )
+  expect_true(subspaces_missing)
+  expect_false(subspaces_explicit)
+
+  shadow = ParamSetShadow$new(
+    ps(visible = p_int(), hidden = p_lgl()),
+    "hidden"
+  )
+  shadow_gateway = get(
+    ".__ParamSetShadow__subspaces",
+    envir = namespace,
+    inherits = FALSE
+  )
+  old_shadow_stub = function(ids = self$ids()) {
+    shadow_gateway(
+      self = self,
+      private = stop("detached Shadow private promise was forced"),
+      super = stop("detached Shadow super promise was forced"),
+      ids = ids
+    )
+  }
+  environment(old_shadow_stub) = list2env(
+    list(self = shadow, shadow_gateway = shadow_gateway),
+    parent = environment()
+  )
+  expect_true(testthat::with_mocked_bindings(
+    old_shadow_stub(),
+    `.__paradox2_ParamSetShadow__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  ))
+  expect_false(testthat::with_mocked_bindings(
+    old_shadow_stub("visible"),
+    `.__paradox2_ParamSetShadow__subspaces` =
+      function(self, private, super, ids) missing(ids),
+    .package = "paradox"
+  ))
+  expect_false(private_forced)
+  expect_false(super_forced)
+})
+
+test_that("pre-release Shadow gateways directly replay current capsules", {
+  shadow = ParamSetShadow$new(
+    ps(visible = p_dbl(0, 1), hidden = p_lgl()),
+    "hidden"
+  )
+  gateway = get(
+    ".__ParamSetShadow__clone",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  old = options(paradox.legacy_object_action = "error")
+  on.exit(options(old), add = TRUE)
+
+  clone = gateway(
+    self = shadow,
+    private = stop("detached private promise was forced"),
+    super = stop("detached super promise was forced"),
+    deep = FALSE
+  )
+  expect_s3_class(clone, "ParamSetShadow")
+  expect_false(identical(clone, shadow))
+  expect_identical(clone$ids(), shadow$ids())
+  expect_identical(clone$origin, shadow$origin)
+})
+
+test_that("legacy gateways reject borrowed current enclosures inertly", {
+  current = ps(x = p_dbl())
+  current_context = paradox:::.paradox_gateway_current_context(current)
+  expect_identical(
+    names(current_context),
+    c(
+      "ok", "enclosure", "private", "super", "core", "class",
+      "assert_values"
+    )
+  )
+  expect_true(current_context$ok)
+  expect_identical(current_context$enclosure$self, current)
+  expect_identical(
+    current_context$private,
+    current$.__enclos_env__$private
+  )
+  expect_identical(current_context$core, current_context$private$.core)
+  expect_identical(current_context$class, class(current))
+  expect_identical(current_context$assert_values, TRUE)
+  expect_null(current_context$super)
+
+  borrowed = new.env(parent = emptyenv())
+  class(borrowed) = class(current)
+  borrowed$.__enclos_env__ = current$.__enclos_env__
+
+  mismatched = new.env(parent = emptyenv())
+  class(mismatched) = c("ParamSetCollection", "ParamSet", "R6")
+  mismatched_enclosure = new.env(parent = emptyenv())
+  mismatched_enclosure$self = mismatched
+  mismatched_enclosure$private = current$.__enclos_env__$private
+  mismatched$.__enclos_env__ = mismatched_enclosure
+
+  collection = ParamSetCollection$new(list(owner = current))
+  class(collection) = c(
+    "ParamSetShadow", "ParamSetCollection", "ParamSet", "R6"
+  )
+  shadow = ParamSetShadow$new(current, character())
+  class(shadow) = c(
+    "ParamSetCollection", "ParamSetShadow", "ParamSet", "R6"
+  )
+
+  expect_false(paradox:::.paradox_gateway_current_core(borrowed))
+  expect_false(paradox:::.paradox_gateway_current_core(mismatched))
+  expect_false(paradox:::.paradox_gateway_current_core(collection))
+  expect_false(paradox:::.paradox_gateway_current_core(shadow))
+
+  missing_r6 = ps(x = p_dbl())
+  class(missing_r6) = "ParamSet"
+  expect_false(paradox:::.paradox_gateway_current_core(missing_r6))
+
+  AdditiveBaseRoot = R6::R6Class("GatewayBaseRoot", inherit = ParamSet)
+  AdditiveBaseLeaf = R6::R6Class(
+    "GatewayBaseLeaf",
+    inherit = AdditiveBaseRoot
+  )
+  AdditiveCollectionRoot = R6::R6Class(
+    "GatewayCollectionRoot",
+    inherit = ParamSetCollection
+  )
+  AdditiveCollectionLeaf = R6::R6Class(
+    "GatewayCollectionLeaf",
+    inherit = AdditiveCollectionRoot
+  )
+  AdditiveShadowRoot = R6::R6Class(
+    "GatewayShadowRoot",
+    inherit = ParamSetShadow
+  )
+  AdditiveShadowLeaf = R6::R6Class(
+    "GatewayShadowLeaf",
+    inherit = AdditiveShadowRoot
+  )
+  additive_base = AdditiveBaseLeaf$new(list(x = p_dbl()))
+  additive_collection = AdditiveCollectionLeaf$new(
+    list(owner = ps(x = p_dbl()))
+  )
+  additive_shadow = AdditiveShadowLeaf$new(
+    ps(x = p_dbl()),
+    character()
+  )
+  expect_true(paradox:::.paradox_gateway_current_core(additive_base))
+  expect_true(paradox:::.paradox_gateway_current_core(additive_collection))
+  expect_true(paradox:::.paradox_gateway_current_core(additive_shadow))
+  expect_true(
+    paradox:::.paradox_gateway_current_context(
+      additive_collection,
+      1L
+    )$ok
+  )
+  expect_true(
+    paradox:::.paradox_gateway_current_context(additive_shadow, 1L)$ok
+  )
+  collection_flatten_gateway = get(
+    ".__ParamSetCollection__flatten",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  flattened = collection_flatten_gateway(
+    self = additive_collection,
+    private = stop("additive collection private promise was forced"),
+    super = stop("additive collection super promise was forced")
+  )
+  expect_s3_class(flattened, "ParamSet")
+  expect_identical(flattened$ids(), additive_collection$ids())
+
+  shadow_params_gateway = get(
+    ".__ParamSetShadow__params",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  expect_equal(
+    shadow_params_gateway(
+      self = additive_shadow,
+      private = stop("additive Shadow private promise was forced"),
+      super = stop("additive Shadow super promise was forced")
+    ),
+    additive_shadow$params
+  )
+
+  malformed_policy = ps(x = p_dbl())
+  malformed_policy$assert_values = NA
+  expect_false(paradox:::.paradox_gateway_current_core(malformed_policy))
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_policy),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_policy),
+      "assert_values",
+      fixed = TRUE
+    )
+  }
+
+  noncanonical = ps(x = p_dbl())
+  noncanonical_private = noncanonical$.__enclos_env__$private
+  noncanonical_core = noncanonical_private$.core
+  attr(noncanonical_core, "forged") = TRUE
+  noncanonical_private$.core = noncanonical_core
+  expect_false(paradox:::.paradox_gateway_current_core(noncanonical))
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(noncanonical),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(noncanonical),
+      "noncanonical versioned core capsule",
+      fixed = TRUE
+    )
+  }
+
+  class_observations = new.env(parent = emptyenv())
+  class_observations$count = 0L
+  hostile_class = native_stateful_altrep(
+    c("ParamSet", "R6"),
+    c("ParamSet", "R6"),
+    callback = function() {
+      class_observations$count = class_observations$count + 1L
+    },
+    callback_after = c(0L, 0L)
+  )
+  hostile = ps(x = p_dbl())
+  attr(hostile, "class") = hostile_class
+  native_stateful_altrep_rearm(
+    attr(hostile, "class", exact = TRUE),
+    c(0L, 0L)
+  )
+  observations_before = class_observations$count
+  expect_false(paradox:::.paradox_gateway_current_core(hostile))
+  expect_identical(class_observations$count, observations_before)
+
+  delayed_forced = FALSE
+  delayed = new.env(parent = emptyenv())
+  class(delayed) = class(current)
+  delayed_enclosure = new.env(parent = emptyenv())
+  delayed_enclosure$self = delayed
+  delayedAssign(
+    "private",
+    {
+      delayed_forced = TRUE
+      current$.__enclos_env__$private
+    },
+    assign.env = delayed_enclosure
+  )
+  delayed$.__enclos_env__ = delayed_enclosure
+  expect_false(paradox:::.paradox_gateway_current_core(delayed))
+  expect_false(delayed_forced)
+
+  gateway = get(
+    ".__ParamSet__ids",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  old = options(paradox.legacy_object_action = NULL)
+  on.exit(options(old), add = TRUE)
+  private_forced = FALSE
+  super_forced = FALSE
+  expect_error(
+    gateway(
+      self = borrowed,
+      private = {
+        private_forced = TRUE
+        stop("borrowed private promise was forced")
+      },
+      super = {
+        super_forced = TRUE
+        stop("borrowed super promise was forced")
+      }
+    ),
+    "upgrade_paradox_object_graph",
+    fixed = TRUE
+  )
+  expect_false(private_forced)
+  expect_false(super_forced)
+})
+
+test_that("the serialized ParamSet-family target ledger is complete", {
+  namespace = asNamespace("paradox")
+  ledgers = list(
+    ParamSet = paradox:::.paradox_legacy_paramset_members,
+    ParamSetCollection = paradox:::.paradox_legacy_collection_members,
+    ParamSetShadow = paradox:::.paradox_prerelease_shadow_members
+  )
+  generators = list(
+    ParamSet = ParamSet,
+    ParamSetCollection = ParamSetCollection,
+    ParamSetShadow = ParamSetShadow
+  )
+
+  for (classname in names(ledgers)) {
+    old_targets = paste0(".__", classname, "__", ledgers[[classname]])
+    expect_identical(anyDuplicated(old_targets), 0L)
+    expect_true(all(vapply(old_targets, function(target) {
+      exists(target, envir = namespace, inherits = FALSE) &&
+        is.function(get(target, envir = namespace, inherits = FALSE))
+    }, logical(1L))))
+
+    generator = generators[[classname]]
+    current_members = c(
+      generator$public_methods,
+      generator$private_methods,
+      generator$active
+    )
+    for (member in names(current_members)) {
+      target = paste0(".__paradox2_", classname, "__", member)
+      expect_true(exists(target, envir = namespace, inherits = FALSE))
+      expect_match(
+        paste(deparse(body(current_members[[member]])), collapse = "\n"),
+        target,
+        fixed = TRUE
+      )
+    }
+  }
+})
+
+test_that("native graph discovery is iterative, identity-aware, and inert", {
+  skip_if_no_active_binding_inspection()
+  ordinary = graph_candidate("ordinary")
+  active = graph_candidate("active")
+  promised = graph_candidate("promised")
+  dots_promised = graph_candidate("dots-promised")
+  ordinary_dots = graph_candidate("ordinary-dots-binding")
+  closure_parent = graph_candidate("closure-parent")
+  attributed = graph_candidate("attributed")
+  protected = graph_candidate("protected")
+  boundary = graph_candidate("global-boundary")
+
+  active_host = new.env(parent = emptyenv())
+  active_environment = new.env(parent = emptyenv())
+  active_environment$hidden = active
+  active_function = function(value) stop("active binding was invoked")
+  environment(active_function) = active_environment
+  makeActiveBinding("danger", active_function, active_host)
+
+  promise_environment = new.env(parent = baseenv())
+  promise_environment$hidden = promised
+  promise_host = new.env(parent = emptyenv())
+  delayedAssign(
+    "danger",
+    stop("delayed binding was forced"),
+    eval.env = promise_environment,
+    assign.env = promise_host
+  )
+
+  capture_dots = function(...) environment()
+  environment(capture_dots) = baseenv()
+  dots_evaluation_environment = new.env(parent = baseenv())
+  dots_evaluation_environment$capture_dots = capture_dots
+  dots_evaluation_environment$hidden = dots_promised
+  dots_frame = eval(
+    quote(capture_dots(stop("dots promise was forced"))),
+    envir = dots_evaluation_environment
+  )
+
+  dots_host = new.env(parent = emptyenv())
+  assign("...", ordinary_dots, envir = dots_host)
+
+  closure_ancestor = new.env(parent = emptyenv())
+  closure_ancestor$hidden = closure_parent
+  closure_environment = new.env(parent = closure_ancestor)
+  closure = function() NULL
+  environment(closure) = closure_environment
+
+  attribute_environment = new.env(parent = emptyenv())
+  attribute_environment$hidden = attributed
+  attribute_function = function() hidden
+  environment(attribute_function) = attribute_environment
+  attribute_carrier = 1L
+  attr(attribute_carrier, "hidden_function") = attribute_function
+
+  current = ps(payload = p_uty())
+  current$values = list(payload = protected)
+
+  cyclic = new.env(parent = emptyenv())
+  cyclic$self = cyclic
+  cyclic$ordinary = ordinary
+  cyclic$alias = ordinary
+
+  global_name = ".paradox_upgrade_graph_boundary_probe"
+  assign(global_name, boundary, envir = .GlobalEnv)
+  on.exit(rm(list = global_name, envir = .GlobalEnv), add = TRUE)
+  global_closure = function() NULL
+  environment(global_closure) = .GlobalEnv
+
+  promise_graph_supported =
+    getRversion() < "4.5.0" || getRversion() >= "4.6.0"
+  promise_graph_fails_closed =
+    getRversion() >= "4.5.0" && getRversion() < "4.6.0"
+  root = list(
+    cyclic,
+    active_host,
+    dots_host,
+    closure,
+    attribute_carrier,
+    current,
+    global_closure
+  )
+  if (promise_graph_supported) {
+    root = append(root, list(promise_host, dots_frame), after = 2L)
+  }
+  discovery = discover_upgrade_candidates(root)
+  expected = list(
+    ordinary,
+    active,
+    ordinary_dots,
+    closure_parent,
+    attributed,
+    current,
+    protected
+  )
+  if (promise_graph_supported) {
+    expected = append(expected, list(promised, dots_promised), after = 2L)
+  }
+  expect_true(same_environment_set(discovery$objects, expected))
+  expect_false(any(vapply(
+    discovery$objects,
+    identical,
+    logical(1L),
+    y = boundary
+  )))
+  expect_true(any(grepl("\\.active", discovery$paths, fixed = FALSE)))
+  expect_identical(
+    any(grepl("\\.promise\\.environment", discovery$paths)),
+    promise_graph_supported
+  )
+  expect_true(any(grepl("@attr", discovery$paths, fixed = TRUE)))
+  expect_true(any(grepl("\\.protected", discovery$paths)))
+  if (promise_graph_fails_closed) {
+    expect_error(
+      discover_upgrade_candidates(promise_host),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
+    expect_error(
+      discover_upgrade_candidates(dots_frame),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
+  }
+  expect_error(promise_host$danger, "delayed binding was forced", fixed = TRUE)
+  expect_error(
+    eval(quote(..1), envir = dots_frame),
+    "dots promise was forced",
+    fixed = TRUE
+  )
+
+  expect_identical(discover_upgrade_candidates(.GlobalEnv)$objects, list())
+  expect_identical(
+    discover_upgrade_candidates(asNamespace("paradox"))$objects,
+    list()
+  )
+})
+
+test_that("only genuine namespace imports environments are graph boundaries", {
+  candidate = graph_candidate("fake-imports-name")
+  fake_imports = new.env(parent = emptyenv())
+  attr(fake_imports, "name") = "imports:not-a-namespace"
+  fake_imports$hidden = candidate
+
+  discovery = discover_upgrade_candidates(fake_imports)
+  expect_true(same_environment_set(discovery$objects, list(candidate)))
+
+  real_imports = parent.env(asNamespace("stats"))
+  expect_match(attr(real_imports, "name"), "^imports:stats$")
+  expect_identical(parent.env(real_imports), asNamespace("base"))
+  expect_identical(discover_upgrade_candidates(real_imports)$objects, list())
+})
+
+test_that("user-database environments are opaque graph boundaries", {
+  database = new.env(parent = emptyenv())
+  namespace_reads = 0L
+  makeActiveBinding(".__NAMESPACE__.", function(value) {
+    if (!missing(value)) stop("namespace marker is read-only")
+    namespace_reads <<- namespace_reads + 1L
+    stop("namespace marker was invoked")
+  }, database)
+  database$hidden = graph_candidate("user-database-hidden")
+  class(database) = "UserDefinedDatabase"
+
+  discovery = discover_upgrade_candidates(database)
+  expect_length(discovery$objects, 0L)
+  expect_length(discovery$paths, 0L)
+  expect_identical(namespace_reads, 0L)
+})
+
+test_that("detached search boundaries stay rooted through discovery", {
+  search_prefix = paste0(
+    "paradox_boundary_lifetime_",
+    Sys.getpid()
+  )
+  search_names = paste0(search_prefix, "_", seq_len(40L))
+  expect_false(any(search_names %in% search()))
+  attached = character()
+  on.exit({
+    for (search_name in rev(attached)) {
+      if (search_name %in% search()) {
+        detach(search_name, character.only = TRUE)
+      }
+    }
+  }, add = TRUE)
+
+  for (index in seq_along(search_names)) {
+    search_name = search_names[[index]]
+    attach(
+      setNames(list(TRUE), paste0(search_prefix, "_binding_", index)),
+      name = search_name
+    )
+    attached = c(attached, search_name)
+  }
+  # The first attached environment is now preceded by at least 39 other
+  # search-path boundaries. This deliberately crosses the native carrier's
+  # initial capacity and exercises its rooted growth path.
+  boundary = as.environment(search_names[[1L]])
+  state = new.env(parent = emptyenv())
+  state$detached = FALSE
+  state$finalized = FALSE
+  state$finalized_during_call = NA
+  reg.finalizer(boundary, function(unused) {
+    state$finalized = TRUE
+  })
+  rm(boundary)
+
+  hook = function() {
+    for (search_name in search_names) {
+      detach(search_name, character.only = TRUE)
+    }
+    attached <<- character()
+    state$detached = TRUE
+    gc(full = TRUE)
+    state$finalized_during_call = state$finalized
+  }
+  result = .Call(
+    get(
+      "C_test_upgrade_graph_boundary_lifetime",
+      envir = asNamespace("paradox")
+    ),
+    list(),
+    hook
+  )
+
+  expect_true(state$detached)
+  expect_identical(state$finalized_during_call, FALSE)
+  expect_identical(result, list(objects = list(), paths = character()))
+  for (iteration in 1:4) {
+    if (state$finalized) break
+    gc(full = TRUE)
+  }
+  expect_true(state$finalized)
+})
+
+test_that("native graph discovery does not consume the C or R stack", {
+  candidate = graph_candidate("deep")
+  root = candidate
+  for (index in seq_len(5000L)) root = list(root)
+  discovery = discover_upgrade_candidates(root)
+  expect_length(discovery$objects, 1L)
+  expect_identical(discovery$objects[[1L]], candidate)
+})
+
+test_that("closure discovery shallow-snapshots deep and cyclic structure", {
+  candidate = graph_candidate("deep-closure")
+  expression = candidate
+  for (index in seq_len(5000L)) {
+    expression = call("identity", expression)
+  }
+  closure = function() NULL
+  # Keep this fixture's enclosing graph explicit. The ambient testthat/R6
+  # ancestry contains factory-frame promises, which are deliberately a
+  # fail-closed migration boundary on R 4.5 and are covered separately below.
+  # This test owns the independent deep-body and cyclic-attribute snapshot
+  # contract, so those unrelated promises must not mask it.
+  environment(closure) = new.env(parent = emptyenv())
+  body(closure) = expression
+  cyclic_metadata = new.env(parent = emptyenv())
+  cyclic_metadata$self = cyclic_metadata
+  attr(closure, "paradox.cyclic.environment") = cyclic_metadata
+  # Install a genuine self-edge through the native by-reference fixture,
+  # without replacement-function copy-on-write where the runtime permits it.
+  # R 3.6 may retain the pre-attribute closure shell instead; the independent
+  # environment edge above still provides a portable metadata cycle. The old-R
+  # closure snapshot must not recursively duplicate either the deep body or
+  # closure-valued metadata before the iterative walker sees them.
+  pointer = .Call(
+    get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
+    closure,
+    "paradox.self",
+    closure
+  )
+  rm(pointer)
+  for (iteration in 1:3) {
+    invisible(gc(full = TRUE))
+  }
+  installed_self = attr(closure, "paradox.self", exact = TRUE)
+  expect_true(is.function(installed_self))
+  if (getRversion() >= "4.5.0") {
+    expect_identical(installed_self, closure)
+  }
+  expect_identical(cyclic_metadata$self, cyclic_metadata)
+
+  discovery = discover_upgrade_candidates(closure)
+
+  expect_true(same_environment_set(discovery$objects, list(candidate)))
+  expect_identical(
+    attr(closure, "paradox.self", exact = TRUE),
+    installed_self
+  )
+  expect_identical(
+    attr(closure, "paradox.cyclic.environment", exact = TRUE),
+    cyclic_metadata
+  )
+})
+
+test_that("graph discovery never splices vector attributes and elements", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = graph_candidate("vector-generation-old")
+  state$new = graph_candidate("vector-generation-new")
+  state$carrier = list(value = state$old)
+  attr(state$carrier, "paradox.edge") = state$old
+  state$fired = FALSE
+  carrier = state$carrier
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    # Both changes are by-reference and form one finalizer generation. A
+    # crawler may select either side, but not one attribute edge from the old
+    # side and one primary edge from the new side.
+    data.table::setattr(state$carrier, "paradox.edge", state$new)
+    data.table::setattr(state$carrier, "class", "data.frame")
+    data.table::setattr(state$carrier, "row.names", 1L)
+    data.table::set(state$carrier, j = 1L, value = list(state$new))
+    data.table::setattr(state$carrier, "class", NULL)
+    data.table::setattr(state$carrier, "row.names", NULL)
+  })
+  trigger = NULL
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  discovery = discover_upgrade_candidates(carrier)
+  gctorture(previous)
+
+  expect_true(
+    same_environment_set(discovery$objects, list(state$old)) ||
+      same_environment_set(discovery$objects, list(state$new))
+  )
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("environment discovery uses two equal complete edge snapshots", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = graph_candidate("environment-generation-old")
+  state$new = graph_candidate("environment-generation-new")
+  state$host = new.env(parent = state$old)
+  state$host$value = state$old
+  attr(state$host, "paradox.edge") = state$old
+  state$fired = FALSE
+  host = state$host
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    attr(state$host, "paradox.edge") = state$new
+    assign("value", state$new, envir = state$host)
+    parent.env(state$host) = state$new
+  })
+  trigger = NULL
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  discovery = tryCatch(
+    discover_upgrade_candidates(host),
+    error = identity
+  )
+  gctorture(previous)
+
+  if (inherits(discovery, "error")) {
+    expect_match(
+      conditionMessage(discovery),
+      "environment changed during inspection",
+      fixed = TRUE
+    )
+  } else {
+    expect_true(
+      same_environment_set(discovery$objects, list(state$old)) ||
+        same_environment_set(discovery$objects, list(state$new))
+    )
+  }
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("environment boundary policy comes from the selected generation", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = graph_candidate("environment-boundary-old")
+  state$new = graph_candidate("environment-boundary-new")
+  state$host = new.env(parent = state$old)
+  state$host$value = state$old
+  state$fired = FALSE
+  host = state$host
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    assign("value", state$new, envir = state$host)
+    parent.env(state$host) = state$new
+    attr(state$host, "name") = "package:finalizer-boundary"
+  })
+  trigger = NULL
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  discovery = tryCatch(
+    discover_upgrade_candidates(host),
+    error = identity
+  )
+  gctorture(previous)
+
+  if (inherits(discovery, "error")) {
+    expect_match(
+      conditionMessage(discovery),
+      "environment changed during inspection",
+      fixed = TRUE
+    )
+  } else {
+    expect_true(
+      same_environment_set(discovery$objects, list(state$old)) ||
+        same_environment_set(discovery$objects, list())
+    )
+  }
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("graph discovery rejects structural ALTREP without observation", {
+  skip_if_no_list_altrep()
+
+  callbacks = 0L
+  candidate = graph_candidate("structural-altrep")
+  carrier = native_stateful_altrep(
+    list(candidate),
+    list(candidate),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+    },
+    callback_after = c(0L, 0L),
+    duplicate_returns_self = TRUE
+  )
+
+  expect_error(
+    discover_upgrade_candidates(carrier),
+    paste0(
+      "structural list/expression vectors must not use ALTREP; rebuild the ",
+      "container with an ordinary copy such as x[seq_along(x)] before migration"
+    ),
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 0L)
+
+  # The remedy the message names is the one the recursive entry point applies
+  # to the carrier it owns; a nested carrier keeps the rejection.
+  expect_error(
+    upgrade_paradox_object_graph(list(nested = carrier)),
+    "rebuild the container with an ordinary copy such as x[seq_along(x)]",
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 0L)
+})
+
+test_that("graph paths render multi-digit indices portably", {
+  candidate = graph_candidate("multi-digit-index")
+  carrier = rep(list(NULL), 12L)
+  carrier[[12L]] = candidate
+
+  discovery = discover_upgrade_candidates(carrier)
+  expect_identical(discovery$objects, list(candidate))
+  expect_identical(discovery$paths, "x[[12]]")
+})
+
+test_that("current ParamSet payloads expose current and nested candidates", {
+  nested = graph_candidate("opaque-current-value")
+  current = ps(payload = p_uty())
+  current$values = list(payload = nested)
+  discovery = discover_upgrade_candidates(current)
+  expect_true(same_environment_set(discovery$objects, list(current, nested)))
+  nested_position = which(vapply(
+    discovery$objects,
+    identical,
+    logical(1L),
+    y = nested
+  ))
+  expect_length(nested_position, 1L)
+  expect_true(grepl("\\.protected", discovery$paths[[nested_position]]))
+})
+
+test_that("replaced current methods remain graph edges", {
+  nested = graph_candidate("replaced-method-environment")
+  closure_environment = new.env(parent = emptyenv())
+  closure_environment$nested = nested
+  replacement = function(...) character()
+  environment(replacement) = closure_environment
+
+  current = ps(x = p_dbl())
+  unlockBinding("ids", current)
+  current$ids = replacement
+
+  discovery = discover_upgrade_candidates(current)
+  expect_true(same_environment_set(discovery$objects, list(current, nested)))
+})
+
+test_that("R 3.6 keeps unsupported relocked method replacements opaque", {
+  nested = graph_candidate("relocked-method-environment")
+  closure_environment = new.env(parent = emptyenv())
+  closure_environment$nested = nested
+  replacement = function(...) character()
+  environment(replacement) = closure_environment
+
+  current = ps(x = p_dbl())
+  unlockBinding("ids", current)
+  current$ids = replacement
+  lockBinding("ids", current)
+  discovery = discover_upgrade_candidates(current)
+
+  expected = if (getRversion() < "4.0.0") {
+    list(current)
+  } else {
+    list(current, nested)
+  }
+  expect_true(same_environment_set(discovery$objects, expected))
+})
+
+test_that("R 3.6 keeps unsupported replaced active facades opaque", {
+  nested = graph_candidate("replaced-active-environment")
+  closure_environment = new.env(parent = baseenv())
+  closure_environment$nested = nested
+  closure_environment$calls = 0L
+  replacement = function(value) {
+    calls <<- calls + 1L
+    stop("replacement active binding was invoked")
+  }
+  environment(replacement) = closure_environment
+
+  current = ps(x = p_dbl())
+  makeActiveBinding("values", replacement, current)
+  discovery = discover_upgrade_candidates(current)
+
+  expected = if (getRversion() < "4.0.0") {
+    list(current)
+  } else {
+    list(current, nested)
+  }
+  expect_true(same_environment_set(discovery$objects, expected))
+  expect_identical(closure_environment$calls, 0L)
+})
+
+test_that("current graph preflight does not refresh stale Shadows", {
+  origin = ps(hidden = p_int(), visible = p_dbl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  private = mlr3misc::get_private(shadow)
+  origin$values = list(hidden = 1L, visible = 0.5)
+  before = serialize(private$.core, NULL)
+
+  expect_identical(upgrade_paradox_object_graph(shadow), shadow)
+  expect_identical(serialize(private$.core, NULL), before)
+
+  corrupt = ps(x = p_dbl())
+  paradox:::param_set_core_replace(
+    mlr3misc::get_private(corrupt),
+    values = list(unknown = 1)
+  )
+  expect_error(
+    upgrade_paradox_object_graph(list(shadow = shadow, corrupt = corrupt)),
+    "corrupt current state capsule"
+  )
+  expect_identical(serialize(private$.core, NULL), before)
+
+  nested_origin = ps(x = p_dbl())
+  nested = ParamSetShadow$new(nested_origin, character())
+  collection = ParamSetCollection$new(list(nested = nested))
+  outer = ParamSetShadow$new(collection, character())
+  nested_origin$values = list(x = 0.25)
+  nested_private = mlr3misc::get_private(nested)
+  outer_private = mlr3misc::get_private(outer)
+  nested_before = serialize(nested_private$.core, NULL)
+  outer_before = serialize(outer_private$.core, NULL)
+  expect_identical(upgrade_paradox_object_graph(outer), outer)
+  expect_identical(serialize(nested_private$.core, NULL), nested_before)
+  expect_identical(serialize(outer_private$.core, NULL), outer_before)
+
+  malformed_child = ps(x = p_dbl())
+  malformed_collection = ParamSetCollection$new(
+    list(child = malformed_child)
+  )
+  class(malformed_child) = "ParamSet"
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_collection),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_collection),
+      "invalid ParamSet-family R6 class",
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("joint current-root preflight retains read-only Shadow previews", {
+  skip_on_cran()
+
+  first = ps(x = p_int())
+  origin = ps(hidden = p_int(), visible = p_dbl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  private = mlr3misc::get_private(shadow)
+  origin$values = list(hidden = 1L, visible = 0.5)
+  before = private$.core
+
+  previous = gctorture2(10L)
+  on.exit(gctorture2(previous), add = TRUE)
+  for (iteration in seq_len(8L)) {
+    result = .Call(
+      paradox:::C_param_set_validate_current_roots,
+      list(first, shadow),
+      NULL
+    )
+    # Keep the forced-GC allocation schedule focused on the native entry;
+    # testthat's rich expectations allocate heavily under gctorture2().
+    if (!identical(result, TRUE) || !identical(private$.core, before)) {
+      stop("joint current-root validation changed its Shadow generation")
+    }
+  }
+  gctorture2(previous)
+  expect_identical(private$.core, before)
+})
+
+test_that("graph preflight admits a Shadow over a dangling-dependency origin", {
+  origin = ps(hidden = p_int(), visible = p_dbl())
+  origin$add_dep("visible", "future", CondEqual(1L),
+    allow_dangling_dependencies = TRUE)
+  shadow = ParamSetShadow$new(origin, "hidden")
+  private = mlr3misc::get_private(shadow)
+  # Make the view stale, so preflight has to preview the origin rather than
+  # read the projection it already holds.
+  origin$values = list(hidden = 1L)
+  before = serialize(private$.core, NULL)
+
+  expect_identical(upgrade_paradox_object_graph(shadow), shadow)
+  expect_identical(serialize(private$.core, NULL), before)
+  expect_identical(shadow$deps$on, "future")
+})
+
+test_that("recursive graph upgrade is an identity-preserving no-op for current graphs", {
+  parameter_set = ps(x = p_dbl(0, 1))
+  host = new.env(parent = emptyenv())
+  host$parameter_set = parameter_set
+  host$self = host
+  expect_identical(upgrade_paradox_object_graph(host), host)
+  expect_identical(host$parameter_set, parameter_set)
+  expect_identical(host$parameter_set$ids(), "x")
+})
+
+test_that("additive current graphs honor exact old-R inspection boundaries", {
+  AdditiveSet = R6::R6Class(
+    "GraphAdditiveSet",
+    inherit = ParamSet
+  )
+  parameter_set = AdditiveSet$new(list(x = p_dbl(0, 1)))
+  private = mlr3misc::get_private(parameter_set)
+  before_core = serialize(private$.core, NULL)
+  before_enclosure = parameter_set$.__enclos_env__
+
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(parameter_set),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else if (getRversion() >= "4.5.0" && getRversion() < "4.6.0") {
+    # An additive R6 factory carries a Constructor promise in its generated
+    # ancestry. R 4.5 has no policy-compliant non-forcing promise accessor, so
+    # the recursive upgrader must reject this graph without changing it.
+    expect_error(
+      upgrade_paradox_object_graph(parameter_set),
+      "cannot inspect a promise on R 4.5",
+      fixed = TRUE
+    )
+  } else {
+    expect_identical(
+      upgrade_paradox_object_graph(parameter_set),
+      parameter_set
+    )
+  }
+  expect_identical(parameter_set$.__enclos_env__, before_enclosure)
+  expect_identical(serialize(private$.core, NULL), before_core)
+})
+
+test_that("authentic Paradox 1 shells upgrade everywhere by identity", {
+  skip_if_no_active_binding_inspection()
+
+  root = Sys.getenv("PARADOX_MBO_CONFIG_ROOT", "")
+  skip_if(!nzchar(root), "PARADOX_MBO_CONFIG_ROOT is not configured")
+  path = file.path(root, "mixed_search_space.rds")
+  skip_if_not(file.exists(path), "authentic Paradox 1 fixture is unavailable")
+
+  legacy = readRDS(path)
+  expected_ids = as.character(
+    legacy$.__enclos_env__$private$.params$id
+  )
+  alias = legacy
+  host = new.env(parent = emptyenv())
+  host$public = legacy
+  host$private_like = new.env(parent = emptyenv())
+  host$private_like$nested = legacy
+  host$self = host
+  closure_environment = new.env(parent = emptyenv())
+  closure_environment$captured = legacy
+  closure = function() captured
+  environment(closure) = closure_environment
+  attr(host, "captured_closure") = closure
+
+  expect_identical(upgrade_paradox_object_graph(host), host)
+  expect_identical(host$public, legacy)
+  expect_identical(host$private_like$nested, legacy)
+  expect_identical(alias, legacy)
+  expect_identical(legacy$ids(), expected_ids)
+  first_id = expected_ids[[1L]]
+  first_domain = legacy$domains[[first_id]]
+  first_class = first_domain$cls[[1L]]
+  if (identical(first_class, "ParamLgl")) {
+    value = TRUE
+  } else if (first_class %in% c("ParamDbl", "ParamInt")) {
+    value = if (is.finite(first_domain$lower[[1L]])) {
+      first_domain$lower[[1L]]
+    } else if (is.finite(first_domain$upper[[1L]])) {
+      first_domain$upper[[1L]]
+    } else {
+      0
+    }
+    if (identical(first_class, "ParamInt")) value = as.integer(value)
+  } else if (identical(first_class, "ParamFct")) {
+    value = first_domain$levels[[1L]][[1L]]
+  } else {
+    value = list()
+  }
+  legacy$values = setNames(list(value), first_id)
+  expect_identical(legacy$values[[first_id]], value)
+  expect_identical(upgrade_paradox_object_graph(host), host)
+
+  clone = legacy$clone(deep = TRUE)
+  expect_identical(clone$ids(), legacy$ids())
+  roundtrip_path = tempfile(fileext = ".rds")
+  saveRDS(legacy, roundtrip_path)
+  roundtrip = readRDS(roundtrip_path)
+  expect_identical(roundtrip$ids(), legacy$ids())
+})
+
+test_that("legacy shells inside a current capsule are upgraded in place", {
+  skip_if_no_active_binding_inspection()
+
+  root = Sys.getenv("PARADOX_MBO_CONFIG_ROOT", "")
+  skip_if(!nzchar(root), "PARADOX_MBO_CONFIG_ROOT is not configured")
+  path = file.path(root, "numeric_search_space.rds")
+  skip_if_not(file.exists(path), "authentic Paradox 1 fixture is unavailable")
+
+  legacy = readRDS(path)
+  expected_ids = as.character(
+    legacy$.__enclos_env__$private$.params$id
+  )
+  current = ps(payload = p_uty())
+  current$values = list(payload = legacy)
+  host = list(current = current, legacy_alias = legacy)
+
+  expect_identical(upgrade_paradox_object_graph(host), host)
+  expect_identical(host$current, current)
+  expect_identical(host$legacy_alias, legacy)
+  expect_identical(current$values$payload, legacy)
+  expect_identical(legacy$ids(), expected_ids)
+})
+
+test_that("graph migration preflight leaves every shell untouched on error", {
+  root = Sys.getenv("PARADOX_MBO_CONFIG_ROOT", "")
+  skip_if(!nzchar(root), "PARADOX_MBO_CONFIG_ROOT is not configured")
+  path = file.path(root, "numeric_search_space.rds")
+  skip_if_not(file.exists(path), "authentic Paradox 1 fixture is unavailable")
+
+  legacy = readRDS(path)
+  before = serialize(legacy, NULL)
+  malformed = graph_candidate("malformed")
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(list(legacy, malformed)),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(list(legacy, malformed)),
+      "Cannot upgrade Paradox object",
+      fixed = TRUE
+    )
+  }
+  expect_identical(serialize(legacy, NULL), before)
+})
+
+test_that("legacy first use errors by default and can auto-upgrade", {
+  root = Sys.getenv("PARADOX_MBO_CONFIG_ROOT", "")
+  skip_if(!nzchar(root), "PARADOX_MBO_CONFIG_ROOT is not configured")
+  path = file.path(root, "numeric_search_space.rds")
+  skip_if_not(file.exists(path), "authentic Paradox 1 fixture is unavailable")
+
+  legacy = readRDS(path)
+  expected_ids = as.character(
+    legacy$.__enclos_env__$private$.params$id
+  )
+  expect_error(
+    legacy$ids(),
+    "upgrade_paradox_object_graph",
+    fixed = TRUE
+  )
+
+  old = options(paradox.legacy_object_action = NA_character_)
+  on.exit(options(old), add = TRUE)
+  invalid = readRDS(path)
+  expect_error(
+    invalid$ids(),
+    "`paradox.legacy_object_action` must be exactly",
+    fixed = TRUE
+  )
+
+  options(paradox.legacy_object_action = "upgrade")
+  legacy = readRDS(path)
+  identity = legacy
+  if (getRversion() < "4.0.0") {
+    before_enclosure = legacy$.__enclos_env__
+    before_private = before_enclosure$private
+    state_names = c(
+      ".params", ".values", ".tags", ".deps", ".trafos",
+      ".extra_trafo", ".constraint"
+    )
+    before_state = lapply(state_names, function(name) {
+      serialize(get(name, envir = before_private, inherits = FALSE), NULL)
+    })
+    error = tryCatch(
+      {
+        legacy$ids()
+        NULL
+      },
+      error = function(error) error
+    )
+    expect_s3_class(error, "error")
+    expect_match(
+      conditionMessage(error),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+    expect_match(conditionMessage(error), "R >= 4.0", fixed = TRUE)
+    expect_identical(legacy$.__enclos_env__, before_enclosure)
+    expect_identical(legacy$.__enclos_env__$private, before_private)
+    expect_false(exists(
+      ".core",
+      envir = legacy$.__enclos_env__$private,
+      inherits = FALSE
+    ))
+    after_state = lapply(state_names, function(name) {
+      serialize(get(name, envir = before_private, inherits = FALSE), NULL)
+    })
+    expect_identical(after_state, before_state)
+    expect_identical(identity, legacy)
+    # R 3.6's default JIT may compile the invoked serialized method closure,
+    # changing the byte serialization of the complete R6 graph even though
+    # neither the gateway nor the upgrader changed its authoritative state.
+  } else {
+    ids = legacy$ids()
+    expect_identical(ids, expected_ids)
+    expect_identical(identity, legacy)
+    check = legacy$check(list())
+    expect_true(identical(check, TRUE) || is.character(check))
+  }
+})
+
+test_that("current Design stubs bypass the transpose gateway", {
+  design = Design$new(
+    ps(x = p_dbl(0, 1)),
+    data.table::data.table(x = 0.5),
+    remove_dupl = FALSE
+  )
+  stub = paste(deparse(body(design$transpose)), collapse = "\n")
+  expect_match(stub, ".__paradox2_Design__transpose", fixed = TRUE)
+  expect_false(grepl(".__Design__transpose", stub, fixed = TRUE))
+
+  namespace = asNamespace("paradox")
+  gateway = get(".__Design__transpose", envir = namespace, inherits = FALSE)
+  expect_false(identical(
+    gateway,
+    get(".__paradox2_Design__transpose", envir = namespace, inherits = FALSE)
+  ))
+  expect_match(
+    paste(deparse(body(gateway)), collapse = "\n"),
+    ".paradox_legacy_embedded_param_set",
+    fixed = TRUE
+  )
+})
+
+test_that("serialized Design transpose gets the first-use gateway", {
+  skip_if_no_active_binding_inspection()
+
+  as_legacy_table = function(x) {
+    data.table::as.data.table(lapply(x, identity))
+  }
+  copy_legacy_private_environment = function(x, omit = character()) {
+    enclosing = x$.__enclos_env__
+    source = mlr3misc::get_private(x)
+    result = new.env(parent = parent.env(source))
+    names = setdiff(ls(source, all.names = TRUE), omit)
+    for (name in names) {
+      assign(name, get(name, envir = source, inherits = FALSE), envir = result)
+    }
+    enclosing$private = result
+    result
+  }
+  transplantable_legacy_base = function(current) {
+    state = paradox:::param_set_core_state(mlr3misc::get_private(current))
+    result = current$clone(deep = TRUE)
+    private = copy_legacy_private_environment(result, omit = ".core")
+    private$.params = as_legacy_table(state$.params)
+    private$.values = state$.values
+    private$.tags = as_legacy_table(state$.tags)
+    private$.deps = as_legacy_table(state$.deps)
+    private$.trafos = as_legacy_table(state$.trafos)
+    private$.extra_trafo = state$.extra_trafo
+    private$.constraint = state$.constraint
+    result
+  }
+
+  # A serialized Paradox 1 Design is layout-compatible with today's method
+  # bodies; what its stub resolves is the unversioned namespace target, and
+  # the `param_set` it carries is still a legacy shell.
+  legacy_ps = transplantable_legacy_base(ps(x = p_dbl(0, 1)))
+  design = new.env(parent = emptyenv())
+  class(design) = c("Design", "R6")
+  design$param_set = legacy_ps
+  design$data = data.table::data.table(x = c(0.25, 0.75))
+
+  gateway = get(
+    ".__Design__transpose",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  old = options(paradox.legacy_object_action = "error")
+  on.exit(options(old), add = TRUE)
+
+  expect_error(
+    gateway(self = design, private = NULL, super = NULL, trafo = TRUE),
+    "A serialized Paradox 1 object tried to call `.__Design__transpose`",
+    fixed = TRUE
+  )
+  # The data-only path used to silently succeed on an unupgraded shell; first
+  # use of a serialized legacy object now triggers the flow either way.
+  expect_error(
+    gateway(self = design, private = NULL, super = NULL, trafo = FALSE),
+    "upgrade_paradox_object_graph",
+    fixed = TRUE
+  )
+  expect_false(exists(
+    ".core",
+    envir = mlr3misc::get_private(legacy_ps),
+    inherits = FALSE
+  ))
+
+  options(paradox.legacy_object_action = "upgrade")
+  rows = gateway(self = design, private = NULL, super = NULL, trafo = TRUE)
+  expect_identical(rows, list(list(x = 0.25), list(x = 0.75)))
+  expect_identical(design$param_set, legacy_ps)
+  expect_true(paradox:::.paradox_gateway_current_core(design$param_set))
+
+  # A healed Design keeps calling the unversioned name forever; the gateway's
+  # current-shell fast path forwards without consulting the option.
+  options(paradox.legacy_object_action = "error")
+  rows = gateway(self = design, private = NULL, super = NULL, trafo = FALSE)
+  expect_identical(rows, list(list(x = 0.25), list(x = 0.75)))
+})
+
+test_that("serialized Paradox 1 Samplers gate nested ParamSets before sampling", {
+  sampler = read_base64_serialized_fixture(testthat::test_path(
+    "fixtures",
+    "paradox-1.0.1-sampler-unif.rds.b64"
+  ))
+  expect_identical(
+    class(sampler),
+    c("SamplerUnif", "SamplerHierarchical", "Sampler", "R6")
+  )
+  top_param_set = sampler$param_set
+  child_param_sets = lapply(sampler$samplers, `[[`, "param_set")
+  expect_false(paradox:::.paradox_gateway_current_core(top_param_set))
+  expect_false(any(vapply(
+    child_param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+
+  namespace = asNamespace("paradox")
+  gateway = get(".__Sampler__sample", envir = namespace, inherits = FALSE)
+  expect_false(identical(
+    gateway,
+    get(".__paradox2_Sampler__sample", envir = namespace, inherits = FALSE)
+  ))
+  expect_match(
+    paste(deparse(body(gateway)), collapse = "\n"),
+    ".paradox_legacy_embedded_param_set",
+    fixed = TRUE
+  )
+
+  old = options(paradox.legacy_object_action = "error")
+  on.exit(options(old), add = TRUE)
+  expect_error(
+    sampler$sample(1L),
+    "A serialized Paradox 1 object tried to call `.__Sampler__sample`",
+    fixed = TRUE
+  )
+  expect_identical(sampler$param_set, top_param_set)
+  expect_identical(
+    lapply(sampler$samplers, `[[`, "param_set"),
+    child_param_sets
+  )
+  expect_false(paradox:::.paradox_gateway_current_core(top_param_set))
+
+  options(paradox.legacy_object_action = "upgrade")
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      sampler$sample(1L),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+    expect_false(paradox:::.paradox_gateway_current_core(top_param_set))
+    return()
+  }
+  set.seed(1L)
+  design = sampler$sample(4L)
+  expect_s3_class(design, "Design")
+  expect_identical(nrow(design$data), 4L)
+  expect_true(all(design$data$x >= 0 & design$data$x <= 1))
+  expect_identical(sampler$param_set, top_param_set)
+  expect_identical(
+    lapply(sampler$samplers, `[[`, "param_set"),
+    child_param_sets
+  )
+  expect_true(paradox:::.paradox_gateway_current_core(top_param_set))
+  expect_true(all(vapply(
+    child_param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+
+  # Historical Sampler stubs remain unversioned after graph healing and after
+  # another serialization round-trip. Their current-graph branch must replay
+  # without consulting the opt-in option again.
+  options(paradox.legacy_object_action = "error")
+  restored = unserialize(serialize(sampler, NULL))
+  expect_s3_class(restored$sample(1L), "Design")
+
+  current = SamplerUnif$new(ps(x = p_dbl(0, 1)))
+  current_stub = paste(deparse(body(current$sample)), collapse = "\n")
+  expect_match(current_stub, ".__paradox2_Sampler__sample", fixed = TRUE)
+  expect_false(grepl(".__Sampler__sample", current_stub, fixed = TRUE))
+})
+
+test_that("serialized Paradox 1 Sampler1D stubs replay changed private formals", {
+  samplers = read_base64_serialized_fixture(testthat::test_path(
+    "fixtures",
+    "paradox-1.0.1-sampler-1d-legacy-formals.rds.b64"
+  ))
+  expect_identical(names(samplers), c("rfun", "categ", "normal"))
+  expect_identical(
+    lapply(samplers, class),
+    list(
+      rfun = c("Sampler1DRfun", "Sampler1D", "Sampler", "R6"),
+      categ = c("Sampler1DCateg", "Sampler1D", "Sampler", "R6"),
+      normal = c(
+        "Sampler1DNormal", "Sampler1DRfun", "Sampler1D", "Sampler", "R6"
+      )
+    )
+  )
+  param_sets = lapply(samplers, `[[`, "param_set")
+  expect_false(any(vapply(
+    param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+
+  namespace = asNamespace("paradox")
+  for (target in c(
+      ".__Sampler1DRfun__.sample",
+      ".__Sampler1DCateg__.sample")) {
+    legacy = get(target, envir = namespace, inherits = FALSE)
+    expect_identical(
+      get(
+        "sample_truncated",
+        envir = environment(legacy),
+        inherits = FALSE
+      ),
+      get(
+        ".__paradox2_Sampler1DRfun__sample_truncated",
+        envir = namespace,
+        inherits = FALSE
+      )
+    )
+    expect_match(
+      paste(deparse(body(legacy)), collapse = "\n"),
+      ".paradox_legacy_embedded_param_set",
+      fixed = TRUE
+    )
+  }
+
+  old = options(paradox.legacy_object_action = "error")
+  on.exit(options(old), add = TRUE)
+  for (index in seq_along(samplers)) {
+    expect_error(
+      samplers[[index]]$sample(1L),
+      "A serialized Paradox 1 object tried to call `.__Sampler__sample`",
+      fixed = TRUE
+    )
+    expect_false(paradox:::.paradox_gateway_current_core(
+      param_sets[[index]]
+    ))
+  }
+
+  options(paradox.legacy_object_action = "upgrade")
+  if (getRversion() < "4.0.0") {
+    for (index in seq_along(samplers)) {
+      expect_error(
+        samplers[[index]]$sample(1L),
+        "cannot inspect an active binding on R 3.6",
+        fixed = TRUE
+      )
+      expect_false(paradox:::.paradox_gateway_current_core(
+        param_sets[[index]]
+      ))
+    }
+    return()
+  }
+
+  results = lapply(seq_along(samplers), function(index) {
+    set.seed(index)
+    samplers[[index]]$sample(4L)
+  })
+  expect_true(all(vapply(results, inherits, logical(1L), "Design")))
+  expect_identical(vapply(results, function(x) nrow(x$data), integer(1L)),
+    c(4L, 4L, 4L))
+  expect_identical(names(results[[1L]]$data), "x")
+  expect_identical(names(results[[2L]]$data), "f")
+  expect_identical(names(results[[3L]]$data), "x")
+  expect_true(all(results[[1L]]$data$x >= 0 & results[[1L]]$data$x <= 1))
+  expect_true(all(results[[2L]]$data$f %in% c("a", "b")))
+  expect_true(all(results[[3L]]$data$x >= 0 & results[[3L]]$data$x <= 1))
+  expect_true(all(vapply(
+    param_sets,
+    paradox:::.paradox_gateway_current_core,
+    logical(1L)
+  )))
+  expect_identical(lapply(samplers, `[[`, "param_set"), param_sets)
+
+  # The historical stubs remain unversioned after healing and serialization,
+  # while current objects never enter the compatibility targets.
+  options(paradox.legacy_object_action = "error")
+  restored = unserialize(serialize(samplers, NULL))
+  expect_true(all(vapply(restored, function(sampler) {
+    inherits(sampler$sample(1L), "Design")
+  }, logical(1L))))
+
+  current_stubs = list(
+    Sampler1DRfun$private_methods$.sample,
+    Sampler1DCateg$private_methods$.sample
+  )
+  expect_true(all(vapply(current_stubs, function(stub) {
+    body = paste(deparse(body(stub)), collapse = "\n")
+    grepl(".__paradox2_", body, fixed = TRUE) &&
+      !grepl(".__Sampler1D", body, fixed = TRUE)
+  }, logical(1L))))
+})
+
+test_that("legacy callback-carrier snapshots keep names paired with elements", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = new.env(parent = emptyenv())
+  state$new = new.env(parent = emptyenv())
+  state$carrier = list(old = state$old)
+  state$fired = FALSE
+  snapshot_carrier = get(
+    "C_upgrade_carrier_list_snapshot",
+    envir = asNamespace("paradox")
+  )
+  carrier = state$carrier
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    # data.table's by-reference setters provide the deliberate hostile
+    # in-place mutation that ordinary R copy-on-write assignment cannot.
+    data.table::setattr(state$carrier, "class", "data.frame")
+    data.table::setattr(state$carrier, "row.names", integer())
+    data.table::set(state$carrier, j = 1L, value = list(state$new))
+    data.table::setnames(state$carrier, "old", "new")
+    data.table::setattr(state$carrier, "class", NULL)
+    data.table::setattr(state$carrier, "row.names", NULL)
+  })
+  trigger = NULL
+  # Arrange the pending finalizer only after the native symbol and argument
+  # have been resolved.  The first allocation should therefore be one of the
+  # two destination-carrier allocations inside the native snapshot.
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  snapshot = .Call(snapshot_carrier, carrier)
+  gctorture(previous)
+
+  # R versions differ in whether an allocation-triggered collection executes
+  # a weak-reference finalizer immediately or leaves it pending until an
+  # explicit top-level collection. Either linearization is valid; a mixed
+  # name/element generation is not.
+  expect_true(
+    (identical(names(snapshot), "old") &&
+      identical(snapshot[[1L]], state$old)) ||
+    (identical(names(snapshot), "new") &&
+      identical(snapshot[[1L]], state$new))
+  )
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("legacy table snapshots keep names, columns, and attributes together", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$old = new.env(parent = emptyenv())
+  state$new = new.env(parent = emptyenv())
+  state$table = data.table::data.table(old = list(state$old))
+  state$fired = FALSE
+  snapshot_table = get(
+    "C_upgrade_table_list_snapshot",
+    envir = asNamespace("paradox")
+  )
+  table = state$table
+  expected_classes = c("data.table", "data.frame")
+  allow_repr = FALSE
+
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(unused) {
+    state$fired = TRUE
+    # Replace the column and its meaning by reference. A table snapshot must
+    # either reject a concurrent generation change or return one generation;
+    # it must never pair `old` with the new column (or conversely).
+    data.table::set(state$table, j = 1L, value = list(state$new))
+    data.table::setnames(state$table, "old", "new")
+  })
+  trigger = NULL
+  # Resolve every R-side input before arming allocation-triggered finalizers.
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+
+  snapshot = .Call(
+    snapshot_table,
+    table,
+    expected_classes,
+    allow_repr
+  )
+  gctorture(previous)
+
+  fired_at_return = state$fired
+  if (is.null(snapshot)) {
+    # A mutation after column capture but before the terminal receipt is
+    # deliberately rejected.
+    expect_true(fired_at_return)
+  } else {
+    expect_true(
+      (identical(names(snapshot$table), "old") &&
+        identical(snapshot$table[[1L]][[1L]], state$old)) ||
+      (identical(names(snapshot$table), "new") &&
+        identical(snapshot$table[[1L]][[1L]], state$new))
+    )
+    expect_null(snapshot$repr)
+  }
+  gc(full = TRUE)
+  expect_true(state$fired)
+})
+
+test_that("legacy table snapshots cannot splice post-receipt column writes", {
+  skip_on_cran()
+
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  state$old_leaf = new.env(parent = emptyenv())
+  state$new_leaf = new.env(parent = emptyenv())
+  state$old_repr = quote(p_uty(tags = "old"))
+  state$new_repr = quote(p_uty(tags = "new"))
+  state$domain = p_uty(tags = "old")
+  data.table::set(state$domain, i = 1L, j = "id", value = "payload")
+  data.table::set(
+    state$domain,
+    i = 1L,
+    j = "special_vals",
+    value = list(list(list(state$old_leaf)))
+  )
+  data.table::setattr(state$domain, "repr", state$old_repr)
+
+  mutate_source = function() {
+    state$fired = TRUE
+    # These writes are one source generation, landing after the terminal
+    # native receipt and before the R migration layer builds its result. A
+    # shallow list-column snapshot used to expose its leaves to that
+    # allocating layer, producing new-leaf/old-repr output that never existed
+    # in the source.
+    data.table::set(state$domain, i = 1L, j = "id", value = "changed")
+    data.table::set(
+      state$domain,
+      i = 1L,
+      j = "special_vals",
+      value = list(list(list(state$new_leaf)))
+    )
+    data.table::set(
+      state$domain,
+      i = 1L,
+      j = ".tags",
+      value = list(list("new"))
+    )
+    data.table::setattr(state$domain, "repr", state$new_repr)
+  }
+
+  # The mutation must land in the window between the native table receipt and
+  # every remaining R migration step. Wrapping the boundary function itself is
+  # that injection point; production code carries no test hook.
+  snapshot_table = paradox:::.upgrade_paradox_table
+  testthat::local_mocked_bindings(
+    .upgrade_paradox_table = function(...) {
+      snapshot = snapshot_table(...)
+      mutate_source()
+      snapshot
+    },
+    .package = "paradox"
+  )
+
+  upgraded = upgrade_paradox_object(state$domain)
+
+  expect_true(state$fired)
+  expect_identical(upgraded$id, "payload")
+  expect_identical(upgraded$.tags[[1L]], "old")
+  expect_identical(upgraded$special_vals[[1L]][[1L]], state$old_leaf)
+  expect_identical(attr(upgraded, "repr", exact = TRUE), state$old_repr)
+  expect_identical(state$domain$id, "changed")
+  expect_identical(state$domain$.tags[[1L]], "new")
+  expect_identical(state$domain$special_vals[[1L]][[1L]], state$new_leaf)
+  expect_identical(attr(state$domain, "repr", exact = TRUE), state$new_repr)
+})
+
+test_that("legacy table receipts finish later ALTREP callbacks first", {
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  state$old_repr = new.env(parent = emptyenv())
+  state$new_repr = new.env(parent = emptyenv())
+  callback = function() {
+    state$fired = TRUE
+    # The ordinary payload has already been copied and, in the former
+    # interleaved receipt, compared before this later column's final Length.
+    # Changing payload first and repr second means old payload/new repr never
+    # coexisted in the source table.
+    data.table::set(state$table, i = 1L, j = 1L, value = "new")
+    data.table::setattr(state$table, "repr", state$new_repr)
+  }
+  ids = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = callback,
+    callback_after = c(NA_integer_, 2L)
+  )
+  state$table = structure(
+    list(tag = c("old", "old"), id = ids),
+    class = c("data.table", "data.frame"),
+    repr = state$old_repr
+  )
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    state$table,
+    c("data.table", "data.frame"),
+    TRUE
+  )
+  expect_true(state$fired)
+  expect_identical(state$table$tag, c("new", "old"))
+  expect_identical(attr(state$table, "repr"), state$new_repr)
+  expect_null(snapshot)
+})
+
+test_that("legacy table snapshots reject a renamed source generation", {
+  # The column payloads stay untouched here, so only the terminal shell
+  # currency check can distinguish the selected generation from the source.
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  ids = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = function() {
+      state$fired = TRUE
+      data.table::setnames(state$table, "tag", "changed")
+    },
+    callback_after = c(NA_integer_, 2L)
+  )
+  state$table = structure(
+    list(tag = c("old", "old"), id = ids),
+    class = c("data.table", "data.frame")
+  )
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    state$table,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_true(state$fired)
+  expect_identical(names(state$table), c("changed", "id"))
+  expect_identical(state$table$changed, c("old", "old"))
+  expect_null(snapshot)
+})
+
+test_that("legacy table snapshots admit only coherent historical row metadata", {
+  empty = data.table::data.table(value = integer())
+  data.table::setattr(empty, "row.names", NULL)
+  empty_snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    empty,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_identical(empty_snapshot$table$value, integer())
+
+  table = data.table::data.table(value = 1:2)
+  data.table::setattr(
+    table,
+    "row.names",
+    c(NA_integer_, -1L)
+  )
+  expect_null(.Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    table,
+    c("data.table", "data.frame"),
+    FALSE
+  ))
+
+  # Paradox 1 built its keyed private tables from a classed list and then
+  # called setkeyv().  data.table deliberately leaves row.names absent in that
+  # spelling even when columns are populated; the equal-length columns are the
+  # sole row-count authority.
+  missing = structure(
+    list(value = 1:2),
+    class = c("data.table", "data.frame")
+  )
+  data.table::setkeyv(missing, "value")
+  expect_null(attr(missing, "row.names", exact = TRUE))
+  missing_snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    missing,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_identical(missing_snapshot$table$value, 1:2)
+
+  old_leaf = new.env(parent = emptyenv())
+  new_leaf = new.env(parent = emptyenv())
+  leaf = structure(1L, generation = old_leaf)
+  nested = structure(
+    list(payload = list(leaf)),
+    row.names = 1L,
+    class = c("data.table", "data.frame")
+  )
+  nested_snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    nested,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  data.table::setattr(leaf, "generation", new_leaf)
+  expect_identical(
+    attr(nested_snapshot$table$payload[[1L]], "generation"),
+    old_leaf
+  )
+  expect_identical(attr(nested$payload[[1L]], "generation"), new_leaf)
+
+  nested_receipt = new.env(parent = emptyenv())
+  nested_receipt$fired = FALSE
+  nested_receipt$old_generation = new.env(parent = emptyenv())
+  nested_receipt$new_generation = new.env(parent = emptyenv())
+  nested_receipt$leaf = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = function() {
+      nested_receipt$fired = TRUE
+      data.table::setattr(
+        nested_receipt$leaf,
+        "generation",
+        nested_receipt$new_generation
+      )
+    },
+    callback_after = NA_integer_
+  )
+  data.table::setattr(
+    nested_receipt$leaf,
+    "generation",
+    nested_receipt$old_generation
+  )
+  # Arm only after the fixture's own attribute installation. The exact native
+  # compatibility paths have different bounded observation counts: R 3.6--4.4
+  # reach the table-wide terminal barrier on the second Length call, whereas
+  # R >= 4.5 reaches it on the fourth. In both cases the callback therefore
+  # mutates after the leaf snapshot is complete and the terminal receipt must
+  # reject the mixed generation.
+  native_stateful_altrep_rearm(
+    nested_receipt$leaf,
+    c(
+      NA_integer_,
+      if (getRversion() < "4.5.0") 1L else 3L
+    )
+  )
+  nested_receipt$table = structure(
+    list(payload = list(nested_receipt$leaf)),
+    row.names = 1L,
+    class = c("data.table", "data.frame")
+  )
+  nested_receipt$result = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    nested_receipt$table,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_true(nested_receipt$fired)
+  expect_identical(
+    attr(nested_receipt$leaf, "generation"),
+    nested_receipt$new_generation
+  )
+  expect_null(nested_receipt$result)
+
+  formal_class = "ParadoxMigrationOpaqueListLeaf"
+  if (!methods::isClass(formal_class)) {
+    methods::setClass(formal_class, slots = c(payload = "integer"))
+  }
+  formal_leaf = methods::new(formal_class, payload = 1L)
+  formal = structure(
+    list(payload = list(formal_leaf)),
+    row.names = 1L,
+    class = c("data.table", "data.frame")
+  )
+  formal_snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    formal,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_identical(formal_snapshot$table$payload[[1L]], formal_leaf)
+
+  inconsistent = structure(
+    list(left = 1:2, right = 1L),
+    class = c("data.table", "data.frame")
+  )
+  expect_error(
+    paradox:::.upgrade_paradox_table(
+      inconsistent,
+      c("left", "right"),
+      "inconsistent table"
+    ),
+    "table columns have inconsistent lengths",
+    fixed = TRUE
+  )
+})
+
+test_that("legacy value snapshots follow the owning parameter kind", {
+  typed_old = new.env(parent = emptyenv())
+  typed_new = new.env(parent = emptyenv())
+  utility_old = new.env(parent = emptyenv())
+  utility_new = new.env(parent = emptyenv())
+  typed = structure(1L, generation = typed_old)
+  utility = structure(2L, generation = utility_old)
+  source = list(x = typed, u = utility)
+
+  snapshot = .Call(
+    paradox:::C_upgrade_values_snapshot,
+    source,
+    c("x", "u"),
+    c("ParamInt", "ParamUty")
+  )
+  data.table::setattr(typed, "generation", typed_new)
+  data.table::setattr(utility, "generation", utility_new)
+  data.table::setattr(source, "names", c("changed", "u"))
+
+  expect_identical(names(snapshot), c("x", "u"))
+  expect_identical(attr(snapshot$x, "generation"), typed_old)
+  # ParamUty values are opaque even when their outward representation is an
+  # atomic vector: migration must preserve this exact identity.
+  expect_identical(attr(snapshot$u, "generation"), utility_new)
+})
+
+test_that("legacy interpreted table carriers are owned by their native schema", {
+  opaque = list(payload = 1L)
+  special = list(opaque)
+  disable = list(flag = opaque)
+  cargo = list(disable_in_tune = disable, repr = "utility")
+  requirement = list(on = "parent", cond = CondEqual(1L))
+  domain = p_uty(special_vals = special)
+  data.table::set(domain, i = 1L, j = "cargo", value = list(cargo))
+  data.table::set(
+    domain,
+    i = 1L,
+    j = ".requirements",
+    value = list(list(list(requirement)))
+  )
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    domain,
+    class(domain),
+    TRUE
+  )$table
+  data.table::setattr(special, "names", "changed")
+  data.table::setattr(disable, "names", "changed")
+  data.table::setattr(requirement, "names", c("changed", "cond"))
+  marker = new.env(parent = emptyenv())
+  data.table::setattr(opaque, "marker", marker)
+
+  expect_null(names(snapshot$special_vals[[1L]]))
+  expect_identical(
+    attr(snapshot$special_vals[[1L]][[1L]], "marker"),
+    marker
+  )
+  expect_identical(names(snapshot$cargo[[1L]]$disable_in_tune), "flag")
+  expect_identical(
+    names(snapshot$.requirements[[1L]][[1L]]),
+    c("on", "cond")
+  )
+})
+
+test_that("legacy nested semantic callbacks cannot splice table generations", {
+  state = new.env(parent = emptyenv())
+  state$first = CondEqual(1L)
+  late_rhs = native_stateful_altrep(
+    2L,
+    2L,
+    callback = function() {
+      data.table::setattr(state$first[[1L]], "changed", TRUE)
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  second = structure(
+    list(rhs = late_rhs, condition_format_string = "%s == %s"),
+    class = c("CondEqual", "Condition")
+  )
+  source = structure(
+    list(
+      id = c("child", "other"),
+      on = c("parent", "parent"),
+      cond = list(state$first, second)
+    ),
+    class = c("data.table", "data.frame")
+  )
+
+  expect_null(.Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    source,
+    c("data.table", "data.frame"),
+    FALSE
+  ))
+})
+
+test_that("legacy Condition Length retains a self-detached RHS", {
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  rhs = native_stateful_altrep(
+    1L,
+    1L,
+    callback = function() {
+      state$fired = TRUE
+      # Remove the exact ALTREP whose Length method is executing from every
+      # caller-owned parent, then collect.  The native receipt must retain its
+      # selected RHS independently of the mutable Condition owner graph. The
+      # package's own by-reference cell mutator performs that replacement from
+      # the collection this callback triggers.
+      pending = .Call(
+        paradox:::C_test_gc_column_mutator,
+        state$condition,
+        0L,
+        2L
+      )
+      rm(pending)
+      gc(full = TRUE)
+      gc(full = TRUE)
+    },
+    # Snapshot materialization owns the first Length observation; dispatch on
+    # the table-wide terminal Length barrier that follows it.
+    callback_after = c(NA_integer_, 1L)
+  )
+  state$condition = structure(
+    list(rhs = rhs, condition_format_string = "%s == %s"),
+    class = c("CondEqual", "Condition")
+  )
+  source = structure(
+    list(id = "child", on = "parent", cond = list(state$condition)),
+    class = c("data.table", "data.frame")
+  )
+  rm(rhs)
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    source,
+    c("data.table", "data.frame"),
+    FALSE
+  )
+  expect_true(state$fired)
+  expect_identical(state$condition[[1L]], 2L)
+  expect_null(snapshot)
+})
+
+test_that("legacy requirement Length retains its detached Condition sibling", {
+  state = new.env(parent = emptyenv())
+  state$fired = FALSE
+  state$sentinel_finalized = FALSE
+  state$new_condition = CondEqual(2L)
+  sentinel = new.env(parent = emptyenv())
+  reg.finalizer(sentinel, function(unused) {
+    state$sentinel_finalized = TRUE
+  })
+  retain_sentinel = local({
+    retained = sentinel
+    function() invisible(retained)
+  })
+  old_rhs = native_stateful_altrep(
+    1L,
+    1L,
+    callback = retain_sentinel,
+    callback_after = c(NA_integer_, NA_integer_)
+  )
+  on = native_stateful_altrep(
+    "parent",
+    "parent",
+    callback = function() {
+      state$fired = TRUE
+      # The selected Condition is a sibling of the dispatching `on` leaf. Once
+      # this by-reference replacement occurs, only the native receipt may keep
+      # the old Condition alive for the immediately following check. The
+      # package's own by-reference cell mutator performs that replacement from
+      # the collection this callback triggers.
+      pending = .Call(
+        paradox:::C_test_gc_column_mutator,
+        state$requirement,
+        1L,
+        state$new_condition
+      )
+      rm(pending)
+      gc(full = TRUE)
+      gc(full = TRUE)
+      if (state$sentinel_finalized) {
+        stop("detached Condition finalized during requirement receipt")
+      }
+    },
+    callback_after = c(NA_integer_, 1L)
+  )
+  old_condition = structure(
+    list(rhs = old_rhs, condition_format_string = "%s == %s"),
+    class = c("CondEqual", "Condition")
+  )
+  state$requirement = list(on = on, cond = old_condition)
+  domain = p_int()
+  data.table::set(domain, i = 1L, j = "id", value = "child")
+  data.table::set(
+    domain,
+    i = 1L,
+    j = ".requirements",
+    value = list(list(list(state$requirement)))
+  )
+  rm(sentinel, retain_sentinel, old_rhs, on, old_condition)
+
+  snapshot = .Call(
+    paradox:::C_upgrade_table_list_snapshot,
+    domain,
+    class(domain),
+    TRUE
+  )
+  expect_true(state$fired)
+  expect_identical(state$requirement$cond, state$new_condition)
+  expect_null(snapshot)
+  for (iteration in seq_len(8L)) {
+    if (state$sentinel_finalized) break
+    gc(full = TRUE)
+  }
+  expect_true(state$sentinel_finalized)
+})
+
+test_that("legacy value callbacks cannot splice typed leaf generations", {
+  state = new.env(parent = emptyenv())
+  state$first = structure(1L, generation = "old")
+  second = native_stateful_altrep(
+    2L,
+    2L,
+    callback = function() {
+      data.table::setattr(state$first, "generation", "new")
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  source = list(x = state$first, y = second)
+
+  expect_null(.Call(
+    paradox:::C_upgrade_values_snapshot,
+    source,
+    c("x", "y"),
+    c("ParamInt", "ParamInt")
+  ))
+})

@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+REGISTRY="$ROOT/environment/runtime-matrix.tsv"
+EXPECTED_HEADER=$'ordinal\truntime\tplatform\truntime_lock\tdependency_mode\tdependency_lock\tapi_branch\tprefix_repair'
+
+fail() {
+  printf 'runtime-matrix-registry: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: runtime-matrix-registry validate
+       runtime-matrix-registry versions
+       runtime-matrix-registry contains VERSION
+       runtime-matrix-registry field VERSION FIELD
+
+Read the checked-in runtime registry after validating its complete shape.
+EOF
+}
+
+validate_registry() {
+  [[ -f "$REGISTRY" && ! -L "$REGISTRY" ]] ||
+    fail "registry is absent or symbolic: $REGISTRY"
+  [[ $(head -n 1 "$REGISTRY") == "$EXPECTED_HEADER" ]] ||
+    fail "registry header is malformed"
+  awk -F '\t' '
+    NR == 1 {next}
+    NF != 8 {exit 1}
+    $1 !~ /^[1-9][0-9]*$/ || $1 != NR - 1 {exit 1}
+    $2 !~ /^[0-9]+[.][0-9]+[.][0-9]+$/ || runtime[$2]++ {exit 1}
+    $3 != "linux-64" {exit 1}
+    $4 != "environment/runtime-r-" $2 "-linux-64.lock" {exit 1}
+    $5 !~ /^(source-library|data-table-overlay|prefix-library)$/ {exit 1}
+    $5 == "source-library" &&
+      $6 != "environment/runtime-r-" $2 "-packages.lock" {exit 1}
+    $5 != "source-library" && $6 != "-" {exit 1}
+    $7 !~ /^[a-z0-9][a-z0-9.-]*$/ {exit 1}
+    $8 != "-" &&
+      $8 != "environment/runtime-r-" $2 "-prefix-repair.lock" {exit 1}
+    END {if (NR < 2) exit 1}
+  ' "$REGISTRY" || fail "registry rows are malformed"
+
+  local runtime_lock dependency_lock prefix_repair
+  while IFS=$'\t' read -r _ runtime _ runtime_lock _ dependency_lock _ prefix_repair; do
+    [[ "$runtime" != runtime ]] || continue
+    [[ -f "$ROOT/$runtime_lock" && ! -L "$ROOT/$runtime_lock" ]] ||
+      fail "registered runtime lock is absent or symbolic: $runtime_lock"
+    if [[ "$dependency_lock" != - ]]; then
+      [[ -f "$ROOT/$dependency_lock" && ! -L "$ROOT/$dependency_lock" ]] ||
+        fail "registered dependency lock is absent or symbolic: $dependency_lock"
+    fi
+    if [[ "$prefix_repair" != - ]]; then
+      [[ -f "$ROOT/$prefix_repair" && ! -L "$ROOT/$prefix_repair" ]] ||
+        fail "registered prefix-repair lock is absent or symbolic: $prefix_repair"
+    fi
+  done < "$REGISTRY"
+}
+
+[[ $# -ge 1 ]] || { usage >&2; exit 2; }
+command=$1
+shift
+validate_registry
+
+case "$command" in
+  validate)
+    [[ $# -eq 0 ]] || { usage >&2; exit 2; }
+    printf 'runtime_matrix_registry=passed\n'
+    printf 'runtime_count=%s\n' "$(( $(wc -l < "$REGISTRY") - 1 ))"
+    ;;
+  versions)
+    [[ $# -eq 0 ]] || { usage >&2; exit 2; }
+    awk -F '\t' 'NR > 1 {print $2}' "$REGISTRY"
+    ;;
+  contains)
+    [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+    awk -F '\t' -v runtime="$1" '
+      NR > 1 && $2 == runtime {found = 1}
+      END {exit !found}
+    ' "$REGISTRY"
+    ;;
+  field)
+    [[ $# -eq 2 ]] || { usage >&2; exit 2; }
+    runtime=$1
+    field=$2
+    case "$field" in
+      ordinal) column=1 ;;
+      runtime) column=2 ;;
+      platform) column=3 ;;
+      runtime_lock) column=4 ;;
+      dependency_mode) column=5 ;;
+      dependency_lock) column=6 ;;
+      api_branch) column=7 ;;
+      prefix_repair) column=8 ;;
+      *) fail "unknown registry field: $field" ;;
+    esac
+    value=$(awk -F '\t' -v runtime="$runtime" -v column="$column" '
+      NR > 1 && $2 == runtime {print $column; count++}
+      END {if (count != 1) exit 1}
+    ' "$REGISTRY") || fail "runtime is not uniquely registered: $runtime"
+    printf '%s\n' "$value"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    fail "unknown command: $command"
+    ;;
+esac

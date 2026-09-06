@@ -1,0 +1,544 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Execute one already-prepared runtime-matrix stage.  The coordinator runs this
+# script in its own supervised process group; all mutable R state is scoped to
+# the version-specific retained stage below RUN_ROOT.
+
+fail() {
+  printf 'run-runtime-matrix-stage: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 3 ]] ||
+  fail "usage: run-runtime-matrix-stage ROOT RUN_ROOT VERSION"
+
+ROOT=$1
+RUN_ROOT=$2
+VERSION=$3
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+MANAGED_PATH="$ROOT/scripts/environment/runtime-matrix-managed-path"
+DECLARED_CHECK_LOG_VERIFIER="$ROOT/scripts/environment/verify-r36-declared-check-log"
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" ]] ||
+  fail "runtime registry or dependency-library manager is absent"
+[[ -x "$MANAGED_PATH" ]] || fail "runtime managed-path helper is absent"
+[[ -x "$DECLARED_CHECK_LOG_VERIFIER" ]] ||
+  fail "declared-minimum check-log verifier is absent"
+"$REGISTRY" contains "$VERSION" || fail "unsupported runtime version"
+DATATABLE_VERSION=1.18.4
+DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
+[[ "$ROOT" == /* && -d "$ROOT" && ! -L "$ROOT" &&
+  "$(cd "$ROOT" && pwd -P)" == "$ROOT" ]] || fail "ROOT is not canonical"
+[[ "$RUN_ROOT" == "$ROOT/.local/checks/"*/runtime-matrix &&
+  -d "$RUN_ROOT" && ! -L "$RUN_ROOT" &&
+  "$(cd "$RUN_ROOT" && pwd -P)" == "$RUN_ROOT" ]] ||
+  fail "RUN_ROOT is not one canonical retained runtime-matrix directory"
+
+STAGE_DIRECTORY="$RUN_ROOT/R-$VERSION"
+STAGE_ARTIFACTS="$STAGE_DIRECTORY/artifacts"
+STAGE_SOURCE="$STAGE_ARTIFACTS/source"
+STAGE_BUILD="$STAGE_ARTIFACTS/build"
+STAGE_CHECK="$STAGE_ARTIFACTS/check"
+STAGE_LIBRARY="$STAGE_ARTIFACTS/library"
+STAGE_LOGS="$STAGE_ARTIFACTS/logs"
+STAGE_INPUTS="$STAGE_ARTIFACTS/inputs"
+MBO_CONFIG_BUNDLE="$RUN_ROOT/inputs/mbo-config-fixtures"
+MBO_CONFIG_FIXTURE_ROOT="$MBO_CONFIG_BUNDLE/common"
+"$MANAGED_PATH" "$ROOT" "$STAGE_DIRECTORY" existing ||
+  fail "prepared runtime stage path is unsafe"
+"$MANAGED_PATH" "$ROOT" "$STAGE_ARTIFACTS" existing ||
+  fail "prepared runtime artifact path is unsafe"
+stage_artifacts_identity=$(/usr/bin/stat -c '%d:%i' -- "$STAGE_ARTIFACTS")
+exec {stage_artifacts_descriptor}< "$STAGE_ARTIFACTS"
+[[ "$(/usr/bin/stat -Lc '%d:%i' \
+  "/proc/$$/fd/$stage_artifacts_descriptor")" == \
+    "$stage_artifacts_identity" ]] ||
+  fail "prepared runtime artifact path changed while opening"
+for directory in "$STAGE_SOURCE" "$STAGE_BUILD" "$STAGE_CHECK" "$STAGE_LIBRARY" \
+    "$STAGE_LOGS" "$STAGE_INPUTS"; do
+  "$MANAGED_PATH" "$ROOT" "$directory" existing ||
+    fail "prepared stage directory is absent or symbolic: $directory"
+done
+[[ -d "$MBO_CONFIG_BUNDLE" && ! -L "$MBO_CONFIG_BUNDLE" ]] ||
+  fail "prepared mbo_config fixture bundle is absent or symbolic"
+"$ROOT/scripts/environment/mbo-config-fixtures" verify \
+  "$STAGE_SOURCE" "$ROOT/.local/compat/github/mbo_config" \
+  "$MBO_CONFIG_BUNDLE" >/dev/null
+dependency_mode=$("$REGISTRY" field "$VERSION" dependency_mode)
+PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF="$STAGE_INPUTS/bootstrap-receipt"
+[[ -d "$PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF" &&
+  ! -L "$PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF" ]] ||
+  fail "prepared prefix receipt handoff is absent or symbolic"
+export PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF
+if [[ "$dependency_mode" == source-library ]]; then
+  PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF="$STAGE_INPUTS/dependency-library-receipt"
+  [[ -d "$PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF" &&
+    ! -L "$PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF" ]] ||
+    fail "prepared dependency-library receipt handoff is absent or symbolic"
+  export PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF
+else
+  unset PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF
+fi
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+audit_symbols() {
+  local version=$1 dso=$2 log=$3 configured_nm configured_nm_status
+  local nm_name nm_tool symbols symbol count branch
+  local -a required forbidden
+  if configured_nm=$(LC_ALL=C R CMD config NM 2>&1); then
+    configured_nm_status=0
+  else
+    configured_nm_status=$?
+  fi
+  [[ -n "${NM:-}" && -n "${CONDA_TOOLCHAIN_HOST:-}" ]] ||
+    fail "runtime compiler activation did not select the expected NM"
+  nm_name="$CONDA_TOOLCHAIN_HOST-nm"
+  nm_tool="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$nm_name"
+  [[ -x "$nm_tool" && "$(command -v -- "$NM")" == "$nm_tool" ]] ||
+    fail "authenticated runtime compiler NM is absent: $nm_tool"
+  if [[ "$version" == 3.6.3 ]]; then
+    [[ "$configured_nm_status" == 1 &&
+      "$configured_nm" == "ERROR: no information for variable 'NM'" ]] ||
+      fail "R $version unexpectedly reports an NM configuration: $configured_nm"
+  else
+    [[ "$configured_nm_status" == 0 &&
+      "${configured_nm##*/}" == "$nm_name" ]] ||
+      fail "runtime R and compiler activation disagree about NM: $configured_nm / $nm_name"
+  fi
+  symbols=${log%.log}.symbols.txt
+  "$nm_tool" -D --undefined-only "$dso" > "$symbols"
+  {
+    printf 'runtime=%s\n' "$version"
+    printf 'r_config_nm_status=%s\n' "$configured_nm_status"
+    printf 'r_config_nm=%s\n' "$configured_nm"
+    printf 'nm=%s\n' "$nm_tool"
+    printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
+  } > "$log"
+  if [[ "$version" == 3.6.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings)
+    forbidden=(R_ClosureFormals R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv
+      R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
+      R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib Rf_GetOption1
+      ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.0.5 || "$version" == 4.1.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings
+      R_ActiveBindingFunction)
+    forbidden=(R_ClosureFormals R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv
+      R_existsVarInFrame R_NewEnv R_getVar R_getVarEx R_GetBindingType
+      R_getRegisteredNamespace R_getAttribCount R_hasAttrib R_mapAttrib
+      Rf_GetOption1 ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.2.3 || "$version" == 4.3.3 || "$version" == 4.4.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_existsVarInFrame
+      R_ActiveBindingFunction SET_COMPLEX_ELT SET_RAW_ELT)
+    forbidden=(R_ClosureFormals R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv R_getVar R_getVarEx
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
+      R_mapAttrib Rf_GetOption1 ANY_ATTRIB R_HasFancyBindings)
+  elif [[ "$version" == 4.5.2 ]]; then
+    required=(Rf_eval ATTRIB ANY_ATTRIB R_ClosureFormals R_ClosureExpr
+      R_BytecodeExpr R_ClosureEnv R_ParentEnv Rf_findVarInFrame
+      Rf_GetOption1 R_existsVarInFrame R_ActiveBindingFunction
+      SET_COMPLEX_ELT SET_RAW_ELT)
+    forbidden=(R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib
+      R_PromiseExpr PRENV PRVALUE FORMALS CLOENV R_HasFancyBindings)
+  else
+    fail "unsupported runtime symbol policy: $version"
+  fi
+  branch=$("$REGISTRY" field "$version" api_branch)
+  for symbol in "${required[@]}"; do
+    count=$(awk -v expected="$symbol" '
+      NF {
+        observed = $NF
+        sub(/@.*/, "", observed)
+        if (observed == expected) count += 1
+      }
+      END { print count + 0 }
+    ' "$symbols")
+    [[ "$count" == 1 ]] ||
+      fail "expected R API symbol is not unique on R $version: $symbol"
+    printf 'required_symbol=%s\n' "$symbol" >> "$log"
+  done
+  for symbol in "${forbidden[@]}"; do
+    count=$(awk -v expected="$symbol" '
+      NF {
+        observed = $NF
+        sub(/@.*/, "", observed)
+        if (observed == expected) count += 1
+      }
+      END { print count + 0 }
+    ' "$symbols")
+    if [[ "$count" != 0 ]]; then
+      fail "too-new R API symbol leaked into the R $version package DSO: $symbol"
+    fi
+    printf 'forbidden_symbol_absent=%s\n' "$symbol" >> "$log"
+  done
+  printf 'r_api_compat_branch=%s\nsymbol_audit=passed\n' "$branch" >> "$log"
+}
+
+audit_r45_compiled_code_policy() {
+  local version=$1 package_directory=$2 log=$3
+  [[ "$version" == 4.5.2 ]] || return 0
+  Rscript --vanilla -e '
+    arguments <- commandArgs(trailingOnly = TRUE)
+    package_directory <- normalizePath(
+      arguments[[1L]], winslash = "/", mustWork = TRUE
+    )
+    issues <- tools:::check_compiled_code(package_directory)
+    if (length(issues)) {
+      cat(
+        "runtime=4.5.2\n",
+        "policy_source=tools:::check_compiled_code\n",
+        sprintf("issue_count=%d\n", length(issues)),
+        sep = ""
+      )
+      writeLines(capture.output(print(issues)))
+      quit(save = "no", status = 1L)
+    }
+    cat(
+      "runtime=4.5.2\n",
+      "policy_source=tools:::check_compiled_code\n",
+      "issue_count=0\n",
+      "compiled_code_policy=passed\n",
+      sep = ""
+    )
+  ' "$package_directory" > "$log" 2>&1 ||
+    fail "R 4.5 compiled-code policy rejected the installed package"
+}
+
+ensure_stage_directory() {
+  local target=$1 mode=${2:-}
+  local relative remainder component current_public open_child
+  local current_descriptor next_descriptor child_identity fd_identity
+  local owns_current=false
+  "$MANAGED_PATH" "$ROOT" "$target" allow-missing ||
+    fail "runtime stage user/cache path is unsafe: $target"
+  case "$target" in
+    "$STAGE_ARTIFACTS"/*) ;;
+    *) fail "runtime stage user/cache path escaped its artifact root: $target" ;;
+  esac
+  [[ "$(/usr/bin/stat -c '%d:%i' -- "$STAGE_ARTIFACTS")" == \
+    "$stage_artifacts_identity" &&
+    "$(/usr/bin/stat -Lc '%d:%i' \
+      "/proc/$$/fd/$stage_artifacts_descriptor")" == \
+      "$stage_artifacts_identity" ]] ||
+    fail "runtime artifact root changed before directory creation"
+  relative=${target#"$STAGE_ARTIFACTS/"}
+  remainder=$relative
+  current_public=$STAGE_ARTIFACTS
+  current_descriptor=$stage_artifacts_descriptor
+  while [[ -n "$remainder" ]]; do
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "runtime stage user/cache path has an unsafe component: $target"
+    open_child="/proc/$$/fd/$current_descriptor/$component"
+    if [[ ! -e "$open_child" && ! -L "$open_child" ]] &&
+        ! mkdir -- "$open_child" 2>/dev/null; then
+      [[ -d "$open_child" && ! -L "$open_child" ]] ||
+        fail "could not create runtime stage directory: $target"
+    fi
+    [[ -d "$open_child" && ! -L "$open_child" ]] ||
+      fail "runtime stage directory component is unsafe: $target"
+    child_identity=$(/usr/bin/stat -Lc '%d:%i' "$open_child")
+    current_public="$current_public/$component"
+    [[ -d "$current_public" && ! -L "$current_public" &&
+      "$(/usr/bin/stat -c '%d:%i' -- "$current_public")" == \
+        "$child_identity" ]] ||
+      fail "runtime stage directory changed during creation: $target"
+    exec {next_descriptor}< "$open_child"
+    fd_identity=$(/usr/bin/stat -Lc '%d:%i' \
+      "/proc/$$/fd/$next_descriptor")
+    [[ "$fd_identity" == "$child_identity" ]] ||
+      fail "runtime stage directory changed while opening: $target"
+    if [[ "$owns_current" == true ]]; then
+      exec {current_descriptor}<&-
+    fi
+    current_descriptor=$next_descriptor
+    owns_current=true
+  done
+  if [[ -n "$mode" ]]; then
+    chmod "$mode" "/proc/$$/fd/$current_descriptor"
+  fi
+  "$MANAGED_PATH" "$ROOT" "$target" existing ||
+    fail "runtime stage user/cache path is unsafe after creation: $target"
+  [[ "$(/usr/bin/stat -c '%d:%i' -- "$target")" == \
+    "$(/usr/bin/stat -Lc '%d:%i' \
+      "/proc/$$/fd/$current_descriptor")" ]] ||
+    fail "runtime stage user/cache path changed after creation: $target"
+  if [[ "$owns_current" == true ]]; then
+    exec {current_descriptor}<&-
+  fi
+}
+
+configure_stage_user_environment() {
+  local directory mode
+  local -a stage_user_directories=(
+    "$STAGE_ARTIFACTS/home"
+    "$STAGE_ARTIFACTS/tmp"
+    "$STAGE_ARTIFACTS/config/xdg"
+    "$STAGE_ARTIFACTS/cache/xdg"
+    "$STAGE_ARTIFACTS/data/xdg"
+    "$STAGE_ARTIFACTS/state/xdg"
+    "$STAGE_ARTIFACTS/runtime"
+    "$STAGE_ARTIFACTS/cache/R"
+    "$STAGE_ARTIFACTS/cache/ccache"
+    "$STAGE_ARTIFACTS/tmp/ccache"
+    "$STAGE_ARTIFACTS/cache/pip"
+    "$STAGE_ARTIFACTS/cache/uv"
+    "$STAGE_ARTIFACTS/cache/cargo"
+    "$STAGE_ARTIFACTS/cache/rustup"
+    "$STAGE_ARTIFACTS/cache/go"
+    "$STAGE_ARTIFACTS/cache/go-mod"
+    "$STAGE_ARTIFACTS/cache/npm"
+    "$STAGE_ARTIFACTS/cache/yarn"
+    "$STAGE_ARTIFACTS/cache/bundle"
+    "$STAGE_ARTIFACTS/cache/python"
+    "$STAGE_ARTIFACTS/cache/julia"
+    "$STAGE_ARTIFACTS/cache/cuda"
+  )
+  for directory in "${stage_user_directories[@]}"; do
+    mode=
+    case "$directory" in
+      "$STAGE_ARTIFACTS/home"|"$STAGE_ARTIFACTS/tmp"|\
+          "$STAGE_ARTIFACTS/runtime")
+        mode=0700
+        ;;
+    esac
+    ensure_stage_directory "$directory" "$mode"
+  done
+  export HOME="$STAGE_ARTIFACTS/home"
+  export R_USER="$STAGE_ARTIFACTS/home"
+  export TMPDIR="$STAGE_ARTIFACTS/tmp"
+  export TMP="$STAGE_ARTIFACTS/tmp"
+  export TEMP="$STAGE_ARTIFACTS/tmp"
+  export XDG_CONFIG_HOME="$STAGE_ARTIFACTS/config/xdg"
+  export XDG_CACHE_HOME="$STAGE_ARTIFACTS/cache/xdg"
+  export XDG_DATA_HOME="$STAGE_ARTIFACTS/data/xdg"
+  export XDG_STATE_HOME="$STAGE_ARTIFACTS/state/xdg"
+  export XDG_RUNTIME_DIR="$STAGE_ARTIFACTS/runtime"
+  export R_USER_CACHE_DIR="$STAGE_ARTIFACTS/cache/R"
+  export CCACHE_DIR="$STAGE_ARTIFACTS/cache/ccache"
+  export CCACHE_TEMPDIR="$STAGE_ARTIFACTS/tmp/ccache"
+  export PIP_CACHE_DIR="$STAGE_ARTIFACTS/cache/pip"
+  export UV_CACHE_DIR="$STAGE_ARTIFACTS/cache/uv"
+  export CARGO_HOME="$STAGE_ARTIFACTS/cache/cargo"
+  export RUSTUP_HOME="$STAGE_ARTIFACTS/cache/rustup"
+  export GOPATH="$STAGE_ARTIFACTS/cache/go"
+  export GOMODCACHE="$STAGE_ARTIFACTS/cache/go-mod"
+  export npm_config_cache="$STAGE_ARTIFACTS/cache/npm"
+  export YARN_CACHE_FOLDER="$STAGE_ARTIFACTS/cache/yarn"
+  export BUNDLE_USER_HOME="$STAGE_ARTIFACTS/cache/bundle"
+  export PYTHONPYCACHEPREFIX="$STAGE_ARTIFACTS/cache/python"
+  export JULIA_DEPOT_PATH="$STAGE_ARTIFACTS/cache/julia"
+  export CUDA_CACHE_PATH="$STAGE_ARTIFACTS/cache/cuda"
+  export GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_CONFIG_SYSTEM=/dev/null
+}
+
+configure_stage_user_environment
+cd "$ROOT"
+export PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT="$STAGE_ARTIFACTS"
+export PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT="$STAGE_INPUTS"
+# shellcheck disable=SC1091
+. "$ROOT/scripts/activate-runtime-matrix" "$VERSION"
+unset PARADOX_RUNTIME_MATRIX_STAGE_STATE_ROOT
+unset PARADOX_RUNTIME_MATRIX_STAGE_INPUT_ROOT
+configure_stage_user_environment
+declared_floor_candidate=
+if [[ "$VERSION" == 3.6.3 ]]; then
+  # This directory is needed only after the general stage setup. Create and
+  # authenticate it while the artifact-root descriptor is still pinned; the
+  # descriptor must not leak into any R/build subprocess below.
+  declared_floor_candidate="$STAGE_ARTIFACTS/declared-floor-candidate-library"
+  ensure_stage_directory "$declared_floor_candidate" 0700
+fi
+exec {stage_artifacts_descriptor}<&-
+
+# Stage-aware activation must already have selected the authenticated detached
+# inputs before its own R identity probes. Keep one postcondition here rather
+# than a second assignment implementation.
+[[ "$R_ENVIRON_USER" == "$STAGE_INPUTS/environment/Renviron" &&
+  "$R_PROFILE_USER" == "$STAGE_INPUTS/environment/Rprofile.R" &&
+  "$R_MAKEVARS_USER" == "$STAGE_INPUTS/environment/Makevars" &&
+  "$R_BUILD_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" &&
+  "$R_CHECK_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" &&
+  "$R_INSTALL_ENVIRON" == "$STAGE_INPUTS/environment/Renviron" ]] ||
+  fail "stage-aware activation did not retain authenticated R startup inputs"
+
+# The outer scheduler may admit every selected minor-version stage at once
+# when the aggregate resource envelope allows it. Do not let a package, BLAS,
+# OpenMP runtime, future/parallel, or a nested build multiply that admitted
+# process and memory budget inside a stage.
+export R_LIBS_USER="$STAGE_LIBRARY"
+export R_LIBS_SITE="$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+export MAKEFLAGS=-j1
+export CMAKE_BUILD_PARALLEL_LEVEL=1
+export CARGO_BUILD_JOBS=1
+export TESTTHAT_CPUS=1
+export MC_CORES=1
+export R_PARALLELLY_AVAILABLECORES_FALLBACK=1
+export R_FUTURE_AVAILABLECORES_FALLBACK=1
+export OMP_NUM_THREADS=1
+export OMP_THREAD_LIMIT=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export BLIS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+
+# R 4.3 has no authenticated conda-forge build of the minimum supported
+# data.table release. Install the cached, SHA-pinned CRAN source into this
+# isolated stage before paradox; no other dependency is rebuilt here.
+if [[ "$dependency_mode" == data-table-overlay ]]; then
+  data_table_archive="$STAGE_INPUTS/data.table_${DATATABLE_VERSION}.tar.gz"
+  [[ -f "$data_table_archive" && ! -L "$data_table_archive" ]] ||
+    fail "prepared data.table source overlay is absent"
+  [[ "$(sha256_file "$data_table_archive")" == "$DATATABLE_SHA256" ]] ||
+    fail "prepared data.table source overlay failed authentication"
+  R CMD INSTALL --preclean --clean --no-multiarch \
+    --library="$STAGE_LIBRARY" "$data_table_archive" \
+    > "$STAGE_LOGS/data.table-install.log" 2>&1
+fi
+observed_data_table=$(Rscript --vanilla -e \
+  'cat(as.character(packageVersion("data.table")))')
+[[ "$observed_data_table" == "$DATATABLE_VERSION" ]] ||
+  fail "runtime resolved data.table $observed_data_table, expected $DATATABLE_VERSION"
+if [[ "$dependency_mode" == data-table-overlay ]]; then
+  printf 'version\tsha256\n%s\t%s\n' "$DATATABLE_VERSION" "$DATATABLE_SHA256" \
+    > "$STAGE_LOGS/data.table-version.tsv"
+fi
+
+cd "$STAGE_BUILD"
+R CMD build --no-build-vignettes --no-manual "$STAGE_SOURCE" \
+  > "$STAGE_LOGS/build.log" 2>&1
+mapfile -t archives < <(find "$STAGE_BUILD" -maxdepth 1 -type f \
+  -name 'paradox_*.tar.gz' -print)
+[[ ${#archives[@]} -eq 1 ]] ||
+  fail "R $VERSION build did not produce one source archive"
+archive=${archives[0]}
+R CMD INSTALL --preclean --clean --install-tests \
+  --library="$STAGE_LIBRARY" "$archive" > "$STAGE_LOGS/install.log" 2>&1
+if [[ "$VERSION" == 3.6.3 ]]; then
+  declared_floor_receipt="$STAGE_INPUTS/declared-floor-library-receipt"
+  [[ -d "$declared_floor_receipt" && ! -L "$declared_floor_receipt" ]] ||
+    fail "prepared declared-floor library receipt handoff is absent or symbolic"
+  declared_floor_library=$(
+    "$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor \
+      --verified-receipt-handoff "$declared_floor_receipt" --print-path
+  )
+  "$MANAGED_PATH" "$ROOT" "$declared_floor_candidate" existing ||
+    fail "prepared declared-floor candidate library is unsafe"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER="$declared_floor_candidate" \
+    R_LIBS_SITE="$declared_floor_library" \
+    R CMD INSTALL --preclean --clean --no-multiarch \
+      --library="$declared_floor_candidate" "$archive" \
+      > "$STAGE_LOGS/declared-floor-install.log" 2>&1
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER="$declared_floor_candidate" \
+    R_LIBS_SITE="$declared_floor_library" \
+    Rscript --vanilla \
+      "$STAGE_SOURCE/scripts/environment/run-r36-declared-floor-smoke.R" smoke \
+      "$STAGE_SOURCE" \
+      "$STAGE_SOURCE/environment/runtime-r-3.6.3-declared-floor-packages.lock" \
+      "$declared_floor_candidate" "$declared_floor_library" "$ROOT" \
+      > "$STAGE_LOGS/declared-floor-smoke.log" 2>&1
+fi
+export PARADOX_RUNTIME_MATRIX_REGISTRY_FILE="$STAGE_INPUTS/environment/runtime-matrix.tsv"
+Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" \
+  "$STAGE_LIBRARY" > "$STAGE_LOGS/focused-probe.log" 2>&1
+audit_symbols "$VERSION" "$STAGE_LIBRARY/paradox/libs/paradox.so" \
+  "$STAGE_LOGS/r-api-symbol-audit.log"
+audit_r45_compiled_code_policy "$VERSION" "$STAGE_LIBRARY/paradox" \
+  "$STAGE_LOGS/r45-compiled-code-policy.log"
+unset PARADOX_SKIP_CHARACTERIZATION_GCT
+LANG=C NOT_CRAN=true PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
+  Rscript --vanilla \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
+  "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/source-test-scope" \
+  > "$STAGE_LOGS/source-tests.log" 2>&1
+if [[ "$VERSION" == 3.6.3 || "$VERSION" == 4.0.5 ]]; then
+  unset PARADOX_SKIP_CHARACTERIZATION_GCT
+  LANG=C NOT_CRAN=true Rscript --vanilla \
+    "$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R" \
+    "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/old-r-stress-scope" \
+    > "$STAGE_LOGS/old-r-stress.log" 2>&1
+fi
+if [[ "$VERSION" == 3.6.3 ]]; then
+  check_driver_log="$STAGE_LOGS/r-cmd-check.log"
+  check_status="$STAGE_LOGS/r-cmd-check-status.tsv"
+  check_nm_directory="$PARADOX_RUNTIME_MATRIX_PREFIX/$CONDA_TOOLCHAIN_HOST/bin"
+  check_nm_alias="$check_nm_directory/nm"
+  check_nm_target="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$CONDA_TOOLCHAIN_HOST-nm"
+  [[ -d "$check_nm_directory" && ! -L "$check_nm_directory" &&
+    -L "$check_nm_alias" &&
+    "$(readlink -- "$check_nm_alias")" == \
+      "../../bin/$CONDA_TOOLCHAIN_HOST-nm" &&
+    -f "$check_nm_target" && ! -L "$check_nm_target" &&
+    -x "$check_nm_target" &&
+    "$(/usr/bin/stat -Lc '%d:%i' -- "$check_nm_alias")" == \
+      "$(/usr/bin/stat -c '%d:%i' -- "$check_nm_target")" ]] ||
+    fail "R 3.6 target-tool nm alias is absent or inconsistent"
+  check_nm_command=$(
+    PATH="$check_nm_directory:$PATH" command -v nm
+  )
+  [[ "$check_nm_command" == "$check_nm_alias" ]] ||
+    fail "R 3.6 check PATH did not select the authenticated target-tool nm"
+  check_exit_status=0
+  (
+    cd "$STAGE_CHECK"
+    PATH="$check_nm_directory:$PATH" _R_CHECK_FORCE_SUGGESTS_=false \
+      R CMD check --no-tests --ignore-vignettes --no-manual "$archive"
+  ) > "$check_driver_log" 2>&1 || check_exit_status=$?
+  check_log="$STAGE_CHECK/paradox.Rcheck/00check.log"
+  check_conclusion=unavailable
+  check_log_sha256=-
+  if [[ -f "$check_log" && ! -L "$check_log" ]]; then
+    check_log_sha256=$(sha256_file "$check_log")
+    if "$DECLARED_CHECK_LOG_VERIFIER" "$check_log" >/dev/null 2>&1; then
+      check_conclusion=expected-missing-suggests-note
+    else
+      check_conclusion=unexpected-check-result
+    fi
+  fi
+  {
+    printf 'field\tvalue\n'
+    printf 'scope\tdeclared-minimum-r-3.6.3\n'
+    printf 'force_suggests\tfalse\n'
+    printf 'options\t--no-tests --ignore-vignettes --no-manual\n'
+    printf 'nm_path_scope\tcheck-only-target-tool-directory\n'
+    printf 'nm_command_relative\t%s/bin/nm\n' "$CONDA_TOOLCHAIN_HOST"
+    printf 'exit_status\t%s\n' "$check_exit_status"
+    printf 'conclusion\t%s\n' "$check_conclusion"
+    printf 'driver_log_sha256\t%s\n' "$(sha256_file "$check_driver_log")"
+    printf 'check_log_relative\tcheck/paradox.Rcheck/00check.log\n'
+    printf 'check_log_sha256\t%s\n' "$check_log_sha256"
+  } > "$check_status"
+  [[ "$check_exit_status" -eq 0 &&
+    "$check_conclusion" == expected-missing-suggests-note ]] ||
+    fail "R 3.6.3 declared-minimum R CMD check exceeded its bounded NOTE"
+fi
+Rscript --vanilla -e 'sessionInfo()' > "$STAGE_LOGS/session-info.log" 2>&1
+Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = intToUtf8(9L), quote = FALSE, row.names = FALSE)' \
+  > "$STAGE_LOGS/r-packages.tsv" 2>&1
+R CMD config CC > "$STAGE_LOGS/cc.txt" 2>&1
+cc=$(R CMD config CC)
+"$cc" --version > "$STAGE_LOGS/compiler-version.log" 2>&1
+printf 'runtime_stage_worker=passed\nruntime=%s\n' "$VERSION"

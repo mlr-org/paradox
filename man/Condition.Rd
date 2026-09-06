@@ -18,14 +18,23 @@ Condition(rhs, condition_format_string)
 \item{cond}{(\code{Condition})\cr
 \code{Condition} to use}
 
-\item{x}{(\code{any})\cr
-Value to test}
+\item{x}{(\code{NULL} or plain logical, integer, numeric, or character vector)\cr
+Values to test. May carry only a names attribute.}
 
 \item{lhs_chr}{(\code{character(1)})\cr
 Symbolic representation to use for \verb{<lhs>} in the returned string.}
 
 \item{rhs}{(\code{any})\cr
-Right-hand-side of the condition.}
+Right-hand side of the condition. \code{Condition()} itself retains this value
+only as a condition-shaped object for compatibility and printing. For the
+testable built-ins, dependency admission and \code{\link[=condition_test]{condition_test()}} require
+an attribute-free logical, integer, numeric, or character vector without
+missing values. \code{CondEqual()} requires one element; \code{CondAnyOf()} requires
+a non-empty unique vector. Stable ALTREP vectors such as \code{1:n} are copied
+element-by-element once at native admission, and the ordinary snapshot is
+then the condition's semantic value for that operation. Atomic right-hand
+sides and directly tested operands may be stable ALTREP, but reject S4
+explicitly; they are semantic leaves rather than structural shells.}
 
 \item{condition_format_string}{(\code{character(1)})\cr
 Format-string for representing the condition when pretty-printing
@@ -35,18 +44,36 @@ two further string values.}
 }
 \description{
 Condition object, to specify the condition in a dependency.
+
+Dependency evaluation is deliberately closed over the built-in
+\code{CondEqual} and \code{CondAnyOf} classes. Third-party \code{Condition} subclasses and
+S3 methods for \code{condition_test()} or \code{condition_as_string()} are not
+supported. The base \code{Condition} class remains available for constructing
+and printing condition-shaped objects, but it is not itself testable. A
+Condition shell and its structural class/name metadata must be ordinary
+non-ALTREP/non-S4 objects.
 }
 \section{Functions}{
 \itemize{
 \item \code{condition_test()}: Used internally. Tests whether a value satisfies a given condition.
-Vectorizes when \code{x} is atomic.
+Vectorizes over a plain logical, integer, numeric, or character \code{x}.
+A character \code{x} never satisfies a logical, integer, or numeric right-hand
+side, and vice versa: such an element is \code{FALSE} rather than an error. No
+value is reinterpreted as another type in order to compare it, so unlike
+Paradox 1 -- which compared through R's \code{==} -- \code{condition_test(CondEqual(1), "1")} is \code{FALSE}. Dependency evaluation uses the same answer.
+\code{NULL} produces \code{logical()}. A names attribute is retained; classed vectors
+and other attributes, including S4 operands, are not part of the closed
+Condition boundary. Stable
+base ALTREP vectors such as compact integer sequences are materialized once
+on native admission. The \code{cond} shell and its structural metadata must be
+ordinary non-ALTREP/non-S4.
 
 \item \code{condition_as_string()}: Used internally. Returns a string that represents the condition for pretty
 printing, in the form \code{"<lhs> <relation> <rhs>"}, e.g. \code{"x == 3"} or
 \code{"param \%in\% {1, 2, 10}"}.
 
 }}
-\section{Currently implemented simple conditions}{
+\section{Supported dependency conditions}{
 
 \itemize{
 \item \code{CondEqual(rhs)} \cr

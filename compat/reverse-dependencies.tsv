@@ -1,0 +1,39 @@
+relation	package	source	priority	notes
+depends	miesmuschel	CRAN	0	Explicitly required compatibility target; repair upstream breakage where practical.
+depends	bbotk	CRAN	1	Core mlr-org optimizer infrastructure.
+depends	mlr3tuning	CRAN	1	Core mlr-org tuning infrastructure.
+imports	mlr3	CRAN	1	Core mlr3 framework.
+imports	mlr3cluster	CRAN	1	Current mlr-org extension.
+imports	mlr3fairness	CRAN	1	Current mlr-org extension.
+imports	mlr3fda	CRAN	1	Current mlr-org extension.
+imports	mlr3filters	CRAN	1	Current mlr-org extension.
+imports	mlr3fselect	CRAN	1	Core mlr-org feature-selection infrastructure.
+imports	mlr3hyperband	CRAN	1	Current mlr-org tuning extension.
+imports	mlr3inferr	CRAN	1	Current mlr-org extension.
+imports	mlr3learners	CRAN	1	Widely used learner integration package.
+imports	mlr3mbo	CRAN	1	Core mlr-org Bayesian optimization package.
+imports	mlr3oml	CRAN	1	Current mlr-org OpenML integration.
+imports	mlr3pipelines	CRAN	1	Core mlr-org pipelines package with broad ParamSet use.
+imports	mlr3resampling	CRAN	1	Current mlr-org extension.
+imports	mlr3spatiotempcv	CRAN	1	Current mlr-org extension.
+imports	mlr3torch	CRAN	1	Current mlr-org deep-learning extension.
+imports	mlr3tuningspaces	CRAN	1	Parameter-space catalog and strong implicit-API consumer.
+imports	mlr3verse	CRAN	1	Meta-package; installation compatibility matters.
+imports	mlrintermbo	CRAN	1	Current mlr-org optimization package.
+imports	mlr3forecast	CRAN	1	Current mlr-org forecasting extension.
+imports	counterfactuals	CRAN	2	External direct importer.
+imports	FoRecoML	CRAN	2	External direct importer.
+imports	interflex	CRAN	2	External direct importer.
+imports	MantaID	CRAN	2	External direct importer.
+imports	MicrobiomeStat	CRAN	2	External direct importer.
+imports	sense	CRAN	2	External direct importer.
+imports	VIM	CRAN	2	External direct importer.
+imports	xplainfi	CRAN	2	External direct importer.
+imports	SIAMCAT	Bioconductor	2	Bioconductor direct importer.
+suggests	mlr3misc	CRAN	2	Core mlr-org package whose optional tests exercise paradox.
+suggests	mlr3spatial	CRAN	2	Current mlr-org extension.
+suggests	mlr3viz	CRAN	2	Current mlr-org visualization package.
+suggests	DoubleML	CRAN	3	Optional external consumer.
+suggests	drape	CRAN	3	Optional external consumer.
+suggests	ggmlR	CRAN	3	Optional external consumer.
+suggests	mcboost	CRAN	3	Optional external consumer.

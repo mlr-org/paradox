@@ -9,7 +9,7 @@ Dependencies are topologically sorted, parameters are then sampled in topologica
 and if dependencies do not hold, values are set to \code{NA} in the resulting \code{data.table}.
 }
 \seealso{
-Other Sampler: 
+Other Sampler:
 \code{\link{Sampler}},
 \code{\link{Sampler1D}},
 \code{\link{Sampler1DCateg}},
@@ -21,68 +21,69 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super class}{
-\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{SamplerHierarchical}
+\code{\link[paradox:Sampler]{Sampler}} -> \code{SamplerHierarchical}
 }
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{samplers}}{(\code{list()})\cr
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{samplers}}{(\code{list()})\cr
 List of \code{\link{Sampler1D}} objects that gives a Sampler for each dimension in the \code{param_set}.}
-}
-\if{html}{\out{</div>}}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-SamplerHierarchical-new}{\code{SamplerHierarchical$new()}}
-\item \href{#method-SamplerHierarchical-clone}{\code{SamplerHierarchical$clone()}}
+  \itemize{
+    \item \href{#method-SamplerHierarchical-initialize}{\code{SamplerHierarchical$new()}}
+    \item \href{#method-SamplerHierarchical-clone}{\code{SamplerHierarchical$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details open><summary>Inherited methods</summary>
+\if{html}{\out{<details open><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>paradox::Sampler$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>paradox::Sampler$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>paradox::Sampler$sample()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>Sampler$format()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>Sampler$print()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>Sampler$sample()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SamplerHierarchical-new"></a>}}
-\if{latex}{\out{\hypertarget{method-SamplerHierarchical-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SamplerHierarchical$new(param_set, samplers)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
-The \code{\link{ParamSet}} to associated with this \code{SamplerHierarchical}.}
-
-\item{\code{samplers}}{(\code{list()})\cr
+\if{html}{\out{<a id="method-SamplerHierarchical-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-SamplerHierarchical-initialize}{}}}
+\subsection{\code{SamplerHierarchical$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{SamplerHierarchical$new(param_set, samplers)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param_set}}{(\code{\link{ParamSet}})\cr
+The \code{\link{ParamSet}} to associate with this \code{SamplerHierarchical}.}
+      \item{\code{samplers}}{(\code{list()})\cr
 List of \code{\link{Sampler1D}} objects that gives a Sampler for each dimension in the \code{param_set}.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SamplerHierarchical-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-SamplerHierarchical-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SamplerHierarchical$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{SamplerHierarchical$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{SamplerHierarchical$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

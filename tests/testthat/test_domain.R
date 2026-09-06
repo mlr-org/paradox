@@ -46,10 +46,23 @@ test_that("ps(p_xxx(...)) creates ParamSets", {
   expect_equal_ps(ps(x = p_uty(default = 1, tags = "xx", custom_check = check_int)),
     ParamSet_legacy$new(list(ParamUty$new("x", default = 1, tags = "xx", custom_check = check_int))))
 
-  expect_error(ps(x = p_int(), x = p_int()), "unique names")
+  expect_error(ps(x = p_int(), x = p_int()), "names must be unique")
 
   expect_error(p_int(id = 1), "unused argument.*id")
 
+})
+
+test_that("p_uty stores the exact custom_check function it validates", {
+  replacement = function(value) FALSE
+  callback = function(value) {
+    assign("custom_check", replacement, envir = parent.frame())
+    TRUE
+  }
+
+  domain = p_uty(custom_check = callback)
+  stored = domain$cargo[[1L]]$custom_check
+  expect_true(stored(1))
+  expect_false(identical(stored, replacement))
 })
 
 test_that("p_fct autotrafo", {
@@ -200,6 +213,33 @@ test_that("requirements in domains", {
   expect_error(p_int(depends = 1), "must be an expression")
   expect_error(p_int(depends = x != 1), "is broken")
 
+  # Hand-built language objects are valid public inputs too. Do not silently
+  # ignore extra operands or leak a low-level subscript error for a missing
+  # operand.
+  short_equal = as.call(list(as.name("=="), as.name("x")))
+  long_equal = as.call(list(as.name("=="), as.name("x"), 1L, 2L))
+  long_and = as.call(list(
+    as.name("&&"),
+    quote(x == 1L),
+    quote(z == "a"),
+    quote(z == "b")
+  ))
+  expect_error(
+    paradox:::parse_depends(short_equal, environment()),
+    "comparison operators must have exactly two operands",
+    fixed = TRUE
+  )
+  expect_error(
+    paradox:::parse_depends(long_equal, environment()),
+    "comparison operators must have exactly two operands",
+    fixed = TRUE
+  )
+  expect_error(
+    paradox:::parse_depends(long_and, environment()),
+    "`&&` must have exactly two operands",
+    fixed = TRUE
+  )
+
 })
 
 
@@ -248,7 +288,11 @@ test_that("logscale in domains", {
   expect_error(p_dbl(trafo = exp, logscale = TRUE), "When a trafo is given then logscale must be FALSE")
   expect_error(p_int(trafo = exp, logscale = TRUE), "When a trafo is given then logscale must be FALSE")
 
-  expect_error(p_int(lower = 1, upper = 2.5, logscale = TRUE), "failed.*integer.*value.*not.*double")
+  expect_error(
+    p_int(lower = 1, upper = 2.5, logscale = TRUE),
+    "`upper` must be one integer-valued number or infinity",
+    fixed = TRUE
+  )
 
   expect_error(p_int(lower = -1, logscale = TRUE), "When logscale is TRUE then lower bound must be greater or equal 0")
   expect_error(p_dbl(lower = 0, logscale = TRUE), "When logscale is TRUE then lower bound must be strictly greater than 0")
@@ -371,3 +415,64 @@ test_that("internal", {
   expect_error(p_dbl(lower = 1, upper = 2, tags = "internal_tuning", "in_tune_fn"))
 })
 
+test_that("cargo constructor arguments receive argument-named diagnostics", {
+  # The sole native admission owner names the documented argument, uniformly
+  # for all five constructors; no constructor restates cargo rules in R.
+  expect_error(p_dbl(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+  expect_error(p_int(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+  expect_error(
+    p_fct(c("a", "b"), aggr = 5),
+    "`aggr` must be a function",
+    fixed = TRUE
+  )
+  expect_error(p_lgl(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+  expect_error(p_uty(aggr = 5), "`aggr` must be a function", fixed = TRUE)
+
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      aggr = function(x) 1,
+      in_tune_fn = 5,
+      disable_in_tune = list()
+    ),
+    "`in_tune_fn` must be a function",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      aggr = function(x) 1,
+      in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = "no"
+    ),
+    "`disable_in_tune` must be a uniquely named list",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = list()
+    ),
+    "require an `aggr` function",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      aggr = function(x) 1,
+      in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = list()
+    ),
+    "require the tag 'internal_tuning'",
+    fixed = TRUE
+  )
+  expect_error(
+    p_dbl(
+      tags = "internal_tuning",
+      aggr = function(x) 1,
+      in_tune_fn = function(domain, param_vals) domain$upper
+    ),
+    "must both be present",
+    fixed = TRUE
+  )
+})

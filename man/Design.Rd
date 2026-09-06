@@ -7,123 +7,154 @@
 A lightweight wrapper around a \link{ParamSet} and a \code{\link[data.table:data.table]{data.table::data.table()}}, where the
 latter is a design of configurations produced from the former - e.g.,
 by calling a \code{\link[=generate_design_grid]{generate_design_grid()}} or by sampling.
+Design operations use Paradox's shared structural data-frame/data-table
+boundary. A well-formed ordinary class vector ends in \code{"data.frame"} or
+\code{c("data.table", "data.frame")}; leading additive classes are
+representation-only and never dispatch. The classifier does not copy or
+materialize an ordinary shell merely to remove the prefix, and native
+semantic snapshots ignore it; an already-required ALTREP snapshot installs
+only the canonical suffix. Malformed class vectors
+reject. Names and accepted data.table cache
+carriers are ordinary structure. Raw row names are attribute-free, nonobject, non-S4 integer or
+character vectors; compact counts and stable ALTREP lengths are supported,
+but row labels are not interpreted. An admitted top-level VECSXP ALTREP
+shell is materialized once after names/classes are owned; semantic atomic
+columns may likewise be stable ALTREP. Package-created tables retain
+canonical ordinary metadata.
 }
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{param_set}}{(\link{ParamSet}).}
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{param_set}}{(\link{ParamSet}).}
 
-\item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored \code{data}.}
-}
-\if{html}{\out{</div>}}
+    \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+Stored data.table shell. The shared suffix-aware public-table boundary and its
+count-only row-name rules apply. An allowed top-level VECSXP ALTREP is
+accepted once, and semantic atomic columns may be stable ALTREP.}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-Design-new}{\code{Design$new()}}
-\item \href{#method-Design-format}{\code{Design$format()}}
-\item \href{#method-Design-print}{\code{Design$print()}}
-\item \href{#method-Design-transpose}{\code{Design$transpose()}}
-\item \href{#method-Design-clone}{\code{Design$clone()}}
-}
+  \itemize{
+    \item \href{#method-Design-initialize}{\code{Design$new()}}
+    \item \href{#method-Design-format}{\code{Design$format()}}
+    \item \href{#method-Design-print}{\code{Design$print()}}
+    \item \href{#method-Design-transpose}{\code{Design$transpose()}}
+    \item \href{#method-Design-clone}{\code{Design$clone()}}
+  }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Design-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Design-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$new(param_set, data, remove_dupl)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param_set}}{(\link{ParamSet}).}
-
-\item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored \code{data}.}
-
-\item{\code{remove_dupl}}{(\code{logical(1)})\cr
+\if{html}{\out{<a id="method-Design-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-Design-initialize}{}}}
+\subsection{\code{Design$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$new(param_set, data, remove_dupl)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param_set}}{(\link{ParamSet}).}
+      \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+Stored \code{data}. The shared suffix-aware public-table boundary and its count-only
+row-name rules apply. An allowed top-level VECSXP ALTREP is accepted
+once, and admitted semantic atomic columns may be stable ALTREP.}
+      \item{\code{remove_dupl}}{(\code{logical(1)})\cr
 Remove duplicates?}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-format"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-format}{}}}
-\subsection{Method \code{format()}}{
-Helper for print outputs.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$format(...)}\if{html}{\out{</div>}}
+\subsection{\code{Design$format()}}{
+  Helper for print outputs.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$format(...)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{(ignored).}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{(ignored).}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-print"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-print}{}}}
-\subsection{Method \code{print()}}{
-Printer.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$print(...)}\if{html}{\out{</div>}}
+\subsection{\code{Design$print()}}{
+  Printer.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$print(...)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{(ignored).}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{(ignored).}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-transpose"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-transpose}{}}}
-\subsection{Method \code{transpose()}}{
-Converts \code{data} into a list of lists of row-configurations,
+\subsection{\code{Design$transpose()}}{
+  Converts \code{data} into a list of lists of row-configurations,
 possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
 and possibly calls the \code{trafo} function of the \link{ParamSet}.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$transpose(filter_na = TRUE, trafo = TRUE)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{filter_na}}{(\code{logical(1)})\cr
+The stored table must continue to satisfy the shared public-table
+boundary. Its captured row-name count must match its columns. A
+zero-column data.frame retains that count, so this method returns one
+empty configuration per row; an unclassed empty list represents zero
+rows. An allowed top-level VECSXP ALTREP and stable atomic columns are
+each materialized once.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$transpose(filter_na = TRUE, trafo = TRUE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{filter_na}}{(\code{logical(1)})\cr
 Should \code{NA} entries of inactive parameter values due to unsatisfied
 dependencies be removed?}
-
-\item{\code{trafo}}{(\code{logical(1)})\cr
+      \item{\code{trafo}}{(\code{logical(1)})\cr
 Should the \code{trafo} function of the \link{ParamSet} be called?}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{Design$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

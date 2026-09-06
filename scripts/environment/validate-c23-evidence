@@ -1,0 +1,277 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Small fail-closed validators shared by the C23 release gate and its synthetic
+# regression fixture.  This helper never provisions a compiler or builds R
+# code; it validates already selected bytes and retained command evidence.
+
+umask 077
+LC_ALL=C
+LANG=C
+export LC_ALL LANG
+
+usage() {
+  cat <<'EOF'
+Usage:
+  validate-c23-evidence file-sha256 FILE EXPECTED_SHA256
+  validate-c23-evidence description RSCRIPT FILE PACKAGE VERSION SYSTEM_REQUIREMENTS
+  validate-c23-evidence toolchain-inventory MICROMAMBA PREFIX LOCK HOME PATH MAMBA_ROOT RAW_LOG OUTPUT
+  validate-c23-evidence install-log LOG COMPILER EXPECTED_SOURCES EXPECTED_DSO
+
+EXPECTED_SOURCES is an ordinary file containing one sorted C source basename
+per line. Every retained compile command and the one shared-library link
+command must use COMPILER and exactly one `-std=gnu23` token.
+EOF
+}
+
+fail() {
+  printf 'validate-c23-evidence: %s\n' "$*" >&2
+  exit 1
+}
+
+require_plain_file() {
+  local path=$1 label=$2
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-regular, or symbolic: $path"
+}
+
+require_plain_directory() {
+  local path=$1 label=$2
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-directory, or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label is not canonical: $path"
+}
+
+require_output_path() {
+  local path=$1 label=$2 parent
+  [[ "$path" == /* ]] ||
+    fail "$label path is not absolute: $path"
+  parent=${path%/*}
+  require_plain_directory "$parent" "$label parent"
+  [[ ! -L "$path" && (! -e "$path" || -f "$path") ]] ||
+    fail "$label is non-regular or symbolic: $path"
+}
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+validate_file_sha256() {
+  local file=$1 expected=$2
+  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "expected SHA-256 is malformed"
+  require_plain_file "$file" "authenticated file"
+  [[ "$(sha256_file "$file")" == "$expected" ]] ||
+    fail "authenticated file differs from its expected SHA-256: $file"
+}
+
+validate_description() {
+  local rscript=$1 file=$2 package=$3 version=$4 system_requirements=$5
+  [[ -f "$rscript" && -x "$rscript" ]] ||
+    fail "Rscript is absent or non-executable: $rscript"
+  require_plain_file "$file" "built package DESCRIPTION"
+  if ! "$rscript" --vanilla -e '
+    args = commandArgs(TRUE)
+    value = read.dcf(args[[1L]])
+    required = c("Package", "Version", "SystemRequirements")
+    stopifnot(
+      nrow(value) == 1L,
+      all(required %in% colnames(value)),
+      identical(unname(value[1L, "Package"]), args[[2L]]),
+      identical(unname(value[1L, "Version"]), args[[3L]]),
+      identical(unname(value[1L, "SystemRequirements"]), args[[4L]])
+    )
+  ' "$file" "$package" "$version" "$system_requirements"; then
+    fail "built package DESCRIPTION does not have the required exact fields"
+  fi
+}
+
+validate_toolchain_inventory() {
+  local micromamba=$1 prefix=$2 lock=$3 home=$4 clean_path=$5
+  local mamba_root=$6 raw_log=$7 output=$8 output_stage expected_banner
+
+  require_plain_file "$micromamba" "micromamba executable"
+  [[ -x "$micromamba" ]] ||
+    fail "micromamba is not executable: $micromamba"
+  require_plain_directory "$prefix" "toolchain prefix"
+  require_plain_file "$lock" "toolchain lock"
+  require_plain_directory "$home" "toolchain inventory home"
+  require_plain_directory "$mamba_root" "micromamba root"
+  [[ -n "$clean_path" && "$clean_path" != *$'\n'* ]] ||
+    fail "toolchain inventory PATH is empty or malformed"
+  require_output_path "$raw_log" "raw toolchain inventory log"
+  require_output_path "$output" "normalized toolchain inventory"
+
+  if ! env -i \
+      "HOME=$home" \
+      "PATH=$clean_path" \
+      "MAMBA_ROOT_PREFIX=$mamba_root" \
+      "LC_ALL=C.UTF-8" \
+      "LANG=C.UTF-8" \
+      "TZ=UTC" \
+      "$micromamba" list --no-rc --prefix "$prefix" --explicit --sha256 \
+      > "$raw_log" 2>&1; then
+    fail "could not obtain the live toolchain inventory; see $raw_log"
+  fi
+  expected_banner="List of packages in environment: \"$prefix\""
+  [[ "$(sed -n '1p' "$raw_log")" == "$expected_banner" &&
+    -z "$(sed -n '2p' "$raw_log")" ]] ||
+    fail "live toolchain inventory has an unexpected header"
+
+  output_stage=$(mktemp "${output}.new.XXXXXX")
+  trap 'rm -f -- "${output_stage:-}"' EXIT
+  {
+    printf '%s\n' '# platform: linux-64' '@EXPLICIT'
+    sed -n '3,$p' "$raw_log"
+  } > "$output_stage"
+  cmp -s -- "$lock" "$output_stage" ||
+    fail "installed main toolchain differs from its exact package lock"
+  mv -- "$output_stage" "$output"
+  trap - EXIT
+}
+
+validate_install_log() {
+  local log=$1 compiler=$2 expected_sources=$3 expected_dso=$4
+  require_plain_file "$log" "C23 installation log"
+  require_plain_file "$expected_sources" "expected C source inventory"
+  [[ -f "$compiler" && -x "$compiler" ]] ||
+    fail "selected compiler is absent or non-executable: $compiler"
+  [[ "$compiler" != *[[:space:]]* ]] ||
+    fail "selected compiler path contains whitespace"
+  [[ "$expected_dso" =~ ^[A-Za-z0-9_.+-]+[.]so$ ]] ||
+    fail "expected DSO basename is malformed"
+
+  awk '
+    BEGIN { previous = ""; count = 0 }
+    NF != 1 || $1 !~ /^[A-Za-z0-9_.+-]+[.]c$/ {
+      print "malformed expected C source inventory" > "/dev/stderr"
+      exit 1
+    }
+    $1 <= previous {
+      print "expected C source inventory is not strictly sorted and unique" \
+        > "/dev/stderr"
+      exit 1
+    }
+    { previous = $1; count += 1 }
+    END {
+      if (count == 0) {
+        print "expected C source inventory is empty" > "/dev/stderr"
+        exit 1
+      }
+    }
+  ' "$expected_sources" ||
+    fail "expected C source inventory is invalid"
+
+  awk -v compiler="$compiler" -v expected_dso="$expected_dso" '
+    function reject(message) {
+      print message > "/dev/stderr"
+      invalid = 1
+    }
+    FNR == NR {
+      expected[$1] = 1
+      expected_count += 1
+      next
+    }
+    {
+      compile = 0
+      link = 0
+      source = ""
+      output = ""
+      for (i = 1; i <= NF; i++) {
+        if ($i == "-c" && i < NF && $(i + 1) ~ /[.]c$/) {
+          compile = 1
+          source = $(i + 1)
+        }
+        if ($i == "-shared")
+          link = 1
+        if ($i == "-o" && i < NF)
+          output = $(i + 1)
+      }
+      if (!compile && !link)
+        next
+
+      if ($1 != compiler)
+        reject("relevant command does not start with the selected compiler")
+      standards = 0
+      for (i = 1; i <= NF; i++) {
+        if ($i ~ /^-std=/) {
+          standards += 1
+          if ($i != "-std=gnu23")
+            reject("relevant command contains a non-GNU23 -std token")
+        }
+        if ($i == "-ansi")
+          reject("relevant command contains the C90 -ansi alias")
+      }
+      if (standards != 1)
+        reject("relevant command does not contain exactly one -std=gnu23 token")
+
+      if (compile) {
+        if (link)
+          reject("one retained command is both a compile and link command")
+        sub(/^.*\//, "", source)
+        if (!(source in expected))
+          reject("compile command names an unexpected C source: " source)
+        observed[source] += 1
+        compile_count += 1
+      }
+      if (link) {
+        sub(/^.*\//, "", output)
+        if (output != expected_dso)
+          reject("shared-library command has an unexpected output: " output)
+        link_count += 1
+      }
+    }
+    END {
+      for (source in expected) {
+        if (observed[source] != 1)
+          reject("expected C source was not compiled exactly once: " source)
+      }
+      if (compile_count != expected_count)
+        reject("retained compile-command count differs from the source inventory")
+      if (link_count != 1)
+        reject("installation log does not contain exactly one DSO link command")
+      exit invalid ? 1 : 0
+    }
+  ' "$expected_sources" "$log" ||
+    fail "installation log does not prove the exact C23 compile/link inventory"
+
+  if grep -Eiq -- '(^|[[:space:]])(warning|error):' "$log"; then
+    fail "installation emitted a compiler or installation diagnostic"
+  fi
+}
+
+command=${1:-}
+[[ -n "$command" ]] || {
+  usage >&2
+  exit 2
+}
+shift
+case "$command" in
+  file-sha256)
+    (($# == 2)) || fail "file-sha256 requires FILE and EXPECTED_SHA256"
+    validate_file_sha256 "$@"
+    ;;
+  description)
+    (($# == 5)) ||
+      fail "description requires RSCRIPT, FILE, PACKAGE, VERSION, and SYSTEM_REQUIREMENTS"
+    validate_description "$@"
+    ;;
+  toolchain-inventory)
+    (($# == 8)) ||
+      fail "toolchain-inventory requires eight arguments"
+    validate_toolchain_inventory "$@"
+    ;;
+  install-log)
+    (($# == 4)) ||
+      fail "install-log requires LOG, COMPILER, EXPECTED_SOURCES, and EXPECTED_DSO"
+    validate_install_log "$@"
+    ;;
+  -h|--help)
+    (($# == 0)) || fail "$command does not accept arguments"
+    usage
+    ;;
+  *)
+    fail "unknown command: $command"
+    ;;
+esac

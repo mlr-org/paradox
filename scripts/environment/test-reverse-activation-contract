@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Exercise the executable-resolution predicates used by the retained reverse-
+# dependency gate against a complete installed checkout.  This script may live
+# in a source-only audit worktree while PARADOX_COMPAT_TEST_INSTALLED_ROOT names
+# the checkout that owns the authenticated toolchain and compatibility overlay.
+
+CODE_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+INSTALLED_ROOT=${PARADOX_COMPAT_TEST_INSTALLED_ROOT:-$CODE_ROOT}
+if [[ ! -d "$INSTALLED_ROOT" || -L "$INSTALLED_ROOT" ]]; then
+  printf '%s\n' "test-reverse-activation-contract: installed root is invalid" >&2
+  exit 1
+fi
+INSTALLED_ROOT=$(cd "$INSTALLED_ROOT" && pwd -P)
+
+HARNESS="$CODE_ROOT/compat/test-reverse-dependencies.R"
+[[ -f "$HARNESS" && ! -L "$HARNESS" ]] || {
+  printf '%s\n' "test-reverse-activation-contract: reverse harness is absent" >&2
+  exit 1
+}
+for required_line in \
+  'actual_r <- file.path(root, ".local", "toolchain", "bin", "R")' \
+  'actual_rscript <- file.path(root, ".local", "toolchain", "bin", "Rscript")' \
+  '    actual_rscript,' \
+  '    actual_r,'
+do
+  grep -F -x -- "$required_line" "$HARNESS" >/dev/null || {
+    printf '%s\n' \
+      "test-reverse-activation-contract: reverse harness lost its top-level launcher contract" >&2
+    exit 1
+  }
+done
+if grep -F 'R.home("bin")' "$HARNESS" >/dev/null ||
+    grep -F 'file.path(actual_r_home, "bin"' "$HARNESS" >/dev/null; then
+  printf '%s\n' \
+    "test-reverse-activation-contract: reverse harness selected an internal R launcher" >&2
+  exit 1
+fi
+
+for path in \
+  "$INSTALLED_ROOT/.local/toolchain/bin/R" \
+  "$INSTALLED_ROOT/.local/toolchain/bin/Rscript" \
+  "$INSTALLED_ROOT/.local/toolchain/bin/texi2dvi" \
+  "$INSTALLED_ROOT/.local/toolchain/bin/x86_64-conda-linux-gnu-cc" \
+  "$INSTALLED_ROOT/.local/tinytex/bin/x86_64-linux/pdflatex" \
+  "$INSTALLED_ROOT/.local/tinytex/bin/x86_64-linux/kpsewhich" \
+  "$INSTALLED_ROOT/.local/tinytex/bin/x86_64-linux/makeindex" \
+  "$INSTALLED_ROOT/.local/quarto/1.9.38/bin/quarto"
+do
+  [[ -x "$path" ]] || {
+    printf '%s\n' "test-reverse-activation-contract: executable is absent: $path" >&2
+    exit 1
+  }
+done
+
+TEST_PARENT="$CODE_ROOT/.local/tmp"
+mkdir -p "$TEST_PARENT"
+FIXTURE=$(mktemp -d "$TEST_PARENT/reverse-activation-contract.XXXXXX")
+trap 'rm -rf -- "$FIXTURE"' EXIT HUP INT TERM
+HOSTILE_BIN="$FIXTURE/hostile-bin"
+mkdir "$HOSTILE_BIN"
+for tool in R Rscript pdflatex kpsewhich makeindex quarto texi2dvi \
+  x86_64-conda-linux-gnu-cc
+do
+  printf '%s\n' '#!/usr/bin/env sh' 'exit 97' >"$HOSTILE_BIN/$tool"
+  chmod 0755 "$HOSTILE_BIN/$tool"
+done
+R_PROBE="$CODE_ROOT/scripts/environment/reverse-activation-probe.R"
+[[ -f "$R_PROBE" && ! -L "$R_PROBE" ]] || {
+  printf '%s\n' "test-reverse-activation-contract: tracked R probe is absent" >&2
+  exit 1
+}
+
+# shellcheck disable=SC2016 # assertions intentionally execute in the clean shell.
+env -i \
+  HOME="${HOME:-/nonexistent}" \
+  USER="${USER:-paradox-check}" \
+  LOGNAME="${LOGNAME:-paradox-check}" \
+  PATH="$HOSTILE_BIN:/usr/bin:/bin" \
+  /bin/sh -eu -c '
+    code_root=$1
+    root=$2
+    hostile_bin=$3
+    r_probe=$4
+    cd "$root"
+
+    tinytex="$root/.local/tinytex/bin/x86_64-linux"
+    quarto="$root/.local/quarto/1.9.38/bin"
+    toolchain="$root/.local/toolchain/bin"
+    local_bin="$root/.local/bin"
+    p1="$root/.local/compat/system/p1/bin"
+    geo="$root/.local/compat/system/geo/bin"
+
+    assert_commands() {
+      expected_prefix=$1
+      case $PATH in
+        "$expected_prefix"|"$expected_prefix":*) ;;
+        *)
+          printf "%s\n" "unexpected PATH: $PATH" >&2
+          exit 1
+          ;;
+      esac
+      test "$(command -v R)" = "$toolchain/R"
+      test "$(command -v Rscript)" = "$toolchain/Rscript"
+      test "$(R RHOME)" = "$root/.local/toolchain/lib/R"
+      test "$(command -v pdflatex)" = "$tinytex/pdflatex"
+      test "$(command -v kpsewhich)" = "$tinytex/kpsewhich"
+      test "$(command -v makeindex)" = "$tinytex/makeindex"
+      test "$(command -v quarto)" = "$quarto/quarto"
+      test "$(command -v texi2dvi)" = "$toolchain/texi2dvi"
+      test "$(command -v x86_64-conda-linux-gnu-cc)" = \
+        "$toolchain/x86_64-conda-linux-gnu-cc"
+
+      "$toolchain/Rscript" --vanilla "$r_probe" "$root"
+    }
+
+    # Use the candidate scripts from CODE_ROOT against the authenticated
+    # installed state. Both helpers derive the selected root from pwd.
+    . "$code_root/scripts/activate"
+    ordinary_prefix="$tinytex:$quarto:$toolchain:$local_bin"
+    assert_commands "$ordinary_prefix"
+
+    . "$code_root/scripts/activate-compat-system"
+    overlay_prefix="$ordinary_prefix:$p1:$geo"
+    assert_commands "$overlay_prefix"
+    test "$PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT" = "$root"
+    test "$PARADOX_COMPAT_SYSTEM_CHILD_PATH" = \
+      "$overlay_prefix:/usr/bin:/bin"
+    first_path=$PATH
+    first_child_path=$PARADOX_COMPAT_SYSTEM_CHILD_PATH
+    first_makevars=$R_MAKEVARS_USER
+    first_pkg_config=$PKG_CONFIG_LIBDIR
+
+    # Re-sourcing must be exactly stable for the selected contract.
+    . "$code_root/scripts/activate-compat-system"
+    assert_commands "$overlay_prefix"
+    test "$PATH" = "$first_path"
+    test "$PARADOX_COMPAT_SYSTEM_CHILD_PATH" = "$first_child_path"
+    test "$R_MAKEVARS_USER" = "$first_makevars"
+    test "$PKG_CONFIG_LIBDIR" = "$first_pkg_config"
+
+    # Managed entries injected in a hostile order, including duplicates, must
+    # be stripped and reconstructed ahead of the hostile executable directory.
+    PATH="$hostile_bin:$p1:$tinytex:$toolchain:$quarto:$geo:$PATH"
+    export PATH
+    hash -r 2>/dev/null || true
+    . "$code_root/scripts/activate-compat-system"
+    assert_commands "$overlay_prefix"
+    test "$PATH" = "$first_path"
+    test "$PARADOX_COMPAT_SYSTEM_CHILD_PATH" = "$first_child_path"
+
+    # Ordinary activation removes the opt-in overlay and restores its own
+    # documentation/runtime order.
+    . "$code_root/scripts/activate"
+    assert_commands "$ordinary_prefix"
+    test -z "${PARADOX_COMPAT_SYSTEM_CHILD_PATH:-}"
+    case :$PATH: in
+      *:"$p1":*|*:"$geo":*) exit 1 ;;
+    esac
+  ' reverse-activation-contract "$CODE_ROOT" "$INSTALLED_ROOT" "$HOSTILE_BIN" \
+    "$R_PROBE"
+
+printf '%s\n' 'reverse_activation_contract=passed'

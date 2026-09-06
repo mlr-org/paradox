@@ -7,7 +7,7 @@
 Create joint, independent sampler out of multiple other samplers.
 }
 \seealso{
-Other Sampler: 
+Other Sampler:
 \code{\link{Sampler}},
 \code{\link{Sampler1D}},
 \code{\link{Sampler1DCateg}},
@@ -19,65 +19,67 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super class}{
-\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{SamplerJointIndep}
+\code{\link[paradox:Sampler]{Sampler}} -> \code{SamplerJointIndep}
 }
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{samplers}}{(\code{list()})\cr
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{samplers}}{(\code{list()})\cr
 List of \code{\link{Sampler}} objects.}
-}
-\if{html}{\out{</div>}}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-SamplerJointIndep-new}{\code{SamplerJointIndep$new()}}
-\item \href{#method-SamplerJointIndep-clone}{\code{SamplerJointIndep$clone()}}
+  \itemize{
+    \item \href{#method-SamplerJointIndep-initialize}{\code{SamplerJointIndep$new()}}
+    \item \href{#method-SamplerJointIndep-clone}{\code{SamplerJointIndep$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details open><summary>Inherited methods</summary>
+\if{html}{\out{<details open><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>paradox::Sampler$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>paradox::Sampler$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>paradox::Sampler$sample()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>Sampler$format()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>Sampler$print()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>Sampler$sample()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SamplerJointIndep-new"></a>}}
-\if{latex}{\out{\hypertarget{method-SamplerJointIndep-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SamplerJointIndep$new(samplers)}\if{html}{\out{</div>}}
+\if{html}{\out{<a id="method-SamplerJointIndep-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-SamplerJointIndep-initialize}{}}}
+\subsection{\code{SamplerJointIndep$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{SamplerJointIndep$new(samplers)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{samplers}}{(\code{list()})\cr
+List of \code{\link{Sampler}} objects.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{samplers}}{(\code{list()})\cr
-List of \code{\link{Sampler}} objects.}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SamplerJointIndep-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-SamplerJointIndep-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SamplerJointIndep$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{SamplerJointIndep$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{SamplerJointIndep$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

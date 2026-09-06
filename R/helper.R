@@ -1,37 +1,3 @@
-#' @title transpose
-#'
-#' @description
-#' Converts [data.table::data.table] into a list of lists of points, possibly
-#' removes `NA` entries of inactive parameter values due to unsatisfied
-#' dependencies, and possibly calls the `trafo` function of the [ParamSet].
-#'
-#' @param data ([data.table::data.table])\cr
-#' Rows are points and columns are parameters.
-#'
-#' @param ps ([`ParamSet`])\cr
-#' If `trafo = TRUE`, used to call trafo function.
-#'
-#' @param filter_na (`logical(1)`)\cr
-#' Should `NA` entries of inactive parameter values be removed due to
-#' unsatisfied dependencies?
-#'
-#' @param trafo (`logical(1)`)\cr
-#' Should the `trafo` function of the [ParamSet] be called?
-#' @noRd
-transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
-  assert_data_table(data)
-  assert_flag(filter_na)
-  assert_flag(trafo)
-  xs = transpose_list(data)
-  if (filter_na) {
-    xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
-  }
-  if (!is.null(ps) && trafo) {
-    if (ps$has_trafo) xs = map(xs, function(x) ps$trafo(x, ps))
-  }
-  return(xs)
-}
-
 repr = function(x) {
   str_collapse(utils::capture.output(print(x)), "\n")
 }
@@ -47,21 +13,139 @@ as_type = function(x, type) {
   )
 }
 
-# column to named list
-col_to_nl = function(dt, col = 1, idcol = 2) {
-  data = dt[[col]]
-  names(data) = dt[[idcol]]
-  data
+.paradox_srcref_attributes = c("srcref", "srcfile", "wholeSrcref")
+
+.paradox_is_srcref_syntax_node = function(x) {
+  typeof(x) == "closure" ||
+    is.language(x) ||
+    is.pairlist(x) ||
+    is.atomic(x)
 }
 
+.paradox_node_has_srcref = function(x) {
+  for (name in .paradox_srcref_attributes) {
+    if (!is.null(attr(x, name, exact = TRUE))) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
 
-# rbindlist, but
-#  (1) some optimization if only one table given and we know it is a data.table
-#  (2) if no table is given, return a prototype table.
-# Input is potentially not copied, so input should be copied itself if by-reference-modification could be an issue!
-rbindlist_proto = function(l, prototype) {
-  tbls_given = which(lengths(l) != 0)
-  if (length(tbls_given) == 0) return(prototype)
-  if (length(tbls_given) == 1) return(l[[tbls_given]])
-  rbindlist(l, use.names = TRUE)
+.paradox_has_srcref_node = function(x) {
+  if (missing(x)) {
+    return(FALSE)
+  }
+  # Calls can contain arbitrary R objects when assembled programmatically.
+  # Environments and other reference-bearing leaves are payload, not syntax:
+  # even assigning an attribute would mutate such an object in place.
+  if (!.paradox_is_srcref_syntax_node(x)) {
+    return(FALSE)
+  }
+  if (.paradox_node_has_srcref(x)) {
+    return(TRUE)
+  }
+  if (typeof(x) == "closure") {
+    if (.paradox_has_srcref_node(formals(x))) {
+      return(TRUE)
+    }
+    return(.paradox_has_srcref_node(body(x)))
+  }
+
+  if (!is.language(x) && !is.pairlist(x)) {
+    return(FALSE)
+  }
+  if (is.symbol(x)) {
+    return(FALSE)
+  }
+  for (i in seq_len(length(x))) {
+    if (typeof(x[[i]]) == "symbol" && !nzchar(as.character(x[[i]]))) {
+      next
+    }
+    if (.paradox_has_srcref_node(x[[i]])) {
+      return(TRUE)
+    }
+  }
+  FALSE
+}
+
+.paradox_has_srcref = function(x) {
+  if (typeof(x) == "closure" || is.language(x) || is.pairlist(x)) {
+    .paradox_has_srcref_node(x)
+  } else {
+    FALSE
+  }
+}
+
+.paradox_strip_srcref_node = function(x) {
+  if (!.paradox_is_srcref_syntax_node(x)) {
+    return(x)
+  }
+  retained_attributes = attributes(x)
+  if (!is.null(retained_attributes)) {
+    retained_attributes[.paradox_srcref_attributes] = NULL
+  }
+
+  if (typeof(x) == "closure") {
+    stripped = x
+    original_formals = formals(x)
+    if (.paradox_has_srcref_node(original_formals)) {
+      formals(stripped) = .paradox_strip_srcref_node(original_formals)
+    }
+    original_body = body(x)
+    if (.paradox_has_srcref_node(original_body)) {
+      body(stripped) = .paradox_strip_srcref_node(original_body)
+    }
+  } else if (is.language(x) || is.pairlist(x)) {
+    if (is.symbol(x)) {
+      stripped = x
+    } else {
+      stripped = x
+      # A parser-produced `function(...)` node carries its srcref as a fourth
+      # positional cell. Remove that cell outright: recursing into it would
+      # strip only `srcfile` and leave an integer vector still classed
+      # "srcref", which `function` installs on the closure and `print()` then
+      # shows in place of the body.
+      if (length(stripped) == 4L &&
+          identical(stripped[[1L]], quote(`function`))) {
+        stripped[[4L]] = NULL
+      }
+      for (i in seq_len(length(stripped))) {
+        if (typeof(stripped[[i]]) == "symbol" &&
+            !nzchar(as.character(stripped[[i]]))) {
+          next
+        }
+        child = stripped[[i]]
+        # `[[<- NULL` removes a call/pairlist cell. Rebuild only syntax nodes
+        # that actually carry source metadata; this also avoids rewriting the
+        # empty formal pairlist of a nested `function()`.
+        if (.paradox_has_srcref_node(child)) {
+          stripped[[i]] = .paradox_strip_srcref_node(child)
+        }
+      }
+    }
+  } else {
+    stripped = x
+  }
+
+  # Replacement functions such as `body<-` may discard closure attributes.
+  # Restore every non-source attribute in its original order after rebuilding.
+  attributes(stripped) = retained_attributes
+  stripped
+}
+
+.paradox_strip_srcref = function(x) {
+  # NULL is the overwhelmingly common constructor callback value. Keep this
+  # before the option lookup and recursive scanner: source normalization is an
+  # admission feature, not a tax on callback-free Domain construction.
+  if (is.null(x)) {
+    return(x)
+  }
+  if (typeof(x) != "closure" && !is.language(x) && !is.pairlist(x)) {
+    return(x)
+  }
+  if (!isTRUE(getOption("paradox.strip_srcrefs", TRUE)) ||
+      !.paradox_has_srcref_node(x)) {
+    return(x)
+  }
+  .paradox_strip_srcref_node(x)
 }

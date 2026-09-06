@@ -1,5 +1,6 @@
 ^LICENSE$
 .github
+^\.git$
 .gitignore
 .ignore
 .Rproj.user
@@ -24,3 +25,13 @@
 ^revdep$
 
 ^cran-comments\.md$
+^\.cache$
+^\.local$
+^AGENTS\.md$
+^benchmarks$
+^compat$
+^design$
+^environment$
+^scripts$
+^verification$
+^Makefile$

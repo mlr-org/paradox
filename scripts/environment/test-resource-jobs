@@ -1,0 +1,629 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+unset PARADOX_VERIFY_AGGREGATE_SYSTEMD
+unset PARADOX_VERIFY_HARD_WORKER
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+HELPER="$ROOT/scripts/environment/resource-jobs"
+[[ -x "$HELPER" && ! -L "$HELPER" ]] || {
+  printf '%s\n' 'test-resource-jobs: helper is absent or symbolic' >&2
+  exit 1
+}
+mkdir -p "$ROOT/.local/tmp"
+SCRATCH=$(mktemp -d "$ROOT/.local/tmp/resource-jobs-test.XXXXXX")
+trap 'rm -rf "$SCRATCH"' EXIT HUP INT TERM
+
+write_file() {
+  local path=$1
+  shift
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' "$@" > "$path"
+}
+
+field() {
+  local name=$1 report=$2
+  awk -F '\t' -v name="$name" '$1 == name { print $2 }' "$report"
+}
+
+run_fixture() {
+  local proc=$1 cgroup=$2
+  shift 2
+  env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    -u PARADOX_VERIFY_HARD_WORKER \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" "$@"
+}
+
+run_unassigned_helper() {
+  env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    -u PARADOX_VERIFY_HARD_WORKER \
+    "$HELPER" "$@"
+}
+
+# Unified hierarchy: the parent, not the leaf, supplies the tight CPU and RAM
+# limits.  The scheduler must walk all ancestors and combine those constraints
+# with process affinity and MemAvailable.
+V2="$SCRATCH/v2"
+write_file "$V2/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   67108864 kB'
+write_file "$V2/proc/self/status" $'Name:\tfixture' \
+  $'Cpus_allowed_list:\t0-7,16-23'
+write_file "$V2/proc/self/cgroup" '0::/team/job'
+write_file "$V2/cgroup/team/job/memory.max" '51539607552'
+write_file "$V2/cgroup/team/job/memory.current" '8589934592'
+write_file "$V2/cgroup/team/job/cpu.max" '800000 100000'
+write_file "$V2/cgroup/team/memory.max" '25769803776'
+write_file "$V2/cgroup/team/memory.current" '8589934592'
+write_file "$V2/cgroup/team/cpu.max" '600000 100000'
+V2_REPORT="$SCRATCH/v2-report.tsv"
+run_fixture "$V2/proc" "$V2/cgroup" api-compile --report > "$V2_REPORT"
+[[ "$(field jobs "$V2_REPORT")" == 5 ]]
+[[ "$(field cpu_limit "$V2_REPORT")" == 6 ]]
+[[ "$(field memory_available_mib "$V2_REPORT")" == 16384 ]]
+[[ "$(field memory_reserve_mib "$V2_REPORT")" == 12288 ]]
+[[ "$(field memory_source "$V2_REPORT")" == proc_memavailable+cgroup ]]
+[[ "$(run_fixture "$V2/proc" "$V2/cgroup" api-compile --max-jobs 3)" == 3 ]]
+
+# An outer verification worker's reviewed allocation is an additional
+# cooperative ceiling. It lowers nested concurrency without pretending to be
+# another cgroup or deducting another reserve from the assigned value.
+ASSIGNED_REPORT="$SCRATCH/v2-assigned-report.tsv"
+env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=3 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=2304 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" api-compile --report > "$ASSIGNED_REPORT"
+[[ "$(field jobs "$ASSIGNED_REPORT")" == 3 ]]
+[[ "$(field operator_max_jobs "$ASSIGNED_REPORT")" == 3 ]]
+[[ "$(field memory_reserve_mib "$ASSIGNED_REPORT")" == 12288 ]]
+[[ "$(run_fixture "$V2/proc" "$V2/cgroup" api-compile \
+  --verify-report "$ASSIGNED_REPORT")" == \
+  resource_report_verified=api-compile ]]
+
+# A proved per-worker container has exact live CPU and memory cgroup limits.
+# Its nested scheduler uses cooperative weights and a one-GiB intra-worker
+# floor rather than reserving another 12--16 GiB for the host.
+WORKER_V2="$SCRATCH/worker-v2"
+write_file "$WORKER_V2/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   67108864 kB'
+write_file "$WORKER_V2/proc/self/status" $'Cpus_allowed_list:\t0-7'
+write_file "$WORKER_V2/proc/self/cgroup" '0::/worker/job'
+write_file "$WORKER_V2/cgroup/worker/job/memory.max" '6442450944'
+write_file "$WORKER_V2/cgroup/worker/job/memory.current" '0'
+write_file "$WORKER_V2/cgroup/worker/job/cpu.max" '400000 100000'
+run_worker_v2_fixture() {
+  env \
+    -u PARADOX_VERIFY_AGGREGATE_SYSTEMD \
+    PARADOX_VERIFY_HARD_WORKER=1 \
+    PARADOX_VERIFY_ASSIGNED_CPUS=4.0 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=6144 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$WORKER_V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$WORKER_V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$@"
+}
+WORKER_LIGHT_REPORT="$SCRATCH/worker-v2-light.tsv"
+run_worker_v2_fixture "$HELPER" light-test --report > "$WORKER_LIGHT_REPORT"
+[[ "$(field containment "$WORKER_LIGHT_REPORT")" == worker-hard ]]
+[[ "$(field memory_source "$WORKER_LIGHT_REPORT")" == \
+  proc_memavailable+cgroup ]]
+[[ "$(field memory_mib_per_job "$WORKER_LIGHT_REPORT")" == 1024 ]]
+[[ "$(field memory_reserve_mib "$WORKER_LIGHT_REPORT")" == 1536 ]]
+[[ "$(field jobs "$WORKER_LIGHT_REPORT")" == 3 ]]
+[[ "$(run_fixture "$WORKER_V2/proc" "$WORKER_V2/cgroup" light-test \
+  --verify-report "$WORKER_LIGHT_REPORT")" == \
+  resource_report_verified=light-test ]]
+WORKER_API_REPORT="$SCRATCH/worker-v2-api.tsv"
+env \
+  -u PARADOX_VERIFY_AGGREGATE_SYSTEMD \
+  PARADOX_VERIFY_HARD_WORKER=1 \
+  PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=4096 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$WORKER_V2/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$WORKER_V2/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" api-compile > "$SCRATCH/worker-api.out" \
+    2> "$SCRATCH/worker-api.err" && {
+  printf '%s\n' \
+    'test-resource-jobs: worker memory cap above assignment was accepted' >&2
+  exit 1
+}
+grep -q 'finite cgroup memory limit inside the assigned envelope' \
+  "$SCRATCH/worker-api.err"
+WORKER_API="$SCRATCH/worker-api"
+write_file "$WORKER_API/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   67108864 kB'
+write_file "$WORKER_API/proc/self/status" $'Cpus_allowed_list:\t0-3'
+write_file "$WORKER_API/proc/self/cgroup" '0::/worker/api'
+write_file "$WORKER_API/cgroup/worker/api/memory.max" '4294967296'
+write_file "$WORKER_API/cgroup/worker/api/memory.current" '0'
+write_file "$WORKER_API/cgroup/worker/api/cpu.max" '400000 100000'
+WORKER_API_REPORT="$SCRATCH/worker-api-report.tsv"
+env \
+  -u PARADOX_VERIFY_AGGREGATE_SYSTEMD \
+  PARADOX_VERIFY_HARD_WORKER=1 \
+  PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=4096 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$WORKER_API/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$WORKER_API/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" api-compile --report > "$WORKER_API_REPORT"
+[[ "$(field containment "$WORKER_API_REPORT")" == worker-hard ]]
+[[ "$(field memory_reserve_mib "$WORKER_API_REPORT")" == 1024 ]]
+[[ "$(field jobs "$WORKER_API_REPORT")" == 3 ]]
+WORKER_TAMPERED="$SCRATCH/worker-v2-light-tampered.tsv"
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "memory_reserve_mib" { $2 = 1024 }
+  { print }
+' "$WORKER_LIGHT_REPORT" > "$WORKER_TAMPERED"
+if run_fixture "$WORKER_V2/proc" "$WORKER_V2/cgroup" light-test \
+    --verify-report "$WORKER_TAMPERED" \
+    > "$SCRATCH/worker-tampered.out" \
+    2> "$SCRATCH/worker-tampered.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: inconsistent worker-hard report was accepted' >&2
+  exit 1
+fi
+grep -q 'malformed or inconsistent with light-test' \
+  "$SCRATCH/worker-tampered.err"
+if env \
+    -u PARADOX_VERIFY_AGGREGATE_SYSTEMD \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    PARADOX_VERIFY_HARD_WORKER=1 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$WORKER_V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$WORKER_V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" light-test > "$SCRATCH/worker-unassigned.out" \
+      2> "$SCRATCH/worker-unassigned.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: hard-worker marker without assignment was accepted' >&2
+  exit 1
+fi
+grep -q 'requires assigned CPU and memory envelopes' \
+  "$SCRATCH/worker-unassigned.err"
+if env \
+    PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+    PARADOX_VERIFY_HARD_WORKER=1 \
+    PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=6144 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$WORKER_V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$WORKER_V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" light-test > "$SCRATCH/worker-both.out" \
+      2> "$SCRATCH/worker-both.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: mutually exclusive containment markers were accepted' \
+    >&2
+  exit 1
+fi
+grep -q 'containment markers are mutually exclusive' "$SCRATCH/worker-both.err"
+if env \
+    -u PARADOX_VERIFY_AGGREGATE_SYSTEMD \
+    PARADOX_VERIFY_HARD_WORKER=1 \
+    PARADOX_VERIFY_ASSIGNED_CPUS=3 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=6144 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$WORKER_V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$WORKER_V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" light-test > "$SCRATCH/worker-cpu.out" \
+      2> "$SCRATCH/worker-cpu.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: worker CPU quota above assignment was accepted' >&2
+  exit 1
+fi
+grep -q 'finite cgroup CPU quota inside the assigned envelope' \
+  "$SCRATCH/worker-cpu.err"
+
+# A consumer keeps its conservative 8-GiB direct estimate and 16-GiB reserve
+# outside the envelope.  Inside the authenticated aggregate systemd service
+# -- the fixture reproduces this host's hybrid layout, where the service
+# limit is only visible on the v1 memory controller while every process also
+# has a v2 row -- rows use the measured 2-GiB cooperative weight, a 4-GiB
+# intra-envelope reserve floor, and an eight-row cap.
+CONSUMER="$SCRATCH/consumer"
+AGGREGATE_LEAF='/system.slice/paradox-verify-aggregate-u1002-fixture-1.service'
+write_file "$CONSUMER/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   52428800 kB'
+write_file "$CONSUMER/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$CONSUMER/proc/self/cgroup" \
+  "9:memory:$AGGREGATE_LEAF" \
+  "6:cpu,cpuacct:$AGGREGATE_LEAF" \
+  "0::$AGGREGATE_LEAF"
+write_file "$CONSUMER/cgroup/memory$AGGREGATE_LEAF/memory.limit_in_bytes" \
+  '34359738368'
+write_file "$CONSUMER/cgroup/memory$AGGREGATE_LEAF/memory.usage_in_bytes" \
+  '2147483648'
+run_aggregate_fixture() {
+  env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    -u PARADOX_VERIFY_HARD_WORKER \
+    PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$@"
+}
+CONSUMER_LIVE_REPORT="$SCRATCH/consumer-aggregate-live.tsv"
+run_aggregate_fixture "$HELPER" consumer --report > "$CONSUMER_LIVE_REPORT"
+[[ "$(field schema "$CONSUMER_LIVE_REPORT")" == 2 ]]
+[[ "$(field containment "$CONSUMER_LIVE_REPORT")" == aggregate-systemd ]]
+[[ "$(field memory_source "$CONSUMER_LIVE_REPORT")" == proc_memavailable+cgroup ]]
+[[ "$(field cgroup_memory_available_mib "$CONSUMER_LIVE_REPORT")" == 30720 ]]
+[[ "$(field memory_reserve_mib "$CONSUMER_LIVE_REPORT")" == 7680 ]]
+[[ "$(field memory_mib_per_job "$CONSUMER_LIVE_REPORT")" == 2048 ]]
+[[ "$(field profile_max_jobs "$CONSUMER_LIVE_REPORT")" == 8 ]]
+[[ "$(field jobs "$CONSUMER_LIVE_REPORT")" == 8 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_LIVE_REPORT")" == \
+  resource_report_verified=consumer ]]
+LIGHT_AGGREGATE_REPORT="$SCRATCH/light-aggregate-live.tsv"
+run_aggregate_fixture "$HELPER" light-test --report \
+  > "$LIGHT_AGGREGATE_REPORT"
+[[ "$(field containment "$LIGHT_AGGREGATE_REPORT")" == aggregate-systemd ]]
+[[ "$(field memory_mib_per_job "$LIGHT_AGGREGATE_REPORT")" == 1024 ]]
+[[ "$(field memory_reserve_mib "$LIGHT_AGGREGATE_REPORT")" == 7680 ]]
+[[ "$(field jobs "$LIGHT_AGGREGATE_REPORT")" == 16 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" light-test \
+  --verify-report "$LIGHT_AGGREGATE_REPORT")" == \
+  resource_report_verified=light-test ]]
+CONSUMER_ONE_REPORT="$SCRATCH/consumer-assigned-one.tsv"
+run_aggregate_fixture env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=2.0 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
+  "$HELPER" consumer --report > "$CONSUMER_ONE_REPORT"
+[[ "$(field memory_mib_per_job "$CONSUMER_ONE_REPORT")" == 2048 ]]
+[[ "$(field operator_max_jobs "$CONSUMER_ONE_REPORT")" == 1 ]]
+[[ "$(field jobs "$CONSUMER_ONE_REPORT")" == 1 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_ONE_REPORT")" == \
+  resource_report_verified=consumer ]]
+CONSUMER_FOUR_REPORT="$SCRATCH/consumer-assigned-four.tsv"
+run_aggregate_fixture env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=8 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
+  "$HELPER" consumer --report > "$CONSUMER_FOUR_REPORT"
+[[ "$(field operator_max_jobs "$CONSUMER_FOUR_REPORT")" == 4 ]]
+[[ "$(field jobs "$CONSUMER_FOUR_REPORT")" == 4 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_FOUR_REPORT")" == \
+  resource_report_verified=consumer ]]
+CONSUMER_FULL_REPORT="$SCRATCH/consumer-assigned-full.tsv"
+run_aggregate_fixture env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=16 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=16384 \
+  "$HELPER" consumer --report > "$CONSUMER_FULL_REPORT"
+[[ "$(field operator_max_jobs "$CONSUMER_FULL_REPORT")" == none ]]
+[[ "$(field jobs "$CONSUMER_FULL_REPORT")" == 8 ]]
+CONSUMER_DIRECT_REPORT="$SCRATCH/consumer-assigned-direct.tsv"
+env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=8192 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$CONSUMER/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$CONSUMER/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" consumer --report > "$CONSUMER_DIRECT_REPORT"
+[[ "$(field containment "$CONSUMER_DIRECT_REPORT")" == direct ]]
+[[ "$(field memory_mib_per_job "$CONSUMER_DIRECT_REPORT")" == 8192 ]]
+[[ "$(field memory_reserve_mib "$CONSUMER_DIRECT_REPORT")" == 16384 ]]
+[[ "$(field profile_max_jobs "$CONSUMER_DIRECT_REPORT")" == 4 ]]
+[[ "$(field jobs "$CONSUMER_DIRECT_REPORT")" == 1 ]]
+[[ "$(run_fixture "$CONSUMER/proc" "$CONSUMER/cgroup" consumer \
+  --verify-report "$CONSUMER_DIRECT_REPORT")" == \
+  resource_report_verified=consumer ]]
+if run_aggregate_fixture env \
+    PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=2047 \
+    "$HELPER" consumer > "$SCRATCH/consumer-small.out" \
+      2> "$SCRATCH/consumer-small.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: undersized aggregate consumer assignment was accepted' \
+    >&2
+  exit 1
+fi
+grep -q 'assigned memory envelope cannot fit one consumer job' \
+  "$SCRATCH/consumer-small.err"
+# The environment marker alone must never unlock the aggregate policy: a
+# process outside the dedicated service leaf fails closed.
+if env \
+    -u PARADOX_VERIFY_ASSIGNED_CPUS \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    PARADOX_VERIFY_AGGREGATE_SYSTEMD=1 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" consumer > "$SCRATCH/consumer-forged.out" \
+      2> "$SCRATCH/consumer-forged.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: aggregate marker outside the service was accepted' >&2
+  exit 1
+fi
+grep -q 'aggregate containment marker without the aggregate service cgroup' \
+  "$SCRATCH/consumer-forged.err"
+
+if env \
+    PARADOX_VERIFY_ASSIGNED_CPUS=3 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=767 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" api-compile > "$SCRATCH/assigned-small.out" \
+      2> "$SCRATCH/assigned-small.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: undersized assigned memory was accepted' >&2
+  exit 1
+fi
+grep -q 'assigned memory envelope cannot fit one api-compile job' \
+  "$SCRATCH/assigned-small.err"
+if env \
+    -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+    PARADOX_VERIFY_ASSIGNED_CPUS=3 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" api-compile > "$SCRATCH/assigned-half.out" \
+      2> "$SCRATCH/assigned-half.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: incomplete assigned envelope was accepted' >&2
+  exit 1
+fi
+grep -q 'must be supplied together' "$SCRATCH/assigned-half.err"
+
+if run_fixture "$V2/proc" "$V2/cgroup" rchk \
+    > "$SCRATCH/unsafe-rchk.out" 2> "$SCRATCH/unsafe-rchk.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: low-memory rchk received an unsafe worker' >&2
+  exit 1
+fi
+grep -q 'insufficient memory for one rchk job' "$SCRATCH/unsafe-rchk.err"
+if run_fixture "$V2/proc" "$V2/cgroup" valgrind \
+    > "$SCRATCH/unsafe-valgrind.out" \
+    2> "$SCRATCH/unsafe-valgrind.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: low-memory Valgrind received an unsafe worker' >&2
+  exit 1
+fi
+grep -q 'insufficient memory for one valgrind job' \
+  "$SCRATCH/unsafe-valgrind.err"
+for noncanonical in 00 08 9999999999; do
+  if run_fixture "$V2/proc" "$V2/cgroup" api-compile \
+      --max-jobs "$noncanonical" > "$SCRATCH/noncanonical-$noncanonical.out" \
+      2> "$SCRATCH/noncanonical-$noncanonical.err"; then
+    printf 'test-resource-jobs: noncanonical job count was accepted: %s\n' \
+      "$noncanonical" >&2
+    exit 1
+  fi
+  grep -q 'positive integer' "$SCRATCH/noncanonical-$noncanonical.err"
+done
+if run_fixture "$V2/proc" "$V2/cgroup" consumer \
+    > "$SCRATCH/unsafe-consumer.out" 2> "$SCRATCH/unsafe-consumer.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: low-memory consumer received an unsafe worker' >&2
+  exit 1
+fi
+grep -q 'insufficient memory for one consumer job' \
+  "$SCRATCH/unsafe-consumer.err"
+
+# The bounded rchk profile is deliberately serial and admits one analyzer only
+# when its 20 GiB address-space budget and 16 GiB host reserve both fit.
+RCHK="$SCRATCH/rchk"
+write_file "$RCHK/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   50331648 kB'
+write_file "$RCHK/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$RCHK/proc/self/cgroup" '0::/'
+mkdir -p "$RCHK/cgroup"
+RCHK_REPORT="$SCRATCH/rchk-report.tsv"
+run_fixture "$RCHK/proc" "$RCHK/cgroup" rchk --report > "$RCHK_REPORT"
+[[ "$(field jobs "$RCHK_REPORT")" == 1 ]]
+[[ "$(field memory_mib_per_job "$RCHK_REPORT")" == 20480 ]]
+[[ "$(field memory_reserve_mib "$RCHK_REPORT")" == 16384 ]]
+[[ "$(field profile_max_jobs "$RCHK_REPORT")" == 1 ]]
+
+# Valgrind executes one instrumented-R process at a time. Its admission budget
+# is deliberately distinct from virtual address-space use: Valgrind reserves
+# large mappings, while the live scheduler protects resident host memory.
+VALGRIND="$SCRATCH/valgrind"
+write_file "$VALGRIND/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   50331648 kB'
+write_file "$VALGRIND/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$VALGRIND/proc/self/cgroup" '0::/'
+mkdir -p "$VALGRIND/cgroup"
+VALGRIND_REPORT="$SCRATCH/valgrind-report.tsv"
+run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind --report \
+  > "$VALGRIND_REPORT"
+[[ "$(field jobs "$VALGRIND_REPORT")" == 1 ]]
+[[ "$(field memory_mib_per_job "$VALGRIND_REPORT")" == 16384 ]]
+[[ "$(field memory_reserve_mib "$VALGRIND_REPORT")" == 16384 ]]
+[[ "$(field profile_max_jobs "$VALGRIND_REPORT")" == 1 ]]
+[[ "$(run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind \
+  --verify-report "$VALGRIND_REPORT")" == \
+  resource_report_verified=valgrind ]]
+
+VALGRIND_TAMPERED="$SCRATCH/valgrind-report-tampered.tsv"
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "memory_reserve_mib" { $2 = 8192 }
+  { print }
+' "$VALGRIND_REPORT" > "$VALGRIND_TAMPERED"
+if run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind \
+    --verify-report "$VALGRIND_TAMPERED" \
+    > "$SCRATCH/tampered-valgrind.out" \
+    2> "$SCRATCH/tampered-valgrind.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: under-reserved Valgrind report was accepted' >&2
+  exit 1
+fi
+grep -q 'malformed or inconsistent with valgrind' \
+  "$SCRATCH/tampered-valgrind.err"
+if run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind --report \
+    --verify-report "$VALGRIND_REPORT" \
+    > "$SCRATCH/mixed-valgrind-mode.out" \
+    2> "$SCRATCH/mixed-valgrind-mode.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: live report and replay modes were combined' >&2
+  exit 1
+fi
+grep -q 'cannot be combined' "$SCRATCH/mixed-valgrind-mode.err"
+
+# Split v1 controllers use different cgroup paths.  Infinity at the leaf must
+# not hide a finite ancestor quota, and the memory controller must use
+# limit-minus-usage rather than its nominal limit.
+V1="$SCRATCH/v1"
+write_file "$V1/proc/meminfo" 'MemTotal:       33554432 kB' \
+  'MemAvailable:   33554432 kB'
+write_file "$V1/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$V1/proc/self/cgroup" \
+  '9:memory:/user/session' '6:cpu,cpuacct:/user'
+write_file "$V1/cgroup/memory/user/session/memory.limit_in_bytes" \
+  '21474836480'
+write_file "$V1/cgroup/memory/user/session/memory.usage_in_bytes" \
+  '4294967296'
+write_file "$V1/cgroup/memory/user/memory.limit_in_bytes" '34359738368'
+write_file "$V1/cgroup/memory/user/memory.usage_in_bytes" '10737418240'
+write_file "$V1/cgroup/cpu,cpuacct/user/cpu.cfs_quota_us" '400000'
+write_file "$V1/cgroup/cpu,cpuacct/user/cpu.cfs_period_us" '100000'
+V1_REPORT="$SCRATCH/v1-report.tsv"
+run_fixture "$V1/proc" "$V1/cgroup" api-compile --report > "$V1_REPORT"
+[[ "$(field jobs "$V1_REPORT")" == 3 ]]
+[[ "$(field cgroup_cpu_limit "$V1_REPORT")" == 4 ]]
+[[ "$(field cgroup_memory_available_mib "$V1_REPORT")" == 16384 ]]
+V1_WORKER_REPORT="$SCRATCH/v1-worker-report.tsv"
+env \
+  -u PARADOX_VERIFY_AGGREGATE_SYSTEMD \
+  PARADOX_VERIFY_HARD_WORKER=1 \
+  PARADOX_VERIFY_ASSIGNED_CPUS=4 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=20480 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$V1/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$V1/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" api-compile --report > "$V1_WORKER_REPORT"
+[[ "$(field containment "$V1_WORKER_REPORT")" == worker-hard ]]
+[[ "$(field memory_mib_per_job "$V1_WORKER_REPORT")" == 768 ]]
+[[ "$(field memory_reserve_mib "$V1_WORKER_REPORT")" == 4096 ]]
+[[ "$(field jobs "$V1_WORKER_REPORT")" == 3 ]]
+[[ "$(run_fixture "$V1/proc" "$V1/cgroup" api-compile \
+  --verify-report "$V1_WORKER_REPORT")" == \
+  resource_report_verified=api-compile ]]
+
+# A malformed present controller file is not silently treated as unlimited.
+write_file "$V2/cgroup/team/job/cpu.max" 'not-a-quota'
+if run_fixture "$V2/proc" "$V2/cgroup" api-compile \
+    > "$SCRATCH/malformed.out" 2> "$SCRATCH/malformed.err"; then
+  printf '%s\n' 'test-resource-jobs: malformed cgroup quota was accepted' >&2
+  exit 1
+fi
+grep -q 'malformed cgroup CPU constraint' "$SCRATCH/malformed.err"
+
+# Darwin must use a live vm_stat reading.  Falling back to a fraction of total
+# physical RAM can over-admit badly on a pressured host, so absent or malformed
+# availability data fails closed.
+DARWIN="$SCRATCH/darwin"
+mkdir -p "$DARWIN/proc" "$DARWIN/cgroup" "$DARWIN/bin"
+# The single quotes deliberately preserve positional parameters in the
+# generated fixture rather than expanding this test runner's arguments.
+# shellcheck disable=SC2016
+write_file "$DARWIN/bin/sysctl" \
+  '#!/bin/sh' \
+  '[ "$1" = -n ] && [ "$2" = hw.memsize ] || exit 64' \
+  'printf "%s\\n" 68719476736'
+write_file "$DARWIN/bin/vm_stat" \
+  '#!/bin/sh' \
+  'cat <<EOF' \
+  'Mach Virtual Memory Statistics: (page size of 4096 bytes)' \
+  'Pages free:                               4000000.' \
+  'Pages inactive:                           3000000.' \
+  'Pages speculative:                        1000000.' \
+  'Pages purgeable:                          9000000.' \
+  'EOF'
+chmod 0700 "$DARWIN/bin/sysctl" "$DARWIN/bin/vm_stat"
+DARWIN_REPORT="$SCRATCH/darwin-report.tsv"
+env \
+  -u PARADOX_VERIFY_ASSIGNED_CPUS \
+  -u PARADOX_VERIFY_ASSIGNED_MEMORY_MIB \
+  "PATH=$DARWIN/bin:/usr/bin:/bin" \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Darwin \
+  PARADOX_RESOURCE_PROC_ROOT="$DARWIN/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$DARWIN/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" api-compile --report > "$DARWIN_REPORT"
+[[ "$(field memory_source "$DARWIN_REPORT")" == darwin_vm_stat ]]
+[[ "$(field memory_available_mib "$DARWIN_REPORT")" == 31250 ]]
+[[ "$(field jobs "$DARWIN_REPORT")" == 24 ]]
+write_file "$DARWIN/bin/vm_stat" \
+  '#!/bin/sh' \
+  'printf "%s\\n" "unrecognized vm_stat output"'
+chmod 0700 "$DARWIN/bin/vm_stat"
+if env \
+    "PATH=$DARWIN/bin:/usr/bin:/bin" \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Darwin \
+    PARADOX_RESOURCE_PROC_ROOT="$DARWIN/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$DARWIN/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" api-compile > "$SCRATCH/darwin-malformed.out" \
+      2> "$SCRATCH/darwin-malformed.err"; then
+  printf '%s\n' 'test-resource-jobs: malformed Darwin availability was accepted' >&2
+  exit 1
+fi
+grep -q 'could not parse positive Darwin vm_stat availability' \
+  "$SCRATCH/darwin-malformed.err"
+
+# Test-only roots cannot leak into production mode, and operator limits may
+# lower but never increase the automatically derived ceiling.
+if env PARADOX_RESOURCE_PROC_ROOT="$V1/proc" "$HELPER" api-compile \
+    > "$SCRATCH/leak.out" 2> "$SCRATCH/leak.err"; then
+  printf '%s\n' 'test-resource-jobs: unguarded fixture override was accepted' >&2
+  exit 1
+fi
+grep -q 'test overrides require' "$SCRATCH/leak.err"
+ACTUAL=$(run_unassigned_helper api-compile)
+LIMITED=$(run_unassigned_helper api-compile --max-jobs 1)
+ACTUAL_COMPILE=$(run_unassigned_helper compile)
+ACTUAL_CONSUMER=$(run_unassigned_helper consumer)
+ACTUAL_REPORT="$SCRATCH/actual-report.tsv"
+run_unassigned_helper api-compile --report > "$ACTUAL_REPORT"
+[[ "$ACTUAL" =~ ^[1-9][0-9]*$ && "$LIMITED" == 1 ]]
+[[ "$ACTUAL_COMPILE" =~ ^[1-9][0-9]*$ && "$ACTUAL_COMPILE" -le 16 ]]
+[[ "$ACTUAL_CONSUMER" =~ ^[1-9][0-9]*$ && "$ACTUAL_CONSUMER" -le 4 ]]
+[[ "$(field memory_reserve_mib "$ACTUAL_REPORT")" -ge 12288 ]]
+
+printf 'resource_jobs_self_test=passed\nactual_api_compile_jobs=%s\nactual_compile_jobs=%s\nactual_consumer_jobs=%s\n' \
+  "$ACTUAL" "$ACTUAL_COMPILE" "$ACTUAL_CONSUMER"

@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  printf '%s\n' "build-bounded-rchk-bcheck: $*" >&2
+  exit 1
+}
+
+[[ $# -eq 6 && "$1" == build ]] ||
+  fail "usage: build-bounded-rchk-bcheck build SOURCE WORK OUTPUT COMMAND ENVIRONMENT"
+
+SOURCE=$2
+WORK=$3
+OUTPUT=$4
+COMMAND_INPUT=$5
+ENVIRONMENT_INPUT=$6
+
+[[ "$SOURCE" == /source && -d "$SOURCE" && ! -L "$SOURCE" ]] ||
+  fail "the immutable source mount is invalid"
+[[ "$WORK" == /work && -d "$WORK" && ! -L "$WORK" ]] ||
+  fail "the writable work mount is invalid"
+[[ "$OUTPUT" == /output && -d "$OUTPUT" && ! -L "$OUTPUT" ]] ||
+  fail "the writable output mount is invalid"
+[[ -f "$COMMAND_INPUT" && ! -L "$COMMAND_INPUT" &&
+   -f "$ENVIRONMENT_INPUT" && ! -L "$ENVIRONMENT_INPUT" ]] ||
+  fail "the build command or environment input is invalid"
+[[ -z "$(find "$OUTPUT" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+  fail "the output mount is not empty"
+[[ -z "$(find "$WORK" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+  fail "the work mount is not empty"
+
+[[ "$(sed -n '1p' "$COMMAND_INPUT")" == $'ordinal\targument' ]] ||
+  fail "the build command header is invalid"
+awk -F '\t' '
+  NR == 1 { next }
+  NF != 2 || $1 != NR - 1 || $2 == "" { exit 1 }
+  END { if (NR != 12) exit 1 }
+' "$COMMAND_INPUT" || fail "the build command inventory is invalid"
+[[ "$(sed -n '1p' "$ENVIRONMENT_INPUT")" == $'key\tvalue' ]] ||
+  fail "the build environment header is invalid"
+awk -F '\t' '
+  NR == 1 { next }
+  NF != 2 || $1 !~ /^[A-Z_][A-Z0-9_]*$/ || $2 == "" { exit 1 }
+  seen[$1]++
+  END {
+    if (NR != 8) exit 1
+    for (key in seen) if (seen[key] != 1) exit 1
+  }
+' "$ENVIRONMENT_INPUT" || fail "the build environment inventory is invalid"
+
+mkdir "$OUTPUT/bin" "$OUTPUT/identity" "$OUTPUT/logs"
+cp -p "$COMMAND_INPUT" "$OUTPUT/build-command.tsv"
+cp -p "$ENVIRONMENT_INPUT" "$OUTPUT/build-environment.tsv"
+
+compiler=/usr/bin/clang++
+llvm_prefix=/usr/lib/llvm-14
+llvm_config=$llvm_prefix/bin/llvm-config
+make=/usr/bin/make
+for executable in "$compiler" "$llvm_config" "$make"; do
+  [[ -x "$executable" ]] || fail "required image tool is not executable: $executable"
+done
+[[ -d "$llvm_prefix" && ! -L "$llvm_prefix" ]] ||
+  fail "the selected LLVM prefix is invalid"
+
+"$compiler" --version > "$OUTPUT/identity/compiler-version.txt"
+{
+  printf 'version\t'; "$llvm_config" --version
+  printf 'host_target\t'; "$llvm_config" --host-target
+  printf 'build_mode\t'; "$llvm_config" --build-mode
+  printf 'shared_mode\t'; "$llvm_config" --shared-mode
+  printf 'cppflags\t'; "$llvm_config" --cppflags
+  printf 'cxxflags\t'; "$llvm_config" --cxxflags
+  printf 'ldflags\t'; "$llvm_config" --ldflags
+  printf 'libs\t'; "$llvm_config" --libs --system-libs
+} > "$OUTPUT/identity/llvm-config-identity.tsv"
+"$make" --version > "$OUTPUT/identity/make-version.txt"
+
+compiler_link=$(/usr/bin/readlink "$compiler")
+compiler_canonical=$(/usr/bin/readlink -f "$compiler")
+llvm_config_canonical=$(/usr/bin/readlink -f "$llvm_config")
+make_link=$(/usr/bin/readlink "$make" || true)
+make_canonical=$(/usr/bin/readlink -f "$make")
+[[ -n "$compiler_link" && -f "$compiler_canonical" &&
+   -f "$llvm_config_canonical" && -f "$make_canonical" ]] ||
+  fail "an image tool has an invalid link chain"
+[[ -n "$make_link" ]] || make_link=-
+{
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'compiler_invoked_path\t%s\n' "$compiler"
+  printf 'compiler_link_target\t%s\n' "$compiler_link"
+  printf 'compiler_canonical_path\t%s\n' "$compiler_canonical"
+  printf 'compiler_sha256\t%s\n' \
+    "$(sha256sum "$compiler_canonical" | cut -d ' ' -f 1)"
+  printf 'compiler_version_sha256\t%s\n' \
+    "$(sha256sum "$OUTPUT/identity/compiler-version.txt" | cut -d ' ' -f 1)"
+  printf 'llvm_prefix\t%s\n' "$llvm_prefix"
+  printf 'llvm_config_path\t%s\n' "$llvm_config"
+  printf 'llvm_config_canonical_path\t%s\n' "$llvm_config_canonical"
+  printf 'llvm_config_sha256\t%s\n' \
+    "$(sha256sum "$llvm_config_canonical" | cut -d ' ' -f 1)"
+  printf 'llvm_config_identity_sha256\t%s\n' \
+    "$(sha256sum "$OUTPUT/identity/llvm-config-identity.tsv" | cut -d ' ' -f 1)"
+  printf 'make_invoked_path\t%s\n' "$make"
+  printf 'make_link_target\t%s\n' "$make_link"
+  printf 'make_canonical_path\t%s\n' "$make_canonical"
+  printf 'make_sha256\t%s\n' \
+    "$(sha256sum "$make_canonical" | cut -d ' ' -f 1)"
+  printf 'make_version_sha256\t%s\n' \
+    "$(sha256sum "$OUTPUT/identity/make-version.txt" | cut -d ' ' -f 1)"
+} > "$OUTPUT/identity/tools.tsv"
+
+mkdir "$WORK/home" "$WORK/tmp" "$WORK/source"
+cp -a "$SOURCE/." "$WORK/source/"
+find "$WORK/source" -type d -exec chmod u+rwx {} +
+find "$WORK/source" -type f -exec chmod u+rw {} +
+
+mapfile -t command_arguments < <(awk -F '\t' 'NR > 1 { print $2 }' \
+  "$COMMAND_INPUT")
+mapfile -t environment_arguments < <(awk -F '\t' \
+  'NR > 1 { print $1 "=" $2 }' "$ENVIRONMENT_INPUT")
+
+set +e
+/usr/bin/env -i "${environment_arguments[@]}" "${command_arguments[@]}" \
+  > "$OUTPUT/logs/build.log" 2>&1
+build_status=$?
+set -e
+{
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'exit_status\t%s\n' "$build_status"
+} > "$OUTPUT/build-status.tsv"
+[[ "$build_status" -eq 0 ]] || exit "$build_status"
+
+bcheck="$WORK/source/src/bcheck"
+[[ -f "$bcheck" && ! -L "$bcheck" && -x "$bcheck" ]] ||
+  fail "make succeeded without producing an executable bcheck"
+cp -p "$bcheck" "$OUTPUT/bin/bcheck"

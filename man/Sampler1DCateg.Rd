@@ -5,9 +5,11 @@
 \title{Sampler1DCateg Class}
 \description{
 Sampling from a discrete distribution, for a \code{\link{ParamSet}} containing a single \code{\link[=p_fct]{p_fct()}} or \code{\link[=p_lgl]{p_lgl()}}.
+A zero-level factor accepts \code{numeric()} probabilities and can be sampled
+for zero rows; a positive-row request fails before entering the RNG.
 }
 \seealso{
-Other Sampler: 
+Other Sampler:
 \code{\link{Sampler}},
 \code{\link{Sampler1D}},
 \code{\link{Sampler1DNormal}},
@@ -19,69 +21,70 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super classes}{
-\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{\link[paradox:Sampler1D]{paradox::Sampler1D}} -> \code{Sampler1DCateg}
+\code{\link[paradox:Sampler]{Sampler}} -> \code{\link[paradox:Sampler1D]{Sampler1D}} -> \code{Sampler1DCateg}
 }
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{prob}}{(\code{numeric()} | NULL)\cr
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{prob}}{(\code{numeric()} | NULL)\cr
 Numeric vector of \code{param$nlevels} probabilities.}
-}
-\if{html}{\out{</div>}}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-Sampler1DCateg-new}{\code{Sampler1DCateg$new()}}
-\item \href{#method-Sampler1DCateg-clone}{\code{Sampler1DCateg$clone()}}
+  \itemize{
+    \item \href{#method-Sampler1DCateg-initialize}{\code{Sampler1DCateg$new()}}
+    \item \href{#method-Sampler1DCateg-clone}{\code{Sampler1DCateg$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details open><summary>Inherited methods</summary>
+\if{html}{\out{<details open><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>paradox::Sampler$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>paradox::Sampler$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>paradox::Sampler$sample()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>Sampler$format()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>Sampler$print()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>Sampler$sample()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Sampler1DCateg-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Sampler1DCateg-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler1DCateg$new(param, prob = NULL)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param}}{(\code{\link{ParamSet}})\cr
+\if{html}{\out{<a id="method-Sampler1DCateg-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler1DCateg-initialize}{}}}
+\subsection{\code{Sampler1DCateg$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler1DCateg$new(param, prob = NULL)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param}}{(\code{\link{ParamSet}})\cr
 Domain / support of the distribution we want to sample from.
 Must be one-dimensional.}
-
-\item{\code{prob}}{(\code{numeric()} | NULL)\cr
+      \item{\code{prob}}{(\code{numeric()} | NULL)\cr
 Numeric vector of \code{param$nlevels} probabilities, which is uniform by default.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Sampler1DCateg-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-Sampler1DCateg-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler1DCateg$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{Sampler1DCateg$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler1DCateg$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

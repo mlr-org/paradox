@@ -6,13 +6,17 @@ test_that("basic example works", {
   ps$add_dep("th_param_int", on = "th_param_fct", CondEqual("a"))
   expect_true(ps$has_deps)
   x = list(th_param_int = 1)
-  expect_string(ps$check(x, check_strict = TRUE), fixed = "th_param_int: can only be set")
+  # The absent parent has recorded default "a", which activates the child.
+  expect_true(ps$check(x, check_strict = TRUE))
   x = list(th_param_int = 1, th_param_fct = "a")
   expect_true(ps$check(x, check_strict = TRUE))
   x = list(th_param_int = 1, th_param_fct = "b")
   expect_string(ps$check(x, check_strict = TRUE), fixed = "th_param_int: can only be set")
   x = list(th_param_int = NA, th_param_fct = "b")
-  expect_string(ps$check(x, check_strict = TRUE), fixed = "May not be NA")
+  expect_string(
+    ps$check(x, check_strict = TRUE),
+    fixed = "th_param_int: May not be NA"
+  )
   x = list(th_param_fct = "a")
   expect_true(ps$check(x, check_strict = TRUE))
   x = list(th_param_fct = "b")
@@ -40,7 +44,7 @@ test_that("nested deps work", {
   ps$add_dep("th_param_lgl", on = "th_param_fct", CondEqual("c"))
 
   x1 = list(th_param_int = 1)
-  expect_string(ps$check(x1, check_strict = TRUE), fixed = "th_param_int: can only be set")
+  expect_true(ps$check(x1, check_strict = TRUE))
   x2 = list(th_param_int = 1, th_param_fct = "b")
   expect_true(ps$check(x2, check_strict = TRUE))
   x3 = list(th_param_int = 1, th_param_fct = "c")

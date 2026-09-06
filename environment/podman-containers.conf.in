@@ -1,0 +1,22 @@
+[containers]
+log_driver = "k8s-file"
+seccomp_profile = "@PODMAN_PREFIX@/etc/containers/seccomp.json"
+
+[network]
+network_backend = "netavark"
+
+[engine]
+cgroup_manager = "cgroupfs"
+events_logger = "file"
+helper_binaries_dir = [
+  "@PODMAN_PREFIX@/usr/local/lib/podman",
+  "@PODMAN_PREFIX@/usr/local/libexec/podman",
+  "@PODMAN_PREFIX@/usr/local/bin",
+]
+conmon_path = ["@PODMAN_PREFIX@/usr/local/lib/podman/conmon"]
+runtime = "crun"
+hooks_dir = []
+
+[engine.runtimes]
+crun = ["@PODMAN_PREFIX@/usr/local/bin/crun"]
+runc = ["@PODMAN_PREFIX@/usr/local/bin/runc"]

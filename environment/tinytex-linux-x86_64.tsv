@@ -1,0 +1,2 @@
+version	platform	archive	archive_size	archive_sha256	tree_manifest_sha256	url
+2026.07	linux-x86_64	TinyTeX-linux-x86_64-v2026.07.tar.xz	151944012	17b9d24197f0bdf5125d56464df191063ed859ffecc4661b79534da1c3d5b70d	bfb75856b5181a10dc334f3a0c6248a93c2a9c6ae6b8ee5e9f917ca5f6d0cc9e	https://github.com/rstudio/tinytex-releases/releases/download/v2026.07/TinyTeX-linux-x86_64-v2026.07.tar.xz

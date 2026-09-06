@@ -1,0 +1,224 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Receipt bytes must not depend on the host or worker locale.  In particular,
+# collation that ignores punctuation/case reorders conda's .r-*, R*, and
+# lowercase executable names even though the authenticated tree is unchanged.
+LC_ALL=C
+LANG=C
+export LC_ALL LANG
+umask 077
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/environment/runtime-matrix-prefix-receipt create|verify DIRECTORY MANIFEST
+
+Create or verify a deterministic SHA-256 manifest for an isolated runtime
+prefix.  Paths, kinds, modes, sizes, file bytes, and internal symbolic-link
+targets are authenticated.  Links that resolve outside the prefix are refused,
+and every regular file must have exactly one hard-link so a writable package
+cache or sibling runtime cannot mutate a sealed prefix through a shared inode.
+USAGE
+}
+
+if [[ $# -ne 3 || ! ${1:-} =~ ^(create|verify)$ ]]; then
+  usage >&2
+  exit 2
+fi
+
+operation=$1
+directory=$2
+manifest=$3
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+[[ -d "$directory" && ! -L "$directory" ]] ||
+  fail "Receipt root must be a real, non-symbolic directory: $directory"
+directory=$(cd "$directory" && pwd -P)
+case "$manifest" in
+  /*) ;;
+  *) manifest=$PWD/$manifest ;;
+esac
+manifest_parent=${manifest%/*}
+[[ -d "$manifest_parent" && ! -L "$manifest_parent" ]] ||
+  fail "Receipt parent must be a real, non-symbolic directory: $manifest_parent"
+manifest_parent=$(cd "$manifest_parent" && pwd -P)
+manifest=$manifest_parent/${manifest##*/}
+case "$manifest/" in
+  "$directory"/*) fail "Receipt must live outside the authenticated tree" ;;
+esac
+
+for tool in find sort sha256sum readlink realpath mktemp cmp xargs stat; do
+  command -v "$tool" >/dev/null 2>&1 || fail "Required receipt tool is absent: $tool"
+done
+
+describe() {
+  local root=$1 output=$2 relative path kind mode size links value target
+  local resolved multiply_linked
+  local record hash full_path
+  local unsorted
+  declare -A hashes=()
+  unsorted=$(mktemp "${output}.unsorted.XXXXXX")
+  trap 'rm -f -- "${unsorted:-}" "${output:-}"' RETURN
+  : > "$unsorted"
+
+  # Reject the old micromamba hard-link topology before reading and hashing the
+  # complete tree.  The per-record check below remains authoritative if a link
+  # is introduced after this cheap preflight.
+  if IFS= read -r -d '' multiply_linked < <(
+      find "$root" -type f -links +1 -print0 -quit
+    ); then
+    relative=${multiply_linked#"$root/"}
+    fail "Runtime prefix contains a multiply-linked regular file: $relative"
+  fi
+
+  # Hash all regular files in batched sha256sum processes.  The earlier
+  # per-member implementation spawned several processes for each conda file
+  # and made read-only activation verification unnecessarily slow.
+  while IFS= read -r -d '' record; do
+    hash=${record:0:64}
+    full_path=${record:66}
+    [[ "$hash" =~ ^[0-9a-f]{64}$ && "$full_path" == "$root/"* ]] ||
+      fail "Could not parse a runtime-prefix SHA-256 record"
+    relative=${full_path#"$root/"}
+    hashes["$relative"]=$hash
+  done < <(find "$root" -type f -print0 | sort -z |
+    xargs -0 -r sha256sum -z --)
+
+  while IFS=$'\t' read -r -d '' relative kind size mode links target; do
+    [[ -n "$relative" && "$relative" != *$'\t'* &&
+      "$relative" != *$'\r'* && "$relative" != *$'\n'* ]] ||
+      fail "Runtime prefix contains a path unsupported by the receipt format"
+    path=$root/$relative
+    if [[ "$kind" == l && -L "$path" ]]; then
+      kind=symlink
+      mode=-
+      size=-
+      [[ -n "$target" && "$target" != *$'\t'* &&
+        "$target" != *$'\r'* && "$target" != *$'\n'* ]] ||
+        fail "Runtime prefix contains an unsupported symbolic-link target: $relative"
+      case "$target" in
+        /*) fail "Runtime prefix contains an absolute symbolic link: $relative" ;;
+      esac
+      resolved=$(realpath -m -- "${path%/*}/$target")
+      case "$resolved" in
+        "$root"|"$root"/*) ;;
+        *) fail "Runtime prefix contains a symbolic link escaping its root: $relative" ;;
+      esac
+      value=target:$target
+    elif [[ "$kind" == d && -d "$path" ]]; then
+      kind=directory
+      size=-
+      value=-
+    elif [[ "$kind" == f && -f "$path" ]]; then
+      kind='file'
+      [[ "$links" == 1 ]] ||
+        fail "Runtime prefix contains a multiply-linked regular file: $relative"
+      value=${hashes[$relative]:-}
+      [[ "$value" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "A regular runtime-prefix file was not hashed: $relative"
+    else
+      fail "Runtime prefix changed while it was being received: $relative"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "$relative" "$kind" "$value" "$size" "$mode" >> "$unsorted"
+  done < <(find "$root" -mindepth 1 \
+    -printf '%P\t%y\t%s\t%m\t%n\t%l\0' | sort -z)
+
+  {
+    printf 'path\tkind\tsha256_or_target\tsize\tmode\n'
+    sort -t $'\t' -k1,1 "$unsorted"
+  } > "$output"
+  rm -f -- "$unsorted"
+  trap - RETURN
+}
+
+if [[ "$operation" == create ]]; then
+  [[ ! -e "$manifest" && ! -L "$manifest" ]] ||
+    fail "Refusing to replace an existing runtime-prefix receipt: $manifest"
+  temporary=$(mktemp "$manifest.new.XXXXXX")
+  trap 'rm -f -- "${temporary:-}"' EXIT
+  describe "$directory" "$temporary"
+  chmod 0444 "$temporary"
+  mv -- "$temporary" "$manifest"
+  trap - EXIT
+  printf 'runtime_prefix_receipt_created=%s\n' "$manifest"
+  printf 'runtime_prefix_members=%s\n' "$(( $(wc -l < "$manifest") - 1 ))"
+  exit 0
+fi
+
+[[ -f "$manifest" && ! -L "$manifest" ]] ||
+  fail "Runtime-prefix receipt is absent or symbolic: $manifest"
+temporary_root=${TMPDIR:-/tmp}
+[[ -d "$temporary_root" && ! -L "$temporary_root" ]] ||
+  fail "Receipt verification temporary root is absent or symbolic: $temporary_root"
+temporary_root=$(cd "$temporary_root" && pwd -P)
+case "$temporary_root/" in
+  "$directory/"|"$directory/"*)
+    fail "Receipt verification temporary root is inside the authenticated tree"
+    ;;
+esac
+temporary_directory=
+temporary_directory_identity=
+temporary_directory_descriptor=
+temporary_directory_handle=
+cleanup_verification_workspace() {
+  local status=$? cleanup_failed=0
+  trap - EXIT
+  if [[ -n "${temporary_directory:-}" ]]; then
+    if [[ -d "$temporary_directory" &&
+        ! -L "$temporary_directory" &&
+        -n "${temporary_directory_identity:-}" &&
+        "$(stat -Lc '%d:%i' -- "$temporary_directory" 2>/dev/null || :)" == \
+          "$temporary_directory_identity" ]]; then
+      if [[ -n "${temporary_directory_handle:-}" &&
+          "$(stat -Lc '%d:%i' -- "$temporary_directory_handle" \
+            2>/dev/null || :)" == "$temporary_directory_identity" ]]; then
+        find -H "$temporary_directory_handle" -xdev -depth -mindepth 1 \
+          -delete >/dev/null 2>&1 || cleanup_failed=1
+      elif [[ -n "${temporary_directory_handle:-}" ]]; then
+        cleanup_failed=1
+      fi
+    else
+      cleanup_failed=1
+    fi
+    if [[ -n "${temporary_directory_descriptor:-}" ]]; then
+      exec {temporary_directory_descriptor}<&-
+    fi
+    if [[ $cleanup_failed -eq 0 ]]; then
+      rmdir -- "$temporary_directory" >/dev/null 2>&1 || cleanup_failed=1
+    fi
+  fi
+  if [[ $status -eq 0 && $cleanup_failed -ne 0 ]]; then
+    printf '%s\n' \
+      "Could not remove the private receipt verification workspace" >&2
+    status=1
+  fi
+  exit "$status"
+}
+trap cleanup_verification_workspace EXIT
+temporary_directory=$(
+  mktemp -d "$temporary_root/runtime-prefix-receipt.verify.XXXXXX"
+)
+temporary_directory_identity=$(stat -Lc '%d:%i' -- "$temporary_directory")
+chmod 0700 -- "$temporary_directory"
+[[ "$(stat -Lc '%d:%i' -- "$temporary_directory")" == \
+    "$temporary_directory_identity" &&
+  "$(stat -Lc '%a' -- "$temporary_directory")" == 700 ]] ||
+  fail "Receipt verification workspace could not be made private"
+exec {temporary_directory_descriptor}< "$temporary_directory"
+temporary_directory_handle="/proc/$$/fd/$temporary_directory_descriptor"
+[[ "$(stat -Lc '%d:%i' -- "$temporary_directory_handle")" == \
+    "$temporary_directory_identity" &&
+  "$(stat -Lc '%a' -- "$temporary_directory_handle")" == 700 ]] ||
+  fail "Receipt verification workspace is not one private owned directory"
+temporary="$temporary_directory_handle/observed.tsv"
+describe "$directory" "$temporary"
+if ! cmp -s -- "$manifest" "$temporary"; then
+  fail "Runtime prefix does not match its authenticated tree receipt: $directory"
+fi
+printf 'runtime_prefix_receipt_verified=%s\n' "$manifest"
+printf 'runtime_prefix_members=%s\n' "$(( $(wc -l < "$manifest") - 1 ))"

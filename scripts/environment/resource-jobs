@@ -1,0 +1,795 @@
+#!/usr/bin/env bash
+
+# Derive a concurrency limit from the CPUs and reclaimable memory that are
+# actually available to this process.  Linux affinity and both cgroup layouts
+# are honoured; Darwin uses sysctl/vm_stat.  The result is deliberately a
+# ceiling: callers may lower it, but should not raise it.
+#
+# Three containment policies exist.  Direct, uncontained admission stays
+# deliberately conservative: large per-job weights and a large host reserve
+# protect unrelated host processes, because nothing else does.  A proved hard
+# per-worker container uses measured cooperative weights and a small reserve
+# inside its exact CPU/RAM cgroup.  Inside the authenticated aggregate systemd
+# envelope
+# (PARADOX_VERIFY_AGGREGATE_SYSTEMD=1, proved below against the dedicated
+# service cgroup), the root-owned launcher already withheld the host reserve
+# when it sized the hard ceiling, so admission uses measured cooperative
+# weights and a small intra-envelope reserve; the envelope, not this tool, is
+# the hard safety boundary there.
+
+set -euo pipefail
+
+fail() {
+  printf 'resource-jobs: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/environment/resource-jobs PROFILE [--max-jobs N] [--report]
+
+Profiles:
+  compile       independent compiler or make jobs
+  api-compile   syntax-only compiler jobs
+  consumer      isolated, heavyweight consumer test processes
+  light-test    isolated, bounded ordinary test processes
+  valgrind      one serial instrumented-R process under Valgrind
+  rchk          one bounded static-analysis process
+
+The default output is one positive integer.  --report writes the complete
+CPU/RAM decision as a two-column TSV.  --max-jobs may only lower the detected
+limit and is intended for an explicit conservative operator override.
+--verify-report PATH validates one retained report, including a lowering-only
+external ceiling, against the selected profile without observing current CPU
+or memory state.  Schema-2 reports record the containment mode (direct,
+worker-hard, or aggregate-systemd) that selected the per-job weight, reserve
+floor, and profile cap; verification re-derives the policy for the recorded
+mode.
+EOF
+}
+
+positive_integer() {
+  # Keep values canonical and safely below Bash's signed arithmetic range.
+  # Every scheduler ceiling is tiny; nine decimal digits is deliberately
+  # generous while rejecting adversarial digit strings before evaluation.
+  [[ "$1" =~ ^[1-9][0-9]{0,8}$ ]]
+}
+
+minimum() {
+  if (( $1 < $2 )); then printf '%s\n' "$1"; else printf '%s\n' "$2"; fi
+}
+
+cpulist_count() {
+  local value=$1 part first last count=0
+  local -a pieces
+  IFS=, read -r -a pieces <<< "$value"
+  ((${#pieces[@]} > 0)) || return 1
+  for part in "${pieces[@]}"; do
+    if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+      first=${BASH_REMATCH[1]}
+      last=${BASH_REMATCH[2]}
+      ((last >= first)) || return 1
+      count=$((count + last - first + 1))
+    elif [[ "$part" =~ ^[0-9]+$ ]]; then
+      count=$((count + 1))
+    else
+      return 1
+    fi
+  done
+  ((count > 0)) || return 1
+  printf '%s\n' "$count"
+}
+
+read_one_line() {
+  local path=$1 value
+  [[ -f "$path" && ! -L "$path" ]] || return 1
+  IFS= read -r value < "$path" || [[ -n "$value" ]] || return 1
+  printf '%s\n' "$value"
+}
+
+safe_cgroup_path() {
+  case "$1" in
+    /*/../*|/*/..|/..|/../*|*//*|*[[:cntrl:]]*) return 1 ;;
+    /*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+memory_constraint_at() {
+  local limit_path=$1 current_path=$2 limit current
+  limit=$(read_one_line "$limit_path") || return 1
+  current=$(read_one_line "$current_path") || return 1
+  [[ "$limit" != max ]] || return 1
+  [[ "$limit" =~ ^[0-9]+$ && "$current" =~ ^[0-9]+$ ]] || return 2
+  # Linux v1 commonly represents infinity as a value close to INT64_MAX.
+  ((limit < 1152921504606846976)) || return 1
+  if ((current >= limit)); then
+    printf '%s 1\n' "$limit"
+  else
+    printf '%s %s\n' "$limit" "$((limit - current))"
+  fi
+}
+
+cpu_constraint_at() {
+  local quota_path=$1 period_path=${2:-} line quota period
+  if [[ -n "$period_path" ]]; then
+    quota=$(read_one_line "$quota_path") || return 1
+    period=$(read_one_line "$period_path") || return 1
+  else
+    line=$(read_one_line "$quota_path") || return 1
+    read -r quota period extra <<< "$line"
+    [[ -z "${extra:-}" ]] || return 2
+    [[ "$quota" != max ]] || return 1
+  fi
+  [[ "$quota" =~ ^-?[0-9]+$ && "$period" =~ ^[0-9]+$ ]] || return 2
+  ((quota > 0 && period > 0)) || return 1
+  # Preserve the raw pair for exact hard-worker authentication. Scheduling
+  # still floors fractional quotas, while allowing one serial job below one
+  # complete CPU so a tightly constrained process can make progress.
+  if ((quota < period)); then
+    printf '%s %s 1\n' "$quota" "$period"
+  else
+    printf '%s %s %s\n' "$quota" "$period" "$((quota / period))"
+  fi
+}
+
+record_worker_cpu_proof() {
+  local quota=$1 period=$2 whole remainder
+  [[ "$WORKER_HARD_REQUESTED" == true ]] || return 0
+  whole=$((quota / period))
+  remainder=$((quota % period))
+  if ((whole < ASSIGNED_CPU_WHOLE ||
+      (whole == ASSIGNED_CPU_WHOLE && remainder == 0))); then
+    if ((CGROUP_WORKER_CPU_QUOTA == 0)); then
+      CGROUP_WORKER_CPU_QUOTA=$quota
+      CGROUP_WORKER_CPU_PERIOD=$period
+    fi
+  fi
+}
+
+walk_cgroup_v2() {
+  local directory=$1 stop=$2 record limit value quota period extra status
+  while [[ "$directory" == "$stop" || "$directory" == "$stop/"* ]]; do
+    if record=$(memory_constraint_at "$directory/memory.max" \
+        "$directory/memory.current"); then
+      read -r limit value extra <<< "$record"
+      [[ "$limit" =~ ^[1-9][0-9]*$ && "$value" =~ ^[1-9][0-9]*$ &&
+        -z "${extra:-}" ]] ||
+        fail "malformed cgroup memory constraint at $directory/memory.max"
+      if ((CGROUP_MEMORY_LIMIT_BYTES == 0 ||
+          limit < CGROUP_MEMORY_LIMIT_BYTES)); then
+        CGROUP_MEMORY_LIMIT_BYTES=$limit
+      fi
+      if ((CGROUP_MEMORY_AVAILABLE_BYTES == 0 ||
+          value < CGROUP_MEMORY_AVAILABLE_BYTES)); then
+        CGROUP_MEMORY_AVAILABLE_BYTES=$value
+      fi
+    else
+      status=$?
+      ((status == 1)) || fail "malformed cgroup memory constraint at $directory/memory.max"
+    fi
+    if record=$(cpu_constraint_at "$directory/cpu.max"); then
+      read -r quota period value extra <<< "$record"
+      [[ "$quota" =~ ^[1-9][0-9]*$ && "$period" =~ ^[1-9][0-9]*$ &&
+        "$value" =~ ^[1-9][0-9]*$ && -z "${extra:-}" ]] ||
+        fail "malformed cgroup CPU constraint at $directory/cpu.max"
+      if ((CGROUP_CPU_LIMIT == 0 || value < CGROUP_CPU_LIMIT)); then
+        CGROUP_CPU_LIMIT=$value
+      fi
+      record_worker_cpu_proof "$quota" "$period"
+    else
+      status=$?
+      ((status == 1)) || fail "malformed cgroup CPU constraint at $directory/cpu.max"
+    fi
+    [[ "$directory" != "$stop" ]] || break
+    directory=${directory%/*}
+    [[ -n "$directory" ]] || directory=/
+  done
+}
+
+walk_cgroup_v1_memory() {
+  local directory=$1 stop=$2 record limit value extra status
+  while [[ "$directory" == "$stop" || "$directory" == "$stop/"* ]]; do
+    if record=$(memory_constraint_at "$directory/memory.limit_in_bytes" \
+        "$directory/memory.usage_in_bytes"); then
+      read -r limit value extra <<< "$record"
+      [[ "$limit" =~ ^[1-9][0-9]*$ && "$value" =~ ^[1-9][0-9]*$ &&
+        -z "${extra:-}" ]] ||
+        fail "malformed cgroup memory constraint at $directory/memory.limit_in_bytes"
+      if ((CGROUP_MEMORY_LIMIT_BYTES == 0 ||
+          limit < CGROUP_MEMORY_LIMIT_BYTES)); then
+        CGROUP_MEMORY_LIMIT_BYTES=$limit
+      fi
+      if ((CGROUP_MEMORY_AVAILABLE_BYTES == 0 ||
+          value < CGROUP_MEMORY_AVAILABLE_BYTES)); then
+        CGROUP_MEMORY_AVAILABLE_BYTES=$value
+      fi
+    else
+      status=$?
+      ((status == 1)) ||
+        fail "malformed cgroup memory constraint at $directory/memory.limit_in_bytes"
+    fi
+    [[ "$directory" != "$stop" ]] || break
+    directory=${directory%/*}
+  done
+}
+
+walk_cgroup_v1_cpu() {
+  local directory=$1 stop=$2 record quota period value extra status
+  while [[ "$directory" == "$stop" || "$directory" == "$stop/"* ]]; do
+    if record=$(cpu_constraint_at "$directory/cpu.cfs_quota_us" \
+        "$directory/cpu.cfs_period_us"); then
+      read -r quota period value extra <<< "$record"
+      [[ "$quota" =~ ^[1-9][0-9]*$ && "$period" =~ ^[1-9][0-9]*$ &&
+        "$value" =~ ^[1-9][0-9]*$ && -z "${extra:-}" ]] ||
+        fail "malformed cgroup CPU constraint at $directory/cpu.cfs_quota_us"
+      if ((CGROUP_CPU_LIMIT == 0 || value < CGROUP_CPU_LIMIT)); then
+        CGROUP_CPU_LIMIT=$value
+      fi
+      record_worker_cpu_proof "$quota" "$period"
+    else
+      status=$?
+      ((status == 1)) ||
+        fail "malformed cgroup CPU constraint at $directory/cpu.cfs_quota_us"
+    fi
+    [[ "$directory" != "$stop" ]] || break
+    directory=${directory%/*}
+  done
+}
+
+PROFILE=${1:-}
+[[ -n "$PROFILE" ]] || { usage >&2; exit 1; }
+shift
+REPORT=false
+MAX_JOBS=0
+VERIFY_REPORT=
+while (($#)); do
+  case "$1" in
+    --max-jobs)
+      (($# >= 2)) || fail "--max-jobs requires a value"
+      positive_integer "$2" || fail "--max-jobs must be a positive integer"
+      MAX_JOBS=$2
+      shift 2
+      ;;
+    --max-jobs=*)
+      value=${1#--max-jobs=}
+      positive_integer "$value" || fail "--max-jobs must be a positive integer"
+      MAX_JOBS=$value
+      shift
+      ;;
+    --report)
+      REPORT=true
+      shift
+      ;;
+    --verify-report)
+      (($# >= 2)) || fail "--verify-report requires a path"
+      [[ -z "$VERIFY_REPORT" ]] || fail "--verify-report may be supplied once"
+      VERIFY_REPORT=$2
+      shift 2
+      ;;
+    --verify-report=*)
+      [[ -z "$VERIFY_REPORT" ]] || fail "--verify-report may be supplied once"
+      VERIFY_REPORT=${1#--verify-report=}
+      [[ -n "$VERIFY_REPORT" ]] || fail "--verify-report requires a path"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *) fail "unknown argument '$1' (see --help)" ;;
+  esac
+done
+
+case "$PROFILE" in
+  compile)
+    CPU_PER_JOB=1
+    MEMORY_MIB_PER_JOB=1024
+    MINIMUM_RESERVE_MIB=12288
+    PROFILE_MAX_JOBS=16
+    AGGREGATE_MEMORY_MIB_PER_JOB=1024
+    AGGREGATE_MINIMUM_RESERVE_MIB=4096
+    AGGREGATE_PROFILE_MAX_JOBS=16
+    ;;
+  api-compile)
+    CPU_PER_JOB=1
+    MEMORY_MIB_PER_JOB=768
+    MINIMUM_RESERVE_MIB=12288
+    PROFILE_MAX_JOBS=0
+    AGGREGATE_MEMORY_MIB_PER_JOB=768
+    AGGREGATE_MINIMUM_RESERVE_MIB=4096
+    AGGREGATE_PROFILE_MAX_JOBS=0
+    ;;
+  consumer)
+    CPU_PER_JOB=2
+    MEMORY_MIB_PER_JOB=8192
+    MINIMUM_RESERVE_MIB=16384
+    PROFILE_MAX_JOBS=4
+    AGGREGATE_MEMORY_MIB_PER_JOB=2048
+    AGGREGATE_MINIMUM_RESERVE_MIB=4096
+    AGGREGATE_PROFILE_MAX_JOBS=8
+    ;;
+  light-test)
+    CPU_PER_JOB=1
+    MEMORY_MIB_PER_JOB=2048
+    MINIMUM_RESERVE_MIB=12288
+    PROFILE_MAX_JOBS=16
+    AGGREGATE_MEMORY_MIB_PER_JOB=1024
+    AGGREGATE_MINIMUM_RESERVE_MIB=4096
+    AGGREGATE_PROFILE_MAX_JOBS=16
+    ;;
+  valgrind)
+    CPU_PER_JOB=1
+    MEMORY_MIB_PER_JOB=16384
+    MINIMUM_RESERVE_MIB=16384
+    PROFILE_MAX_JOBS=1
+    AGGREGATE_MEMORY_MIB_PER_JOB=16384
+    AGGREGATE_MINIMUM_RESERVE_MIB=16384
+    AGGREGATE_PROFILE_MAX_JOBS=1
+    ;;
+  rchk)
+    CPU_PER_JOB=1
+    MEMORY_MIB_PER_JOB=20480
+    MINIMUM_RESERVE_MIB=16384
+    PROFILE_MAX_JOBS=1
+    AGGREGATE_MEMORY_MIB_PER_JOB=20480
+    AGGREGATE_MINIMUM_RESERVE_MIB=16384
+    AGGREGATE_PROFILE_MAX_JOBS=1
+    ;;
+  *) fail "unknown profile '$PROFILE' (see --help)" ;;
+esac
+
+# A hard worker is already isolated by the exact task cgroup. Reuse the
+# measured aggregate per-job weights, but retain one GiB inside the worker for
+# its controller/runtime and transient peaks. Heavy analyzers keep their
+# existing conservative serial allowance: they are not nested schedulers.
+WORKER_MEMORY_MIB_PER_JOB=$AGGREGATE_MEMORY_MIB_PER_JOB
+WORKER_MINIMUM_RESERVE_MIB=1024
+WORKER_PROFILE_MAX_JOBS=$AGGREGATE_PROFILE_MAX_JOBS
+if [[ "$PROFILE" == valgrind || "$PROFILE" == rchk ]]; then
+  WORKER_MEMORY_MIB_PER_JOB=$MEMORY_MIB_PER_JOB
+  WORKER_MINIMUM_RESERVE_MIB=$MINIMUM_RESERVE_MIB
+  WORKER_PROFILE_MAX_JOBS=$PROFILE_MAX_JOBS
+fi
+
+# --verify-report re-derives policy from retained fields without trusting the
+# caller's current environment or observing live resources.
+CONTAINMENT=direct
+EFFECTIVE_MEMORY_MIB_PER_JOB=$MEMORY_MIB_PER_JOB
+EFFECTIVE_MINIMUM_RESERVE_MIB=$MINIMUM_RESERVE_MIB
+EFFECTIVE_PROFILE_MAX_JOBS=$PROFILE_MAX_JOBS
+
+if [[ "${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1 ]]; then
+  :
+else
+  [[ -z "${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" ]] ||
+    fail "aggregate containment marker must be exactly 1"
+fi
+if [[ "${PARADOX_VERIFY_HARD_WORKER:-}" == 1 ]]; then
+  :
+else
+  [[ -z "${PARADOX_VERIFY_HARD_WORKER:-}" ]] ||
+    fail "hard-worker containment marker must be exactly 1"
+fi
+
+validate_report() {
+  local path=$1 size
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "resource report is absent, non-regular, or symbolic: $path"
+  size=$(wc -c < "$path")
+  [[ "$size" =~ ^[0-9]+$ && "$size" -le 1048576 ]] ||
+    fail "resource report is unexpectedly large"
+  awk -F '\t' -v expected_profile="$PROFILE" \
+      -v expected_cpu_per_job="$CPU_PER_JOB" \
+      -v direct_memory_mib="$MEMORY_MIB_PER_JOB" \
+      -v direct_reserve_mib="$MINIMUM_RESERVE_MIB" \
+      -v direct_profile_max_jobs="$PROFILE_MAX_JOBS" \
+      -v aggregate_memory_mib="$AGGREGATE_MEMORY_MIB_PER_JOB" \
+      -v aggregate_reserve_mib="$AGGREGATE_MINIMUM_RESERVE_MIB" \
+      -v aggregate_profile_max_jobs="$AGGREGATE_PROFILE_MAX_JOBS" \
+      -v worker_memory_mib="$WORKER_MEMORY_MIB_PER_JOB" \
+      -v worker_reserve_mib="$WORKER_MINIMUM_RESERVE_MIB" \
+      -v worker_profile_max_jobs="$WORKER_PROFILE_MAX_JOBS" '
+    function positive(value) { return value ~ /^[1-9][0-9]*$/ }
+    function nonnegative(value) { return value ~ /^(0|[1-9][0-9]*)$/ }
+    function limit(value) { return value == "unlimited" || positive(value) }
+    function min(left, right) { return left < right ? left : right }
+    BEGIN {
+      count = split("field schema profile containment platform online_cpus affinity_cpus cgroup_cpu_limit cpu_limit cpu_reserve cpu_per_job cpu_jobs memory_source memory_available_mib cgroup_memory_available_mib memory_reserve_mib memory_mib_per_job memory_jobs profile_max_jobs operator_max_jobs jobs", keys, " ")
+    }
+    {
+      if (NF != 2 || NR > count || $1 != keys[NR]) exit 1
+      value[$1] = $2
+    }
+    END {
+      if (NR != count || value["field"] != "value" ||
+          value["schema"] != "2" ||
+          value["profile"] != expected_profile) exit 1
+      if (value["containment"] == "aggregate-systemd") {
+        expected_memory_mib = aggregate_memory_mib
+        minimum_reserve_mib = aggregate_reserve_mib
+        expected_profile_max_jobs = aggregate_profile_max_jobs
+      } else if (value["containment"] == "worker-hard") {
+        expected_memory_mib = worker_memory_mib
+        minimum_reserve_mib = worker_reserve_mib
+        expected_profile_max_jobs = worker_profile_max_jobs
+      } else if (value["containment"] == "direct") {
+        expected_memory_mib = direct_memory_mib
+        minimum_reserve_mib = direct_reserve_mib
+        expected_profile_max_jobs = direct_profile_max_jobs
+      } else {
+        exit 1
+      }
+      if ((value["platform"] != "Linux" &&
+           value["platform"] != "Darwin") ||
+          (value["platform"] == "Darwin" &&
+           value["containment"] != "direct") ||
+          !positive(value["online_cpus"]) ||
+          !positive(value["affinity_cpus"]) ||
+          !limit(value["cgroup_cpu_limit"]) ||
+          !positive(value["cpu_limit"]) ||
+          !nonnegative(value["cpu_reserve"]) ||
+          value["cpu_per_job"] != expected_cpu_per_job ||
+          !positive(value["cpu_jobs"]) ||
+          !positive(value["memory_available_mib"]) ||
+          !limit(value["cgroup_memory_available_mib"]) ||
+          !positive(value["memory_reserve_mib"]) ||
+          value["memory_mib_per_job"] != expected_memory_mib ||
+          !positive(value["memory_jobs"]) ||
+          (value["operator_max_jobs"] != "none" &&
+           !positive(value["operator_max_jobs"])) ||
+          !positive(value["jobs"])) exit 1
+
+      cpu_limit = min(value["online_cpus"] + 0, value["affinity_cpus"] + 0)
+      if (value["cgroup_cpu_limit"] != "unlimited")
+        cpu_limit = min(cpu_limit, value["cgroup_cpu_limit"] + 0)
+      if (cpu_limit < 1) cpu_limit = 1
+      cpu_reserve = cpu_limit >= 16 ? 2 : (cpu_limit >= 4 ? 1 : 0)
+      cpu_budget = cpu_limit - cpu_reserve
+      if (cpu_budget < 1) cpu_budget = 1
+      cpu_jobs = int(cpu_budget / expected_cpu_per_job)
+      if (cpu_jobs < 1) cpu_jobs = 1
+
+      if (value["platform"] == "Linux") {
+        if (value["memory_source"] != "proc_memavailable" &&
+            value["memory_source"] != "proc_memavailable+cgroup") exit 1
+        cgroup_memory = value["cgroup_memory_available_mib"]
+        if (value["memory_source"] == "proc_memavailable+cgroup") {
+          if (cgroup_memory == "unlimited") exit 1
+          if (cgroup_memory + 0 != value["memory_available_mib"] + 0) exit 1
+        }
+        if (value["memory_source"] == "proc_memavailable" &&
+            cgroup_memory != "unlimited") {
+          if (cgroup_memory + 0 < value["memory_available_mib"] + 0) exit 1
+        }
+      } else {
+        if (value["memory_source"] != "darwin_vm_stat") exit 1
+        if (value["cgroup_cpu_limit"] != "unlimited") exit 1
+        if (value["cgroup_memory_available_mib"] != "unlimited") exit 1
+      }
+
+      memory_available = value["memory_available_mib"] + 0
+      dynamic_reserve = int(memory_available / 4)
+      memory_reserve = dynamic_reserve > minimum_reserve_mib ? dynamic_reserve : minimum_reserve_mib
+      memory_budget = memory_available > memory_reserve ? memory_available - memory_reserve : 0
+      if (memory_budget < expected_memory_mib) exit 1
+      memory_jobs = int(memory_budget / expected_memory_mib)
+      jobs = min(cpu_jobs, memory_jobs)
+      if (expected_profile_max_jobs > 0 &&
+          jobs > expected_profile_max_jobs) jobs = expected_profile_max_jobs
+      if (value["operator_max_jobs"] != "none") {
+        if (!positive(value["operator_max_jobs"]) ||
+            value["operator_max_jobs"] + 0 > jobs) exit 1
+        jobs = min(jobs, value["operator_max_jobs"] + 0)
+      }
+      expected_profile_max = expected_profile_max_jobs > 0 ? expected_profile_max_jobs : "unlimited"
+
+      if (value["cpu_limit"] + 0 != cpu_limit ||
+          value["cpu_reserve"] + 0 != cpu_reserve ||
+          value["cpu_jobs"] + 0 != cpu_jobs ||
+          value["memory_reserve_mib"] + 0 != memory_reserve ||
+          value["memory_jobs"] + 0 != memory_jobs ||
+          value["profile_max_jobs"] != expected_profile_max ||
+          value["jobs"] + 0 != jobs) exit 1
+    }
+  ' "$path" || fail "resource report is malformed or inconsistent with $PROFILE"
+}
+
+if [[ -n "$VERIFY_REPORT" ]]; then
+  [[ "$REPORT" == false && "$MAX_JOBS" -eq 0 ]] ||
+    fail "--verify-report cannot be combined with --report or --max-jobs"
+  validate_report "$VERIFY_REPORT"
+  printf 'resource_report_verified=%s\n' "$PROFILE"
+  exit 0
+fi
+
+AGGREGATE_REQUESTED=false
+WORKER_HARD_REQUESTED=false
+if [[ "${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1 ]]; then
+  AGGREGATE_REQUESTED=true
+fi
+if [[ "${PARADOX_VERIFY_HARD_WORKER:-}" == 1 ]]; then
+  WORKER_HARD_REQUESTED=true
+fi
+[[ "$AGGREGATE_REQUESTED" != true || "$WORKER_HARD_REQUESTED" != true ]] ||
+  fail "aggregate and hard-worker containment markers are mutually exclusive"
+
+ASSIGNED_CPUS=${PARADOX_VERIFY_ASSIGNED_CPUS:-}
+ASSIGNED_MEMORY_MIB=${PARADOX_VERIFY_ASSIGNED_MEMORY_MIB:-}
+ASSIGNED_CPU_WHOLE=0
+if [[ -n "$ASSIGNED_CPUS" || -n "$ASSIGNED_MEMORY_MIB" ]]; then
+  [[ -n "$ASSIGNED_CPUS" && -n "$ASSIGNED_MEMORY_MIB" ]] ||
+    fail "assigned CPU and memory envelopes must be supplied together"
+  [[ "$ASSIGNED_CPUS" =~ ^([1-9][0-9]{0,8})(\.[0-9]+)?$ ]] ||
+    fail "assigned CPU envelope is malformed"
+  ASSIGNED_CPU_WHOLE=${BASH_REMATCH[1]}
+  positive_integer "$ASSIGNED_MEMORY_MIB" ||
+    fail "assigned memory envelope is malformed"
+fi
+if [[ "$WORKER_HARD_REQUESTED" == true ]]; then
+  [[ -n "$ASSIGNED_CPUS" && -n "$ASSIGNED_MEMORY_MIB" ]] ||
+    fail "hard-worker containment requires assigned CPU and memory envelopes"
+  case "$ASSIGNED_CPUS" in
+    *.*)
+      [[ "${ASSIGNED_CPUS#*.}" =~ ^0+$ ]] ||
+        fail "hard-worker CPU envelope must be a whole CPU allocation"
+      ;;
+  esac
+  CONTAINMENT=worker-hard
+  EFFECTIVE_MEMORY_MIB_PER_JOB=$WORKER_MEMORY_MIB_PER_JOB
+  EFFECTIVE_MINIMUM_RESERVE_MIB=$WORKER_MINIMUM_RESERVE_MIB
+  EFFECTIVE_PROFILE_MAX_JOBS=$WORKER_PROFILE_MAX_JOBS
+elif [[ "$AGGREGATE_REQUESTED" == true ]]; then
+  CONTAINMENT=aggregate-systemd
+  EFFECTIVE_MEMORY_MIB_PER_JOB=$AGGREGATE_MEMORY_MIB_PER_JOB
+  EFFECTIVE_MINIMUM_RESERVE_MIB=$AGGREGATE_MINIMUM_RESERVE_MIB
+  EFFECTIVE_PROFILE_MAX_JOBS=$AGGREGATE_PROFILE_MAX_JOBS
+fi
+
+TEST_MODE=${PARADOX_RESOURCE_TEST_MODE:-false}
+if [[ "$TEST_MODE" == true ]]; then
+  PROC_ROOT=${PARADOX_RESOURCE_PROC_ROOT:?test mode requires PARADOX_RESOURCE_PROC_ROOT}
+  CGROUP_ROOT=${PARADOX_RESOURCE_CGROUP_ROOT:?test mode requires PARADOX_RESOURCE_CGROUP_ROOT}
+  PLATFORM=${PARADOX_RESOURCE_TEST_PLATFORM:-Linux}
+  ONLINE_CPUS=${PARADOX_RESOURCE_ONLINE_CPUS:?test mode requires PARADOX_RESOURCE_ONLINE_CPUS}
+  [[ "$PROC_ROOT" == /* && -d "$PROC_ROOT" && ! -L "$PROC_ROOT" ]] ||
+    fail "test proc root must be one plain absolute directory"
+  [[ "$CGROUP_ROOT" == /* && -d "$CGROUP_ROOT" && ! -L "$CGROUP_ROOT" ]] ||
+    fail "test cgroup root must be one plain absolute directory"
+else
+  [[ -z "${PARADOX_RESOURCE_PROC_ROOT:-}${PARADOX_RESOURCE_CGROUP_ROOT:-}${PARADOX_RESOURCE_TEST_PLATFORM:-}${PARADOX_RESOURCE_ONLINE_CPUS:-}" ]] ||
+    fail "resource test overrides require PARADOX_RESOURCE_TEST_MODE=true"
+  PROC_ROOT=/proc
+  CGROUP_ROOT=/sys/fs/cgroup
+  PLATFORM=$(uname -s)
+  if [[ "$PLATFORM" == Darwin ]]; then
+    ONLINE_CPUS=$(sysctl -n hw.logicalcpu)
+  else
+    ONLINE_CPUS=$(getconf _NPROCESSORS_ONLN)
+  fi
+fi
+positive_integer "$ONLINE_CPUS" || fail "could not determine online CPU count"
+
+AFFINITY_CPUS=$ONLINE_CPUS
+MEMORY_AVAILABLE_BYTES=0
+MEMORY_SOURCE=unknown
+CGROUP_CPU_LIMIT=0
+CGROUP_MEMORY_AVAILABLE_BYTES=0
+CGROUP_MEMORY_LIMIT_BYTES=0
+CGROUP_WORKER_CPU_QUOTA=0
+CGROUP_WORKER_CPU_PERIOD=0
+AGGREGATE_LEAF=
+
+if [[ "$PLATFORM" == Linux ]]; then
+  [[ -f "$PROC_ROOT/meminfo" && ! -L "$PROC_ROOT/meminfo" ]] ||
+    fail "Linux MemAvailable input is absent or symbolic"
+  while read -r key value unit rest; do
+    if [[ "$key" == MemAvailable: ]]; then
+      [[ "$value" =~ ^[0-9]+$ && "$unit" == kB && -z "${rest:-}" ]] ||
+        fail "malformed MemAvailable row"
+      MEMORY_AVAILABLE_BYTES=$((value * 1024))
+      MEMORY_SOURCE=proc_memavailable
+      break
+    fi
+  done < "$PROC_ROOT/meminfo"
+  ((MEMORY_AVAILABLE_BYTES > 0)) || fail "could not read positive MemAvailable"
+
+  if [[ -f "$PROC_ROOT/self/status" && ! -L "$PROC_ROOT/self/status" ]]; then
+    while IFS=$'\t' read -r key value rest; do
+      if [[ "$key" == Cpus_allowed_list: ]]; then
+        [[ -z "${rest:-}" ]] || fail "malformed Cpus_allowed_list row"
+        AFFINITY_CPUS=$(cpulist_count "$value") ||
+          fail "malformed Cpus_allowed_list value"
+        break
+      fi
+    done < "$PROC_ROOT/self/status"
+  fi
+
+  if [[ -f "$PROC_ROOT/self/cgroup" && ! -L "$PROC_ROOT/self/cgroup" ]]; then
+    UNIFIED_PATH=
+    MEMORY_PATH=
+    CPU_PATH=
+    while IFS=: read -r hierarchy controllers cgroup_path; do
+      [[ -n "$hierarchy" && -n "$cgroup_path" ]] ||
+        fail "malformed /proc/self/cgroup row"
+      safe_cgroup_path "$cgroup_path" || fail "unsafe cgroup path"
+      if [[ -z "$controllers" ]]; then
+        UNIFIED_PATH=$cgroup_path
+      else
+        case ",$controllers," in *,memory,*) MEMORY_PATH=$cgroup_path ;; esac
+        case ",$controllers," in *,cpu,*|*,cpuacct,*) CPU_PATH=$cgroup_path ;; esac
+      fi
+    done < "$PROC_ROOT/self/cgroup"
+    AGGREGATE_LEAF=${MEMORY_PATH:-$UNIFIED_PATH}
+    if [[ -n "$UNIFIED_PATH" ]]; then
+      walk_cgroup_v2 "$CGROUP_ROOT$UNIFIED_PATH" "$CGROUP_ROOT"
+    fi
+    # A hybrid hierarchy gives every process a v2 row while the memory and
+    # CPU controllers stay on cgroup v1.  When the unified walk found no
+    # constraint, consult the v1 controllers so a v1 limit -- for example
+    # the aggregate service ceiling -- is not silently invisible.
+    if [[ -n "$MEMORY_PATH" ]] && ((CGROUP_MEMORY_AVAILABLE_BYTES == 0)); then
+      walk_cgroup_v1_memory "$CGROUP_ROOT/memory$MEMORY_PATH" \
+        "$CGROUP_ROOT/memory"
+    fi
+    if [[ -n "$CPU_PATH" ]] && ((CGROUP_CPU_LIMIT == 0)); then
+      CPU_CONTROLLER_ROOT=
+      for candidate in cpu,cpuacct cpuacct,cpu cpu; do
+        if [[ -d "$CGROUP_ROOT/$candidate" &&
+              ! -L "$CGROUP_ROOT/$candidate" ]]; then
+          CPU_CONTROLLER_ROOT="$CGROUP_ROOT/$candidate"
+          break
+        fi
+      done
+      if [[ -n "$CPU_CONTROLLER_ROOT" ]]; then
+        walk_cgroup_v1_cpu "$CPU_CONTROLLER_ROOT$CPU_PATH" \
+          "$CPU_CONTROLLER_ROOT"
+      fi
+    fi
+  fi
+elif [[ "$PLATFORM" == Darwin ]]; then
+  TOTAL_BYTES=$(sysctl -n hw.memsize)
+  [[ "$TOTAL_BYTES" =~ ^[1-9][0-9]{0,17}$ ]] ||
+    fail "could not determine Darwin physical memory"
+  command -v vm_stat >/dev/null 2>&1 ||
+    fail "Darwin vm_stat is required for a live memory ceiling"
+  VM_STAT=$(vm_stat) || fail "could not read Darwin vm_stat"
+  PAGE_SIZE=$(printf '%s\n' "$VM_STAT" | awk \
+    'NR == 1 && match($0, /page size of [0-9]+ bytes/) {
+       value = substr($0, RSTART, RLENGTH); gsub(/[^0-9]/, "", value); print value
+     }')
+  # Purgeable pages can overlap the inactive accounting on Darwin.  Exclude
+  # them here so reclaimable memory is never counted twice.
+  AVAILABLE_PAGES=$(printf '%s\n' "$VM_STAT" | awk -F: \
+    '/^Pages (free|inactive|speculative):/ {
+       gsub(/[^0-9]/, "", $2); if ($2 != "") sum += $2
+     } END { print sum + 0 }')
+  [[ "$PAGE_SIZE" =~ ^[1-9][0-9]{0,8}$ &&
+     "$AVAILABLE_PAGES" =~ ^[1-9][0-9]{0,15}$ ]] ||
+    fail "could not parse positive Darwin vm_stat availability"
+  ((AVAILABLE_PAGES <= TOTAL_BYTES / PAGE_SIZE)) ||
+    fail "Darwin vm_stat availability exceeds physical memory"
+  MEMORY_AVAILABLE_BYTES=$((PAGE_SIZE * AVAILABLE_PAGES))
+  MEMORY_SOURCE=darwin_vm_stat
+else
+  fail "unsupported platform for live memory admission: $PLATFORM"
+fi
+
+# The aggregate policy weakens the reserve, so the environment marker alone is
+# not accepted: the process must actually sit inside the dedicated
+# root-created transient service before the cooperative policy applies.
+if [[ "$CONTAINMENT" == aggregate-systemd ]]; then
+  [[ "$PLATFORM" == Linux ]] ||
+    fail "aggregate containment is only authenticated on Linux"
+  [[ "$AGGREGATE_LEAF" =~ ^/system\.slice/paradox-verify-aggregate-u[0-9]+-[A-Za-z0-9._-]+\.service(/.*)?$ ]] ||
+    fail "aggregate containment marker without the aggregate service cgroup"
+fi
+if [[ "$CONTAINMENT" == worker-hard ]]; then
+  [[ "$PLATFORM" == Linux ]] ||
+    fail "hard-worker containment is only authenticated on Linux"
+  ((CGROUP_MEMORY_LIMIT_BYTES > 0 &&
+    CGROUP_MEMORY_LIMIT_BYTES <= ASSIGNED_MEMORY_MIB * 1048576)) ||
+    fail "hard-worker marker without a finite cgroup memory limit inside the assigned envelope"
+  ((CGROUP_WORKER_CPU_QUOTA > 0 && CGROUP_WORKER_CPU_PERIOD > 0)) ||
+    fail "hard-worker marker without a finite cgroup CPU quota inside the assigned envelope"
+fi
+
+CPU_LIMIT=$(minimum "$ONLINE_CPUS" "$AFFINITY_CPUS")
+if ((CGROUP_CPU_LIMIT > 0)); then
+  CPU_LIMIT=$(minimum "$CPU_LIMIT" "$CGROUP_CPU_LIMIT")
+fi
+((CPU_LIMIT > 0)) || CPU_LIMIT=1
+if ((CPU_LIMIT >= 16)); then
+  CPU_RESERVE=2
+elif ((CPU_LIMIT >= 4)); then
+  CPU_RESERVE=1
+else
+  CPU_RESERVE=0
+fi
+CPU_BUDGET=$((CPU_LIMIT - CPU_RESERVE))
+((CPU_BUDGET > 0)) || CPU_BUDGET=1
+CPU_JOBS=$((CPU_BUDGET / CPU_PER_JOB))
+((CPU_JOBS > 0)) || CPU_JOBS=1
+
+if ((CGROUP_MEMORY_AVAILABLE_BYTES > 0 &&
+    CGROUP_MEMORY_AVAILABLE_BYTES < MEMORY_AVAILABLE_BYTES)); then
+  MEMORY_AVAILABLE_BYTES=$CGROUP_MEMORY_AVAILABLE_BYTES
+  MEMORY_SOURCE=${MEMORY_SOURCE}+cgroup
+fi
+MEMORY_AVAILABLE_MIB=$((MEMORY_AVAILABLE_BYTES / 1048576))
+((MEMORY_AVAILABLE_MIB > 0)) || fail "available memory rounds to zero MiB"
+DYNAMIC_RESERVE_MIB=$((MEMORY_AVAILABLE_MIB / 4))
+if ((DYNAMIC_RESERVE_MIB > EFFECTIVE_MINIMUM_RESERVE_MIB)); then
+  RESERVE_MIB=$DYNAMIC_RESERVE_MIB
+else
+  RESERVE_MIB=$EFFECTIVE_MINIMUM_RESERVE_MIB
+fi
+if ((MEMORY_AVAILABLE_MIB > RESERVE_MIB)); then
+  MEMORY_BUDGET_MIB=$((MEMORY_AVAILABLE_MIB - RESERVE_MIB))
+else
+  MEMORY_BUDGET_MIB=0
+fi
+((MEMORY_BUDGET_MIB >= EFFECTIVE_MEMORY_MIB_PER_JOB)) ||
+  fail "insufficient memory for one $PROFILE job while retaining the ${RESERVE_MIB}-MiB safety reserve (available=${MEMORY_AVAILABLE_MIB} MiB, required_per_job=${EFFECTIVE_MEMORY_MIB_PER_JOB} MiB, cpu_limit=${CPU_LIMIT})"
+MEMORY_JOBS=$((MEMORY_BUDGET_MIB / EFFECTIVE_MEMORY_MIB_PER_JOB))
+((MEMORY_JOBS > 0)) ||
+  fail "internal error: positive memory budget produced no jobs"
+
+ASSIGNED_MAX_JOBS=0
+if [[ -n "$ASSIGNED_CPUS" || -n "$ASSIGNED_MEMORY_MIB" ]]; then
+  ASSIGNED_CPU_JOBS=$((ASSIGNED_CPU_WHOLE / CPU_PER_JOB))
+  ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / EFFECTIVE_MEMORY_MIB_PER_JOB))
+  ((ASSIGNED_CPU_JOBS > 0)) ||
+    fail "assigned CPU envelope cannot fit one $PROFILE job"
+  ((ASSIGNED_MEMORY_JOBS > 0)) ||
+    fail "assigned memory envelope cannot fit one $PROFILE job"
+  ASSIGNED_MAX_JOBS=$(minimum \
+    "$ASSIGNED_CPU_JOBS" "$ASSIGNED_MEMORY_JOBS")
+fi
+
+JOBS=$(minimum "$CPU_JOBS" "$MEMORY_JOBS")
+if ((EFFECTIVE_PROFILE_MAX_JOBS > 0 && JOBS > EFFECTIVE_PROFILE_MAX_JOBS)); then
+  JOBS=$EFFECTIVE_PROFILE_MAX_JOBS
+fi
+if ((ASSIGNED_MAX_JOBS > 0 &&
+    (MAX_JOBS == 0 || ASSIGNED_MAX_JOBS < MAX_JOBS) &&
+    ASSIGNED_MAX_JOBS < JOBS)); then
+  MAX_JOBS=$ASSIGNED_MAX_JOBS
+fi
+if ((MAX_JOBS > JOBS)); then
+  MAX_JOBS=$JOBS
+fi
+if ((MAX_JOBS > 0 && JOBS > MAX_JOBS)); then
+  JOBS=$MAX_JOBS
+fi
+((JOBS > 0)) || JOBS=1
+
+if [[ "$REPORT" == true ]]; then
+  printf 'field\tvalue\n'
+  printf 'schema\t2\n'
+  printf 'profile\t%s\n' "$PROFILE"
+  printf 'containment\t%s\n' "$CONTAINMENT"
+  printf 'platform\t%s\n' "$PLATFORM"
+  printf 'online_cpus\t%s\n' "$ONLINE_CPUS"
+  printf 'affinity_cpus\t%s\n' "$AFFINITY_CPUS"
+  printf 'cgroup_cpu_limit\t%s\n' \
+    "$([[ "$CGROUP_CPU_LIMIT" -gt 0 ]] && printf '%s' "$CGROUP_CPU_LIMIT" || printf unlimited)"
+  printf 'cpu_limit\t%s\n' "$CPU_LIMIT"
+  printf 'cpu_reserve\t%s\n' "$CPU_RESERVE"
+  printf 'cpu_per_job\t%s\n' "$CPU_PER_JOB"
+  printf 'cpu_jobs\t%s\n' "$CPU_JOBS"
+  printf 'memory_source\t%s\n' "$MEMORY_SOURCE"
+  printf 'memory_available_mib\t%s\n' "$MEMORY_AVAILABLE_MIB"
+  printf 'cgroup_memory_available_mib\t%s\n' \
+    "$([[ "$CGROUP_MEMORY_AVAILABLE_BYTES" -gt 0 ]] && printf '%s' "$((CGROUP_MEMORY_AVAILABLE_BYTES / 1048576))" || printf unlimited)"
+  printf 'memory_reserve_mib\t%s\n' "$RESERVE_MIB"
+  printf 'memory_mib_per_job\t%s\n' "$EFFECTIVE_MEMORY_MIB_PER_JOB"
+  printf 'memory_jobs\t%s\n' "$MEMORY_JOBS"
+  printf 'profile_max_jobs\t%s\n' \
+    "$([[ "$EFFECTIVE_PROFILE_MAX_JOBS" -gt 0 ]] && printf '%s' "$EFFECTIVE_PROFILE_MAX_JOBS" || printf unlimited)"
+  printf 'operator_max_jobs\t%s\n' \
+    "$([[ "$MAX_JOBS" -gt 0 ]] && printf '%s' "$MAX_JOBS" || printf none)"
+  printf 'jobs\t%s\n' "$JOBS"
+else
+  printf '%s\n' "$JOBS"
+fi

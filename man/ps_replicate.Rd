@@ -24,6 +24,9 @@ Should not be given if \code{affixes} is provided.}
 \item{affixes}{(\code{character})\cr
 A \code{character} vector indicating the prefixes / postfixes to use for each repetition of \code{set}.
 Per default, these are prefixes; if \code{postfix} is \code{TRUE}, these values are postfixed instead.
+Each affix becomes part of every parameter ID it creates: a prefix must
+itself match the ID grammar \verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$}, a postfix
+only has to use ASCII letters, digits, \code{.}, and \verb{_}.
 If this is given, \code{times} is inferred from \code{length(affixes)} and should not be given separately.
 If \code{times} is given, this defaults to \code{"repX"}, with \code{X} counting up from 1.}
 
@@ -39,7 +42,8 @@ Whether to add a tag of the form \code{"param_<id>"} to each parameter in the re
 }
 \description{
 Repeat a \code{\link{ParamSet}} a given number of times and thus create a larger \code{\link{ParamSet}}.
-By default, the resulting parameters are prefixed with the string \verb{"repX.", where }X\verb{counts up from 1. It is also possible to tag parameters by their original name and by their prefix, making grouped retrieval e.g. using}$get_values()` easier.
+By default, the resulting parameters are prefixed with the string \code{"repX."}, where \code{X} counts up from 1.
+It is also possible to tag parameters by their original name and by their prefix, making grouped retrieval e.g. using \verb{$get_values()} easier.
 }
 \examples{
 pset = ps(

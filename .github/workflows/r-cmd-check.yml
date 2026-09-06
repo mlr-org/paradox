@@ -11,25 +11,37 @@ on:
 
 name: r-cmd-check
 
+permissions: read-all
+
 jobs:
   r-cmd-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}
+    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}${{ matrix.config.no_tests && ' – noTests' || '' }}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
 
     strategy:
       fail-fast: false
       matrix:
         config:
-          - {os: ubuntu-latest,   r: 'devel'}
-          - {os: ubuntu-latest,   r: 'release'}
-          - {os: ubuntu-latest,   r: 'release', depends_only: true}
+          # macos-15 is a standard GitHub-hosted Apple silicon (ARM64) runner.
+          - {os: macos-15,        arch: arm64,  r: 'release'}
+          # setup-r installs the Rtools version appropriate for release R.
+          - {os: windows-latest,  arch: x86_64, r: 'release'}
+          - {os: ubuntu-latest,   arch: x86_64, r: 'devel'}
+          - {os: ubuntu-latest,   arch: x86_64, r: 'release'}
+          - {os: ubuntu-latest,   arch: x86_64, r: 'release', depends_only: true}
+          # Keep one older hosted-toolchain source check in addition to current
+          # R. The authenticated repository-local gate, not this convenience
+          # row, proves the declared R 3.6 minimum with exact R 3.6.3 execution
+          # and compilation against pinned R 3.6.0 headers.
+          - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true, no_tests: true}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -40,7 +52,479 @@ jobs:
           extra-packages: any::rcmdcheck
           needs: check
 
-      - uses: r-lib/actions/check-r-package@v2
+      - name: Verify runner and R architecture
+        shell: Rscript {0}
         env:
-          _R_CHECK_DEPENDS_ONLY_: ${{ matrix.config.depends_only && 'TRUE' || '' }}
+          EXPECTED_ARCH: ${{ matrix.config.arch }}
+          RUNNER_ARCHITECTURE: ${{ runner.arch }}
+        run: |
+          expected <- Sys.getenv("EXPECTED_ARCH")
+          runner <- tolower(Sys.getenv("RUNNER_ARCHITECTURE"))
+          r_arch <- tolower(R.version$arch)
+          cat("GitHub runner:", runner, "\nR platform:", R.version$platform, "\n")
+
+          expected_runner <- c(arm64 = "arm64", x86_64 = "x64")[[expected]]
+          expected_r <- c(arm64 = "^(aarch64|arm64)$", x86_64 = "^(x86_64|x64)$")[[expected]]
+          stopifnot(
+            identical(runner, expected_runner),
+            grepl(expected_r, r_arch)
+          )
+
+      - name: Verify native source compilation
+        shell: Rscript {0}
+        run: |
+          lib <- tempfile("paradox-native-ci-")
+          dir.create(lib)
+          install.packages(
+            pkgs = ".",
+            lib = lib,
+            repos = NULL,
+            type = "source",
+            INSTALL_opts = c("--preclean", "--clean")
+          )
+
+          loadNamespace("paradox", lib.loc = lib)
+          dll <- getLoadedDLLs()[["paradox"]]
+          stopifnot(
+            !is.null(dll),
+            file.exists(dll[["path"]]),
+            length(getDLLRegisteredRoutines(dll)[[".Call"]]) > 0L
+          )
+
+      # Run rcmdcheck directly and reject its child status explicitly: its
+      # normal policy accepts one nonzero status class when it cannot parse a
+      # formal check finding. The independent log-completion assertion below
+      # also rejects incomplete output and future wrapper-policy regressions.
+      - name: Run R CMD check
+        shell: Rscript {0}
+        env:
+          # An empty value becomes NA in R 4.6 and crashes R CMD check when it
+          # evaluates R_cdo_tests. Always provide a legal logical spelling.
+          _R_CHECK_DEPENDS_ONLY_: ${{ matrix.config.depends_only && 'TRUE' || 'FALSE' }}
           NOT_CRAN: ${{ matrix.config.depends_only && 'FALSE' || 'TRUE' }}
+          PARADOX_CHECK_NO_TESTS: ${{ matrix.config.no_tests && 'TRUE' || 'FALSE' }}
+        run: |
+          options(crayon.enabled = TRUE)
+          if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") {
+            Sys.setenv("_R_CHECK_FORCE_SUGGESTS_" = "false")
+          }
+          if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") {
+            Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
+          }
+          args = c("--no-manual", "--as-cran")
+          if (identical(Sys.getenv("PARADOX_CHECK_NO_TESTS"), "TRUE")) {
+            args = c(args, "--no-tests")
+          }
+          result = rcmdcheck::rcmdcheck(
+            args = args,
+            build_args = "--no-manual",
+            error_on = "warning",
+            check_dir = "check"
+          )
+          if (!identical(result$status, 0L)) {
+            stop("rcmdcheck returned nonzero status: ", result$status)
+          }
+
+      # This independent top-level step catches a truncated check even if a
+      # future runner or wrapper again loses the process exit status.
+      - name: Verify R CMD check completion
+        if: always()
+        shell: Rscript {0}
+        run: |
+          path = file.path("check", "paradox.Rcheck", "00check.log")
+          logs = Sys.glob(file.path("check", "*.Rcheck", "00check.log"))
+          if (!identical(logs, path) || !file.exists(path)) {
+            stop("R CMD check did not create exactly one expected log: ", path)
+          }
+          lines = readLines(path, warn = FALSE)
+          status = grep("^Status:", lines, value = TRUE)
+          nonempty = lines[nzchar(trimws(lines))]
+          if (any(grepl("Execution halted", lines, fixed = TRUE)) ||
+              !identical(status, "Status: OK") ||
+              !identical(tail(nonempty, 1L), "Status: OK")) {
+            cat(lines, sep = "\n")
+            stop("R CMD check did not finish cleanly with one final `Status: OK`")
+          }
+
+  r36-windows:
+    name: windows-latest / x86_64 (R 3.6.3 / Rtools35)
+    runs-on: windows-latest
+    timeout-minutes: 75
+
+    env:
+      R_KEEP_PKG_SOURCE: yes
+      PARADOX_R36_WORK: C:\p36
+      PARADOX_R36_EVIDENCE: C:\p36-evidence
+      PARADOX_R36_ISOLATION: C:\p36-isolation
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
+        with:
+          r-version: '3.6.3'
+          rtools-version: '35'
+          use-public-rspm: false
+
+      - name: Verify exact R 3.6 Windows toolchain
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          . "$env:GITHUB_WORKSPACE\scripts\environment\enter-hosted-r36-windows.ps1" `
+            -IsolationRoot "$env:PARADOX_R36_ISOLATION" `
+            -WorkRoot "$env:PARADOX_R36_WORK" `
+            -Phase toolchain `
+            -Initialize
+          # R 3.6's top-level Windows launchers rebuild a cmd.exe command and
+          # cannot faithfully relay general native arguments. Select the exact
+          # installed x86-64 executables directly in every old-Windows phase.
+          $rBin = "C:\R\bin\x64"
+          $rExe = Join-Path $rBin "R.exe"
+          $rScriptExe = Join-Path $rBin "Rscript.exe"
+          $rtools = "C:\Rtools"
+          $gcc = Join-Path $rtools "mingw_64\bin\gcc.exe"
+          $gxx = Join-Path $rtools "mingw_64\bin\g++.exe"
+          $objdump = Join-Path $rtools "mingw_64\bin\objdump.exe"
+          $make = Join-Path $rtools "bin\make.exe"
+          if (-not (Test-Path -LiteralPath $rExe -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $rScriptExe -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $gcc -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $gxx -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $objdump -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $make -PathType Leaf)) {
+            throw "setup-r did not install the exact R 3.6/Rtools35 x86-64 toolchain"
+          }
+          $expectedToolHashes = @(
+            [pscustomobject]@{
+              Path = $gcc
+              SHA256 = "2d415b0fd5eacb43268e2ddf080b50f706d9fa2465b1e32d04f54ce936fac3da"
+            },
+            [pscustomobject]@{
+              Path = $gxx
+              SHA256 = "0d3d581bca702c777fc045a2fe69696e5979d86e819efe2350e2ac43f33f2b7f"
+            },
+            [pscustomobject]@{
+              Path = $objdump
+              SHA256 = "cbf5f996ef759be73502387c9d1296176f8bb7b6320b63cfb61371f7a98e7b59"
+            },
+            [pscustomobject]@{
+              Path = $make
+              SHA256 = "ce462e4ca812718a077ae4b67ebec0bd2df0e7a3bc1e31897e40895023e13c72"
+            }
+          )
+          foreach ($tool in $expectedToolHashes) {
+            $observedHash = (
+              Get-FileHash -LiteralPath $tool.Path -Algorithm SHA256
+            ).Hash.ToLowerInvariant()
+            if ($observedHash -cne $tool.SHA256) {
+              throw "installed Rtools35 executable differs from official bytes: $($tool.Path)"
+            }
+          }
+          $env:PATH = (
+            "$rBin;$rtools\bin;$rtools\mingw_64\bin;" + $env:PATH
+          )
+          @(
+            $rBin,
+            "$rtools\bin",
+            "$rtools\mingw_64\bin"
+          ) | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+          $rArchitectureScript = Join-Path `
+            $env:TEMP `
+            "verify-r36-architecture.R"
+          if (Test-Path -LiteralPath $rArchitectureScript) {
+            throw "R architecture probe path is not fresh"
+          }
+          $rArchitectureCode = @(
+            'stopifnot(',
+            '  identical(as.character(getRversion()), "3.6.3"),',
+            '  identical(.Platform$OS.type, "windows"),',
+            '  grepl("^(x86_64|x64)$", tolower(R.version$arch))',
+            ')',
+            'cat(R.version$version.string, "\n", R.version$platform, "\n")'
+          )
+          $utf8NoBom = New-Object Text.UTF8Encoding($false)
+          [IO.File]::WriteAllLines(
+            $rArchitectureScript,
+            $rArchitectureCode,
+            $utf8NoBom
+          )
+          try {
+            & $rScriptExe --vanilla $rArchitectureScript
+            $rArchitectureStatus = $LASTEXITCODE
+          } finally {
+            Remove-Item -LiteralPath $rArchitectureScript -Force
+          }
+          if ($rArchitectureStatus -ne 0 -or
+              (Test-Path -LiteralPath $rArchitectureScript)) {
+            throw "exact R 3.6.3 architecture verification failed"
+          }
+
+          $gccVersion = & $gcc --version
+          $gccFirstLine = $gccVersion | Select-Object -First 1
+          if ($LASTEXITCODE -ne 0 -or
+              $gccFirstLine -cne (
+                "gcc.exe (x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3"
+              )) {
+            throw "Rtools35 GCC is absent or is not exact GCC 4.9.3"
+          }
+          $gxxVersion = & $gxx --version
+          $gxxFirstLine = $gxxVersion | Select-Object -First 1
+          if ($LASTEXITCODE -ne 0 -or
+              $gxxFirstLine -cne (
+                "g++.exe (x86_64-posix-seh, Built by MinGW-W64 project) 4.9.3"
+              )) {
+            throw "Rtools35 G++ is absent or is not exact G++ 4.9.3"
+          }
+          $makeVersion = & $make --version
+          if ($LASTEXITCODE -ne 0 -or
+              -not ($makeVersion -match "^GNU Make")) {
+            throw "Rtools35 make is absent or unusable"
+          }
+          function Assert-RConfiguredToolPath {
+            param(
+              [Parameter(Mandatory = $true)]
+              [string]$Observed,
+              [Parameter(Mandatory = $true)]
+              [string]$ExpectedExecutable,
+              [Parameter(Mandatory = $true)]
+              [string]$Label
+            )
+            if ($Observed -match "\s") {
+              throw "$Label contains unexpected flags or whitespace"
+            }
+            $expectedPath = Join-Path `
+              ([IO.Path]::GetDirectoryName($ExpectedExecutable)) `
+              ([IO.Path]::GetFileNameWithoutExtension($ExpectedExecutable))
+            $observedPath = [IO.Path]::GetFullPath(
+              $Observed.Replace("/", "\")
+            )
+            if (-not [String]::Equals(
+                $observedPath,
+                [IO.Path]::GetFullPath($expectedPath),
+                [StringComparison]::OrdinalIgnoreCase
+            )) {
+              throw "$Label does not select the exact Rtools35 executable"
+            }
+          }
+          $rConfiguredCc = (& $rExe CMD config CC | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "R CMD config CC failed"
+          }
+          Assert-RConfiguredToolPath $rConfiguredCc $gcc "R CMD config CC"
+          $rConfiguredCxx = (& $rExe CMD config CXX | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "R CMD config CXX failed"
+          }
+          $rConfiguredCxxTokens = @($rConfiguredCxx -split "\s+")
+          if ($rConfiguredCxxTokens.Count -ne 2 -or
+              $rConfiguredCxxTokens[1] -cne "-std=gnu++11") {
+            throw "R CMD config CXX does not contain one exact GNU++11 flag"
+          }
+          Assert-RConfiguredToolPath `
+            $rConfiguredCxxTokens[0] `
+            $gxx `
+            "R CMD config CXX"
+          $rConfiguredCxx11 = (& $rExe CMD config CXX11 | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) {
+            throw "R CMD config CXX11 failed"
+          }
+          Assert-RConfiguredToolPath $rConfiguredCxx11 $gxx "R CMD config CXX11"
+          $rConfiguredCxx11Std = (
+            & $rExe CMD config CXX11STD | Out-String
+          ).Trim()
+          if ($LASTEXITCODE -ne 0 -or
+              $rConfiguredCxx11Std -cne "-std=gnu++11") {
+            throw "R CMD config CXX11STD is not exact GNU++11"
+          }
+          $gccFirstLine
+          $gxxFirstLine
+          "R CMD config CC: $rConfiguredCc"
+          "R CMD config CXX: $rConfiguredCxx"
+          "R CMD config CXX11: $rConfiguredCxx11"
+          "R CMD config CXX11STD: $rConfiguredCxx11Std"
+          $makeVersion | Select-Object -First 1
+
+      - name: Install exact R 3.6 source closure
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          . "$env:GITHUB_WORKSPACE\scripts\environment\enter-hosted-r36-windows.ps1" `
+            -IsolationRoot "$env:PARADOX_R36_ISOLATION" `
+            -WorkRoot "$env:PARADOX_R36_WORK" `
+            -Phase closure
+          $rBin = "C:\R\bin\x64"
+          $rExe = Join-Path $rBin "R.exe"
+          $rScriptExe = Join-Path $rBin "Rscript.exe"
+          if (-not (Test-Path -LiteralPath $rExe -PathType Leaf) -or
+              -not (Test-Path -LiteralPath $rScriptExe -PathType Leaf)) {
+            throw "closure phase lacks exact R 3.6 x86-64 executables"
+          }
+          $env:PATH = (
+            "$rBin;C:\Rtools\bin;C:\Rtools\mingw_64\bin;" + $env:PATH
+          )
+          & "$env:GITHUB_WORKSPACE\scripts\environment\install-hosted-r36-windows.ps1" `
+            -RepositoryRoot "$env:GITHUB_WORKSPACE" `
+            -WorkRoot "$env:PARADOX_R36_WORK" `
+            -EvidenceRoot "$env:PARADOX_R36_EVIDENCE" `
+            -RExe $rExe `
+            -RScriptExe $rScriptExe
+
+      - name: Build, smoke, and check on R 3.6 Windows
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          . "$env:GITHUB_WORKSPACE\scripts\environment\enter-hosted-r36-windows.ps1" `
+            -IsolationRoot "$env:PARADOX_R36_ISOLATION" `
+            -WorkRoot "$env:PARADOX_R36_WORK" `
+            -Phase candidate
+          $env:PATH = (
+            "C:\R\bin\x64;C:\Rtools\bin;C:\Rtools\mingw_64\bin;" +
+              $env:PATH
+          )
+          $rScriptExe = "C:\R\bin\x64\Rscript.exe"
+          if (-not (Test-Path -LiteralPath $rScriptExe -PathType Leaf)) {
+            throw "candidate phase lacks exact R 3.6 x86-64 Rscript"
+          }
+          & $rScriptExe --vanilla `
+            "$env:GITHUB_WORKSPACE\scripts\environment\run-hosted-r36-windows.R" `
+            "$env:GITHUB_WORKSPACE" `
+            "$env:PARADOX_R36_WORK" `
+            "$env:PARADOX_R36_EVIDENCE"
+          if ($LASTEXITCODE -ne 0) {
+            throw "exact R 3.6.3/Rtools35 source validation failed"
+          }
+
+      - name: Retain old-Windows provenance
+        if: always()
+        shell: pwsh
+        run: |
+          Set-StrictMode -Version Latest
+          $ErrorActionPreference = "Stop"
+          if (-not (Test-Path -LiteralPath $env:PARADOX_R36_EVIDENCE)) {
+            $null = New-Item `
+              -ItemType Directory `
+              -Path $env:PARADOX_R36_EVIDENCE
+          }
+          $isolationEvidence = Join-Path `
+            $env:PARADOX_R36_EVIDENCE `
+            "environment-isolation"
+          if (Test-Path -LiteralPath $isolationEvidence) {
+            throw "old-Windows isolation evidence destination is not fresh"
+          }
+          $null = New-Item -ItemType Directory -Path $isolationEvidence
+          $receiptRoot = Join-Path $env:PARADOX_R36_ISOLATION "receipts"
+          $expectedReceipts = @(
+            "toolchain.tsv",
+            "closure.tsv",
+            "candidate.tsv"
+          )
+          $observedReceipts = @(
+            Get-ChildItem `
+              -LiteralPath $receiptRoot `
+              -File `
+              -Filter "*.tsv" |
+                Select-Object -ExpandProperty Name |
+                Sort-Object
+          )
+          $expectedReceiptOrder = @($expectedReceipts | Sort-Object)
+          if (($observedReceipts -join "`n") -cne
+              ($expectedReceiptOrder -join "`n")) {
+            throw "old-Windows isolation receipts are incomplete or unexpected"
+          }
+          foreach ($receipt in $expectedReceipts) {
+            Copy-Item `
+              -LiteralPath (Join-Path $receiptRoot $receipt) `
+              -Destination (Join-Path $isolationEvidence $receipt)
+          }
+          $directory = Join-Path $env:PARADOX_R36_EVIDENCE "ci-evidence"
+          $null = New-Item -ItemType Directory -Path $directory -Force
+          $checkedOut = (& git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or
+              $checkedOut -notmatch "^[0-9a-f]{40}$") {
+            throw "could not retain the exact checked-out commit"
+          }
+          $rScriptExe = "C:\R\bin\x64\Rscript.exe"
+          if (-not (Test-Path -LiteralPath $rScriptExe -PathType Leaf)) {
+            throw "provenance phase lacks exact R 3.6 x86-64 Rscript"
+          }
+          $rPlatformScript = Join-Path `
+            $env:RUNNER_TEMP `
+            "retain-r36-platform.R"
+          if (Test-Path -LiteralPath $rPlatformScript) {
+            throw "R platform probe path is not fresh"
+          }
+          $encoding = New-Object Text.UTF8Encoding($false)
+          [IO.File]::WriteAllText(
+            $rPlatformScript,
+            'cat(R.version$platform)',
+            $encoding
+          )
+          try {
+            $rPlatformOutput = @(
+              & $rScriptExe --vanilla $rPlatformScript
+            )
+            $rPlatformStatus = $LASTEXITCODE
+          } finally {
+            Remove-Item -LiteralPath $rPlatformScript -Force
+          }
+          $rPlatform = ($rPlatformOutput -join "`n").Trim()
+          if ($rPlatformStatus -ne 0 -or
+              (Test-Path -LiteralPath $rPlatformScript) -or
+              -not $rPlatform) {
+            throw "could not retain the exact R platform"
+          }
+          $lines = @(
+            "workflow_sha=$env:GITHUB_SHA",
+            "workflow_ref=$env:GITHUB_REF",
+            "checked_out_sha=$checkedOut",
+            "runner_os=$env:RUNNER_OS",
+            "runner_arch=$env:RUNNER_ARCH",
+            "r_platform=$rPlatform"
+          )
+          [IO.File]::WriteAllLines(
+            (Join-Path $directory "provenance.txt"),
+            $lines,
+            $encoding
+          )
+
+      - name: Upload old-Windows evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: paradox-2.0.0-portability-windows-r3.6.3-x86_64
+          path: C:\p36-evidence
+          if-no-files-found: error
+          retention-days: 14
+
+  portability-complete:
+    name: Verify required check jobs
+    if: ${{ always() }}
+    needs:
+      - r-cmd-check
+      - r36-windows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify required job conclusions
+        shell: bash
+        env:
+          R_CMD_CHECK_RESULT: ${{ needs.r-cmd-check.result }}
+          R36_WINDOWS_RESULT: ${{ needs.r36-windows.result }}
+        run: |
+          set -euo pipefail
+          readonly matrix_result="$R_CMD_CHECK_RESULT"
+          readonly old_windows_result="$R36_WINDOWS_RESULT"
+          if [[ "$matrix_result" != success ]]; then
+            printf 'required r-cmd-check matrix result: %s\n' \
+              "$matrix_result" >&2
+            exit 1
+          fi
+          if [[ "$old_windows_result" != success ]]; then
+            printf 'required R 3.6 Windows result: %s\n' \
+              "$old_windows_result" >&2
+            exit 1
+          fi

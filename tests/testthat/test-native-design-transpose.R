@@ -1,0 +1,191 @@
+test_that("native Design transpose is authoritative for ordinary columns", {
+  native = get("C_design_transpose", envir = asNamespace("paradox"))
+  opaque = new.env(parent = emptyenv())
+  data = list(
+    logical = c(TRUE, NA),
+    integer = c(1L, NA_integer_),
+    double = c(1, NaN),
+    complex = c(1 + 2i, NA_complex_),
+    character = c("x", NA_character_),
+    raw = as.raw(c(1, 2)),
+    factor = factor(c("a", NA), levels = c("a", "b")),
+    utility = list(opaque, NULL)
+  )
+
+  unfiltered = .Call(native, data, FALSE)
+  expect_identical(names(unfiltered[[1L]]), names(data))
+  expect_identical(unfiltered[[1L]]$factor, factor("a", levels = c("a", "b")))
+  expect_identical(unfiltered[[1L]]$utility, opaque)
+  expect_identical(unfiltered[[2L]]$utility, NULL)
+
+  filtered = .Call(native, data, TRUE)
+  expect_named(filtered[[1L]], names(data))
+  expect_named(filtered[[2L]], c("raw", "utility"))
+  expect_identical(filtered[[2L]]$utility, NULL)
+})
+
+test_that("native transpose materializes compact inputs and owns row shells", {
+  native = get("C_design_transpose", envir = asNamespace("paradox"))
+  source_names = c("x", "y")
+  data = setNames(list(1:3, c("a", "b", "c")), source_names)
+  result = .Call(native, data, FALSE)
+
+  expect_identical(result, list(
+    list(x = 1L, y = "a"),
+    list(x = 2L, y = "b"),
+    list(x = 3L, y = "c")
+  ))
+  names(result[[1L]])[[1L]] = "changed"
+  result[[1L]]$y = "changed"
+  expect_identical(names(data), source_names)
+  expect_identical(names(result[[2L]]), source_names)
+  expect_identical(data$y, c("a", "b", "c"))
+})
+
+test_that("native transpose owns flat Design metadata for every scalar", {
+  native = get("C_design_transpose", envir = asNamespace("paradox"))
+  factor_column = factor(c("a", "b"), levels = c("a", "b"))
+  elapsed = structure(c(1, 2), class = "difftime", units = "secs")
+  result = .Call(
+    native,
+    list(factor = factor_column, elapsed = elapsed),
+    FALSE
+  )
+
+  expect_identical(result[[1L]]$factor, factor("a", levels = c("a", "b")))
+  expect_identical(result[[2L]]$factor, factor("b", levels = c("a", "b")))
+  expect_identical(
+    attr(result[[1L]]$elapsed, "units", exact = TRUE),
+    "secs"
+  )
+  expect_false(identical(
+    data.table::address(levels(result[[1L]]$factor)),
+    data.table::address(levels(result[[2L]]$factor))
+  ))
+  expect_false(identical(
+    data.table::address(attr(result[[1L]]$elapsed, "units", exact = TRUE)),
+    data.table::address(attr(result[[2L]]$elapsed, "units", exact = TRUE))
+  ))
+  data.table::setattr(levels(result[[1L]]$factor), "marker", TRUE)
+  data.table::setattr(
+    attr(result[[1L]]$elapsed, "units", exact = TRUE),
+    "marker",
+    TRUE
+  )
+  expect_null(attr(levels(result[[2L]]$factor), "marker", exact = TRUE))
+  expect_null(attr(
+    attr(result[[2L]]$elapsed, "units", exact = TRUE),
+    "marker",
+    exact = TRUE
+  ))
+})
+
+test_that("native transpose rejects recursive Design attribute metadata", {
+  native = get("C_design_transpose", envir = asNamespace("paradox"))
+  attach_metadata = function(column, metadata) {
+    pointer = .Call(
+      get("C_test_gc_attribute_mutator", envir = asNamespace("paradox")),
+      attr(column, "levels", exact = TRUE),
+      "metadata",
+      metadata
+    )
+    rm(pointer)
+    for (attempt in seq_len(3L)) {
+      invisible(gc(full = TRUE))
+    }
+    stopifnot(identical(
+      data.table::address(attr(
+        attr(column, "levels", exact = TRUE),
+        "metadata",
+        exact = TRUE
+      )),
+      data.table::address(metadata)
+    ))
+    invisible(column)
+  }
+  exercise = function(metadata) {
+    column = factor(c("a", "b"), levels = c("a", "b"))
+    attach_metadata(column, metadata)
+    .Call(native, list(value = column), FALSE)
+  }
+  exercise_cycle = function() {
+    metadata = list(NULL)
+    column = factor(c("a", "b"), levels = c("a", "b"))
+    # Install the acyclic carrier first. R 3.6's public attribute setter tries
+    # to duplicate an already-cyclic value and overflows its C stack before
+    # the package can inspect it.
+    attach_metadata(column, metadata)
+    pointer = .Call(
+      get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+      metadata,
+      0L,
+      metadata
+    )
+    rm(pointer)
+    for (attempt in seq_len(3L)) {
+      invisible(gc(full = TRUE))
+    }
+    stopifnot(identical(
+      data.table::address(metadata[[1L]]),
+      data.table::address(metadata)
+    ))
+    .Call(native, list(value = column), FALSE)
+  }
+
+  deep = TRUE
+  for (depth in seq_len(100L)) {
+    deep = list(deep)
+  }
+  expect_error(
+    exercise(deep),
+    "ordinary structural attributes"
+  )
+  expect_error(
+    exercise_cycle(),
+    "ordinary structural attributes"
+  )
+})
+
+test_that("native transpose rejects malformed state without a sentinel", {
+  native = get("C_design_transpose", envir = asNamespace("paradox"))
+  expect_error(.Call(native, 1:2, FALSE), "list-like")
+  expect_error(.Call(native, unname(list(1:2)), FALSE), "list-like")
+  expect_error(.Call(native, setNames(list(1:2), ""), FALSE), "name")
+  expect_error(.Call(native, list(x = 1:2, y = 1L), FALSE), "length")
+  expect_error(.Call(native, list(x = 1L), NA), "filter_na")
+  expect_error(.Call(native, list(x = 1L), logical()), "filter_na")
+  expect_error(
+    .Call(native, list(x = matrix(1:4, 2L)), FALSE),
+    "structural attributes"
+  )
+  overlong = 1:2
+  attributes(overlong) = stats::setNames(
+    as.list(seq_len(6L)),
+    sprintf("unsupported_%02d", seq_len(6L))
+  )
+  expect_error(
+    .Call(native, list(x = overlong), FALSE),
+    "structural attributes"
+  )
+})
+
+test_that("Design observes its then-current public data exactly once", {
+  parameter_set = ps(x = p_dbl(), y = p_uty())
+  design = Design$new(
+    parameter_set,
+    data.table(x = c(1, NA_real_), y = list("a", NULL)),
+    remove_dupl = FALSE
+  )
+  design$data$x[[1L]] = 2
+  expect_identical(
+    design$transpose(filter_na = TRUE, trafo = FALSE),
+    list(list(x = 2, y = "a"), list(y = NULL))
+  )
+})
+
+test_that("Design transpose has no dormant R semantic engine", {
+  namespace = asNamespace("paradox")
+  expect_false(exists("transpose", namespace, inherits = FALSE))
+  expect_false(exists("col_to_nl", namespace, inherits = FALSE))
+  expect_false(exists("rbindlist_proto", namespace, inherits = FALSE))
+})

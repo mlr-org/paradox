@@ -1,0 +1,1845 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
+MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
+MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+PREFIX_HANDOFF="$ROOT/scripts/environment/runtime-matrix-prefix-handoff"
+TRUSTED_INPUT_RELATIVE=scripts/environment/runtime-matrix-trusted-inputs
+MANAGED_PATH_HELPER="$ROOT/scripts/environment/runtime-matrix-managed-path"
+DECLARED_CHECK_LOG_VERIFIER="$ROOT/scripts/environment/verify-r36-declared-check-log"
+RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/verify-runtime-matrix-evidence --run-id ID
+
+Verify the completion seals and complete retained artifact trees for a local
+registered runtime-matrix run.
+USAGE
+}
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+run_id=
+while (($#)); do
+  case "$1" in
+    --run-id)
+      (($# >= 2)) || fail "--run-id requires a value"
+      run_id=$2
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown evidence-verifier argument: $1" ;;
+  esac
+done
+[[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
+  fail "Run ID has an unsafe or empty shape"
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" &&
+  "$(command -v git)" == "$LOCAL_GIT" ]] ||
+  fail "activate the exact repository-local toolchain first: . scripts/activate"
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" && -x "$PREFIX_HANDOFF" &&
+  -x "$DECLARED_CHECK_LOG_VERIFIER" && -x "$RESOURCE_JOBS" ]] ||
+  fail "runtime registry or receipt verifier is absent"
+"$REGISTRY" validate >/dev/null
+run_root="$ROOT/.local/checks/$run_id/runtime-matrix"
+[[ -x "$MANAGED_PATH_HELPER" && -f "$MANAGED_PATH_HELPER" &&
+  ! -L "$MANAGED_PATH_HELPER" ]] ||
+  fail "Managed-path verifier is absent or symbolic"
+"$MANAGED_PATH_HELPER" "$ROOT" "$run_root" existing
+
+verify_seal() {
+  local metadata=$1
+  for file in run.tsv completion.inputs.tsv completion.seal; do
+    [[ -f "$metadata/$file" && ! -L "$metadata/$file" ]] ||
+      fail "Runtime evidence metadata is absent or symbolic: $metadata/$file"
+  done
+  [[ $(awk -F '\t' '$1 == "status" {print $2}' "$metadata/run.tsv") == passed ]] ||
+    fail "Runtime evidence status is not passed: $metadata/run.tsv"
+  (
+    cd "$metadata"
+    sha256sum -c completion.inputs.tsv >/dev/null
+    expected="$(sha256sum completion.inputs.tsv | cut -d ' ' -f 1)  completion.inputs.tsv"
+    [[ $(wc -l < completion.seal) -eq 1 && "$(<completion.seal)" == "$expected" ]]
+  ) || fail "Runtime evidence completion seal is stale: $metadata"
+}
+
+metadata_value() {
+  local metadata=$1 key=$2
+  awk -F '\t' -v key="$key" '$1 == key {print $2}' "$metadata/run.tsv"
+}
+
+verify_mbo_config_evidence() {
+  local top_metadata=$1 source=$2
+  local bundle="$run_root/inputs/mbo-config-fixtures"
+  local provenance="$bundle/provenance.tsv"
+  local manifest="$top_metadata/mbo-config-fixtures.manifest.tsv"
+  local mixed="$bundle/common/mixed_search_space.rds"
+  local numeric="$bundle/common/numeric_search_space.rds"
+  for path in "$provenance" "$manifest" "$mixed" "$numeric"; do
+    [[ -f "$path" && ! -L "$path" ]] ||
+      fail "Retained mbo_config fixture evidence is absent or symbolic: $path"
+  done
+  [[ -d "$bundle" && ! -L "$bundle" ]] ||
+    fail "Retained mbo_config fixture bundle is absent or symbolic"
+  "$PREFIX_RECEIPT" verify "$bundle" "$manifest" >/dev/null ||
+    fail "Retained mbo_config fixture bundle differs from its complete receipt"
+  "$MBO_CONFIG_FIXTURE_HELPER" verify "$source" "$MBO_CONFIG_CHECKOUT" \
+    "$bundle" >/dev/null ||
+    fail "Retained mbo_config fixtures fail reviewed Git-object authentication"
+  provenance_value() {
+    awk -F '\t' -v key="$1" '$1 == key {print $2}' "$provenance"
+  }
+  [[ $(metadata_value "$top_metadata" mbo_config_commit) == \
+      "$(provenance_value commit)" &&
+    $(metadata_value "$top_metadata" mbo_config_tree) == \
+      "$(provenance_value tree)" &&
+    $(metadata_value "$top_metadata" mbo_config_provenance_sha256) == \
+      "$(sha256sum "$provenance" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" mbo_config_fixture_manifest_sha256) == \
+      "$(sha256sum "$manifest" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" mbo_config_mixed_search_space_sha256) == \
+      "$(sha256sum "$mixed" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" mbo_config_numeric_search_space_sha256) == \
+      "$(sha256sum "$numeric" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained mbo_config fixture digest claims are inconsistent"
+}
+
+log_value() {
+  local log=$1 key=$2
+  awk -F = -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$log"
+}
+
+# Evidence replay must not inherit an unreceipted search executable from the
+# operator's PATH.  Keep the small marker and nm-output readers inside Bash and
+# bound both the record count and bytes observed before accepting a result.
+bounded_regular_text_file() {
+  local file=$1 size
+  [[ -f "$file" && ! -L "$file" ]] || return 1
+  size=$(/usr/bin/stat -c '%s' -- "$file") || return 1
+  [[ "$size" =~ ^[0-9]+$ && "$size" -le 1048576 ]]
+}
+
+text_has_exact_line_once() {
+  local file=$1 expected=$2 line
+  local records=0 bytes=0 matches=0
+  bounded_regular_text_file "$file" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    records=$((records + 1))
+    bytes=$((bytes + ${#line} + 1))
+    ((records <= 4096 && bytes <= 1048576)) || return 1
+    [[ "$line" == "$expected" ]] && matches=$((matches + 1))
+  done < "$file"
+  [[ "$matches" -eq 1 ]]
+}
+
+runtime_symbol_count() {
+  local file=$1 expected=$2 line kind symbol extra
+  local records=0 bytes=0 matches=0
+  bounded_regular_text_file "$file" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    records=$((records + 1))
+    bytes=$((bytes + ${#line} + 1))
+    ((records <= 4096 && bytes <= 1048576)) || return 1
+    kind=
+    symbol=
+    extra=
+    read -r kind symbol extra <<< "$line"
+    [[ "$kind" == U || "$kind" == w ]] || return 1
+    [[ -n "$symbol" && -z "$extra" ]] || return 1
+    [[ "$symbol" == "$expected" ]] && matches=$((matches + 1))
+  done < "$file"
+  ((records > 0)) || return 1
+  printf '%s\n' "$matches"
+}
+
+verify_source_archive() {
+  local artifacts=$1 metadata=$2
+  local source="$artifacts/source"
+  local inputs="$artifacts/inputs"
+  local source_tar="$inputs/source.git.tar"
+  local source_manifest="$inputs/source.manifest.tsv"
+  local git_identity="$inputs/git-identity.tsv"
+  local recorded_commit verify_tmp
+  for file in "$source_tar" "$source_manifest" "$git_identity"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Retained source archive input is absent or symbolic: $file"
+  done
+  [[ -d "$source" && ! -L "$source" ]] ||
+    fail "Retained source tree is absent or symbolic"
+  recorded_commit=$(metadata_value "$metadata" source_commit)
+  [[ "$recorded_commit" =~ ^[0-9a-f]{40}$ ]] ||
+    fail "Retained Git archive commit is malformed"
+  "$GIT_HELPER" verify-archive "$ROOT" "$recorded_commit" \
+    "$source_tar" >/dev/null ||
+    fail "Retained Git archive is not the canonical recorded commit archive"
+  [[ $(metadata_value "$metadata" source_git_tar_sha256) == \
+      "$(sha256sum "$source_tar" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" source_manifest_sha256) == \
+      "$(sha256sum "$source_manifest" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" git_identity_sha256) == \
+      "$(sha256sum "$git_identity" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained source archive identity hashes are inconsistent"
+  "$GIT_HELPER" identity "$ROOT" | cmp -s -- "$git_identity" - ||
+    fail "Retained Git tool identity differs from the active reviewed toolchain"
+  "$PREFIX_RECEIPT" verify "$source" "$source_manifest" >/dev/null ||
+    fail "Retained source differs from its pre-execution receipt"
+  mkdir -p -- "$ROOT/.local/tmp"
+  verify_tmp=$(mktemp -d "$ROOT/.local/tmp/runtime-matrix-source-verify.XXXXXX")
+  if ! /usr/bin/tar -xf "$source_tar" -C "$verify_tmp" ||
+      ! "$PREFIX_RECEIPT" verify "$verify_tmp" "$source_manifest" >/dev/null; then
+    rm -rf -- "$verify_tmp"
+    fail "Retained Git archive differs from the receipted source tree"
+  fi
+  rm -rf -- "$verify_tmp"
+}
+
+verify_recorded_digests() {
+  local version=$1 artifacts=$2 metadata=$3
+  local inputs="$artifacts/inputs"
+  local archive
+  local -a archives
+  mapfile -t archives < <(find "$artifacts/build" -maxdepth 1 -type f \
+    -name 'paradox_*.tar.gz' -print)
+  [[ ${#archives[@]} -eq 1 ]] || fail "Retained build has no unique package archive"
+  archive=${archives[0]}
+  local runtime_lock_relative dependency_lock_relative dependency_mode
+  runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+  dependency_lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+  dependency_mode=$("$REGISTRY" field "$version" dependency_mode)
+  [[ $(metadata_value "$metadata" lock_sha256) == \
+      "$(sha256sum "$inputs/$runtime_lock_relative" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" bootstrap_receipt_sha256) == \
+      "$(sha256sum "$inputs/bootstrap-receipt/receipt.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" archive_sha256) == \
+      "$(sha256sum "$archive" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" candidate_dso_sha256) == \
+      "$(sha256sum "$artifacts/library/paradox/libs/paradox.so" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" artifacts_manifest_sha256) == \
+      "$(sha256sum "$metadata/artifacts.manifest.tsv" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained stage digest claims are inconsistent"
+  "$PREFIX_HANDOFF" "$version" "$inputs/bootstrap-receipt" >/dev/null ||
+    fail "Retained staged prefix receipt failed authenticated replay"
+  if [[ "$dependency_mode" == source-library ]]; then
+    [[ -d "$inputs/dependency-library-receipt" &&
+      ! -L "$inputs/dependency-library-receipt" &&
+      $(metadata_value "$metadata" dependency_lock_sha256) == \
+        "$(sha256sum "$inputs/$dependency_lock_relative" | cut -d ' ' -f 1)" &&
+      $(metadata_value "$metadata" dependency_library_receipt_sha256) == \
+        "$(sha256sum "$inputs/dependency-library-receipt/receipt.tsv" | cut -d ' ' -f 1)" ]] ||
+      fail "Retained dependency-library digest claims are inconsistent"
+    dependency_library=$("$LIBRARY_MANAGER" \
+      --runtime "$version" --verify --print-path)
+    dependency_key=${dependency_library%/library}
+    dependency_key=${dependency_key##*/}
+    live_receipt="$ROOT/.local/runtime-matrix/dependency-receipts/R-$version/$dependency_key"
+    diff -ru -- "$inputs/dependency-library-receipt" "$live_receipt" >/dev/null ||
+      fail "Retained dependency-library receipt differs from the live sealed input"
+  else
+    [[ $(metadata_value "$metadata" dependency_lock_sha256) == - &&
+      $(metadata_value "$metadata" dependency_library_receipt_sha256) == - ]] ||
+      fail "Runtime without a source library claims dependency-library inputs"
+  fi
+  local overlay_archive="$inputs/data.table_1.18.4.tar.gz"
+  local overlay_install_log="$artifacts/logs/data.table-install.log"
+  local overlay_version_log="$artifacts/logs/data.table-version.tsv"
+  if [[ "$dependency_mode" == data-table-overlay ]]; then
+    local overlay_sha=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
+    local overlay_lock_record
+    overlay_lock_record=$(awk -F '\t' '
+      $1 == "data.table" && $2 == "1.18.4" {print $2 "\t" $4}
+    ' "$inputs/environment/r-packages-linux-64.lock")
+    [[ "$overlay_lock_record" == "1.18.4"$'\t'"$overlay_sha" &&
+      -f "$overlay_archive" && ! -L "$overlay_archive" &&
+      -f "$overlay_install_log" && ! -L "$overlay_install_log" &&
+      -s "$overlay_install_log" &&
+      -f "$overlay_version_log" && ! -L "$overlay_version_log" &&
+      "$(sha256sum "$overlay_archive" | cut -d ' ' -f 1)" == "$overlay_sha" ]] ||
+      fail "Retained data.table overlay archive or install log is inconsistent"
+    printf 'version\tsha256\n1.18.4\t%s\n' "$overlay_sha" |
+      cmp -s -- "$overlay_version_log" - ||
+      fail "Retained data.table overlay version log is inconsistent"
+    [[ $(metadata_value "$metadata" dependency_overlay_archive_sha256) == \
+        "$overlay_sha" &&
+      $(metadata_value "$metadata" dependency_overlay_install_log_sha256) == \
+        "$(sha256sum "$overlay_install_log" | cut -d ' ' -f 1)" &&
+      $(metadata_value "$metadata" dependency_overlay_version_log_sha256) == \
+        "$(sha256sum "$overlay_version_log" | cut -d ' ' -f 1)" ]] ||
+      fail "Retained data.table overlay digest claims are inconsistent"
+  else
+    [[ ! -e "$overlay_archive" && ! -L "$overlay_archive" &&
+      ! -e "$overlay_install_log" && ! -L "$overlay_install_log" &&
+      ! -e "$overlay_version_log" && ! -L "$overlay_version_log" &&
+      $(metadata_value "$metadata" dependency_overlay_archive_sha256) == - &&
+      $(metadata_value "$metadata" dependency_overlay_install_log_sha256) == - &&
+      $(metadata_value "$metadata" dependency_overlay_version_log_sha256) == - ]] ||
+      fail "Runtime without a data.table overlay retained overlay evidence"
+  fi
+}
+
+verify_declared_minimum_check() {
+  local version=$1 artifacts=$2 metadata=$3
+  local check="$artifacts/check"
+  local status="$artifacts/logs/r-cmd-check-status.tsv"
+  local driver="$artifacts/logs/r-cmd-check.log"
+  local check_log="$check/paradox.Rcheck/00check.log"
+  if [[ "$version" != 3.6.3 ]]; then
+    [[ -d "$check" && ! -L "$check" &&
+      -z $(find "$check" -mindepth 1 -print -quit) &&
+      ! -e "$status" && ! -L "$status" &&
+      ! -e "$driver" && ! -L "$driver" &&
+      $(metadata_value "$metadata" declared_minimum_check_status_sha256) == - &&
+      $(metadata_value "$metadata" declared_minimum_check_driver_sha256) == - &&
+      $(metadata_value "$metadata" declared_minimum_check_log_sha256) == - ]] ||
+      fail "A non-minimum runtime claims R CMD check evidence"
+    return
+  fi
+
+  [[ -d "$check/paradox.Rcheck" && ! -L "$check/paradox.Rcheck" &&
+    -f "$status" && ! -L "$status" &&
+    -f "$driver" && ! -L "$driver" &&
+    -f "$check_log" && ! -L "$check_log" ]] ||
+    fail "Declared-minimum R CMD check evidence is absent or symbolic"
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "field\tvalue") exit 1
+      next
+    }
+    NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}
+    END {
+      if (NR != 11 ||
+          !seen["scope"] || !seen["force_suggests"] || !seen["options"] ||
+          !seen["nm_path_scope"] || !seen["nm_command_relative"] ||
+          !seen["exit_status"] || !seen["conclusion"] ||
+          !seen["driver_log_sha256"] || !seen["check_log_relative"] ||
+          !seen["check_log_sha256"]) exit 1
+    }
+  ' "$status" || fail "Declared-minimum R CMD check status is malformed"
+  check_status_value() {
+    awk -F '\t' -v key="$1" '$1 == key {print $2}' "$status"
+  }
+  [[ $(check_status_value scope) == declared-minimum-r-3.6.3 &&
+    $(check_status_value force_suggests) == false &&
+    $(check_status_value options) == \
+      "--no-tests --ignore-vignettes --no-manual" &&
+    $(check_status_value nm_path_scope) == \
+      check-only-target-tool-directory &&
+    $(check_status_value nm_command_relative) == \
+      x86_64-conda-linux-gnu/bin/nm &&
+    $(check_status_value exit_status) == 0 &&
+    $(check_status_value conclusion) == expected-missing-suggests-note &&
+    $(check_status_value check_log_relative) == \
+      check/paradox.Rcheck/00check.log &&
+    $(check_status_value driver_log_sha256) == \
+      "$(sha256sum "$driver" | cut -d ' ' -f 1)" &&
+    $(check_status_value check_log_sha256) == \
+      "$(sha256sum "$check_log" | cut -d ' ' -f 1)" ]] ||
+    fail "Declared-minimum R CMD check status is inconsistent"
+  "$DECLARED_CHECK_LOG_VERIFIER" "$check_log" >/dev/null ||
+    fail "Declared-minimum R CMD check exceeded its bounded NOTE"
+  [[ $(metadata_value "$metadata" declared_minimum_check_status_sha256) == \
+      "$(sha256sum "$status" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_minimum_check_driver_sha256) == \
+      "$(sha256sum "$driver" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_minimum_check_log_sha256) == \
+      "$(sha256sum "$check_log" | cut -d ' ' -f 1)" ]] ||
+    fail "Declared-minimum R CMD check digest claims are inconsistent"
+  unset -f check_status_value
+}
+
+verify_declared_floor_smoke() {
+  local version=$1 artifacts=$2 metadata=$3
+  local inputs="$artifacts/inputs"
+  local lock="$inputs/environment/runtime-r-3.6.3-declared-floor-packages.lock"
+  local source_lock="$artifacts/source/environment/runtime-r-3.6.3-declared-floor-packages.lock"
+  local receipt="$inputs/declared-floor-library-receipt"
+  local candidate="$artifacts/declared-floor-candidate-library"
+  local install_log="$artifacts/logs/declared-floor-install.log"
+  local smoke_log="$artifacts/logs/declared-floor-smoke.log"
+  local dso="$candidate/paradox/libs/paradox.so"
+  local description="$candidate/paradox/DESCRIPTION"
+  local field
+  local -a digest_fields=(
+    declared_floor_lock_sha256
+    declared_floor_library_receipt_sha256
+    declared_floor_install_log_sha256
+    declared_floor_smoke_log_sha256
+    declared_floor_candidate_dso_sha256
+  )
+
+  if [[ "$version" != 3.6.3 ]]; then
+    [[ ! -e "$receipt" && ! -L "$receipt" &&
+      ! -e "$candidate" && ! -L "$candidate" &&
+      ! -e "$install_log" && ! -L "$install_log" &&
+      ! -e "$smoke_log" && ! -L "$smoke_log" ]] ||
+      fail "A non-minimum runtime retained declared-floor evidence"
+    for field in "${digest_fields[@]}"; do
+      [[ $(metadata_value "$metadata" "$field") == - ]] ||
+        fail "A non-minimum runtime claims declared-floor evidence: $field"
+    done
+    return
+  fi
+
+  [[ -f "$lock" && ! -L "$lock" &&
+    -f "$source_lock" && ! -L "$source_lock" &&
+    -d "$receipt" && ! -L "$receipt" &&
+    -d "$candidate" && ! -L "$candidate" &&
+    -f "$description" && ! -L "$description" &&
+    -f "$dso" && ! -L "$dso" ]] ||
+    fail "Declared-floor package evidence is absent or symbolic"
+  bounded_regular_text_file "$install_log" &&
+    bounded_regular_text_file "$smoke_log" ||
+    fail "Declared-floor log evidence is absent, unsafe, or unbounded"
+  cmp -s -- "$lock" "$source_lock" ||
+    fail "Declared-floor retained input differs from the source-bound lock"
+  text_has_exact_line_once "$install_log" '* DONE (paradox)' ||
+    fail "Declared-floor candidate install did not complete"
+
+  local declared_floor_library
+  declared_floor_library=$(
+    "$LIBRARY_MANAGER" --runtime 3.6.3 --profile declared-floor \
+      --verified-receipt-handoff "$receipt" --print-path
+  ) || fail "Declared-floor receipt handoff failed authenticated replay"
+  [[ -d "$declared_floor_library" && ! -L "$declared_floor_library" ]] ||
+    fail "Authenticated declared-floor library is absent or symbolic"
+
+  local -a candidate_entries=()
+  mapfile -d '' -t candidate_entries < <(
+    find -H "$candidate" -mindepth 1 -maxdepth 1 -printf '%f:%y\0' |
+      LC_ALL=C sort -z
+  )
+  [[ ${#candidate_entries[@]} -eq 1 &&
+    "${candidate_entries[0]}" == paradox:d ]] ||
+    fail "Declared-floor candidate library does not contain only paradox"
+  local description_package description_version description_built
+  description_package=$(awk -F ': ' '$1 == "Package" {print $2}' "$description")
+  description_version=$(awk -F ': ' '$1 == "Version" {print $2}' "$description")
+  description_built=$(awk -F ': ' '$1 == "Built" {print $2}' "$description")
+  [[ "$description_package" == paradox &&
+    "$description_version" == 2.0.0 &&
+    "$description_built" == "R 3.6.3; "* ]] ||
+    fail "Declared-floor candidate has the wrong installed identity"
+
+  local -a smoke_lines=()
+  mapfile -t smoke_lines < "$smoke_log"
+  [[ ${#smoke_lines[@]} -eq 16 &&
+    "${smoke_lines[0]}" == $'format\t1' &&
+    "${smoke_lines[1]}" == $'runtime\t3.6.3' &&
+    "${smoke_lines[2]}" == $'candidate_package\tparadox' &&
+    "${smoke_lines[3]}" == $'candidate_version\t2.0.0' &&
+    "${smoke_lines[4]}" == $'dependency_count\t6' &&
+    "${smoke_lines[5]}" == $'dependency\tbackports=1.1.7' &&
+    "${smoke_lines[6]}" == $'dependency\tcheckmate=2.0.0' &&
+    "${smoke_lines[7]}" == $'dependency\tdata.table=1.18.4' &&
+    "${smoke_lines[8]}" == $'dependency\tmlr3misc=0.10.0' &&
+    "${smoke_lines[9]}" == $'dependency\tR6=2.6.1' &&
+    "${smoke_lines[10]}" == $'dependency\tdigest=0.6.39' &&
+    "${smoke_lines[11]}" =~ ^registered_call_routines$'\t'[1-9][0-9]*$ &&
+    "${smoke_lines[12]}" == $'constructor_deparse\tpassed' &&
+    "${smoke_lines[13]}" == $'paramset_check_values\tpassed' &&
+    "${smoke_lines[14]}" == $'grid_facade\tpassed' &&
+    "${smoke_lines[15]}" == $'declared_floor_smoke\tpassed' ]] ||
+    fail "Declared-floor smoke evidence is malformed or incomplete"
+
+  local validate_output
+  validate_output=$(
+    Rscript --vanilla \
+      "$artifacts/source/scripts/environment/run-r36-declared-floor-smoke.R" \
+      validate "$artifacts/source" "$source_lock"
+  ) || fail "Retained declared-floor inputs failed semantic validation"
+  [[ "$validate_output" == declared_floor_inputs=passed ]] ||
+    fail "Retained declared-floor input validator returned an unexpected result"
+
+  [[ $(metadata_value "$metadata" declared_floor_lock_sha256) == \
+      "$(sha256sum "$lock" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_floor_library_receipt_sha256) == \
+      "$(sha256sum "$receipt/receipt.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_floor_install_log_sha256) == \
+      "$(sha256sum "$install_log" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_floor_smoke_log_sha256) == \
+      "$(sha256sum "$smoke_log" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_floor_candidate_dso_sha256) == \
+      "$(sha256sum "$dso" | cut -d ' ' -f 1)" ]] ||
+    fail "Declared-floor digest claims are inconsistent"
+}
+
+verify_runtime_symbol_scope() {
+  local version=$1 artifacts=$2 metadata=$3
+  local log="$artifacts/logs/r-api-symbol-audit.log"
+  local symbols="$artifacts/logs/r-api-symbol-audit.symbols.txt"
+  local dso="$artifacts/library/paradox/libs/paradox.so"
+  local branch symbol count
+  local -a required forbidden
+  for file in "$log" "$symbols" "$dso"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Runtime symbol evidence is absent or symbolic: $file"
+  done
+
+  if [[ "$version" == 3.6.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings)
+    forbidden=(R_ClosureFormals R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv
+      R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
+      R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib Rf_GetOption1
+      ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.0.5 || "$version" == 4.1.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings
+      R_ActiveBindingFunction)
+    forbidden=(R_ClosureFormals R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv
+      R_existsVarInFrame R_NewEnv R_getVar R_getVarEx R_GetBindingType
+      R_getRegisteredNamespace R_getAttribCount R_hasAttrib R_mapAttrib
+      Rf_GetOption1 ANY_ATTRIB SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.2.3 || "$version" == 4.3.3 || "$version" == 4.4.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr CLOENV Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_existsVarInFrame
+      R_ActiveBindingFunction SET_COMPLEX_ELT SET_RAW_ELT)
+    forbidden=(R_ClosureFormals R_BytecodeExpr
+      R_ClosureEnv R_ParentEnv R_getVar R_getVarEx
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount
+      R_hasAttrib R_mapAttrib Rf_GetOption1 ANY_ATTRIB R_HasFancyBindings)
+  elif [[ "$version" == 4.5.2 ]]; then
+    required=(Rf_eval ATTRIB ANY_ATTRIB R_ClosureFormals R_ClosureExpr
+      R_BytecodeExpr R_ClosureEnv R_ParentEnv Rf_findVarInFrame
+      Rf_GetOption1 R_existsVarInFrame R_ActiveBindingFunction
+      SET_COMPLEX_ELT SET_RAW_ELT)
+    forbidden=(R_getVar R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib
+      R_PromiseExpr PRENV PRVALUE FORMALS CLOENV R_HasFancyBindings)
+  else
+    fail "unsupported retained runtime symbol policy: $version"
+  fi
+  branch=$("$REGISTRY" field "$version" api_branch)
+
+  for symbol in "${required[@]}"; do
+    count=$(runtime_symbol_count "$symbols" "$symbol") ||
+      fail "Retained runtime symbol inventory is malformed or unbounded"
+    [[ "$count" == 1 ]] ||
+      fail "Required R API symbol is not unique on R $version: $symbol"
+    text_has_exact_line_once "$log" "required_symbol=$symbol" ||
+      fail "Required R API symbol receipt is absent or duplicated: $symbol"
+  done
+  for symbol in "${forbidden[@]}"; do
+    count=$(runtime_symbol_count "$symbols" "$symbol") ||
+      fail "Retained runtime symbol inventory is malformed or unbounded"
+    [[ "$count" == 0 ]] ||
+      fail "Forbidden R API symbol is present on R $version: $symbol"
+    text_has_exact_line_once "$log" "forbidden_symbol_absent=$symbol" ||
+      fail "Forbidden R API symbol receipt is absent or duplicated: $symbol"
+  done
+  if ! text_has_exact_line_once "$log" "runtime=$version" ||
+      ! text_has_exact_line_once "$log" \
+        "dso_sha256=$(sha256sum "$dso" | cut -d ' ' -f 1)" ||
+      ! text_has_exact_line_once "$log" "r_api_compat_branch=$branch" ||
+      ! text_has_exact_line_once "$log" "symbol_audit=passed"; then
+    fail "Runtime symbol audit identity or completion marker is inconsistent"
+  fi
+  if [[ "$version" == 3.6.3 ]]; then
+    text_has_exact_line_once "$log" "r_config_nm_status=1" &&
+      text_has_exact_line_once "$log" \
+        "r_config_nm=ERROR: no information for variable 'NM'" ||
+      fail "R $version symbol evidence has an unexpected NM configuration"
+  else
+    text_has_exact_line_once "$log" "r_config_nm_status=0" ||
+      fail "Runtime symbol evidence did not retain a usable R NM configuration"
+  fi
+  [[ $(metadata_value "$metadata" r_api_compat_branch) == "$branch" ]] ||
+    fail "Runtime symbol policy branch differs from stage metadata"
+}
+
+verify_r45_compiled_code_policy() {
+  local version=$1 artifacts=$2 metadata=$3
+  local log="$artifacts/logs/r45-compiled-code-policy.log"
+  local -a lines=()
+  if [[ "$version" != 4.5.2 ]]; then
+    [[ ! -e "$log" && ! -L "$log" ]] ||
+      fail "R 4.5 compiled-code policy evidence appeared on R $version"
+    [[ $(metadata_value "$metadata" \
+      r45_compiled_code_policy_sha256) == - ]] ||
+      fail "A non-4.5 runtime claims compiled-code policy evidence"
+    return
+  fi
+  bounded_regular_text_file "$log" ||
+    fail "R 4.5 compiled-code policy evidence is absent, unsafe, or unbounded"
+  mapfile -t lines < "$log"
+  [[ ${#lines[@]} -eq 4 &&
+    "${lines[0]}" == "runtime=4.5.2" &&
+    "${lines[1]}" == "policy_source=tools:::check_compiled_code" &&
+    "${lines[2]}" == "issue_count=0" &&
+    "${lines[3]}" == "compiled_code_policy=passed" ]] ||
+    fail "R 4.5 compiled-code policy evidence is inconsistent"
+  [[ $(metadata_value "$metadata" \
+    r45_compiled_code_policy_sha256) == \
+      "$(sha256sum "$log" | cut -d ' ' -f 1)" ]] ||
+    fail "R 4.5 compiled-code policy digest claim is inconsistent"
+}
+
+declare -a RETAINED_TRUSTED_INPUTS=()
+TRUSTED_INPUTS_MANIFEST_SHA256=
+
+verify_trusted_inputs_manifest() {
+  local top_metadata=$1 source=$2
+  local manifest="$top_metadata/trusted-inputs.tsv"
+  local helper="$source/$TRUSTED_INPUT_RELATIVE"
+  local relative digest extra index=0
+  local -a expected=()
+
+  [[ -f "$manifest" && ! -L "$manifest" &&
+    -x "$helper" && -f "$helper" && ! -L "$helper" ]] ||
+    fail "Retained trusted-input policy or manifest is absent or symbolic"
+  mapfile -t expected < <("$helper")
+  [[ ${#expected[@]} -gt 0 ]] ||
+    fail "Retained trusted-input policy is empty"
+  IFS=$'\t' read -r relative digest extra < "$manifest"
+  [[ "$relative" == relative && "$digest" == sha256 && -z "${extra:-}" ]] ||
+    fail "Retained trusted-input manifest has the wrong header"
+  while IFS=$'\t' read -r relative digest extra; do
+    [[ -z "${extra:-}" && "$index" -lt "${#expected[@]}" &&
+      "$relative" == "${expected[index]}" &&
+      "$digest" =~ ^[0-9a-f]{64}$ &&
+      -f "$source/$relative" && ! -L "$source/$relative" &&
+      "$(sha256sum "$source/$relative" | cut -d ' ' -f 1)" == "$digest" ]] ||
+      fail "Retained trusted-input manifest differs from its source: $relative"
+    RETAINED_TRUSTED_INPUTS+=("$relative")
+    index=$((index + 1))
+  done < <(tail -n +2 "$manifest")
+  [[ "$index" -eq "${#expected[@]}" ]] ||
+    fail "Retained trusted-input manifest has the wrong row count"
+  TRUSTED_INPUTS_MANIFEST_SHA256=$(sha256sum "$manifest" | cut -d ' ' -f 1)
+  [[ $(metadata_value "$top_metadata" trusted_inputs_manifest_sha256) == \
+    "$TRUSTED_INPUTS_MANIFEST_SHA256" ]] ||
+    fail "Top-level trusted-input manifest digest is inconsistent"
+}
+
+verify_trusted_inputs() {
+  local artifacts=$1 metadata=$2
+  local source="$artifacts/source"
+  local inputs="$artifacts/inputs"
+  local relative
+  [[ $(metadata_value "$metadata" trusted_inputs_manifest_sha256) == \
+    "$TRUSTED_INPUTS_MANIFEST_SHA256" ]] ||
+    fail "Stage trusted-input policy differs from the top-level manifest"
+  for relative in "${RETAINED_TRUSTED_INPUTS[@]}"; do
+    [[ -f "$inputs/$relative" && ! -L "$inputs/$relative" ]] ||
+      fail "Retained trusted input is absent or symbolic: $relative"
+    cmp -s -- "$inputs/$relative" "$source/$relative" ||
+      fail "Retained trusted input differs from the source archive: $relative"
+  done
+}
+
+verify_scheduler_evidence() {
+  local top_metadata=$1
+  shift
+  local -a expected_versions=("$@")
+  local report="$top_metadata/resource-jobs.tsv"
+  local tasks="$top_metadata/stage-tasks.tsv"
+  local wave="$top_metadata/stage-wave"
+  local plan="$wave/wave-plan.tsv"
+  local ledger="$wave/task-ledger.tsv"
+  local manifest="$top_metadata/stage-wave.manifest.tsv"
+  local jobs timeout_seconds value path ordinal version exit_status timed_out
+  local task_log_relative task_log_sha supervisor_relative supervisor_sha
+  local expected expected_plan_worker expected_task_wrapper
+
+  for path in "$report" "$tasks" "$plan" "$ledger" "$manifest"; do
+    [[ -f "$path" && ! -L "$path" ]] ||
+      fail "Runtime scheduler evidence is absent or symbolic: $path"
+  done
+  [[ -d "$wave" && ! -L "$wave" ]] ||
+    fail "Runtime scheduler wave directory is absent or symbolic"
+  "$PREFIX_RECEIPT" verify "$wave" "$manifest" >/dev/null ||
+    fail "Runtime scheduler wave differs from its complete receipt"
+
+  "$RESOURCE_JOBS" light-test --verify-report "$report" >/dev/null ||
+    fail "Runtime resource report is not a valid light-test admission"
+  jobs=$(awk -F '\t' '$1 == "jobs" {print $2}' "$report")
+  [[ "$jobs" =~ ^[1-9][0-9]*$ &&
+    "$jobs" -le "${#expected_versions[@]}" ]] ||
+    fail "Runtime resource report jobs are unsafe or inconsistent"
+
+  {
+    printf 'ordinal\tversion\n'
+    for ((ordinal = 1; ordinal <= ${#expected_versions[@]}; ordinal++)); do
+      printf '%s\t%s\n' "$ordinal" "${expected_versions[ordinal - 1]}"
+    done
+  } | cmp -s -- "$tasks" - ||
+    fail "Runtime scheduler task order differs from the stage ledger"
+
+  [[ $(head -n 1 "$plan") == $'field\tvalue' ]] ||
+    fail "Runtime scheduler plan has the wrong header"
+  awk -F '\t' 'NR == 1 {next} NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}' \
+    "$plan" || fail "Runtime scheduler plan is malformed"
+  plan_value() { awk -F '\t' -v key="$1" '$1 == key {print $2}' "$plan"; }
+  timeout_seconds=$(plan_value task_timeout_seconds)
+  [[ $(plan_value schema) == 1 && $(plan_value jobs) == "$jobs" &&
+    $(plan_value tasks) == "${#expected_versions[@]}" &&
+    $(plan_value admission_report_path) == "$report" &&
+    $(plan_value admission_report_sha256) == "$(sha256sum "$report" | cut -d ' ' -f 1)" &&
+    $(plan_value task_list_path) == "$tasks" &&
+    $(plan_value task_list_sha256) == "$(sha256sum "$tasks" | cut -d ' ' -f 1)" &&
+    $(plan_value nested_parallelism) == 1 &&
+    $(plan_value kill_after_seconds) == 10 &&
+    $(plan_value termination_grace_tenths) == 50 &&
+    "$timeout_seconds" =~ ^[1-9][0-9]{0,4}$ && "$timeout_seconds" -le 86400 ]] ||
+    fail "Runtime scheduler plan admission or timeout policy is inconsistent"
+
+  expected_plan_worker="$ROOT/scripts/environment/run-runtime-matrix-stage"
+  expected_task_wrapper="$ROOT/scripts/environment/run-runtime-matrix-wave"
+  [[ $(plan_value worker_path) == "$expected_plan_worker" &&
+    $(plan_value worker_sha256) == "$(sha256sum "$expected_plan_worker" | cut -d ' ' -f 1)" &&
+    $(plan_value task_wrapper_path) == "$expected_task_wrapper" &&
+    $(plan_value task_wrapper_sha256) == "$(sha256sum "$expected_task_wrapper" | cut -d ' ' -f 1)" ]] ||
+    fail "Runtime stage worker identity differs from trusted current code"
+  for value in bash setsid timeout_tool; do
+    path=$(plan_value "${value}_path")
+    [[ "$path" == /* && -x "$path" && -f "$path" && ! -L "$path" &&
+      "$(readlink -f -- "$path")" == "$path" &&
+      $(plan_value "${value}_sha256") == "$(sha256sum "$path" | cut -d ' ' -f 1)" ]] ||
+      fail "Runtime scheduler tool identity is stale: $value"
+  done
+  [[ $(LC_ALL=C "$(plan_value bash_path)" --version 2>&1 | head -n 1 | sha256sum | cut -d ' ' -f 1) == \
+      "$(plan_value bash_identity_sha256)" &&
+    $(LC_ALL=C "$(plan_value setsid_path)" --version 2>&1 | head -n 1 | sha256sum | cut -d ' ' -f 1) == \
+      "$(plan_value setsid_identity_sha256)" &&
+    $(LC_ALL=C "$(plan_value timeout_tool_path)" --version 2>&1 | head -n 1 | sha256sum | cut -d ' ' -f 1) == \
+      "$(plan_value timeout_tool_identity_sha256)" ]] ||
+    fail "Runtime scheduler tool version identity is stale"
+
+  [[ $(head -n 1 "$ledger") == $'schema\tordinal\tversion\texit_status\ttimed_out\tstarted\ttask_log_relative\ttask_log_sha256\tsupervisor_log_relative\tsupervisor_log_sha256' ]] ||
+    fail "Runtime scheduler task ledger has the wrong header"
+  expected=0
+  while IFS=$'\t' read -r _ ordinal version exit_status timed_out started \
+      task_log_relative task_log_sha supervisor_relative supervisor_sha extra; do
+    [[ -z "${extra:-}" ]] || fail "Runtime scheduler ledger row has extra fields"
+    expected=$((expected + 1))
+    [[ "$ordinal" == "$expected" &&
+      "$version" == "${expected_versions[expected - 1]}" &&
+      "$exit_status" == 0 && "$timed_out" == false && "$started" == true &&
+      "$task_log_relative" == "tasks/$(printf '%04d.log' "$expected")" &&
+      "$supervisor_relative" == "tasks/$(printf '%04d.supervisor.log' "$expected")" ]] ||
+      fail "Runtime scheduler sibling result is incomplete or out of order"
+    [[ -f "$wave/$task_log_relative" && ! -L "$wave/$task_log_relative" &&
+      -f "$wave/$supervisor_relative" && ! -L "$wave/$supervisor_relative" &&
+      "$task_log_sha" == "$(sha256sum "$wave/$task_log_relative" | cut -d ' ' -f 1)" &&
+      "$supervisor_sha" == "$(sha256sum "$wave/$supervisor_relative" | cut -d ' ' -f 1)" &&
+      ! -s "$wave/$supervisor_relative" ]] ||
+      fail "Runtime scheduler task logs are stale or a successful supervisor emitted diagnostics"
+    if ! grep -Fqx 'runtime_stage_worker=passed' "$wave/$task_log_relative" ||
+        ! grep -Fqx "runtime=$version" "$wave/$task_log_relative"; then
+      fail "Runtime stage worker success marker is absent"
+    fi
+  done < <(tail -n +2 "$ledger")
+  [[ "$expected" -eq "${#expected_versions[@]}" ]] ||
+    fail "Runtime scheduler did not retain every expected sibling"
+
+  [[ $(metadata_value "$top_metadata" runtime_jobs) == "$jobs" &&
+    $(metadata_value "$top_metadata" stage_timeout_seconds) == "$timeout_seconds" &&
+    $(metadata_value "$top_metadata" resource_report_sha256) == "$(sha256sum "$report" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" stage_tasks_sha256) == "$(sha256sum "$tasks" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" wave_plan_sha256) == "$(sha256sum "$plan" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" wave_task_ledger_sha256) == "$(sha256sum "$ledger" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" wave_manifest_sha256) == "$(sha256sum "$manifest" | cut -d ' ' -f 1)" ]] ||
+    fail "Top-level runtime scheduler bindings are inconsistent"
+}
+
+# The source projection treats only top-level test*.R/test*.r files as test
+# programs. Every nested regular file is support, even when its basename looks
+# like a test. Validate paths before using newline-delimited inventories below;
+# the actual member walk remains NUL-delimited so a hostile path cannot hide
+# from the rejection pass.
+test_tree_assert_plain() {
+  local tree=$1 label=$2 path relative
+  [[ -d "$tree" && ! -L "$tree" ]] ||
+    fail "$label root is absent or symbolic: $tree"
+  while IFS= read -r -d '' path; do
+    [[ "$path" == "$tree/"* ]] ||
+      fail "$label member escaped its root: $path"
+    relative=${path#"$tree/"}
+    if [[ -z "$relative" || "$relative" == /* || "$relative" == */ ||
+        "$relative" == *//* || "$relative" == . || "$relative" == .. ||
+        "$relative" == ./* || "$relative" == ../* ||
+        "$relative" == */./* || "$relative" == */../* ||
+        "$relative" == */. || "$relative" == */.. ||
+        "$relative" =~ [[:cntrl:]] ]]; then
+      fail "$label contains an ambiguous or control-character path"
+    fi
+    if [[ -L "$path" ||
+        ( ! -f "$path" && ! -d "$path" ) ||
+        ( -f "$path" && -d "$path" ) ]]; then
+      fail "$label contains a symbolic or non-regular member: $relative"
+    fi
+  done < <(find "$tree" -mindepth 1 -print0)
+}
+
+test_tree_directory_inventory() {
+  find "$1" -mindepth 1 -type d -printf '%P\n' | LC_ALL=C sort
+}
+
+test_tree_file_inventory() {
+  find "$1" -mindepth 1 -type f -printf '%P\n' | LC_ALL=C sort
+}
+
+test_tree_top_level_test_inventory() {
+  find "$1" -mindepth 1 -maxdepth 1 -type f \
+    \( -name 'test*.R' -o -name 'test*.r' \) -printf '%f\n' |
+    LC_ALL=C sort
+}
+
+test_tree_support_file_inventory() {
+  {
+    find "$1" -mindepth 1 -maxdepth 1 -type f \
+      ! -name 'test*.R' ! -name 'test*.r' -printf '%P\n'
+    find "$1" -mindepth 2 -type f -printf '%P\n'
+  } | LC_ALL=C sort
+}
+
+test_tree_compare_mode() {
+  local source_path=$1 staged_path=$2 label=$3 relative=$4
+  [[ $(/usr/bin/stat -c '%a' -- "$source_path") == \
+      "$(/usr/bin/stat -c '%a' -- "$staged_path")" ]] ||
+    fail "$label mode differs from its source: $relative"
+}
+
+test_tree_verify_receipt() {
+  local helper=$1 scope=$2 log=$3 label=$4
+  local receipt="$scope/testthat-tree.manifest.tsv"
+  [[ -x "$helper" && -f "$helper" && ! -L "$helper" ]] ||
+    fail "$label retained tree-receipt helper is absent or symbolic"
+  [[ -f "$receipt" && ! -L "$receipt" ]] ||
+    fail "$label tree receipt is absent or symbolic"
+  "$helper" verify "$scope/testthat" "$receipt" >/dev/null ||
+    fail "$label tree differs from its retained receipt"
+  [[ $(log_value "$log" staged_test_tree_receipt) == \
+      testthat-tree.manifest.tsv &&
+    $(log_value "$log" staged_test_tree_receipt_created) == passed &&
+    $(log_value "$log" staged_test_tree_receipt_verified) == passed ]] ||
+    fail "$label tree-receipt log contract is incomplete"
+}
+
+verify_source_scope() {
+  local artifacts=$1 metadata=$2
+  local source="$artifacts/source"
+  local inputs="$artifacts/inputs"
+  local scope="$inputs/source-test-scope"
+  local log="$artifacts/logs/source-tests.log"
+  local exclusions="$inputs/environment/runtime-matrix-pre46-exclusions.tsv"
+  local whole_skips="$inputs/environment/runtime-matrix-whole-file-skips.tsv"
+  local result_skip_policy="$inputs/environment/runtime-matrix-result-skips.tsv"
+  local file value expectations result_skips total_skips runtime
+  local discovered_files discovered_contexts executed_files executed_contexts
+  local excluded_files excluded_contexts support_files reported_files
+  local expected_whole_count observed_whole_count expected_result_skip_count
+  local logged_expected_whole_count logged_observed_whole_count
+  local manifest_whole_count manifest_result_count source_support_count
+  local scope_discovered scope_executed scope_excluded retained_reported
+  local staged_file_count
+
+  for file in "$exclusions" "$whole_skips" "$result_skip_policy" "$scope/scope.tsv" \
+      "$scope/testthat-tree.manifest.tsv" \
+      "$scope/testthat-reported-files.tsv" \
+      "$scope/observed-whole-file-skips.tsv" \
+      "$scope/observed-result-skips.tsv" "$log"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Runtime source-scope input is absent or symbolic: $file"
+  done
+  [[ -d "$scope/testthat" && ! -L "$scope/testthat" ]] ||
+    fail "Staged runtime tests are absent or symbolic"
+  cmp -s -- "$exclusions" \
+    "$source/environment/runtime-matrix-pre46-exclusions.tsv" ||
+    fail "Retained exclusion policy differs from the source snapshot"
+  cmp -s -- "$whole_skips" \
+    "$source/environment/runtime-matrix-whole-file-skips.tsv" ||
+    fail "Retained whole-file skip policy differs from the source snapshot"
+  cmp -s -- "$result_skip_policy" \
+    "$source/environment/runtime-matrix-result-skips.tsv" ||
+    fail "Retained result-skip policy differs from the source snapshot"
+  Rscript --vanilla \
+    "$source/scripts/environment/runtime-matrix-skip-policy.R" \
+    "$source" >/dev/null ||
+    fail "Retained result-skip policy fails its exact source-derived policy"
+
+  awk -F '\t' '
+    NR == 1 {if ($0 != "context\treason") exit 1; next}
+    NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
+    END {if (NR != 1) exit 1}
+  ' "$exclusions" || fail "Retained pre-R-4.6 exclusion policy is malformed"
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "file\tcontext\tmissing_package\tleading_guards\treason") exit 1
+      next
+    }
+    NF != 5 || $1 !~ /^test[^/]*[.][Rr]$/ ||
+      $2 == "" || $3 !~ /^[A-Za-z][A-Za-z0-9.]*$/ ||
+      $4 !~ /^[A-Za-z0-9_:.,-]+$/ || $5 == "" || seen[$1]++ {exit 1}
+    END {if (NR < 2) exit 1}
+  ' "$whole_skips" || fail "Retained whole-file skip policy is malformed"
+  awk -F '\t' '
+    NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
+    NF != 4 || $1 !~ /^[0-9]+[.][0-9]+[.][0-9]+$/ ||
+      $2 !~ /^test[^/]*[.][Rr]$/ || $3 == "" ||
+      $4 == "" ||
+      seen[$1 FS $2 FS $3]++ {exit 1}
+  ' "$result_skip_policy" || fail "Retained result-skip policy is malformed"
+  while IFS=$'\t' read -r policy_runtime _; do
+    [[ "$policy_runtime" == runtime ]] || "$REGISTRY" contains "$policy_runtime" ||
+      fail "Result-skip policy names an unregistered runtime"
+  done < "$result_skip_policy"
+  for peer_runtime in 4.4.3 4.5.2; do
+    diff -u \
+      <(awk -F '\t' '$1 == "4.3.3" {print $2 "\t" $3 "\t" $4}' \
+        "$result_skip_policy") \
+      <(awk -F '\t' -v runtime="$peer_runtime" \
+        '$1 == runtime {print $2 "\t" $3 "\t" $4}' \
+        "$result_skip_policy") >/dev/null ||
+      fail "Retained result-skip inventories differ among R 4.3--4.5"
+  done
+  for peer_runtime in 4.1.3; do
+    diff -u \
+      <(awk -F '\t' '$1 == "4.0.5" {print $2 "\t" $3 "\t" $4}' \
+        "$result_skip_policy") \
+      <(awk -F '\t' -v runtime="$peer_runtime" \
+        '$1 == runtime {print $2 "\t" $3 "\t" $4}' \
+        "$result_skip_policy") >/dev/null ||
+      fail "Retained result-skip inventories differ among R 4.0--4.1"
+  done
+  diff -u \
+    <(awk -F '\t' '$1 == "4.1.3" {print $2 "\t" $3 "\t" $4}' \
+      "$result_skip_policy") \
+    <(awk -F '\t' '
+        $1 == "4.2.3" &&
+          $4 != "Reason: R >= 4.2 has a public non-evaluating binding-existence operation" {
+          print $2 "\t" $3 "\t" $4
+        }
+      ' "$result_skip_policy") >/dev/null ||
+    fail "R 4.2 result skips differ from R 4.1 beyond its old-path exclusion"
+  diff -u \
+    <(tail -n +2 "$result_skip_policy") \
+    <(tail -n +2 "$result_skip_policy" | LC_ALL=C sort) >/dev/null ||
+    fail "Retained result-skip policy is not byte-sorted"
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "state\tfile\tcontext\treason") exit 1
+      next
+    }
+    NF != 4 || $1 !~ /^(executed|excluded)$/ ||
+      $2 !~ /^tests\/testthat\/test[^/]*[.][Rr]$/ || $3 == "" ||
+      seen_file[$2]++ || seen_context[$3]++ {exit 1}
+    {
+      expected = $2
+      sub(/^tests\/testthat\//, "", expected)
+      sub(/[.][Rr]$/, "", expected)
+      sub(/^test[-_]/, "", expected)
+      if ($3 != expected) exit 1
+      if (($1 == "executed" && $4 != "") ||
+          ($1 == "excluded" && $4 == "")) exit 1
+      count[$1]++
+    }
+    END {
+      if (NR < 2 || count["excluded"] != 0 ||
+          count["executed"] != NR - 1) exit 1
+    }
+  ' "$scope/scope.tsv" || fail "Retained source-test scope is malformed"
+
+  diff -u \
+    <(tail -n +2 "$exclusions" | LC_ALL=C sort) \
+    <(awk -F '\t' '$1 == "excluded" {print $3 "\t" $4}' "$scope/scope.tsv" | LC_ALL=C sort) \
+    >/dev/null || fail "Excluded scope rows differ from the reviewed policy"
+  test_tree_assert_plain "$source/tests/testthat" \
+    "Retained source-test source tree"
+  test_tree_assert_plain "$scope/testthat" "Staged source-test tree"
+  test_tree_verify_receipt \
+    "$inputs/scripts/environment/runtime-matrix-prefix-receipt" \
+    "$scope" "$log" \
+    "Staged source-test"
+  diff -u \
+    <(test_tree_top_level_test_inventory "$source/tests/testthat" |
+      sed 's|^|tests/testthat/|') \
+    <(tail -n +2 "$scope/scope.tsv" | cut -f 2 | LC_ALL=C sort) \
+    >/dev/null || fail "Source-test scope does not cover the exact source inventory"
+
+  diff -u \
+    <(test_tree_directory_inventory "$source/tests/testthat") \
+    <(test_tree_directory_inventory "$scope/testthat") >/dev/null ||
+    fail "Staged source-test support directories differ from source"
+  while IFS= read -r relative; do
+    test_tree_compare_mode \
+      "$source/tests/testthat/$relative" "$scope/testthat/$relative" \
+      "Staged source-test directory" "$relative"
+  done < <(test_tree_directory_inventory "$scope/testthat")
+  diff -u \
+    <(test_tree_support_file_inventory "$source/tests/testthat") \
+    <(test_tree_support_file_inventory "$scope/testthat") >/dev/null ||
+    fail "Staged source-test support files differ from source"
+  diff -u \
+    <(test_tree_top_level_test_inventory "$scope/testthat") \
+    <(awk -F '\t' '$1 == "executed" {sub(/^tests\/testthat\//, "", $2); print $2}' \
+      "$scope/scope.tsv" | LC_ALL=C sort) \
+    >/dev/null || fail "Staged tests differ from the executed scope"
+  while IFS= read -r relative; do
+    cmp -s -- "$scope/testthat/$relative" \
+      "$source/tests/testthat/$relative" ||
+      fail "Staged source-test input differs from its source: $relative"
+    test_tree_compare_mode \
+      "$source/tests/testthat/$relative" "$scope/testthat/$relative" \
+      "Staged source-test input" "$relative"
+  done < <(test_tree_file_inventory "$scope/testthat")
+
+  cmp -s -- "$whole_skips" "$scope/observed-whole-file-skips.tsv" ||
+    fail "Observed whole-file skips differ from the reviewed policy"
+  diff -u \
+    <(awk -F '\t' 'NR > 1 {print $1 "\t" $4}' "$whole_skips") \
+    <(awk -F '\t' '/^observed_whole_file_skip_guard_sequence=/ {
+       sub(/^observed_whole_file_skip_guard_sequence=/, "", $1)
+       sub(/^leading_guards=/, "", $2)
+       print $1 "\t" $2
+     }' "$log") >/dev/null ||
+    fail "Logged whole-file leading guards differ from the reviewed policy"
+  awk -F '\t' '
+    NR == 1 {if ($0 != "file") exit 1; next}
+    NF != 1 || $1 !~ /^test[^/]*[.][Rr]$/ || seen[$1]++ {exit 1}
+    END {if (NR < 2) exit 1}
+  ' "$scope/testthat-reported-files.tsv" ||
+    fail "Retained testthat-reported file inventory is malformed"
+  diff -u \
+    <(comm -23 \
+      <(awk -F '\t' '$1 == "executed" {sub(/^tests\/testthat\//, "", $2); print $2}' \
+        "$scope/scope.tsv" | LC_ALL=C sort) \
+      <(tail -n +2 "$whole_skips" | cut -f 1 | LC_ALL=C sort)) \
+    <(tail -n +2 "$scope/testthat-reported-files.tsv" | LC_ALL=C sort) \
+    >/dev/null || fail "Testthat result files do not equal executed files minus whole-file skips"
+
+  for field in discovered_test_file_count discovered_test_context_count \
+      executed_test_file_count executed_test_context_count \
+      excluded_test_file_count excluded_test_context_count \
+      staged_test_support_file_count testthat_reported_file_count; do
+    value=$(metadata_value "$metadata" "$field")
+    [[ "$value" =~ ^(0|[1-9][0-9]*)$ &&
+      "$value" == "$(log_value "$log" "$field")" ]] ||
+      fail "Retained source-test count is malformed or inconsistent: $field"
+  done
+  discovered_files=$(metadata_value "$metadata" discovered_test_file_count)
+  discovered_contexts=$(metadata_value "$metadata" discovered_test_context_count)
+  executed_files=$(metadata_value "$metadata" executed_test_file_count)
+  executed_contexts=$(metadata_value "$metadata" executed_test_context_count)
+  excluded_files=$(metadata_value "$metadata" excluded_test_file_count)
+  excluded_contexts=$(metadata_value "$metadata" excluded_test_context_count)
+  support_files=$(metadata_value "$metadata" staged_test_support_file_count)
+  reported_files=$(metadata_value "$metadata" testthat_reported_file_count)
+  scope_discovered=$(awk 'END {print NR - 1}' "$scope/scope.tsv")
+  scope_executed=$(awk -F '\t' \
+    '$1 == "executed" {count++} END {print count + 0}' "$scope/scope.tsv")
+  scope_excluded=$(awk -F '\t' \
+    '$1 == "excluded" {count++} END {print count + 0}' "$scope/scope.tsv")
+  retained_reported=$(awk 'END {print NR - 1}' \
+    "$scope/testthat-reported-files.tsv")
+  source_support_count=$(test_tree_support_file_inventory \
+    "$source/tests/testthat" | wc -l)
+  staged_file_count=$(test_tree_file_inventory "$scope/testthat" | wc -l)
+  ((discovered_files > 0 &&
+    discovered_files == discovered_contexts &&
+    executed_files == executed_contexts &&
+    excluded_files == excluded_contexts &&
+    discovered_files == executed_files + excluded_files &&
+    excluded_files == 0 &&
+    discovered_files == scope_discovered &&
+    executed_files == scope_executed &&
+    excluded_files == scope_excluded &&
+    reported_files == retained_reported &&
+    support_files == source_support_count &&
+    staged_file_count == executed_files + support_files)) ||
+    fail "Retained source-test counts differ from their discovered inventories"
+
+  manifest_whole_count=$(awk 'END {print NR - 1}' "$whole_skips")
+  expected_whole_count=$(metadata_value "$metadata" expected_whole_file_skip_count)
+  observed_whole_count=$(metadata_value "$metadata" whole_file_skip_count)
+  logged_expected_whole_count=$(log_value "$log" expected_whole_file_skip_count)
+  logged_observed_whole_count=$(log_value "$log" observed_whole_file_skip_count)
+  for value in "$expected_whole_count" "$observed_whole_count" \
+      "$logged_expected_whole_count" "$logged_observed_whole_count"; do
+    [[ "$value" =~ ^(0|[1-9][0-9]*)$ ]] ||
+      fail "Retained whole-file skip count is malformed"
+  done
+  ((expected_whole_count == manifest_whole_count &&
+    observed_whole_count == expected_whole_count &&
+    expected_whole_count == logged_expected_whole_count &&
+    observed_whole_count == logged_observed_whole_count &&
+    reported_files + observed_whole_count == executed_files)) ||
+    fail "Retained whole-file skip accounting is inconsistent"
+  runtime=$(metadata_value "$metadata" runtime)
+  manifest_result_count=$(awk -F '\t' -v runtime="$runtime" \
+    'NR > 1 && $1 == runtime {count++} END {print count + 0}' \
+    "$result_skip_policy")
+  expected_result_skip_count=$(metadata_value \
+    "$metadata" expected_result_test_block_skip_count)
+  [[ "$expected_result_skip_count" =~ ^(0|[1-9][0-9]*)$ &&
+    "$expected_result_skip_count" -eq "$manifest_result_count" ]] ||
+    fail "Expected result-skip count differs from its retained manifest"
+  diff -u \
+    <(awk -F '\t' -v runtime="$runtime" 'NR == 1 || $1 == runtime' "$result_skip_policy") \
+    "$scope/observed-result-skips.tsv" >/dev/null ||
+    fail "Observed result skips differ from the reviewed runtime policy"
+  diff -u \
+    <(awk -F '\t' -v runtime="$runtime" \
+      'NR > 1 && $1 == runtime {print $2 "\t" $3 "\t" $4}' "$result_skip_policy") \
+    <(awk -F '\t' '/^observed_result_skip=/ {
+       sub(/^observed_result_skip=/, "", $1)
+       sub(/^test=/, "", $2)
+       sub(/^reason=/, "", $3)
+       print $1 "\t" $2 "\t" $3
+     }' "$log") >/dev/null ||
+    fail "Logged result skips differ from the reviewed runtime policy"
+  [[ $(log_value "$log" expected_result_test_block_skip_count) == \
+      "$expected_result_skip_count" ]] ||
+    fail "Expected result-skip count differs from the reviewed runtime policy"
+
+  expectations=$(metadata_value "$metadata" expectations_passed)
+  result_skips=$(metadata_value "$metadata" result_test_blocks_skipped)
+  total_skips=$(metadata_value "$metadata" total_test_skips)
+  [[ "$expectations" =~ ^[1-9][0-9]*$ &&
+    "$result_skips" =~ ^(0|[1-9][0-9]*)$ &&
+    "$total_skips" =~ ^(0|[1-9][0-9]*)$ &&
+    "$result_skips" -eq "$expected_result_skip_count" &&
+    "$total_skips" -eq $((result_skips + observed_whole_count)) ]] ||
+    fail "Retained expectation or skip totals are inconsistent"
+  [[ "$expectations" == "$(log_value "$log" expectations_passed)" &&
+    "$result_skips" == "$(log_value "$log" result_test_blocks_skipped)" &&
+    "$total_skips" == "$(log_value "$log" total_test_skips)" ]] ||
+    fail "Retained expectation accounting differs from the source-test log"
+  [[ $(log_value "$log" not_cran) == true &&
+    $(log_value "$log" lc_all) == unset &&
+    $(log_value "$log" characterization_gct_override) == unset &&
+    $(log_value "$log" test_scope) == complete-source-suite &&
+    $(log_value "$log" test_scope_manifest) == source-test-scope/scope.tsv &&
+    $(log_value "$log" whole_file_skip_manifest) == \
+      environment/runtime-matrix-whole-file-skips.tsv &&
+    $(log_value "$log" result_skip_manifest) == \
+      environment/runtime-matrix-result-skips.tsv &&
+    $(log_value "$log" pre46_exclusion_manifest) == \
+      environment/runtime-matrix-pre46-exclusions.tsv &&
+    $(log_value "$log" mbo_config_fixture_count) == 2 &&
+    $(log_value "$log" mbo_config_fixture_source) == \
+      retained-reviewed-git-objects &&
+    $(log_value "$log" testthat_reported_file_form) == basename &&
+    $(log_value "$log" expectations_failed) == 0 &&
+    $(log_value "$log" warnings) == 0 && $(log_value "$log" errors) == 0 ]] ||
+    fail "Retained source-test policy or clean status is inconsistent"
+  # The outer runtime wave owns parallelism, so every stage retains one exact
+  # serial testthat decision.
+  testthat_parallel=$(log_value "$log" testthat_parallel)
+  testthat_workers=$(log_value "$log" testthat_workers)
+  [[ "$testthat_parallel:$testthat_workers" == false:1 ]] ||
+    fail "Retained testthat scheduler decision is missing or inconsistent"
+
+  [[ $(metadata_value "$metadata" pre46_exclusion_manifest_sha256) == \
+      "$(sha256sum "$exclusions" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" whole_file_skip_manifest_sha256) == \
+      "$(sha256sum "$whole_skips" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" result_skip_manifest_sha256) == \
+      "$(sha256sum "$result_skip_policy" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" test_scope_manifest_sha256) == \
+      "$(sha256sum "$scope/scope.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" testthat_reported_files_sha256) == \
+      "$(sha256sum "$scope/testthat-reported-files.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" observed_whole_file_skips_sha256) == \
+      "$(sha256sum "$scope/observed-whole-file-skips.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" observed_result_skips_sha256) == \
+      "$(sha256sum "$scope/observed-result-skips.tsv" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained source-test scope hashes are inconsistent"
+
+  diff -u \
+    <(tail -n +2 "$exclusions" | LC_ALL=C sort) \
+    <(awk -F '\t' '/^pre46_excluded_context=/ {
+       sub(/^pre46_excluded_context=/, "", $1)
+       sub(/^reason=/, "", $2)
+       print $1 "\t" $2
+     }' "$log" | LC_ALL=C sort) \
+    >/dev/null || fail "Logged pre-R-4.6 exclusions differ from policy"
+}
+
+verify_old_r_stress() {
+  local version=$1 artifacts=$2 metadata=$3
+  local source="$artifacts/source"
+  local inputs="$artifacts/inputs"
+  local manifest="$inputs/environment/runtime-matrix-old-r-stress.tsv"
+  local scope="$inputs/old-r-stress-scope"
+  local selection="$scope/selection.tsv"
+  local results="$scope/results.tsv"
+  local reported="$scope/testthat-reported-files.tsv"
+  local staged="$scope/testthat"
+  local filter_file=helper_zz_runtime_old_r_stress_filter.R
+  local filter_path="$staged/$filter_file"
+  local log="$artifacts/logs/old-r-stress.log"
+  local field value selected_files selected_targets test_blocks target_passes
+  local non_target_skips support_files expectations_passed
+  local retained_files retained_targets retained_blocks retained_target_passes
+  local retained_non_target_skips retained_support retained_expectations
+  local retained_reported
+  local -a stress_fields=(
+    old_r_stress_manifest_sha256
+    old_r_stress_selection_sha256
+    old_r_stress_results_sha256
+    old_r_stress_reported_files_sha256
+    old_r_stress_log_sha256
+    old_r_stress_selected_file_count
+    old_r_stress_selected_target_count
+    old_r_stress_test_block_count
+    old_r_stress_target_pass_count
+    old_r_stress_non_target_skip_count
+    old_r_stress_support_file_count
+    old_r_stress_expectations_passed
+  )
+
+  if [[ "$version" != 3.6.3 && "$version" != 4.0.5 ]]; then
+    [[ ! -e "$scope" && ! -L "$scope" &&
+      ! -e "$log" && ! -L "$log" ]] ||
+      fail "A newer runtime retained old-runtime stress artifacts"
+    for field in "${stress_fields[@]}"; do
+      [[ $(metadata_value "$metadata" "$field") == - ]] ||
+        fail "A newer runtime claims old-runtime stress evidence: $field"
+    done
+    return
+  fi
+
+  for file in "$manifest" "$selection" "$results" "$reported" \
+      "$scope/testthat-tree.manifest.tsv" "$log"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Old-runtime stress evidence is absent or symbolic: $file"
+  done
+  [[ -d "$scope" && ! -L "$scope" &&
+    -d "$staged" && ! -L "$staged" ]] ||
+    fail "Old-runtime stress staged scope is absent or symbolic"
+  cmp -s -- "$manifest" \
+    "$source/environment/runtime-matrix-old-r-stress.tsv" ||
+    fail "Retained old-runtime stress policy differs from source"
+  cmp -s -- "$manifest" "$selection" ||
+    fail "Retained old-runtime stress selection differs from policy"
+  Rscript --vanilla \
+    "$source/scripts/environment/runtime-matrix-old-r-stress-policy.R" \
+    "$source" >/dev/null ||
+    fail "Retained old-runtime stress policy is not source-derived"
+
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "file\ttest\tmode\tcoverage") exit 1
+      next
+    }
+    NF != 4 || $1 !~ /^test[^/]*[.][Rr]$/ || $2 == "" ||
+      $3 !~ /^(not-cran|companion)$/ ||
+      $4 !~ /^[a-z][a-z0-9-]*(,[a-z][a-z0-9-]*)*$/ ||
+      seen[$1 FS $2]++ {exit 1}
+    END {if (NR < 2) exit 1}
+  ' "$selection" || fail "Retained old-runtime stress selection is malformed"
+  diff -u \
+    <(tail -n +2 "$selection") \
+    <(tail -n +2 "$selection" | LC_ALL=C sort) >/dev/null ||
+    fail "Retained old-runtime stress selection is not byte-sorted"
+
+  test_tree_assert_plain "$source/tests/testthat" \
+    "Retained old-runtime stress source tree"
+  test_tree_assert_plain "$staged" "Staged old-runtime stress tree"
+  test_tree_verify_receipt \
+    "$inputs/scripts/environment/runtime-matrix-prefix-receipt" \
+    "$scope" "$log" \
+    "Staged old-runtime stress"
+  diff -u \
+    <(test_tree_directory_inventory "$source/tests/testthat") \
+    <(test_tree_directory_inventory "$staged") >/dev/null ||
+    fail "Staged old-runtime stress support directories differ from source"
+  while IFS= read -r relative; do
+    test_tree_compare_mode \
+      "$source/tests/testthat/$relative" "$staged/$relative" \
+      "Staged old-runtime stress directory" "$relative"
+  done < <(test_tree_directory_inventory "$staged")
+  diff -u \
+    <(tail -n +2 "$selection" | cut -f 1 | LC_ALL=C sort -u) \
+    <(test_tree_top_level_test_inventory "$staged") >/dev/null ||
+    fail "Staged old-runtime stress tests differ from policy"
+  diff -u \
+    <(test_tree_support_file_inventory "$source/tests/testthat") \
+    <(test_tree_support_file_inventory "$staged" |
+      awk -v filter="$filter_file" '$0 != filter') >/dev/null ||
+    fail "Staged old-runtime stress source support files are incomplete"
+  while IFS= read -r relative; do
+    [[ "$relative" != "$filter_file" ]] || continue
+    cmp -s -- "$staged/$relative" "$source/tests/testthat/$relative" ||
+      fail "Staged old-runtime stress input differs from source: $relative"
+    test_tree_compare_mode \
+      "$source/tests/testthat/$relative" "$staged/$relative" \
+      "Staged old-runtime stress input" "$relative"
+  done < <(test_tree_file_inventory "$staged")
+  Rscript --vanilla \
+    "$source/scripts/environment/runtime-matrix-old-r-stress-policy.R" \
+    --filter "$source" | cmp -s -- "$filter_path" - ||
+    fail "Staged old-runtime stress title filter is not source-derived"
+
+  awk -F '\t' '
+    NR == 1 {if ($0 != "file") exit 1; next}
+    NF != 1 || $1 !~ /^test[^/]*[.][Rr]$/ ||
+      seen[$1]++ {exit 1}
+    END {if (NR < 2) exit 1}
+  ' "$reported" ||
+    fail "Retained old-runtime stress reported-file ledger is malformed"
+  diff -u \
+    <(tail -n +2 "$selection" | cut -f 1 | LC_ALL=C sort -u) \
+    <(tail -n +2 "$reported" | LC_ALL=C sort) >/dev/null ||
+    fail "Old-runtime stress reported files differ from selection"
+
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "file\ttest\ttargeted\tmode\tcoverage\tsuccess\tskip\tfailure\twarning\terror\tstatus") exit 1
+      next
+    }
+    NF != 11 || $1 !~ /^test[^/]*[.][Rr]$/ || $2 == "" ||
+      $3 != "true" ||
+      $6 !~ /^(0|[1-9][0-9]*)$/ ||
+      $7 !~ /^(0|[1-9][0-9]*)$/ ||
+      $8 !~ /^(0|[1-9][0-9]*)$/ ||
+      $9 !~ /^(0|[1-9][0-9]*)$/ ||
+      $10 !~ /^(0|[1-9][0-9]*)$/ ||
+      $11 !~ /^(passed|skipped|failed)$/ ||
+      seen[$1 FS $2]++ {exit 1}
+    $8 != 0 || $9 != 0 || $10 != 0 || $11 == "failed" {exit 1}
+    $3 == "true" {
+      if ($4 !~ /^(not-cran|companion)$/ ||
+          $5 !~ /^[a-z][a-z0-9-]*(,[a-z][a-z0-9-]*)*$/ ||
+          $6 < 1 || $7 != 0 || $11 != "passed") exit 1
+      targets++
+    }
+    END {if (NR < 2 || targets < 1) exit 1}
+  ' "$results" || fail "Retained old-runtime stress results are malformed"
+  diff -u \
+    <(tail -n +2 "$results") \
+    <(tail -n +2 "$results" | LC_ALL=C sort -t $'\t' -k1,1 -k2,2) \
+    >/dev/null || fail "Old-runtime stress result ledger is not byte-sorted"
+  diff -u \
+    "$selection" \
+    <({
+      printf 'file\ttest\tmode\tcoverage\n'
+      awk -F '\t' '$3 == "true" {
+        print $1 "\t" $2 "\t" $4 "\t" $5
+      }' "$results"
+    }) >/dev/null ||
+    fail "Old-runtime stress result targets differ from source selection"
+
+  selected_files=$(metadata_value "$metadata" \
+    old_r_stress_selected_file_count)
+  selected_targets=$(metadata_value "$metadata" \
+    old_r_stress_selected_target_count)
+  test_blocks=$(metadata_value "$metadata" old_r_stress_test_block_count)
+  target_passes=$(metadata_value "$metadata" old_r_stress_target_pass_count)
+  non_target_skips=$(metadata_value "$metadata" \
+    old_r_stress_non_target_skip_count)
+  support_files=$(metadata_value "$metadata" old_r_stress_support_file_count)
+  expectations_passed=$(metadata_value "$metadata" \
+    old_r_stress_expectations_passed)
+  for value in "$selected_files" "$selected_targets" "$test_blocks" \
+      "$target_passes" "$non_target_skips" "$support_files" \
+      "$expectations_passed"; do
+    [[ "$value" =~ ^(0|[1-9][0-9]*)$ ]] ||
+      fail "Retained old-runtime stress count is malformed"
+  done
+  retained_files=$(tail -n +2 "$selection" | cut -f 1 |
+    LC_ALL=C sort -u | wc -l)
+  retained_targets=$(awk 'END {print NR - 1}' "$selection")
+  retained_blocks=$(awk 'END {print NR - 1}' "$results")
+  retained_target_passes=$(awk -F '\t' \
+    'NR > 1 && $3 == "true" && $11 == "passed" {count++}
+     END {print count + 0}' "$results")
+  retained_non_target_skips=$(awk -F '\t' \
+    'NR > 1 && $3 == "false" && $11 == "skipped" {count++}
+     END {print count + 0}' "$results")
+  retained_support=$(test_tree_support_file_inventory "$staged" | wc -l)
+  retained_expectations=$(awk -F '\t' \
+    'NR > 1 {total += $6} END {print total + 0}' "$results")
+  retained_reported=$(awk 'END {print NR - 1}' "$reported")
+  ((selected_files > 0 && selected_targets > 0 &&
+    test_blocks == selected_targets &&
+    target_passes == selected_targets &&
+    non_target_skips == 0 &&
+    expectations_passed > 0 &&
+    selected_files == retained_files &&
+    selected_files == retained_reported &&
+    selected_targets == retained_targets &&
+    test_blocks == retained_blocks &&
+    target_passes == retained_target_passes &&
+    non_target_skips == retained_non_target_skips &&
+    support_files == retained_support &&
+    expectations_passed == retained_expectations)) ||
+    fail "Retained old-runtime stress counts differ from their ledgers"
+
+  [[ $(log_value "$log" runtime) == "$version" &&
+    $(log_value "$log" not_cran) == true &&
+    $(log_value "$log" lc_all) == unset &&
+    $(log_value "$log" stress_scope) == \
+      old-runtime-source-derived-selection &&
+    $(log_value "$log" stress_manifest) == \
+      environment/runtime-matrix-old-r-stress.tsv &&
+    $(log_value "$log" stress_selection) == \
+      old-r-stress-scope/selection.tsv &&
+    $(log_value "$log" selection_filter) == "$filter_file" &&
+    $(log_value "$log" selection_filter_self_test) == passed &&
+    $(log_value "$log" selected_file_count) == "$selected_files" &&
+    $(log_value "$log" selected_target_count) == "$selected_targets" &&
+    $(log_value "$log" staged_test_support_file_count) == "$support_files" &&
+    $(log_value "$log" testthat_reported_file_count) == "$selected_files" &&
+    $(log_value "$log" test_block_count) == "$test_blocks" &&
+    $(log_value "$log" target_pass_count) == "$target_passes" &&
+    $(log_value "$log" non_target_skip_count) == "$non_target_skips" &&
+    $(log_value "$log" expectations_passed) == "$expectations_passed" &&
+    $(log_value "$log" expectations_failed) == 0 &&
+    $(log_value "$log" warnings) == 0 &&
+    $(log_value "$log" errors) == 0 ]] ||
+    fail "Retained old-runtime stress log differs from its ledgers"
+  text_has_exact_line_once "$log" 'runtime_matrix_old_r_stress=passed' ||
+    fail "Old-runtime stress completion marker is absent"
+
+  [[ $(metadata_value "$metadata" old_r_stress_manifest_sha256) == \
+      "$(sha256sum "$manifest" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" old_r_stress_selection_sha256) == \
+      "$(sha256sum "$selection" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" old_r_stress_results_sha256) == \
+      "$(sha256sum "$results" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" old_r_stress_reported_files_sha256) == \
+      "$(sha256sum "$reported" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" old_r_stress_log_sha256) == \
+      "$(sha256sum "$log" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained old-runtime stress digest claims are inconsistent"
+}
+
+verify_cross_runtime_serialization() {
+  local top_metadata=$1
+  shift
+  local -a selected_versions=("$@") registered_versions=()
+  mapfile -t registered_versions < <("$REGISTRY" versions)
+  local complete=true index
+  if [[ ${#selected_versions[@]} -ne ${#registered_versions[@]} ]]; then
+    complete=false
+  else
+    for index in "${!registered_versions[@]}"; do
+      if [[ "${selected_versions[index]}" != "${registered_versions[index]}" ]]; then
+        complete=false
+        break
+      fi
+    done
+  fi
+
+  local status producer_runtime consumer_runtime timeout_seconds seal_sha
+  local driver_sha cross_directory artifacts state metadata driver_log
+  status=$(metadata_value "$top_metadata" \
+    cross_runtime_serialization_status)
+  producer_runtime=$(metadata_value "$top_metadata" \
+    cross_runtime_serialization_producer_runtime)
+  consumer_runtime=$(metadata_value "$top_metadata" \
+    cross_runtime_serialization_consumer_runtime)
+  timeout_seconds=$(metadata_value "$top_metadata" \
+    cross_runtime_serialization_timeout_seconds)
+  seal_sha=$(metadata_value "$top_metadata" \
+    cross_runtime_serialization_seal_sha256)
+  driver_sha=$(metadata_value "$top_metadata" \
+    cross_runtime_serialization_driver_log_sha256)
+  cross_directory="$run_root/cross-runtime-serialization"
+  artifacts="$cross_directory/artifacts"
+  state="$cross_directory/state"
+  metadata="$cross_directory/metadata"
+  driver_log="$top_metadata/cross-runtime-serialization-driver.log"
+  [[ "$timeout_seconds" =~ ^[1-9][0-9]{1,3}$ &&
+    "$timeout_seconds" -le 3600 ]] ||
+    fail "Cross-runtime serialization timeout is malformed or unbounded"
+
+  if [[ "$complete" == false ]]; then
+    [[ "$status" == not-applicable && "$producer_runtime" == - &&
+      "$consumer_runtime" == - && "$seal_sha" == - &&
+      "$driver_sha" == - && ! -e "$cross_directory" &&
+      ! -L "$cross_directory" && ! -e "$driver_log" &&
+      ! -L "$driver_log" ]] ||
+      fail "Partial runtime matrix retained a cross-runtime completion claim"
+    return 0
+  fi
+
+  [[ "$status" == passed && "$producer_runtime" == 4.0.5 &&
+    "$consumer_runtime" == 3.6.3 && "$seal_sha" =~ ^[0-9a-f]{64}$ &&
+    "$driver_sha" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "Complete runtime matrix lacks the required cross-runtime claim"
+  "$MANAGED_PATH_HELPER" "$ROOT" "$cross_directory" existing >/dev/null ||
+    fail "Cross-runtime serialization path is not one managed directory"
+  for directory in "$artifacts" "$state" "$metadata"; do
+    [[ -d "$directory" && ! -L "$directory" &&
+      "$(cd "$directory" && pwd -P)" == "$directory" ]] ||
+      fail "Cross-runtime evidence directory is absent or symbolic: $directory"
+  done
+  verify_seal "$metadata"
+  [[ "$seal_sha" == "$(sha256sum "$metadata/completion.seal" |
+      cut -d ' ' -f 1)" &&
+    -f "$driver_log" && ! -L "$driver_log" &&
+    "$driver_sha" == "$(sha256sum "$driver_log" | cut -d ' ' -f 1)" ]] ||
+    fail "Cross-runtime top-level digest bindings are stale"
+  text_has_exact_line_once "$driver_log" \
+    'cross_runtime_serialization=passed' ||
+    fail "Cross-runtime driver completion marker is absent"
+  text_has_exact_line_once "$driver_log" 'producer_runtime=4.0.5' ||
+    fail "Cross-runtime driver producer marker is absent"
+  text_has_exact_line_once "$driver_log" 'consumer_runtime=3.6.3' ||
+    fail "Cross-runtime driver consumer marker is absent"
+
+  local artifacts_manifest="$metadata/artifacts.manifest.tsv"
+  local state_manifest="$metadata/state.manifest.tsv"
+  for file in "$artifacts_manifest" "$state_manifest"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Cross-runtime receipt is absent or symbolic: $file"
+  done
+  "$PREFIX_RECEIPT" verify "$artifacts" "$artifacts_manifest" >/dev/null ||
+    fail "Cross-runtime semantic artifacts differ from their receipt"
+  "$PREFIX_RECEIPT" verify "$state" "$state_manifest" >/dev/null ||
+    fail "Cross-runtime isolated state differs from its receipt"
+
+  local fixture="$artifacts/current-v2-from-r-4.0.5.rds"
+  local roundtrip="$artifacts/r-3.6-roundtrip.rds"
+  local producer_result="$artifacts/producer.tsv"
+  local consumer_result="$artifacts/consumer.tsv"
+  local producer_log="$artifacts/producer.log"
+  local consumer_log="$artifacts/consumer.log"
+  local -a expected_artifact_names=(
+    consumer.log
+    consumer.tsv
+    current-v2-from-r-4.0.5.rds
+    producer.log
+    producer.tsv
+    r-3.6-roundtrip.rds
+  )
+  local -a observed_artifact_names=()
+  mapfile -t observed_artifact_names < <(
+    find "$artifacts" -mindepth 1 -maxdepth 1 -type f -printf '%f\n' |
+      LC_ALL=C sort
+  )
+  [[ "${observed_artifact_names[*]}" == \
+    "${expected_artifact_names[*]}" &&
+    -z $(find "$artifacts" -mindepth 1 -maxdepth 1 ! -type f -print -quit) ]] ||
+    fail "Cross-runtime artifact inventory differs from the exact contract"
+  for file in "$fixture" "$roundtrip" "$producer_result" "$consumer_result" \
+      "$producer_log" "$consumer_log"; do
+    [[ -s "$file" && ! -L "$file" ]] ||
+      fail "Cross-runtime semantic artifact is empty or symbolic: $file"
+  done
+
+  validate_cross_result() {
+    local file=$1 expected_mode=$2 expected_runtime=$3
+    local -a expected_keys=(
+      schema
+      mode
+      runtime
+      package
+      package_version
+      package_library
+      package_path
+      dll_path
+      serialization_version
+      fixture_status
+    )
+    if [[ "$expected_mode" == consumer ]]; then
+      expected_keys+=(mutation_status roundtrip_status)
+    fi
+    expected_keys+=(shared_leaf_edges attribute_closure semantic_status)
+    local -a observed_keys=()
+    [[ $(head -n 1 "$file") == $'field\tvalue' ]] ||
+      fail "Cross-runtime semantic result has the wrong header: $file"
+    awk -F '\t' '
+      NR == 1 {next}
+      NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}
+    ' "$file" ||
+      fail "Cross-runtime semantic result is malformed: $file"
+    mapfile -t observed_keys < <(tail -n +2 "$file" | cut -f 1)
+    [[ "${observed_keys[*]}" == "${expected_keys[*]}" ]] ||
+      fail "Cross-runtime semantic result has unexpected fields: $file"
+    [[ $(awk -F '\t' '$1 == "schema" {print $2}' "$file") == 1 &&
+      $(awk -F '\t' '$1 == "mode" {print $2}' "$file") == "$expected_mode" &&
+      $(awk -F '\t' '$1 == "runtime" {print $2}' "$file") == \
+        "$expected_runtime" &&
+      $(awk -F '\t' '$1 == "package" {print $2}' "$file") == paradox &&
+      $(awk -F '\t' '$1 == "serialization_version" {print $2}' "$file") == 3 &&
+      $(awk -F '\t' '$1 == "shared_leaf_edges" {print $2}' "$file") == 3 &&
+      $(awk -F '\t' '$1 == "attribute_closure" {print $2}' "$file") == \
+        present &&
+      $(awk -F '\t' '$1 == "semantic_status" {print $2}' "$file") == \
+        passed ]] ||
+      fail "Cross-runtime semantic result differs from its contract: $file"
+  }
+  validate_cross_result "$producer_result" producer "$producer_runtime"
+  validate_cross_result "$consumer_result" consumer "$consumer_runtime"
+  [[ $(awk -F '\t' '$1 == "fixture_status" {print $2}' \
+      "$producer_result") == written &&
+    $(awk -F '\t' '$1 == "fixture_status" {print $2}' \
+      "$consumer_result") == loaded &&
+    $(awk -F '\t' '$1 == "mutation_status" {print $2}' \
+      "$consumer_result") == passed &&
+    $(awk -F '\t' '$1 == "roundtrip_status" {print $2}' \
+      "$consumer_result") == passed ]] ||
+    fail "Cross-runtime producer/consumer result is incomplete"
+  text_has_exact_line_once "$producer_log" \
+    'cross_runtime_serialization_producer=passed' ||
+    fail "Cross-runtime producer log lacks its completion marker"
+  text_has_exact_line_once "$producer_log" 'runtime=4.0.5' ||
+    fail "Cross-runtime producer log lacks its runtime marker"
+  text_has_exact_line_once "$consumer_log" \
+    'cross_runtime_serialization_consumer=passed' ||
+    fail "Cross-runtime consumer log lacks its completion marker"
+  text_has_exact_line_once "$consumer_log" 'runtime=3.6.3' ||
+    fail "Cross-runtime consumer log lacks its runtime marker"
+
+  [[ $(head -n 1 "$metadata/run.tsv") == $'field\tvalue' ]] ||
+    fail "Cross-runtime metadata has the wrong header"
+  awk -F '\t' '
+    NR == 1 {next}
+    NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}
+  ' "$metadata/run.tsv" ||
+    fail "Cross-runtime metadata is malformed"
+  local -a expected_metadata_keys=(
+    status
+    schema
+    run_id
+    source_ref
+    source_commit
+    source_tree
+    producer_runtime
+    consumer_runtime
+    serialization_version
+    package_version
+    semantic_driver_sha256
+    producer_stage_seal_sha256
+    consumer_stage_seal_sha256
+    producer_prefix_receipt_sha256
+    consumer_prefix_receipt_sha256
+    producer_candidate_dso_sha256
+    consumer_candidate_dso_sha256
+    fixture_sha256
+    roundtrip_sha256
+    producer_result_sha256
+    consumer_result_sha256
+    producer_log_sha256
+    consumer_log_sha256
+    artifacts_manifest_sha256
+    state_manifest_sha256
+  )
+  local -a observed_metadata_keys=()
+  mapfile -t observed_metadata_keys < <(
+    tail -n +2 "$metadata/run.tsv" | cut -f 1
+  )
+  [[ "${observed_metadata_keys[*]}" == "${expected_metadata_keys[*]}" ]] ||
+    fail "Cross-runtime metadata has unexpected fields or ordering"
+  local producer_stage="$run_root/R-$producer_runtime"
+  local consumer_stage="$run_root/R-$consumer_runtime"
+  [[ $(awk -F '\t' '$1 == "package_library" {print $2}' \
+      "$producer_result") == "$producer_stage/artifacts/library" &&
+    $(awk -F '\t' '$1 == "package_path" {print $2}' \
+      "$producer_result") == \
+      "$producer_stage/artifacts/library/paradox" &&
+    $(awk -F '\t' '$1 == "dll_path" {print $2}' \
+      "$producer_result") == \
+      "$producer_stage/artifacts/library/paradox/libs/paradox.so" &&
+    $(awk -F '\t' '$1 == "package_library" {print $2}' \
+      "$consumer_result") == "$consumer_stage/artifacts/library" &&
+    $(awk -F '\t' '$1 == "package_path" {print $2}' \
+      "$consumer_result") == \
+      "$consumer_stage/artifacts/library/paradox" &&
+    $(awk -F '\t' '$1 == "dll_path" {print $2}' \
+      "$consumer_result") == \
+      "$consumer_stage/artifacts/library/paradox/libs/paradox.so" ]] ||
+    fail "Cross-runtime process did not load the exact stage candidates"
+  local semantic_relative=scripts/environment/runtime-matrix-cross-serialization.R
+  local producer_semantic="$producer_stage/artifacts/inputs/$semantic_relative"
+  local consumer_semantic="$consumer_stage/artifacts/inputs/$semantic_relative"
+  cmp -s -- "$producer_semantic" "$consumer_semantic" ||
+    fail "Retained cross-runtime semantic drivers differ"
+  local producer_package_version consumer_package_version
+  producer_package_version=$(awk -F '\t' \
+    '$1 == "package_version" {print $2}' "$producer_result")
+  consumer_package_version=$(awk -F '\t' \
+    '$1 == "package_version" {print $2}' "$consumer_result")
+  local producer_installed_version consumer_installed_version
+  producer_installed_version=$(awk '$1 == "Version:" {print $2}' \
+    "$producer_stage/artifacts/library/paradox/DESCRIPTION")
+  consumer_installed_version=$(awk '$1 == "Version:" {print $2}' \
+    "$consumer_stage/artifacts/library/paradox/DESCRIPTION")
+  [[ "$producer_package_version" == "$consumer_package_version" &&
+    "$producer_package_version" == "$producer_installed_version" &&
+    "$producer_package_version" == "$consumer_installed_version" &&
+    "$producer_package_version" =~ ^[0-9]+[.][0-9]+[.][0-9]+([.-][A-Za-z0-9]+)*$ ]] ||
+    fail "Cross-runtime package versions are malformed or inconsistent"
+
+  [[ $(metadata_value "$metadata" schema) == 1 &&
+    $(metadata_value "$metadata" run_id) == "$run_id" &&
+    $(metadata_value "$metadata" source_ref) == \
+      "$(metadata_value "$top_metadata" source_ref)" &&
+    $(metadata_value "$metadata" source_commit) == \
+      "$(metadata_value "$top_metadata" source_commit)" &&
+    $(metadata_value "$metadata" source_tree) == \
+      "$(metadata_value "$top_metadata" source_tree)" &&
+    $(metadata_value "$metadata" producer_runtime) == "$producer_runtime" &&
+    $(metadata_value "$metadata" consumer_runtime) == "$consumer_runtime" &&
+    $(metadata_value "$metadata" serialization_version) == 3 &&
+    $(metadata_value "$metadata" package_version) == \
+      "$producer_package_version" &&
+    $(metadata_value "$metadata" semantic_driver_sha256) == \
+      "$(sha256sum "$producer_semantic" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" producer_stage_seal_sha256) == \
+      "$(sha256sum "$producer_stage/metadata/completion.seal" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" consumer_stage_seal_sha256) == \
+      "$(sha256sum "$consumer_stage/metadata/completion.seal" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" producer_prefix_receipt_sha256) == \
+      "$(sha256sum "$producer_stage/artifacts/inputs/bootstrap-receipt/receipt.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" consumer_prefix_receipt_sha256) == \
+      "$(sha256sum "$consumer_stage/artifacts/inputs/bootstrap-receipt/receipt.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" producer_candidate_dso_sha256) == \
+      "$(sha256sum "$producer_stage/artifacts/library/paradox/libs/paradox.so" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" consumer_candidate_dso_sha256) == \
+      "$(sha256sum "$consumer_stage/artifacts/library/paradox/libs/paradox.so" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" fixture_sha256) == \
+      "$(sha256sum "$fixture" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" roundtrip_sha256) == \
+      "$(sha256sum "$roundtrip" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" producer_result_sha256) == \
+      "$(sha256sum "$producer_result" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" consumer_result_sha256) == \
+      "$(sha256sum "$consumer_result" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" producer_log_sha256) == \
+      "$(sha256sum "$producer_log" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" consumer_log_sha256) == \
+      "$(sha256sum "$consumer_log" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" artifacts_manifest_sha256) == \
+      "$(sha256sum "$artifacts_manifest" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" state_manifest_sha256) == \
+      "$(sha256sum "$state_manifest" | cut -d ' ' -f 1)" ]] ||
+    fail "Cross-runtime provenance or digest bindings are inconsistent"
+  unset -f validate_cross_result
+}
+
+top_metadata="$run_root/metadata"
+stages_file="$top_metadata/stages.tsv"
+[[ -f "$stages_file" && ! -L "$stages_file" ]] ||
+  fail "Runtime stage ledger is absent or symbolic"
+verify_seal "$top_metadata"
+awk -F '\t' '
+  NR == 1 {if ($0 != "runtime\tstage_seal_sha256") exit 1; next}
+  NF != 2 || $1 !~ /^[0-9]+[.][0-9]+[.][0-9]+$/ ||
+    $2 !~ /^[0-9a-f]+$/ || length($2) != 64 || seen[$1]++ {exit 1}
+  END {if (NR < 2) exit 1}
+' "$stages_file" || fail "Runtime stage ledger is malformed"
+mapfile -t versions < <(awk -F '\t' 'NR > 1 {print $1}' "$stages_file")
+previous_ordinal=0
+for version in "${versions[@]}"; do
+  "$REGISTRY" contains "$version" ||
+    fail "Runtime stage ledger names an unregistered runtime"
+  ordinal=$("$REGISTRY" field "$version" ordinal)
+  ((ordinal > previous_ordinal)) ||
+    fail "Runtime stage ledger differs from registry order"
+  previous_ordinal=$ordinal
+done
+top_run_id=$(metadata_value "$top_metadata" run_id)
+top_source_ref=$(metadata_value "$top_metadata" source_ref)
+top_commit=$(metadata_value "$top_metadata" source_commit)
+top_tree=$(metadata_value "$top_metadata" source_tree)
+top_stage_count=$(metadata_value "$top_metadata" stage_count)
+registered_count=$("$REGISTRY" versions | wc -l)
+[[ "$top_run_id" == "$run_id" &&
+  "$top_source_ref" =~ ^refs/[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
+  "$top_source_ref" != *..* && "$top_source_ref" != */ &&
+  "$top_source_ref" != *//* && "$top_commit" =~ ^[0-9a-f]{40}$ &&
+  "$top_tree" =~ ^[0-9a-f]{40}$ &&
+  "$top_stage_count" =~ ^[1-9][0-9]*$ &&
+  "$top_stage_count" -le "$registered_count" &&
+  "$top_stage_count" -eq "${#versions[@]}" ]] ||
+  fail "Top-level runtime provenance is malformed or inconsistent"
+"$GIT_HELPER" verify-ref "$ROOT" "$top_source_ref" "$top_commit" \
+  "$top_tree" >/dev/null ||
+  fail "Top-level source ref no longer resolves to its recorded commit and tree"
+first_source="$run_root/R-${versions[0]}/artifacts/source"
+[[ -f "$first_source/$TRUSTED_INPUT_RELATIVE" &&
+  ! -L "$first_source/$TRUSTED_INPUT_RELATIVE" ]] ||
+  fail "Retained trusted-input bootstrap is absent or symbolic"
+"$GIT_HELPER" show-file \
+  "$ROOT" "$top_commit:$TRUSTED_INPUT_RELATIVE" |
+  cmp -s -- "$first_source/$TRUSTED_INPUT_RELATIVE" - ||
+  fail "Retained trusted-input bootstrap differs from the recorded commit"
+verify_mbo_config_evidence "$top_metadata" \
+  "$first_source"
+verify_trusted_inputs_manifest "$top_metadata" \
+  "$first_source"
+verify_scheduler_evidence "$top_metadata" "${versions[@]}"
+verify_cross_runtime_serialization "$top_metadata" "${versions[@]}"
+for version in "${versions[@]}"; do
+  "$REGISTRY" contains "$version" || fail "Unexpected retained runtime: $version"
+  stage="$run_root/R-$version"
+  metadata="$stage/metadata"
+  artifacts="$stage/artifacts"
+  verify_seal "$metadata"
+  expected_stage_seal=$(awk -F '\t' -v version="$version" \
+    '$1 == version {print $2}' "$stages_file")
+  [[ "$expected_stage_seal" == \
+    "$(sha256sum "$metadata/completion.seal" | cut -d ' ' -f 1)" ]] ||
+    fail "Stage ledger digest differs from the retained completion seal"
+  [[ -d "$artifacts" && ! -L "$artifacts" ]] || fail "Artifact tree is absent: $artifacts"
+  [[ -f "$metadata/artifacts.manifest.tsv" && ! -L "$metadata/artifacts.manifest.tsv" ]] ||
+    fail "Artifact tree receipt is absent"
+  "$PREFIX_RECEIPT" verify "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
+  verify_source_archive "$artifacts" "$metadata"
+  verify_trusted_inputs "$artifacts" "$metadata"
+  verify_recorded_digests "$version" "$artifacts" "$metadata"
+  verify_runtime_symbol_scope "$version" "$artifacts" "$metadata"
+  verify_r45_compiled_code_policy "$version" "$artifacts" "$metadata"
+  [[ $(metadata_value "$metadata" scheduler_resource_report_sha256) == \
+      "$(metadata_value "$top_metadata" resource_report_sha256)" &&
+    $(metadata_value "$metadata" scheduler_stage_tasks_sha256) == \
+      "$(metadata_value "$top_metadata" stage_tasks_sha256)" &&
+    $(metadata_value "$metadata" scheduler_wave_plan_sha256) == \
+      "$(metadata_value "$top_metadata" wave_plan_sha256)" &&
+    $(metadata_value "$metadata" scheduler_task_ledger_sha256) == \
+      "$(metadata_value "$top_metadata" wave_task_ledger_sha256)" &&
+    $(metadata_value "$metadata" scheduler_wave_manifest_sha256) == \
+      "$(metadata_value "$top_metadata" wave_manifest_sha256)" &&
+    $(metadata_value "$metadata" stage_worker_sha256) == \
+      "$(sha256sum "$artifacts/inputs/scripts/environment/run-runtime-matrix-stage" | cut -d ' ' -f 1)" ]] ||
+    fail "Stage scheduler evidence differs from the top-level admission"
+  for fixture_field in mbo_config_commit mbo_config_tree \
+      mbo_config_provenance_sha256 mbo_config_fixture_manifest_sha256 \
+      mbo_config_mixed_search_space_sha256 \
+      mbo_config_numeric_search_space_sha256; do
+    [[ $(metadata_value "$metadata" "$fixture_field") == \
+      "$(metadata_value "$top_metadata" "$fixture_field")" ]] ||
+      fail "Stage mbo_config evidence differs from the shared retained input: $fixture_field"
+  done
+  verify_source_scope "$artifacts" "$metadata"
+  verify_old_r_stress "$version" "$artifacts" "$metadata"
+  verify_declared_minimum_check "$version" "$artifacts" "$metadata"
+  verify_declared_floor_smoke "$version" "$artifacts" "$metadata"
+  recorded_run_id=$(awk -F '\t' '$1 == "run_id" {print $2}' "$metadata/run.tsv")
+  recorded_version=$(awk -F '\t' '$1 == "runtime" {print $2}' "$metadata/run.tsv")
+  recorded_ref=$(awk -F '\t' '$1 == "source_ref" {print $2}' "$metadata/run.tsv")
+  recorded_commit=$(awk -F '\t' '$1 == "source_commit" {print $2}' "$metadata/run.tsv")
+  recorded_tree=$(awk -F '\t' '$1 == "source_tree" {print $2}' "$metadata/run.tsv")
+  recorded_branch=$(awk -F '\t' '$1 == "r_api_compat_branch" {print $2}' "$metadata/run.tsv")
+  [[ "$recorded_run_id" == "$run_id" && "$recorded_version" == "$version" &&
+    "$recorded_ref" == "$top_source_ref" && "$recorded_commit" == "$top_commit" &&
+    "$recorded_tree" == "$top_tree" ]] ||
+    fail "Stage source/runtime provenance differs from the top-level ledger"
+  [[ "$recorded_branch" == "$("$REGISTRY" field "$version" api_branch)" ]] ||
+    fail "Retained public-R-API branch marker is inconsistent"
+  text_has_exact_line_once "$artifacts/logs/focused-probe.log" \
+    'runtime_matrix_focused_probe=passed' ||
+    fail "Focused public-R-API probe did not pass"
+  text_has_exact_line_once "$artifacts/logs/source-tests.log" \
+    'runtime_matrix_source_tests=passed' ||
+    fail "Full practical source suite did not pass"
+done
+
+printf 'runtime_matrix_evidence=passed\nrun_id=%s\nstages=%s\n' \
+  "$run_id" "${#versions[@]}"

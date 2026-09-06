@@ -23,6 +23,8 @@ LHS functions are implemented in package \pkg{lhs}, default is to use \code{\lin
 Generate a space-filling design using Latin hypercube sampling. Dependent
 parameters whose constraints are unsatisfied generate \code{NA} entries in
 their respective columns.
+The returned \code{\link{Design}} retains the exact \code{param_set} reference supplied by
+the caller.
 }
 \examples{
 pset = ps(
@@ -35,9 +37,9 @@ if (requireNamespace("lhs", quietly = TRUE)) {
 }
 }
 \seealso{
-Other generate_design: 
-\code{\link{generate_design_grid}()},
-\code{\link{generate_design_random}()},
-\code{\link{generate_design_sobol}()}
+Other generate_design:
+\code{\link[=generate_design_grid]{generate_design_grid()}},
+\code{\link[=generate_design_random]{generate_design_random()}},
+\code{\link[=generate_design_sobol]{generate_design_sobol()}}
 }
 \concept{generate_design}

@@ -1,5 +1,13 @@
 context("Repeated params")
 
+test_that("replication requires a count or explicit affixes", {
+  expect_error(
+    ps_replicate(ps(x = p_int())),
+    "At least one of `times` or `affixes` must be supplied",
+    fixed = TRUE
+  )
+})
+
 test_that("rep params work", {
   p = ParamDbl$new(id = "x", lower = 1, upper = 3)
   ps = ps_replicate(p, 2)
@@ -20,4 +28,3 @@ test_that("rep params work", {
     expect_equal(ps$levels[[id]], c("a", "b"))
   }
 })
-

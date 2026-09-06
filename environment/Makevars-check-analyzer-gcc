@@ -1,0 +1,27 @@
+# GCC 14 static analyzer build.  Analyzer findings and ordinary compiler
+# warnings are fatal.  This is intentionally separate from runtime testing.
+
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
+# DESCRIPTION requests USE_C17 for ordinary installs.  Keep this release lane
+# on its stronger portable-source contract by deliberately supplying GNU C99
+# through R's selected no-later-than-C17 variable.
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
+SHLIB_LD = $(CC)
+# glibc deliberately diagnoses _FORTIFY_SOURCE at -O0. The analyzer stays
+# unoptimized for path fidelity; the strict and runtime profiles retain
+# fortification, so omitting it here does not weaken a shipped build.
+CPPFLAGS = -DNDEBUG -isystem $(CONDA_PREFIX)/include
+
+PARADOX_ANALYZER_FLAGS = -O0 -g3 -fno-omit-frame-pointer \
+  -Wall -Wextra -Wpedantic -Werror \
+  -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations \
+  -Wold-style-definition -Wbad-function-cast \
+  -Wformat=2 -Wformat-security -Wundef -Wshadow \
+  -Wconversion -Wsign-conversion -Wpointer-arith \
+  -Wcast-align=strict -Wcast-qual -Wwrite-strings -Wvla \
+  -Werror=implicit-function-declaration -Werror=incompatible-pointer-types \
+  -fanalyzer -fanalyzer-call-summaries \
+  -fdiagnostics-path-format=inline-events -fdiagnostics-show-option
+
+CFLAGS = $(PARADOX_ANALYZER_FLAGS)
+C17FLAGS = $(PARADOX_ANALYZER_FLAGS)

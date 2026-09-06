@@ -1,0 +1,178 @@
+#!/usr/bin/env sh
+# Source after the ordinary repository activation:
+#   . scripts/activate
+#   . scripts/activate-compat-system
+
+if [ ! -f DESCRIPTION ]; then
+  echo "scripts/activate-compat-system must be sourced from the paradox repository root" >&2
+  # shellcheck disable=SC2317 # exit is reached only when this file is executed.
+  return 1 2>/dev/null || exit 1
+fi
+
+PARADOX_COMPAT_REQUESTED_ROOT=$(pwd -P)
+if [ "${PARADOX_ACTIVE_ROOT:-}" != "$PARADOX_COMPAT_REQUESTED_ROOT" ]; then
+  echo "activate the ordinary repository environment first: . scripts/activate" >&2
+  unset PARADOX_COMPAT_REQUESTED_ROOT
+  # shellcheck disable=SC2317 # exit is reached only when this file is executed.
+  return 1 2>/dev/null || exit 1
+fi
+
+# Rebuild the ordinary environment first. This makes re-sourcing reparative and
+# ensures a failed overlay verification cannot leave a previously active JVM,
+# MPI, library, or compiler search path selected.
+unset PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT PARADOX_COMPAT_SYSTEM_RECEIPT
+unset PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO
+unset PARADOX_COMPAT_SYSTEM_P1 PARADOX_COMPAT_SYSTEM_CHILD_PATH
+unset PROJ_DATA GDAL_DATA UDUNITS2_XML_PATH UDUNITS2_INCLUDE UDUNITS2_LIBS
+unset JAVA JAVA_CPPFLAGS JAVA_LIBS JAVA_LD_LIBRARY_PATH R_JAVA_LD_LIBRARY_PATH
+unset MPI_ROOT MPI_INCLUDE MPI_LIB_PATH MPI_TYPE OPAL_PREFIX
+unset OMPI_CC OMPI_CXX OMPI_FC OMPI_MCA_plm_ssh_agent
+unset PRTE_MCA_rmaps_default_mapping_policy
+unset CARGO_HOME RUSTUP_HOME CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER
+unset FONTCONFIG_PATH FONTCONFIG_FILE
+# shellcheck disable=SC1091 # tracked helper resolved from the selected checkout.
+if ! . "$PARADOX_COMPAT_REQUESTED_ROOT/scripts/activate"; then
+  echo "ordinary repository activation could not be repaired" >&2
+  unset PARADOX_COMPAT_REQUESTED_ROOT
+  # shellcheck disable=SC2317 # exit is reached only when this file is executed.
+  return 1 2>/dev/null || exit 1
+fi
+unset PARADOX_COMPAT_REQUESTED_ROOT
+
+PARADOX_COMPAT_SYSTEM_ROOT="$PARADOX_ROOT/.local/compat/system"
+PARADOX_COMPAT_SYSTEM_GEO="$PARADOX_COMPAT_SYSTEM_ROOT/geo"
+PARADOX_COMPAT_SYSTEM_P1="$PARADOX_COMPAT_SYSTEM_ROOT/p1"
+PARADOX_COMPAT_SYSTEM_RECEIPT="$PARADOX_ROOT/.local/receipts/compat-system/receipt.tsv"
+
+if ! "$PARADOX_ROOT/scripts/bootstrap-compat-system" --verify >/dev/null; then
+  echo "repository-local compatibility system verification failed" >&2
+  unset PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO
+  unset PARADOX_COMPAT_SYSTEM_P1 PARADOX_COMPAT_SYSTEM_RECEIPT
+  # shellcheck disable=SC2317 # exit is reached only when this file is executed.
+  return 1 2>/dev/null || exit 1
+fi
+
+export PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO
+export PARADOX_COMPAT_SYSTEM_P1 PARADOX_COMPAT_SYSTEM_RECEIPT
+
+# Rebuild the complete repository-managed executable prefix. Documentation
+# tools retain the order established by ordinary activation, while the reviewed
+# R/compiler toolchain remains ahead of the P1 and GEO overlays. Remove every
+# managed entry first so hostile inherited ordering and repeated activation are
+# both repaired deterministically.
+PARADOX_COMPAT_TINYTEX_BIN="$PARADOX_ROOT/.local/tinytex/bin/x86_64-linux"
+PARADOX_COMPAT_QUARTO_BIN="$PARADOX_ROOT/.local/quarto/1.9.38/bin"
+PARADOX_COMPAT_TOOLCHAIN_BIN="$PARADOX_ROOT/.local/toolchain/bin"
+PARADOX_COMPAT_LOCAL_BIN="$PARADOX_ROOT/.local/bin"
+PARADOX_COMPAT_CLEAN_PATH=
+PARADOX_COMPAT_PATH_REMAINDER=${PATH:-}
+while :; do
+  case $PARADOX_COMPAT_PATH_REMAINDER in
+    *:*)
+      PARADOX_COMPAT_PATH_ENTRY=${PARADOX_COMPAT_PATH_REMAINDER%%:*}
+      PARADOX_COMPAT_PATH_REMAINDER=${PARADOX_COMPAT_PATH_REMAINDER#*:}
+      ;;
+    *)
+      PARADOX_COMPAT_PATH_ENTRY=$PARADOX_COMPAT_PATH_REMAINDER
+      PARADOX_COMPAT_PATH_REMAINDER=
+      ;;
+  esac
+  case $PARADOX_COMPAT_PATH_ENTRY in
+    ""|"$PARADOX_COMPAT_TINYTEX_BIN"|"$PARADOX_COMPAT_QUARTO_BIN"|\
+      "$PARADOX_COMPAT_TOOLCHAIN_BIN"|"$PARADOX_COMPAT_LOCAL_BIN"|\
+      "$PARADOX_COMPAT_SYSTEM_P1/bin"|"$PARADOX_COMPAT_SYSTEM_GEO/bin"|\
+      "$PARADOX_ROOT/.local/runtime-matrix/prefixes/"R-*/bin) ;;
+    *)
+      case :$PARADOX_COMPAT_CLEAN_PATH: in
+        *:"$PARADOX_COMPAT_PATH_ENTRY":*) ;;
+        *)
+          PARADOX_COMPAT_CLEAN_PATH=${PARADOX_COMPAT_CLEAN_PATH:+"$PARADOX_COMPAT_CLEAN_PATH:"}$PARADOX_COMPAT_PATH_ENTRY
+          ;;
+      esac
+      ;;
+  esac
+  [ -n "$PARADOX_COMPAT_PATH_REMAINDER" ] || break
+done
+PARADOX_COMPAT_MANAGED_PATH="$PARADOX_COMPAT_TOOLCHAIN_BIN:$PARADOX_COMPAT_LOCAL_BIN"
+if [ -x "$PARADOX_COMPAT_QUARTO_BIN/quarto" ]; then
+  PARADOX_COMPAT_MANAGED_PATH="$PARADOX_COMPAT_QUARTO_BIN:$PARADOX_COMPAT_MANAGED_PATH"
+fi
+if [ -x "$PARADOX_COMPAT_TINYTEX_BIN/pdflatex" ] &&
+    [ -x "$PARADOX_COMPAT_TINYTEX_BIN/kpsewhich" ] &&
+    [ -x "$PARADOX_COMPAT_TINYTEX_BIN/makeindex" ]; then
+  PARADOX_COMPAT_MANAGED_PATH="$PARADOX_COMPAT_TINYTEX_BIN:$PARADOX_COMPAT_MANAGED_PATH"
+fi
+PARADOX_COMPAT_SYSTEM_CHILD_PATH="$PARADOX_COMPAT_MANAGED_PATH:$PARADOX_COMPAT_SYSTEM_P1/bin"
+PARADOX_COMPAT_SYSTEM_CHILD_PATH="$PARADOX_COMPAT_SYSTEM_CHILD_PATH:$PARADOX_COMPAT_SYSTEM_GEO/bin:/usr/bin:/bin"
+export PARADOX_COMPAT_SYSTEM_CHILD_PATH
+PATH="$PARADOX_COMPAT_MANAGED_PATH:$PARADOX_COMPAT_SYSTEM_P1/bin"
+PATH="$PATH:$PARADOX_COMPAT_SYSTEM_GEO/bin"
+PATH="$PATH${PARADOX_COMPAT_CLEAN_PATH:+:$PARADOX_COMPAT_CLEAN_PATH}"
+export PATH
+unset PARADOX_COMPAT_CLEAN_PATH PARADOX_COMPAT_PATH_REMAINDER
+unset PARADOX_COMPAT_PATH_ENTRY PARADOX_COMPAT_MANAGED_PATH
+unset PARADOX_COMPAT_TINYTEX_BIN PARADOX_COMPAT_QUARTO_BIN
+unset PARADOX_COMPAT_TOOLCHAIN_BIN PARADOX_COMPAT_LOCAL_BIN
+
+PKG_CONFIG="$PARADOX_ROOT/.local/toolchain/bin/pkg-config"
+PKG_CONFIG_LIBDIR="$PARADOX_COMPAT_SYSTEM_P1/lib/pkgconfig"
+PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$PARADOX_COMPAT_SYSTEM_P1/share/pkgconfig"
+PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$PARADOX_COMPAT_SYSTEM_GEO/lib/pkgconfig"
+PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$PARADOX_COMPAT_SYSTEM_GEO/share/pkgconfig"
+PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$PARADOX_ROOT/.local/toolchain/lib/pkgconfig"
+PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR:$PARADOX_ROOT/.local/toolchain/share/pkgconfig"
+PKG_CONFIG_PATH=$PKG_CONFIG_LIBDIR
+CMAKE_PREFIX_PATH="$PARADOX_COMPAT_SYSTEM_P1:$PARADOX_COMPAT_SYSTEM_GEO"
+CMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH:$PARADOX_ROOT/.local/toolchain"
+CMAKE_PREFIX_PATH="$CMAKE_PREFIX_PATH:$PARADOX_ROOT/.local/toolchain/x86_64-conda-linux-gnu/sysroot/usr"
+export PKG_CONFIG PKG_CONFIG_LIBDIR PKG_CONFIG_PATH CMAKE_PREFIX_PATH
+unset PKG_CONFIG_SYSROOT_DIR
+
+PROJ_DATA="$PARADOX_COMPAT_SYSTEM_GEO/share/proj"
+GDAL_DATA="$PARADOX_COMPAT_SYSTEM_GEO/share/gdal"
+UDUNITS2_XML_PATH="$PARADOX_COMPAT_SYSTEM_GEO/share/udunits/udunits2.xml"
+UDUNITS2_INCLUDE="$PARADOX_COMPAT_SYSTEM_GEO/include"
+UDUNITS2_LIBS="$PARADOX_COMPAT_SYSTEM_GEO/lib"
+export PROJ_DATA GDAL_DATA UDUNITS2_XML_PATH UDUNITS2_INCLUDE UDUNITS2_LIBS
+
+JAVA_HOME="$PARADOX_COMPAT_SYSTEM_P1/lib/jvm"
+JAVA="$JAVA_HOME/bin/java"
+JAVAC="$JAVA_HOME/bin/javac"
+JAR="$JAVA_HOME/bin/jar"
+JAVA_CPPFLAGS="-I$JAVA_HOME/include -I$JAVA_HOME/include/linux"
+JAVA_LIBS="-L$JAVA_HOME/lib/server -Wl,-rpath,$JAVA_HOME/lib/server -ljvm"
+JAVA_LD_LIBRARY_PATH="$JAVA_HOME/lib/server"
+R_JAVA_LD_LIBRARY_PATH=$JAVA_LD_LIBRARY_PATH
+export JAVA_HOME JAVA JAVAC JAR JAVA_CPPFLAGS JAVA_LIBS
+export JAVA_LD_LIBRARY_PATH R_JAVA_LD_LIBRARY_PATH
+
+LD_LIBRARY_PATH="$PARADOX_COMPAT_SYSTEM_P1/lib:$JAVA_HOME/lib/server:$PARADOX_COMPAT_SYSTEM_GEO/lib"
+export LD_LIBRARY_PATH
+
+CARGO_HOME="$PARADOX_COMPAT_SYSTEM_ROOT/cargo-home"
+RUSTUP_HOME="$PARADOX_COMPAT_SYSTEM_ROOT/rustup-home"
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER="$PARADOX_ROOT/.local/toolchain/bin/x86_64-conda-linux-gnu-cc"
+export CARGO_HOME RUSTUP_HOME CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER
+
+MPI_ROOT=$PARADOX_COMPAT_SYSTEM_P1
+MPI_INCLUDE="$MPI_ROOT/include"
+MPI_LIB_PATH="$MPI_ROOT/lib"
+MPI_TYPE=OPENMPI
+OPAL_PREFIX=$MPI_ROOT
+OMPI_CC="$PARADOX_ROOT/.local/toolchain/bin/x86_64-conda-linux-gnu-cc"
+OMPI_CXX="$PARADOX_ROOT/.local/toolchain/bin/x86_64-conda-linux-gnu-c++"
+OMPI_FC="$PARADOX_ROOT/.local/toolchain/bin/x86_64-conda-linux-gnu-gfortran"
+OMPI_MCA_plm_ssh_agent=false
+PRTE_MCA_rmaps_default_mapping_policy=:oversubscribe
+export MPI_ROOT MPI_INCLUDE MPI_LIB_PATH MPI_TYPE OPAL_PREFIX
+export OMPI_CC OMPI_CXX OMPI_FC OMPI_MCA_plm_ssh_agent
+export PRTE_MCA_rmaps_default_mapping_policy
+
+FONTCONFIG_PATH="$PARADOX_COMPAT_SYSTEM_P1/etc/fonts"
+FONTCONFIG_FILE="$FONTCONFIG_PATH/fonts.conf"
+R_MAKEVARS_USER="$PARADOX_COMPAT_SYSTEM_ROOT/Makevars"
+export FONTCONFIG_PATH FONTCONFIG_FILE R_MAKEVARS_USER
+
+PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT=$PARADOX_ROOT
+export PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT
+hash -r 2>/dev/null || true

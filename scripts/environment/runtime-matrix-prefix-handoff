@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Validate the exact prefix receipt copied into one retained runtime stage and
+# compare it byte-for-byte with the live receipt selected by the registry.
+# Callers authenticate the live prefix immediately before this comparison.
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+MANAGED_PATH="$ROOT/scripts/environment/runtime-matrix-managed-path"
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+INVENTORY_HELPER="$ROOT/scripts/environment/runtime-matrix-inventory.R"
+
+fail() {
+  printf 'runtime-matrix-prefix-handoff: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 2 ]] ||
+  fail "usage: runtime-matrix-prefix-handoff VERSION DIRECTORY"
+
+version=$1
+handoff=$2
+[[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] ||
+  fail "runtime version has an invalid shape"
+for input in "$REGISTRY" "$MANAGED_PATH" "$PREFIX_RECEIPT" \
+    "$INVENTORY_HELPER"; do
+  [[ -f "$input" && ! -L "$input" ]] ||
+    fail "required handoff input is absent or symbolic: $input"
+done
+[[ -x "$REGISTRY" && -x "$MANAGED_PATH" && -x "$PREFIX_RECEIPT" ]] ||
+  fail "required handoff helper is not executable"
+"$REGISTRY" contains "$version" ||
+  fail "runtime is not registered: $version"
+
+case "$handoff" in
+  "$ROOT/.local/checks/"*) ;;
+  *) fail "prefix receipt handoff is outside the retained stage tree" ;;
+esac
+relative=${handoff#"$ROOT/.local/checks/"}
+run_id=${relative%%/*}
+[[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
+  fail "prefix receipt handoff has an invalid run ID"
+expected_handoff="$ROOT/.local/checks/$run_id/runtime-matrix/R-$version/artifacts/inputs/bootstrap-receipt"
+[[ "$handoff" == "$expected_handoff" ]] ||
+  fail "prefix receipt handoff is not the exact runtime stage input"
+live="$ROOT/.local/runtime-matrix/receipts/R-$version"
+"$MANAGED_PATH" "$ROOT" "$handoff" existing >/dev/null
+"$MANAGED_PATH" "$ROOT" "$live" existing >/dev/null
+
+receipt_files=(
+  installed-explicit.lock
+  packages.tsv
+  prefix.manifest.tsv
+  receipt.sha256
+  receipt.tsv
+)
+
+validate_directory() {
+  local directory=$1 label=$2 entry index
+  local -a observed=()
+  mapfile -d '' -t observed < <(
+    find -H "$directory" -mindepth 1 -maxdepth 1 -printf '%f\0' |
+      LC_ALL=C sort -z
+  )
+  [[ ${#observed[@]} -eq ${#receipt_files[@]} ]] ||
+    fail "$label does not contain the exact five receipt files"
+  for index in "${!receipt_files[@]}"; do
+    entry=${receipt_files[index]}
+    [[ "${observed[index]}" == "$entry" &&
+      -f "$directory/$entry" && ! -L "$directory/$entry" ]] ||
+      fail "$label contains an absent, symbolic, or unexpected receipt file"
+  done
+}
+
+validate_directory "$handoff" "staged prefix receipt"
+validate_directory "$live" "live prefix receipt"
+for file in "${receipt_files[@]}"; do
+  cmp -s -- "$handoff/$file" "$live/$file" ||
+    fail "staged prefix receipt differs from the live authenticated receipt"
+done
+
+receipt="$handoff/receipt.tsv"
+seal="$handoff/receipt.sha256"
+manifest="$handoff/prefix.manifest.tsv"
+installed="$handoff/installed-explicit.lock"
+packages="$handoff/packages.tsv"
+runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+runtime_lock="$ROOT/$runtime_lock_relative"
+repair_relative=$("$REGISTRY" field "$version" prefix_repair)
+
+expected_keys=(
+  format
+  runtime
+  platform
+  prefix_relative
+  lock_relative
+  lock_sha256
+  micromamba_version
+  micromamba_archive_sha256
+  micromamba_executable_sha256
+  inventory_helper_sha256
+  prefix_receipt_helper_sha256
+  prefix_manifest_sha256
+  r_version
+  r_home_relative
+  cc
+)
+if [[ "$repair_relative" != - ]]; then
+  expected_keys+=(
+    prefix_repair_relative
+    prefix_repair_lock_sha256
+    prefix_repair_helper_sha256
+  )
+fi
+awk -F '\t' '
+  NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}
+' "$receipt" || fail "staged prefix receipt is malformed"
+mapfile -t observed_keys < <(cut -f 1 "$receipt")
+[[ ${#observed_keys[@]} -eq ${#expected_keys[@]} ]] ||
+  fail "staged prefix receipt has the wrong field count"
+for index in "${!expected_keys[@]}"; do
+  [[ "${observed_keys[index]}" == "${expected_keys[index]}" ]] ||
+    fail "staged prefix receipt has an unexpected field order"
+done
+
+receipt_value() {
+  local key=$1
+  awk -F '\t' -v key="$key" '$1 == key {print $2}' "$receipt"
+}
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+expected_seal="$(sha256_file "$receipt")  receipt.tsv"
+[[ $(wc -l < "$seal") -eq 1 && "$(<"$seal")" == "$expected_seal" ]] ||
+  fail "staged prefix receipt seal is malformed or stale"
+[[ $(head -n 1 "$manifest") == \
+    $'path\tkind\tsha256_or_target\tsize\tmode' &&
+  $(head -n 1 "$packages") == \
+    $'package\tversion\tbuild\tsubdir\turl\tsha256' ]] ||
+  fail "staged prefix manifest or package inventory has the wrong header"
+tail -n +4 "$runtime_lock" | LC_ALL=C sort |
+  cmp -s -- "$installed" - ||
+  fail "staged explicit inventory differs from the runtime lock"
+
+[[ "$(receipt_value format)" == 1 &&
+  "$(receipt_value runtime)" == "$version" &&
+  "$(receipt_value platform)" == linux-64 &&
+  "$(receipt_value prefix_relative)" == \
+    ".local/runtime-matrix/prefixes/R-$version" &&
+  "$(receipt_value lock_relative)" == "$runtime_lock_relative" &&
+  "$(receipt_value lock_sha256)" == "$(sha256_file "$runtime_lock")" &&
+  "$(receipt_value inventory_helper_sha256)" == \
+    "$(sha256_file "$INVENTORY_HELPER")" &&
+  "$(receipt_value prefix_receipt_helper_sha256)" == \
+    "$(sha256_file "$PREFIX_RECEIPT")" &&
+  "$(receipt_value prefix_manifest_sha256)" == "$(sha256_file "$manifest")" &&
+  "$(receipt_value r_version)" == "$version" &&
+  "$(receipt_value r_home_relative)" == \
+    ".local/runtime-matrix/prefixes/R-$version/lib/R" ]] ||
+  fail "staged prefix receipt differs from current authenticated inputs"
+for key in micromamba_archive_sha256 micromamba_executable_sha256; do
+  [[ "$(receipt_value "$key")" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "staged prefix receipt has a malformed SHA-256 field: $key"
+done
+[[ "$(receipt_value micromamba_version)" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ &&
+  -n "$(receipt_value cc)" ]] ||
+  fail "staged prefix receipt has malformed runtime-tool identity"
+if [[ "$repair_relative" != - ]]; then
+  [[ "$(receipt_value prefix_repair_relative)" == "$repair_relative" &&
+    "$(receipt_value prefix_repair_lock_sha256)" == \
+      "$(sha256_file "$ROOT/$repair_relative")" &&
+    "$(receipt_value prefix_repair_helper_sha256)" == \
+      "$(sha256_file "$ROOT/scripts/environment/runtime-matrix-prefix-repair")" ]] ||
+    fail "staged prefix-repair receipt differs from current authenticated inputs"
+fi
+
+printf 'runtime_matrix_prefix_handoff=passed\nruntime=%s\nreceipt=%s\n' \
+  "$version" "$handoff"

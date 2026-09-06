@@ -1,0 +1,2168 @@
+#!/usr/bin/env bash
+
+# Prepare and authenticate the small public-header surface needed by the
+# offline R API compiler gate.  Expensive extracted source/build trees are
+# private cache-miss staging and are removed before an entry is published.
+
+set -euo pipefail
+
+fail() {
+  printf 'r-api-header-cache: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: r-api-header-cache prepare OPTIONS
+       r-api-header-cache terminate-active --active-group-file PATH
+         [--grace-tenths N]
+
+Required options:
+  --root DIRECTORY
+  --version X.Y.Z
+  --archive-sha256 SHA256
+  --toolchain-lock FILE
+  --output DIRECTORY
+  --metadata-directory DIRECTORY
+  --log-directory DIRECTORY
+  --tree-receipt-helper FILE
+  --setsid FILE
+  --active-group-file FILE
+  --lock-timeout-seconds N
+  --command-timeout-seconds N
+  --curl7-receipt-helper FILE
+
+The command verifies or creates a repository-local content-addressed cache
+entry and atomically copies its authenticated header tree into OUTPUT.
+EOF
+}
+
+sha256_value() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
+}
+
+sha256_stream() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | cut -d ' ' -f 1
+  else
+    shasum -a 256 | cut -d ' ' -f 1
+  fi
+}
+
+exact_tsv_value() {
+  local file=$1 field=$2 value count
+  value=$(awk -F '\t' -v field="$field" '$1 == field {print $2}' "$file")
+  count=$(awk -F '\t' -v field="$field" \
+    '$1 == field {count++} END {print count + 0}' "$file")
+  [[ "$count" -eq 1 ]] || return 1
+  printf '%s\n' "$value"
+}
+
+resolve_plain_executable() {
+  local selected=$1 search_path=$2 candidate directory
+  if [[ "$selected" == */* ]]; then
+    [[ "$selected" == /* ]] || return 1
+    candidate=$selected
+  else
+    candidate=
+    IFS=: read -r -a search_directories <<< "$search_path"
+    for directory in "${search_directories[@]}"; do
+      [[ "$directory" == /* && -d "$directory" && ! -L "$directory" ]] ||
+        return 1
+      if [[ -x "$directory/$selected" ]]; then
+        candidate="$directory/$selected"
+        break
+      fi
+    done
+  fi
+  [[ "$candidate" == /* && -f "$candidate" && -x "$candidate" &&
+     ! -L "$candidate" ]] || return 1
+  printf '%s\n' "$candidate"
+}
+
+tool_identity_sha256() {
+  local executable=$1
+  LC_ALL=C "$executable" --version 2>&1 | sha256_stream
+}
+
+tool_fingerprint() {
+  local executable=$1
+  {
+    printf 'path=%s\n' "$executable"
+    printf 'sha256=%s\n' "$(sha256_value "$executable")"
+    printf 'identity=%s\n' "$(tool_identity_sha256 "$executable")"
+  } | sha256_stream
+}
+
+select_configure_compatibility() {
+  local version=$1
+  CONFIGURE_COMPATIBILITY_MODE=none
+  CONFIGURE_CFLAGS_SUFFIX=
+  CURL_PREFLIGHT_REQUIRED=false
+  CURL_PREFLIGHT_MINIMUM_HEX=none
+  case "$version" in
+    3.6.0)
+      # Two upstream configure probes omit declarations that contemporary C
+      # compilers diagnose as errors.  Demote only that diagnostic so the
+      # original bzip2 and HTTPS compile/run probes still execute.
+      CONFIGURE_COMPATIBILITY_MODE=legacy-implicit-declarations-locked-curl7
+      CONFIGURE_CFLAGS_SUFFIX=-Wno-error=implicit-function-declaration
+      CURL_PREFLIGHT_REQUIRED=true
+      CURL_PREFLIGHT_MINIMUM_HEX=071600
+      ;;
+    4.0.0)
+      CONFIGURE_COMPATIBILITY_MODE=legacy-implicit-declarations-locked-curl7
+      CONFIGURE_CFLAGS_SUFFIX=-Wno-error=implicit-function-declaration
+      CURL_PREFLIGHT_REQUIRED=true
+      CURL_PREFLIGHT_MINIMUM_HEX=071c00
+      ;;
+    4.2.0)
+      CONFIGURE_COMPATIBILITY_MODE=locked-curl7
+      CURL_PREFLIGHT_REQUIRED=true
+      CURL_PREFLIGHT_MINIMUM_HEX=071c00
+      ;;
+  esac
+}
+
+validate_curl_preflight_output() {
+  local file=$1 minimum_hex=$2 header_hex runtime_hex
+  local -a lines
+  [[ -f "$file" && ! -L "$file" &&
+     "$minimum_hex" =~ ^[0-9a-f]{6}$ &&
+     "$(wc -l < "$file")" -eq 3 ]] || return 1
+  mapfile -t lines < "$file"
+  [[ "${#lines[@]}" -eq 3 &&
+     "${lines[0]}" =~ ^header_version_hex=([0-9a-f]{6})$ ]] || return 1
+  header_hex=${BASH_REMATCH[1]}
+  [[ "${lines[1]}" =~ ^runtime_version_hex=([0-9a-f]{6})$ ]] || return 1
+  runtime_hex=${BASH_REMATCH[1]}
+  [[ "${lines[2]}" == https=true &&
+     "$header_hex" == "$runtime_hex" &&
+     "$header_hex" == 07???? ]] || return 1
+  ((16#$header_hex >= 16#$minimum_hex)) || return 1
+  CURL_PREFLIGHT_HEADER_VERSION_HEX=$header_hex
+  CURL_PREFLIGHT_RUNTIME_VERSION_HEX=$runtime_hex
+  CURL_PREFLIGHT_HTTPS=true
+}
+
+normalize_absolute_path() {
+  local path=$1 component
+  local -a components normalized=()
+  [[ "$path" == /* ]] || return 1
+  IFS=/ read -r -a components <<< "$path"
+  for component in "${components[@]}"; do
+    case "$component" in
+      ''|.) ;;
+      ..)
+        ((${#normalized[@]} > 0)) || return 1
+        unset 'normalized[${#normalized[@]}-1]'
+        ;;
+      *) normalized+=("$component") ;;
+    esac
+  done
+  printf '/%s\n' "$(IFS=/; printf '%s' "${normalized[*]}")"
+}
+
+resolve_inventory_command() {
+  local name=$1 search_path=$2 directory candidate current target next depth
+  local canonical
+  local chain=none
+  INVENTORY_SELECTED_PATH=
+  INVENTORY_FINAL_PATH=
+  INVENTORY_RESOLUTION=absent
+  INVENTORY_LINK_CHAIN=none
+  IFS=: read -r -a inventory_directories <<< "$search_path"
+  for directory in "${inventory_directories[@]}"; do
+    [[ "$directory" == /* && -d "$directory" && ! -L "$directory" ]] ||
+      return 2
+    candidate="$directory/$name"
+    if [[ ! -e "$candidate" && ! -L "$candidate" ]]; then
+      continue
+    fi
+    # Shell PATH lookup skips non-executable regular files, but special files
+    # and dangling links are not acceptable cache-key inputs.
+    if [[ -f "$candidate" && ! -x "$candidate" && ! -L "$candidate" ]]; then
+      continue
+    fi
+    [[ -f "$candidate" || -L "$candidate" ]] || return 2
+    [[ -x "$candidate" || -L "$candidate" ]] || return 2
+    INVENTORY_SELECTED_PATH=$candidate
+    current=$candidate
+    chain=
+    declare -A seen_links=()
+    for ((depth = 0; depth < 32; ++depth)); do
+      if [[ ! -L "$current" ]]; then break; fi
+      [[ -z "${seen_links[$current]:-}" ]] || return 2
+      seen_links[$current]=1
+      target=$(readlink -- "$current") || return 2
+      [[ -n "$target" && "$target" != *$'\t'* &&
+         "$target" != *$'\r'* && "$target" != *$'\n'* &&
+         "$target" != *'|'* ]] || return 2
+      if [[ -n "$chain" ]]; then chain+='|'; fi
+      chain+="$current=>$target"
+      if [[ "$target" == /* ]]; then
+        next=$target
+      else
+        next="${current%/*}/$target"
+      fi
+      current=$(normalize_absolute_path "$next") || return 2
+    done
+    [[ ! -L "$current" && -f "$current" && -x "$current" ]] || return 2
+    canonical=$(readlink -f -- "$current") || return 2
+    [[ "$canonical" == "$current" ]] || return 2
+    case "$current" in
+      # Debian's unmerged-/usr alternatives may start at /usr/bin, traverse
+      # /etc/alternatives, and terminate at the equally standard /bin root.
+      # The complete chain, final path, mode, bytes, and optional identity are
+      # still authenticated below; accepting /bin does not broaden PATH.
+      "$TOOLCHAIN"/*|/bin/*|/usr/bin/*|/usr/lib/*|/lib/*) ;;
+      *) return 2 ;;
+    esac
+    INVENTORY_FINAL_PATH=$current
+    if [[ "$current" == "$candidate" ]]; then
+      INVENTORY_RESOLUTION=plain
+      INVENTORY_LINK_CHAIN=none
+    else
+      INVENTORY_RESOLUTION=authenticated_symlink_chain
+      INVENTORY_LINK_CHAIN=$chain
+    fi
+    return 0
+  done
+  return 1
+}
+
+probe_inventory_identity() {
+  local name=$1 executable=$2 output status=0
+  case "$name" in
+    R|Rscript|ar|as|awk|bash|bison|c++|cc|clang|cpp|curl-config|env|g++|gcc|\
+    gfortran|grep|ld|m4|make|makeinfo|nm|objcopy|objdump|perl|\
+    pkg-config|python|python3|ranlib|readelf|sed|strip|tar|\
+    x86_64-conda-linux-gnu-ar|x86_64-conda-linux-gnu-as|\
+    x86_64-conda-linux-gnu-c++|x86_64-conda-linux-gnu-cpp|\
+    x86_64-conda-linux-gnu-gcc|x86_64-conda-linux-gnu-gfortran|\
+    x86_64-conda-linux-gnu-ld|x86_64-conda-linux-gnu-nm|\
+    x86_64-conda-linux-gnu-ranlib|x86_64-conda-linux-gnu-strip)
+      ;;
+    *)
+      INVENTORY_IDENTITY_STATE=not_probed
+      INVENTORY_IDENTITY_STATUS=not_probed
+      INVENTORY_IDENTITY_SHA256=
+      return 0
+      ;;
+  esac
+  if output=$(LC_ALL=C "$executable" --version 2>&1); then
+    status=0
+  else
+    status=$?
+  fi
+  INVENTORY_IDENTITY_STATUS=$status
+  INVENTORY_IDENTITY_SHA256=$(printf '%s' "$output" | sha256_stream)
+  if [[ "$status" -eq 0 && -n "$output" ]]; then
+    INVENTORY_IDENTITY_STATE=supported
+  else
+    INVENTORY_IDENTITY_STATE=unsupported
+  fi
+}
+
+inventory_row() {
+  local name=$1 value=$2
+  [[ "$name" =~ ^[a-z0-9_]+$ && "$value" != *$'\t'* &&
+     "$value" != *$'\r'* && "$value" != *$'\n'* ]] || return 1
+  printf '%s\t%s\n' "$name" "$value"
+}
+
+create_external_tool_inventory() {
+  local output=$1 search_path=$2 name index=0 prefix resolution_status
+  shift 2
+  local -A seen_names=()
+  {
+    printf 'field\tvalue\n'
+    inventory_row schema 1
+    inventory_row search_path "$search_path"
+    inventory_row command_count "$#"
+    for name in "$@"; do
+      [[ "$name" =~ ^[][A-Za-z0-9+._-]+$ &&
+         -z "${seen_names[$name]:-}" ]] || return 1
+      seen_names[$name]=1
+      index=$((index + 1))
+      prefix=$(printf 'command_%03d' "$index")
+      inventory_row "${prefix}_name" "$name"
+      if resolve_inventory_command "$name" "$search_path"; then
+        resolution_status=0
+      else
+        resolution_status=$?
+      fi
+      case "$resolution_status" in
+        0)
+          probe_inventory_identity "$name" "$INVENTORY_FINAL_PATH"
+          inventory_row "${prefix}_state" present
+          inventory_row "${prefix}_selected_path" "$INVENTORY_SELECTED_PATH"
+          inventory_row "${prefix}_resolution" "$INVENTORY_RESOLUTION"
+          inventory_row "${prefix}_link_chain" "$INVENTORY_LINK_CHAIN"
+          inventory_row "${prefix}_final_path" "$INVENTORY_FINAL_PATH"
+          inventory_row "${prefix}_mode" \
+            "$(stat -c '%a' "$INVENTORY_FINAL_PATH")"
+          inventory_row "${prefix}_sha256" \
+            "$(sha256_value "$INVENTORY_FINAL_PATH")"
+          inventory_row "${prefix}_identity_state" \
+            "$INVENTORY_IDENTITY_STATE"
+          inventory_row "${prefix}_identity_status" \
+            "$INVENTORY_IDENTITY_STATUS"
+          inventory_row "${prefix}_identity_sha256" \
+            "$INVENTORY_IDENTITY_SHA256"
+          ;;
+        1)
+          inventory_row "${prefix}_state" absent
+          inventory_row "${prefix}_selected_path" ''
+          inventory_row "${prefix}_resolution" absent
+          inventory_row "${prefix}_link_chain" none
+          inventory_row "${prefix}_final_path" ''
+          inventory_row "${prefix}_mode" absent
+          inventory_row "${prefix}_sha256" ''
+          inventory_row "${prefix}_identity_state" absent
+          inventory_row "${prefix}_identity_status" absent
+          inventory_row "${prefix}_identity_sha256" ''
+          ;;
+        *) return 1 ;;
+      esac
+    done
+  } > "$output"
+}
+
+cache_recipe_fingerprint() {
+  local helper=$1 inventory=$2 shell=$3
+  {
+    printf 'helper_sha256=%s\n' "$(sha256_value "$helper")"
+    printf 'inventory_sha256=%s\n' "$(sha256_value "$inventory")"
+    printf 'shell_fingerprint=%s\n' "$(tool_fingerprint "$shell")"
+  } | sha256_stream
+}
+
+# GNU mv's -T prevents directory nesting.  --no-clobber plus the source-side
+# postcondition turns its success-on-skip behavior into an explicit failure.
+publish_directory_no_clobber() {
+  local source=$1 destination=$2 source_mode
+  [[ -d "$source" && ! -L "$source" &&
+     ! -e "$destination" && ! -L "$destination" ]] || return 1
+  source_mode=$(stat -c '%a' "$source") || return 1
+  [[ "$source_mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  # This host's rename policy requires owner-write permission on a directory
+  # being moved, even though its parents are writable. Preserve the reviewed
+  # published mode across the atomic rename.
+  chmod u+w "$source" || return 1
+  if ! mv -T --no-clobber -- "$source" "$destination"; then
+    chmod "$source_mode" "$source" 2>/dev/null || true
+    return 1
+  fi
+  chmod "$source_mode" "$destination" || return 1
+  [[ ! -e "$source" && ! -L "$source" &&
+     -d "$destination" && ! -L "$destination" ]]
+}
+
+publish_file_no_clobber() {
+  local source=$1 destination=$2 temporary
+  [[ -f "$source" && ! -L "$source" &&
+     ! -e "$destination" && ! -L "$destination" ]] || return 1
+  temporary=$(mktemp "${destination}.new.XXXXXX") || return 1
+  if ! cp -- "$source" "$temporary" ||
+      ! mv -T --no-clobber -- "$temporary" "$destination" ||
+      [[ -e "$temporary" || -L "$temporary" ]] ||
+      [[ ! -f "$destination" || -L "$destination" ]]; then
+    rm -f -- "$temporary"
+    return 1
+  fi
+}
+
+linux_process_identity() {
+  local pid=$1 stat rest
+  local -a fields
+  [[ "$pid" =~ ^[1-9][0-9]*$ && -r "/proc/$pid/stat" ]] || return 1
+  IFS= read -r stat < "/proc/$pid/stat" || return 1
+  [[ "$stat" == "$pid ("*') '* ]] || return 1
+  rest=${stat##*) }
+  read -r -a fields <<< "$rest"
+  ((${#fields[@]} >= 20)) || return 1
+  [[ "${fields[2]}" =~ ^[0-9]+$ && "${fields[3]}" =~ ^[0-9]+$ &&
+     "${fields[19]}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\t%s\t%s\n' "${fields[2]}" "${fields[3]}" "${fields[19]}"
+}
+
+linux_start_ticks() {
+  local pid=$1 pgrp session start
+  IFS=$'\t' read -r pgrp session start < <(linux_process_identity "$pid") ||
+    return 1
+  printf '%s\n' "$start"
+}
+
+linux_group_identity_matches() {
+  local pid=$1 expected_start=$2 pgrp session start
+  IFS=$'\t' read -r pgrp session start < <(linux_process_identity "$pid") ||
+    return 1
+  [[ "$pgrp" == "$pid" && "$session" == "$pid" &&
+     "$start" == "$expected_start" ]]
+}
+
+linux_process_start_matches() {
+  local pid=$1 expected_start=$2 observed
+  observed=$(linux_start_ticks "$pid") || return 1
+  [[ "$observed" == "$expected_start" ]]
+}
+
+linux_process_is_non_zombie() {
+  local pid=$1 stat rest state
+  [[ -r "/proc/$pid/stat" ]] || return 1
+  IFS= read -r stat < "/proc/$pid/stat" || return 1
+  rest=${stat##*) }
+  state=${rest%% *}
+  [[ -n "$state" && "$state" != Z ]]
+}
+
+capture_linux_group_members() {
+  local group=$1 expected_start=$2 proc pid pgrp session start
+  TERMINATION_MEMBERS=()
+  linux_group_identity_matches "$group" "$expected_start" || return 1
+  shopt -s nullglob
+  for proc in /proc/[0-9]*/stat; do
+    pid=${proc#/proc/}
+    pid=${pid%/stat}
+    if IFS=$'\t' read -r pgrp session start \
+        < <(linux_process_identity "$pid"); then
+      if [[ "$pgrp" == "$group" && "$session" == "$group" ]]; then
+        TERMINATION_MEMBERS+=("$pid:$start")
+      fi
+    fi
+  done
+  shopt -u nullglob
+}
+
+capture_linux_session_members() {
+  local group=$1 proc pid pgrp session start
+  TERMINATION_MEMBERS=()
+  shopt -s nullglob
+  for proc in /proc/[0-9]*/stat; do
+    pid=${proc#/proc/}
+    pid=${pid%/stat}
+    if IFS=$'\t' read -r pgrp session start \
+        < <(linux_process_identity "$pid"); then
+      if [[ "$pgrp" == "$group" && "$session" == "$group" ]]; then
+        TERMINATION_MEMBERS+=("$pid:$start")
+      fi
+    fi
+  done
+  shopt -u nullglob
+}
+
+terminate_orphaned_recorded_session() {
+  local group=$1 grace_tenths=$2 attempt member member_pid member_start
+  capture_linux_session_members "$group"
+  for member in "${TERMINATION_MEMBERS[@]}"; do
+    member_pid=${member%%:*}
+    member_start=${member#*:}
+    if linux_process_start_matches "$member_pid" "$member_start"; then
+      kill -TERM "$member_pid" 2>/dev/null || true
+    fi
+  done
+  for ((attempt = 0; attempt < grace_tenths; ++attempt)); do
+    sleep 0.1
+  done
+  # Re-scan the still-reserved recorded session after TERM.  With no process
+  # currently carrying the recorded leader PID, Linux cannot recycle that
+  # session identity while any of these members remains.  Positive signals are
+  # nevertheless used and every target's fresh start identity is checked.
+  capture_linux_session_members "$group"
+  for member in "${TERMINATION_MEMBERS[@]}"; do
+    member_pid=${member%%:*}
+    member_start=${member#*:}
+    if linux_process_start_matches "$member_pid" "$member_start"; then
+      kill -KILL "$member_pid" 2>/dev/null || true
+    fi
+  done
+}
+
+terminate_process_group() {
+  local pid=$1 expected_start=$2 grace_tenths=$3 direct_child_fallback=$4
+  local attempt member member_pid member_start
+  [[ "$pid" =~ ^[1-9][0-9]*$ ]] || return 0
+  TERMINATION_MEMBERS=()
+  if [[ -n "$expected_start" ]] &&
+      capture_linux_group_members "$pid" "$expected_start"; then
+    kill -TERM -- "-$pid" 2>/dev/null || true
+    for ((attempt = 0; attempt < grace_tenths; ++attempt)); do
+      kill -0 -- "-$pid" 2>/dev/null || break
+      sleep 0.1
+    done
+    # A TERM may remove the group leader while a resistant descendant remains.
+    # Kill only the exact processes captured before TERM whose Linux start
+    # identities still match; never signal a recycled bare PID.
+    for member in "${TERMINATION_MEMBERS[@]}"; do
+      member_pid=${member%%:*}
+      member_start=${member#*:}
+      if linux_process_start_matches "$member_pid" "$member_start"; then
+        kill -KILL "$member_pid" 2>/dev/null || true
+      fi
+    done
+    if linux_group_identity_matches "$pid" "$expected_start"; then
+      kill -KILL -- "-$pid" 2>/dev/null || true
+    fi
+  elif [[ "$direct_child_fallback" == true ]]; then
+    # Before the start identity is captured, the positive PID is still an
+    # unreaped direct child.  Signalling that one child is safe; negative-PGID
+    # signalling without an authenticated group identity is not.
+    kill -TERM "$pid" 2>/dev/null || true
+  fi
+}
+
+remove_owned_active_records() {
+  local pid_file=${ACTIVE_GROUP_FILE:-} identity_file=${ACTIVE_GROUP_IDENTITY_FILE:-}
+  if [[ -n "$pid_file" && -f "$pid_file" && ! -L "$pid_file" &&
+        -n "${ACTIVE_GROUP_FILE_SHA256:-}" &&
+        "$(sha256_value "$pid_file")" == "$ACTIVE_GROUP_FILE_SHA256" ]]; then
+    rm -f -- "$pid_file"
+  fi
+  if [[ -n "$identity_file" && -f "$identity_file" &&
+        ! -L "$identity_file" && -n "${ACTIVE_GROUP_IDENTITY_SHA256:-}" &&
+        "$(sha256_value "$identity_file")" == \
+          "$ACTIVE_GROUP_IDENTITY_SHA256" ]]; then
+    rm -f -- "$identity_file"
+  fi
+}
+
+terminate_active_record() {
+  local active_file=$1 grace_tenths=$2 identity_file pid_hash identity_hash
+  local pid start pgrp session owner owner_start nonce label_hash recorded_pid_hash
+  local key value extra index attempt member member_pid member_start
+  local -a pid_lines identity_lines expected_fields
+  local -A record=()
+  [[ "$active_file" == /* &&
+     "$grace_tenths" =~ ^(0|[1-9][0-9]{0,8})$ ]] || return 2
+  identity_file="${active_file}.identity"
+  if [[ ! -e "$active_file" && ! -L "$active_file" &&
+        ! -e "$identity_file" && ! -L "$identity_file" ]]; then
+    printf 'active_group_state=absent\n'
+    return 0
+  fi
+  [[ -f "$active_file" && ! -L "$active_file" ]] || return 2
+  [[ -f "$identity_file" && ! -L "$identity_file" ]] || return 2
+  mapfile -t pid_lines < "$active_file"
+  [[ "${#pid_lines[@]}" -eq 1 &&
+     "${pid_lines[0]}" =~ ^[1-9][0-9]*$ ]] || return 2
+  pid=${pid_lines[0]}
+  mapfile -t identity_lines < "$identity_file"
+  expected_fields=(field schema nonce pid start_ticks pgrp session owner_pid
+    owner_start_ticks pid_file_sha256 label_sha256)
+  [[ "${#identity_lines[@]}" -eq "${#expected_fields[@]}" ]] || return 2
+  [[ "${identity_lines[0]}" == $'field\tvalue' ]] || return 2
+  for ((index = 1; index < ${#identity_lines[@]}; ++index)); do
+    IFS=$'\t' read -r key value extra <<< "${identity_lines[$index]}"
+    [[ "$key" == "${expected_fields[$index]}" && -n "$value" &&
+       -z "$extra" ]] || return 2
+    record[$key]=$value
+  done
+  nonce=${record[nonce]}
+  start=${record[start_ticks]}
+  pgrp=${record[pgrp]}
+  session=${record[session]}
+  owner=${record[owner_pid]}
+  owner_start=${record[owner_start_ticks]}
+  recorded_pid_hash=${record[pid_file_sha256]}
+  label_hash=${record[label_sha256]}
+  [[ "${record[schema]}" == 1 && "${record[pid]}" == "$pid" &&
+     "$nonce" =~ ^[0-9a-f]{64}$ && "$start" =~ ^[0-9]+$ &&
+     "$pgrp" == "$pid" && "$session" == "$pid" &&
+     "$owner" =~ ^[1-9][0-9]*$ && "$owner_start" =~ ^[0-9]+$ &&
+     "$recorded_pid_hash" =~ ^[0-9a-f]{64}$ &&
+     "$label_hash" =~ ^[0-9a-f]{64}$ ]] || return 2
+  pid_hash=$(sha256_value "$active_file")
+  identity_hash=$(sha256_value "$identity_file")
+  [[ "$pid_hash" == "$recorded_pid_hash" ]] || return 2
+
+  if linux_group_identity_matches "$pid" "$start"; then
+    terminate_process_group "$pid" "$start" "$grace_tenths" false
+    for ((attempt = 0; attempt < 40; ++attempt)); do
+      surviving=false
+      for member in "${TERMINATION_MEMBERS[@]}"; do
+        member_pid=${member%%:*}
+        member_start=${member#*:}
+        if linux_process_start_matches "$member_pid" "$member_start" &&
+            linux_process_is_non_zombie "$member_pid"; then
+          surviving=true
+          break
+        fi
+      done
+      [[ "$surviving" == false ]] && break
+      sleep 0.05
+    done
+    [[ "$surviving" == false ]] || return 1
+  elif [[ -e "/proc/$pid" ]]; then
+    # A live process with a different start identity is unrelated.  Retain the
+    # record for diagnosis and never signal it.
+    return 3
+  else
+    terminate_orphaned_recorded_session "$pid" "$grace_tenths"
+    for ((attempt = 0; attempt < 40; ++attempt)); do
+      capture_linux_session_members "$pid"
+      surviving=false
+      for member in "${TERMINATION_MEMBERS[@]}"; do
+        member_pid=${member%%:*}
+        member_start=${member#*:}
+        if linux_process_start_matches "$member_pid" "$member_start" &&
+            linux_process_is_non_zombie "$member_pid"; then
+          surviving=true
+          break
+        fi
+      done
+      [[ "$surviving" == false ]] && break
+      sleep 0.05
+    done
+    [[ "$surviving" == false ]] || return 1
+  fi
+
+  [[ "$(sha256_value "$active_file")" == "$pid_hash" &&
+     "$(sha256_value "$identity_file")" == "$identity_hash" ]] || return 3
+  rm -f -- "$identity_file" "$active_file"
+  printf 'active_group_state=terminated_or_absent\n'
+  printf 'active_group_pid=%s\n' "$pid"
+}
+
+run_supervised_group() {
+  local timeout_seconds=$1 label=$2 status=0 sleeper marker_new
+  local watchdog_sleeper attempt
+  local identity_new release_new attempt pgrp session start
+  shift 2
+  GROUP_TIMEOUT_MARKER=$(mktemp "$LOCAL_TMP/r-api-header-timeout.XXXXXX")
+  rm -f -- "$GROUP_TIMEOUT_MARKER"
+  ACTIVE_GROUP_RELEASE=$(mktemp "$LOCAL_TMP/r-api-header-release.XXXXXX")
+  rm -f -- "$ACTIVE_GROUP_RELEASE"
+  GROUP_WATCHDOG_SLEEPER_FILE=$(mktemp \
+    "$LOCAL_TMP/r-api-header-watchdog-sleeper.XXXXXX")
+  rm -f -- "$GROUP_WATCHDOG_SLEEPER_FILE"
+  # The session leader waits for a private release token.  Configure/make can
+  # therefore never begin before the parent has published the active PID and
+  # its Linux process-start identity.  If the parent disappears in that narrow
+  # interval, the bounded wrapper exits without starting byte-affecting work.
+  # The single-quoted program is source for the supervised Bash child.
+  # shellcheck disable=SC2016
+  "$SETSID" --wait -- "$BASH_EXECUTABLE" -c \
+    'release=$1; shift; for ((attempt = 0; attempt < 500; ++attempt)); do [[ -f "$release" && ! -L "$release" ]] && exec "$@"; sleep 0.01; done; exit 125' \
+    r-api-header-group "$ACTIVE_GROUP_RELEASE" "$@" &
+  ACTIVE_GROUP=$!
+  ACTIVE_GROUP_START=
+  ACTIVE_GROUP_NEW=$(mktemp "${ACTIVE_GROUP_FILE}.new.XXXXXX")
+  printf '%s\n' "$ACTIVE_GROUP" > "$ACTIVE_GROUP_NEW"
+  mv -T --no-clobber -- "$ACTIVE_GROUP_NEW" "$ACTIVE_GROUP_FILE"
+  [[ ! -e "$ACTIVE_GROUP_NEW" && ! -L "$ACTIVE_GROUP_NEW" ]] ||
+    fail "active-group PID publication raced with an existing target"
+  ACTIVE_GROUP_FILE_SHA256=$(sha256_value "$ACTIVE_GROUP_FILE")
+  ACTIVE_GROUP_NEW=
+  for ((attempt = 0; attempt < 100; ++attempt)); do
+    if IFS=$'\t' read -r pgrp session start \
+        < <(linux_process_identity "$ACTIVE_GROUP") &&
+        [[ "$pgrp" == "$ACTIVE_GROUP" && "$session" == "$ACTIVE_GROUP" ]]; then
+      ACTIVE_GROUP_START=$start
+      break
+    fi
+    kill -0 "$ACTIVE_GROUP" 2>/dev/null || break
+    sleep 0.01
+  done
+  if [[ -z "$ACTIVE_GROUP_START" ]]; then
+    terminate_process_group "$ACTIVE_GROUP" '' 0 true
+    wait "$ACTIVE_GROUP" 2>/dev/null || true
+    ACTIVE_GROUP=
+    remove_owned_active_records
+    rm -f -- "$ACTIVE_GROUP_RELEASE"
+    ACTIVE_GROUP_FILE_SHA256=
+    ACTIVE_GROUP_RELEASE=
+    fail "could not authenticate the supervised Linux process-group identity"
+  fi
+  ACTIVE_GROUP_IDENTITY_FILE="${ACTIVE_GROUP_FILE}.identity"
+  ACTIVE_GROUP_NONCE=$({
+    printf '%s\n' "$$" "$OWNER_START_TICKS" "$ACTIVE_GROUP" \
+      "$ACTIVE_GROUP_START" "$RANDOM" "$label"
+  } | sha256_stream)
+  identity_new=$(mktemp "${ACTIVE_GROUP_IDENTITY_FILE}.new.XXXXXX")
+  {
+    printf 'field\tvalue\n'
+    printf 'schema\t1\n'
+    printf 'nonce\t%s\n' "$ACTIVE_GROUP_NONCE"
+    printf 'pid\t%s\n' "$ACTIVE_GROUP"
+    printf 'start_ticks\t%s\n' "$ACTIVE_GROUP_START"
+    printf 'pgrp\t%s\n' "$ACTIVE_GROUP"
+    printf 'session\t%s\n' "$ACTIVE_GROUP"
+    printf 'owner_pid\t%s\n' "$$"
+    printf 'owner_start_ticks\t%s\n' "$OWNER_START_TICKS"
+    printf 'pid_file_sha256\t%s\n' "$ACTIVE_GROUP_FILE_SHA256"
+    printf 'label_sha256\t%s\n' "$(printf '%s' "$label" | sha256_stream)"
+  } > "$identity_new"
+  mv -T --no-clobber -- "$identity_new" "$ACTIVE_GROUP_IDENTITY_FILE"
+  if [[ -e "$identity_new" || -L "$identity_new" ]]; then
+    rm -f -- "$identity_new"
+    fail "active-group identity publication raced with an existing target"
+  fi
+  ACTIVE_GROUP_IDENTITY_SHA256=$(sha256_value "$ACTIVE_GROUP_IDENTITY_FILE")
+  release_new=$(mktemp "${ACTIVE_GROUP_RELEASE}.new.XXXXXX")
+  printf 'go\n' > "$release_new"
+  mv -T --no-clobber -- "$release_new" "$ACTIVE_GROUP_RELEASE"
+  if [[ -e "$release_new" || -L "$release_new" ]]; then
+    rm -f -- "$release_new"
+    fail "active-group release publication raced with an existing target"
+  fi
+  (
+    sleeper=
+    # Invoked indirectly by the watchdog's signal traps.
+    # shellcheck disable=SC2329
+    stop_watchdog() {
+      trap - HUP INT TERM
+      [[ -n "$sleeper" ]] && kill "$sleeper" 2>/dev/null || true
+      [[ -n "$sleeper" ]] && wait "$sleeper" 2>/dev/null || true
+      exit 0
+    }
+    trap stop_watchdog HUP INT TERM
+    sleep "$timeout_seconds" &
+    sleeper=$!
+    printf '%s\n' "$sleeper" > "$GROUP_WATCHDOG_SLEEPER_FILE"
+    wait "$sleeper" || exit 0
+    trap - HUP INT TERM
+    marker_new=$(mktemp "${GROUP_TIMEOUT_MARKER}.new.XXXXXX")
+    printf 'timeout\n' > "$marker_new"
+    if ! mv -T --no-clobber -- "$marker_new" "$GROUP_TIMEOUT_MARKER" ||
+        [[ -e "$marker_new" || -L "$marker_new" ]]; then
+      rm -f -- "$marker_new"
+      terminate_process_group "$ACTIVE_GROUP" "$ACTIVE_GROUP_START" \
+        "$TERMINATION_GRACE_TENTHS" false
+      exit 125
+    fi
+    terminate_process_group "$ACTIVE_GROUP" "$ACTIVE_GROUP_START" \
+      "$TERMINATION_GRACE_TENTHS" false
+  ) &
+  GROUP_WATCHDOG_PID=$!
+  if wait "$ACTIVE_GROUP"; then status=0; else status=$?; fi
+  if [[ -f "$GROUP_TIMEOUT_MARKER" && ! -L "$GROUP_TIMEOUT_MARKER" ]]; then
+    # The watchdog owns the pre-TERM member identities.  Let its bounded
+    # escalation finish even if TERM already removed the group leader.
+    wait "$GROUP_WATCHDOG_PID" 2>/dev/null || true
+  else
+    watchdog_sleeper=
+    for ((attempt = 0; attempt < 20; ++attempt)); do
+      if [[ -f "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+          ! -L "$GROUP_WATCHDOG_SLEEPER_FILE" ]] &&
+          IFS= read -r watchdog_sleeper \
+            < "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+          [[ "$watchdog_sleeper" =~ ^[1-9][0-9]*$ ]]; then
+        break
+      fi
+      watchdog_sleeper=
+      sleep 0.01
+    done
+    # Interrupt the child that the watchdog is synchronously waiting for.
+    # Signalling only the shell can otherwise be deferred by Bash until the
+    # full sleep expires when several helpers finish at the same instant.
+    [[ -n "$watchdog_sleeper" ]] &&
+      kill "$watchdog_sleeper" 2>/dev/null || true
+    kill "$GROUP_WATCHDOG_PID" 2>/dev/null || true
+    wait "$GROUP_WATCHDOG_PID" 2>/dev/null || true
+  fi
+  GROUP_WATCHDOG_PID=
+  rm -f -- "$GROUP_WATCHDOG_SLEEPER_FILE"
+  GROUP_WATCHDOG_SLEEPER_FILE=
+  terminate_process_group "$ACTIVE_GROUP" "$ACTIVE_GROUP_START" 0 false
+  wait "$ACTIVE_GROUP" 2>/dev/null || true
+  ACTIVE_GROUP=
+  ACTIVE_GROUP_START=
+  remove_owned_active_records
+  rm -f -- "$ACTIVE_GROUP_RELEASE"
+  ACTIVE_GROUP_FILE_SHA256=
+  ACTIVE_GROUP_IDENTITY_SHA256=
+  ACTIVE_GROUP_NONCE=
+  ACTIVE_GROUP_IDENTITY_FILE=
+  ACTIVE_GROUP_RELEASE=
+  if [[ -f "$GROUP_TIMEOUT_MARKER" && ! -L "$GROUP_TIMEOUT_MARKER" ]]; then
+    rm -f -- "$GROUP_TIMEOUT_MARKER"
+    GROUP_TIMEOUT_MARKER=
+    printf 'r-api-header-cache: %s exceeded %ss\n' \
+      "$label" "$timeout_seconds" >&2
+    return 124
+  fi
+  rm -f -- "$GROUP_TIMEOUT_MARKER"
+  GROUP_TIMEOUT_MARKER=
+  return "$status"
+}
+
+if [[ "${1:-}" == terminate-active ]]; then
+  shift
+  TERMINATE_ACTIVE_FILE=
+  TERMINATE_ACTIVE_GRACE=20
+  while (($#)); do
+    case "$1" in
+      --active-group-file)
+        (($# >= 2)) || fail "--active-group-file requires a value"
+        TERMINATE_ACTIVE_FILE=$2
+        shift 2
+        ;;
+      --grace-tenths)
+        (($# >= 2)) || fail "--grace-tenths requires a value"
+        TERMINATE_ACTIVE_GRACE=$2
+        shift 2
+        ;;
+      -h|--help) usage; exit 0 ;;
+      *) fail "unknown terminate-active argument: $1" ;;
+    esac
+  done
+  [[ "$(uname -s)" == Linux && -r /proc/self/stat ]] ||
+    fail "terminate-active requires Linux /proc start identities"
+  if terminate_active_record "$TERMINATE_ACTIVE_FILE" \
+      "$TERMINATE_ACTIVE_GRACE"; then
+    exit 0
+  else
+    terminate_status=$?
+  fi
+  case "$terminate_status" in
+    1) fail "authenticated active process group survived bounded cleanup" ;;
+    2) fail "active-group record is malformed, absent, or unsafe" ;;
+    3) fail "active-group identity is stale or changed; no unrelated PID was signalled" ;;
+    *) fail "terminate-active failed with unexpected status $terminate_status" ;;
+  esac
+fi
+
+if [[ "${1:-}" == self-test ]]; then
+  SELF_TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/r-api-header-cache-test.XXXXXX")
+  SELF_TEST_PIDS=()
+  # Invoked indirectly by the self-test's signal/exit traps.
+  # shellcheck disable=SC2329
+  cleanup_self_test() {
+    local status=$? pid
+    trap - EXIT HUP INT TERM
+    if [[ -n "${ACTIVE_GROUP:-}" ]]; then
+      terminate_process_group "$ACTIVE_GROUP" "${ACTIVE_GROUP_START:-}" 5 true
+      wait "$ACTIVE_GROUP" 2>/dev/null || true
+    fi
+    for pid in "${SELF_TEST_PIDS[@]}"; do
+      kill -TERM "$pid" 2>/dev/null || true
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+    done
+    rm -rf -- "$SELF_TEST_ROOT"
+    exit "$status"
+  }
+  trap cleanup_self_test EXIT HUP INT TERM
+  LOCAL_TMP=$SELF_TEST_ROOT
+  TOOLCHAIN=$SELF_TEST_ROOT
+  SETSID=$(resolve_plain_executable /usr/bin/setsid /usr/bin) ||
+    fail "self-test requires plain setsid"
+  BASH_EXECUTABLE=$(resolve_plain_executable /usr/bin/bash /usr/bin) ||
+    fail "self-test requires plain Bash"
+  OWNER_START_TICKS=$(linux_start_ticks "$$") ||
+    fail "self-test could not authenticate its Linux owner identity"
+  ACTIVE_GROUP=
+  ACTIVE_GROUP_START=
+  ACTIVE_GROUP_NEW=
+  ACTIVE_GROUP_FILE_SHA256=
+  ACTIVE_GROUP_IDENTITY_FILE=
+  ACTIVE_GROUP_IDENTITY_SHA256=
+  ACTIVE_GROUP_NONCE=
+  ACTIVE_GROUP_RELEASE=
+  GROUP_WATCHDOG_PID=
+  GROUP_WATCHDOG_SLEEPER_FILE=
+  ACTIVE_GROUP_FILE="$SELF_TEST_ROOT/active-group"
+  TERMINATION_GRACE_TENTHS=5
+  pid_file="$SELF_TEST_ROOT/timeout-pids"
+  # The single-quoted program is synthetic child source.
+  # shellcheck disable=SC2016
+  if run_supervised_group 1 synthetic-timeout "$BASH_EXECUTABLE" -c \
+      '[[ -s "$2" && -s "${2}.identity" ]] || exit 91; trap "" HUP INT TERM; (trap "" HUP INT TERM; while :; do sleep 1; done) & printf "%s %s\n" "$$" "$!" > "$1"; wait "$!"' \
+      r-api-header-timeout "$pid_file" "$ACTIVE_GROUP_FILE"; then
+    fail "synthetic TERM-ignoring group escaped its deadline"
+  else
+    synthetic_status=$?
+  fi
+  [[ "$synthetic_status" -eq 124 && -s "$pid_file" ]] ||
+    fail "synthetic deadline did not return status 124 with PID evidence"
+  read -r synthetic_parent synthetic_child < "$pid_file"
+  for pid in "$synthetic_parent" "$synthetic_child"; do
+    for ((attempt = 0; attempt < 20; ++attempt)); do
+      kill -0 "$pid" 2>/dev/null || break
+      sleep 0.05
+    done
+    kill -0 "$pid" 2>/dev/null &&
+      fail "synthetic deadline left process $pid alive"
+  done
+  [[ ! -e "$ACTIVE_GROUP_FILE" &&
+     ! -e "${ACTIVE_GROUP_FILE}.identity" ]] ||
+    fail "synthetic deadline retained active-group state"
+
+  graceful_started=$SECONDS
+  run_supervised_group 5 synthetic-fast-completion \
+    "$BASH_EXECUTABLE" -c 'exit 0' ||
+    fail "synthetic fast command did not complete successfully"
+  ((SECONDS - graceful_started <= 2)) ||
+    fail "fast supervised command waited for its watchdog deadline"
+  [[ ! -e "$ACTIVE_GROUP_FILE" &&
+     ! -e "${ACTIVE_GROUP_FILE}.identity" &&
+     -z "$GROUP_WATCHDOG_SLEEPER_FILE" ]] ||
+    fail "fast supervised command retained watchdog/process state"
+
+  # An incorrect Linux start identity must never signal a live session group.
+  "$SETSID" --wait -- "$BASH_EXECUTABLE" -c 'exec sleep 30' &
+  innocent_group=$!
+  SELF_TEST_PIDS+=("$innocent_group")
+  innocent_start=
+  for ((attempt = 0; attempt < 100; ++attempt)); do
+    if linux_group_identity_matches "$innocent_group" \
+        "$(linux_start_ticks "$innocent_group" 2>/dev/null || true)"; then
+      innocent_start=$(linux_start_ticks "$innocent_group")
+      break
+    fi
+    sleep 0.01
+  done
+  [[ "$innocent_start" =~ ^[0-9]+$ ]] ||
+    fail "could not capture the synthetic innocent group identity"
+  terminate_process_group "$innocent_group" "$((innocent_start + 1))" 0 false
+  kill -0 "$innocent_group" 2>/dev/null ||
+    fail "stale process identity signalled an unrelated live group"
+  terminate_process_group "$innocent_group" "$innocent_start" 0 false
+  wait "$innocent_group" 2>/dev/null || true
+  SELF_TEST_PIDS=()
+
+  # Exercise the public post-timeout cleanup interface from a separate helper
+  # process against an exact nonce/start-identity record.
+  terminate_file="$SELF_TEST_ROOT/terminate-active.pid"
+  terminate_child_file="$SELF_TEST_ROOT/terminate-active-child.pid"
+  # The single-quoted program is source for the synthetic Bash child.
+  # shellcheck disable=SC2016
+  "$SETSID" --wait -- "$BASH_EXECUTABLE" -c \
+    'trap "" HUP INT TERM; (trap "" HUP INT TERM; printf "%s\n" "$BASHPID" > "$1"; while :; do sleep 1; done) & wait "$!"' \
+    r-api-terminate-fixture "$terminate_child_file" &
+  terminate_pid=$!
+  SELF_TEST_PIDS+=("$terminate_pid")
+  terminate_start=
+  for ((attempt = 0; attempt < 100; ++attempt)); do
+    candidate_start=$(linux_start_ticks "$terminate_pid" 2>/dev/null || true)
+    if [[ -n "$candidate_start" ]] &&
+        linux_group_identity_matches "$terminate_pid" "$candidate_start" &&
+        [[ -s "$terminate_child_file" ]]; then
+      terminate_start=$candidate_start
+      break
+    fi
+    sleep 0.01
+  done
+  [[ "$terminate_start" =~ ^[0-9]+$ ]] ||
+    fail "terminate-active fixture did not establish its session identity"
+  printf '%s\n' "$terminate_pid" > "$terminate_file"
+  terminate_pid_hash=$(sha256_value "$terminate_file")
+  terminate_nonce=$(printf '%s' "$terminate_pid:$terminate_start:$RANDOM" |
+    sha256_stream)
+  {
+    printf 'field\tvalue\n'
+    printf 'schema\t1\n'
+    printf 'nonce\t%s\n' "$terminate_nonce"
+    printf 'pid\t%s\n' "$terminate_pid"
+    printf 'start_ticks\t%s\n' "$terminate_start"
+    printf 'pgrp\t%s\n' "$terminate_pid"
+    printf 'session\t%s\n' "$terminate_pid"
+    printf 'owner_pid\t%s\n' "$$"
+    printf 'owner_start_ticks\t%s\n' "$OWNER_START_TICKS"
+    printf 'pid_file_sha256\t%s\n' "$terminate_pid_hash"
+    printf 'label_sha256\t%s\n' \
+      "$(printf '%s' terminate-active-fixture | sha256_stream)"
+  } > "${terminate_file}.identity"
+  cp -- "${terminate_file}.identity" \
+    "$SELF_TEST_ROOT/terminate-active.valid.identity"
+  while IFS= read -r identity_line; do
+    if [[ "$identity_line" == start_ticks$'\t'* ]]; then
+      printf 'start_ticks\t%s\n' "$((terminate_start + 1))"
+    else
+      printf '%s\n' "$identity_line"
+    fi
+  done < "$SELF_TEST_ROOT/terminate-active.valid.identity" \
+    > "${terminate_file}.identity"
+  SELF_HELPER_SOURCE=$(cd "$(dirname "${BASH_SOURCE[0]}")" &&
+    pwd -P)/$(basename "${BASH_SOURCE[0]}")
+  if "$BASH_EXECUTABLE" "$SELF_HELPER_SOURCE" terminate-active \
+      --active-group-file "$terminate_file" --grace-tenths 2 \
+      > "$SELF_TEST_ROOT/terminate-stale.out" \
+      2> "$SELF_TEST_ROOT/terminate-stale.err"; then
+    fail "terminate-active accepted a stale process-start identity"
+  fi
+  grep -Fq 'identity is stale or changed' \
+    "$SELF_TEST_ROOT/terminate-stale.err" ||
+    fail "terminate-active did not classify its stale identity"
+  kill -0 "$terminate_pid" 2>/dev/null ||
+    fail "terminate-active signalled a stale unrelated identity"
+  cp -- "$SELF_TEST_ROOT/terminate-active.valid.identity" \
+    "${terminate_file}.identity"
+  # Reproduce the outer GNU-timeout boundary: the recorded session leader can
+  # be gone while a resistant member still carries its reserved SID/PGID.
+  kill -KILL "$terminate_pid"
+  wait "$terminate_pid" 2>/dev/null || true
+  SELF_TEST_PIDS=()
+  terminate_child=$(<"$terminate_child_file")
+  linux_process_is_non_zombie "$terminate_child" ||
+    fail "leaderless terminate-active fixture lost its resistant member"
+  "$BASH_EXECUTABLE" "$SELF_HELPER_SOURCE" terminate-active \
+    --active-group-file "$terminate_file" --grace-tenths 2 \
+    > "$SELF_TEST_ROOT/terminate-active.out"
+  grep -Fqx active_group_state=terminated_or_absent \
+    "$SELF_TEST_ROOT/terminate-active.out" ||
+    fail "terminate-active retained no authenticated success result"
+  [[ ! -e "$terminate_file" && ! -e "${terminate_file}.identity" ]] ||
+    fail "terminate-active did not retire its exact record"
+  "$BASH_EXECUTABLE" "$SELF_HELPER_SOURCE" terminate-active \
+    --active-group-file "$terminate_file" --grace-tenths 2 \
+    > "$SELF_TEST_ROOT/terminate-active-absent.out"
+  grep -Fqx active_group_state=absent \
+    "$SELF_TEST_ROOT/terminate-active-absent.out" ||
+    fail "terminate-active is not idempotent after record retirement"
+  for ((attempt = 0; attempt < 40; ++attempt)); do
+    linux_process_is_non_zombie "$terminate_child" || break
+    sleep 0.05
+  done
+  linux_process_is_non_zombie "$terminate_child" &&
+    fail "terminate-active left a live resistant descendant"
+
+  mkdir "$SELF_TEST_ROOT/source" "$SELF_TEST_ROOT/existing"
+  printf 'source\n' > "$SELF_TEST_ROOT/source/member"
+  printf 'destination\n' > "$SELF_TEST_ROOT/existing/sentinel"
+  if publish_directory_no_clobber "$SELF_TEST_ROOT/source" \
+      "$SELF_TEST_ROOT/existing"; then
+    fail "directory publication replaced an existing target"
+  fi
+  [[ -f "$SELF_TEST_ROOT/source/member" &&
+     -f "$SELF_TEST_ROOT/existing/sentinel" &&
+     ! -e "$SELF_TEST_ROOT/existing/source" ]] ||
+    fail "failed directory publication nested or changed an existing target"
+  publish_directory_no_clobber "$SELF_TEST_ROOT/source" \
+    "$SELF_TEST_ROOT/published" || fail "safe directory publication failed"
+  [[ -f "$SELF_TEST_ROOT/published/member" ]] ||
+    fail "safe directory publication lost its member"
+
+  printf 'metadata-source\n' > "$SELF_TEST_ROOT/metadata-source"
+  printf 'metadata-existing\n' > "$SELF_TEST_ROOT/metadata-existing"
+  if publish_file_no_clobber "$SELF_TEST_ROOT/metadata-source" \
+      "$SELF_TEST_ROOT/metadata-existing"; then
+    fail "file publication replaced an existing target"
+  fi
+  grep -Fqx metadata-existing "$SELF_TEST_ROOT/metadata-existing" ||
+    fail "failed file publication changed its existing target"
+  publish_file_no_clobber "$SELF_TEST_ROOT/metadata-source" \
+    "$SELF_TEST_ROOT/metadata-published" ||
+    fail "safe file publication failed"
+  grep -Fqx metadata-source "$SELF_TEST_ROOT/metadata-published" ||
+    fail "safe file publication changed its source bytes"
+
+  mkdir "$SELF_TEST_ROOT/tools"
+  fake_tool="$SELF_TEST_ROOT/tools/selected-tool"
+  fake_shell="$SELF_TEST_ROOT/tools/reviewed-bash"
+  printf '%s\n' '#!/bin/sh' 'printf "identity-one\n"' > "$fake_tool"
+  printf '%s\n' '#!/bin/sh' 'printf "shell-one\n"' > "$fake_shell"
+  chmod 0755 "$fake_tool"
+  chmod 0755 "$fake_shell"
+  ln -s selected-tool "$SELF_TEST_ROOT/tools/tool-alias"
+  resolved=$(resolve_plain_executable selected-tool "$SELF_TEST_ROOT/tools") ||
+    fail "synthetic tool did not resolve against the exact path"
+  fingerprint_one=$(tool_fingerprint "$resolved")
+  printf '%s\n' '#!/bin/sh' 'printf "identity-two\n"' > "$fake_tool"
+  chmod 0755 "$fake_tool"
+  fingerprint_two=$(tool_fingerprint "$resolved")
+  [[ "$fingerprint_one" != "$fingerprint_two" ]] ||
+    fail "selected-tool byte change did not invalidate its fingerprint"
+
+  helper_copy="$SELF_TEST_ROOT/helper-copy"
+  helper_original="$SELF_TEST_ROOT/helper-original"
+  cp -- "${BASH_SOURCE[0]}" "$helper_copy"
+  cp -- "$helper_copy" "$helper_original"
+  inventory_one="$SELF_TEST_ROOT/inventory-one.tsv"
+  create_external_tool_inventory "$inventory_one" "$SELF_TEST_ROOT/tools" \
+    reviewed-bash selected-tool tool-alias absent-tool ||
+    fail "synthetic external-tool inventory failed"
+  grep -Fq $'command_004_state\tabsent' "$inventory_one" ||
+    fail "synthetic inventory did not authenticate command absence"
+  grep -Fq $'authenticated_symlink_chain' "$inventory_one" ||
+    fail "synthetic inventory did not authenticate its reviewed link chain"
+  recipe_one=$(cache_recipe_fingerprint \
+    "$helper_copy" "$inventory_one" "$fake_shell")
+
+  printf '# builder mutation\n' >> "$helper_copy"
+  recipe_helper_mutated=$(cache_recipe_fingerprint \
+    "$helper_copy" "$inventory_one" "$fake_shell")
+  [[ "$recipe_helper_mutated" != "$recipe_one" ]] ||
+    fail "full helper mutation did not invalidate the recipe key"
+  cp -- "$helper_original" "$helper_copy"
+
+  printf '%s\n' '#!/bin/sh' 'printf "identity-three\n"' > "$fake_tool"
+  chmod 0755 "$fake_tool"
+  inventory_tool_mutated="$SELF_TEST_ROOT/inventory-tool-mutated.tsv"
+  create_external_tool_inventory "$inventory_tool_mutated" \
+    "$SELF_TEST_ROOT/tools" reviewed-bash selected-tool tool-alias absent-tool ||
+    fail "mutated synthetic tool inventory failed"
+  recipe_tool_mutated=$(cache_recipe_fingerprint \
+    "$helper_copy" "$inventory_tool_mutated" "$fake_shell")
+  [[ "$recipe_tool_mutated" != "$recipe_one" ]] ||
+    fail "external-tool mutation did not invalidate the recipe key"
+
+  printf '%s\n' '#!/bin/sh' 'printf "shell-two\n"' > "$fake_shell"
+  chmod 0755 "$fake_shell"
+  inventory_shell_mutated="$SELF_TEST_ROOT/inventory-shell-mutated.tsv"
+  create_external_tool_inventory "$inventory_shell_mutated" \
+    "$SELF_TEST_ROOT/tools" reviewed-bash selected-tool tool-alias absent-tool ||
+    fail "mutated synthetic shell inventory failed"
+  recipe_shell_mutated=$(cache_recipe_fingerprint \
+    "$helper_copy" "$inventory_shell_mutated" "$fake_shell")
+  [[ "$recipe_shell_mutated" != "$recipe_tool_mutated" ]] ||
+    fail "reviewed-shell mutation did not invalidate the recipe key"
+
+  ln -s missing-target "$SELF_TEST_ROOT/tools/unsafe-link"
+  if create_external_tool_inventory "$SELF_TEST_ROOT/unsafe.tsv" \
+      "$SELF_TEST_ROOT/tools" unsafe-link; then
+    fail "unsafe symbolic command resolution was accepted"
+  fi
+  if [[ -e /usr/bin/pager || -L /usr/bin/pager ]]; then
+    resolve_inventory_command pager /usr/bin ||
+      fail "standard /usr/bin alternative did not resolve safely"
+    case "$INVENTORY_FINAL_PATH" in
+      /bin/*|/usr/bin/*) ;;
+      *) fail "standard /usr/bin alternative escaped its reviewed roots" ;;
+    esac
+  fi
+
+  select_configure_compatibility 3.6.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == \
+       legacy-implicit-declarations-locked-curl7 &&
+     "$CONFIGURE_CFLAGS_SUFFIX" == \
+       -Wno-error=implicit-function-declaration &&
+     "$CURL_PREFLIGHT_REQUIRED" == true &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == 071600 ]] ||
+    fail "R 3.6 configure-compatibility selection changed"
+  select_configure_compatibility 4.0.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == \
+       legacy-implicit-declarations-locked-curl7 &&
+     "$CONFIGURE_CFLAGS_SUFFIX" == \
+       -Wno-error=implicit-function-declaration &&
+     "$CURL_PREFLIGHT_REQUIRED" == true &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == 071c00 ]] ||
+    fail "R 4.0 configure-compatibility selection changed"
+  select_configure_compatibility 4.2.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == locked-curl7 &&
+     -z "$CONFIGURE_CFLAGS_SUFFIX" &&
+     "$CURL_PREFLIGHT_REQUIRED" == true &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == 071c00 ]] ||
+    fail "R 4.2 configure-compatibility selection changed"
+  select_configure_compatibility 4.3.0
+  [[ "$CONFIGURE_COMPATIBILITY_MODE" == none &&
+     -z "$CONFIGURE_CFLAGS_SUFFIX" &&
+     "$CURL_PREFLIGHT_REQUIRED" == false &&
+     "$CURL_PREFLIGHT_MINIMUM_HEX" == none ]] ||
+    fail "modern R configure-compatibility selection changed"
+
+  curl_fixture="$SELF_TEST_ROOT/curl-preflight.txt"
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075600 \
+    https=true > "$curl_fixture"
+  validate_curl_preflight_output "$curl_fixture" 071c00 ||
+    fail "valid synthetic libcurl proof was rejected"
+  [[ "$CURL_PREFLIGHT_HEADER_VERSION_HEX" == 075600 &&
+     "$CURL_PREFLIGHT_RUNTIME_VERSION_HEX" == 075600 &&
+     "$CURL_PREFLIGHT_HTTPS" == true ]] ||
+    fail "valid synthetic libcurl proof was parsed incorrectly"
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075500 \
+    https=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "mismatched libcurl header/runtime proof was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=081500 \
+    runtime_version_hex=081500 \
+    https=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "non-major-7 libcurl proof was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=071500 \
+    runtime_version_hex=071500 \
+    https=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "insufficient libcurl proof was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075600 \
+    https=false > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "libcurl proof without HTTPS was accepted"
+  fi
+  printf '%s\n' \
+    header_version_hex=075600 \
+    runtime_version_hex=075600 \
+    https=true \
+    unexpected=true > "$curl_fixture"
+  if validate_curl_preflight_output "$curl_fixture" 071c00; then
+    fail "libcurl proof with extra output was accepted"
+  fi
+  printf '%s\n' \
+    'r_api_header_cache_self_test=passed' \
+    'timeout_status=124' \
+    'publication_no_clobber=passed' \
+    'metadata_no_clobber=passed' \
+    'linux_start_identity=passed' \
+    'terminate_active_interface=passed' \
+    'builder_recipe_invalidation=passed' \
+    'tool_inventory_invalidation=passed' \
+    'shell_identity_invalidation=passed' \
+    'fast_watchdog_cancellation=passed' \
+    'configure_compatibility_selection=passed' \
+    'curl_preflight_validation=passed'
+  exit 0
+fi
+
+[[ "${1:-}" == prepare ]] || {
+  usage >&2
+  exit 2
+}
+shift
+
+ROOT=
+VERSION=
+ARCHIVE_SHA256=
+TOOLCHAIN_LOCK=
+OUTPUT=
+METADATA_DIRECTORY=
+LOG_DIRECTORY=
+TREE_RECEIPT_HELPER=
+SETSID=
+ACTIVE_GROUP_FILE=
+LOCK_TIMEOUT_SECONDS=
+COMMAND_TIMEOUT_SECONDS=
+CURL7_RECEIPT_HELPER=
+while (($#)); do
+  case "$1" in
+    --root) ROOT=${2:-}; shift 2 ;;
+    --version) VERSION=${2:-}; shift 2 ;;
+    --archive-sha256) ARCHIVE_SHA256=${2:-}; shift 2 ;;
+    --toolchain-lock) TOOLCHAIN_LOCK=${2:-}; shift 2 ;;
+    --output) OUTPUT=${2:-}; shift 2 ;;
+    --metadata-directory) METADATA_DIRECTORY=${2:-}; shift 2 ;;
+    --log-directory) LOG_DIRECTORY=${2:-}; shift 2 ;;
+    --tree-receipt-helper) TREE_RECEIPT_HELPER=${2:-}; shift 2 ;;
+    --setsid) SETSID=${2:-}; shift 2 ;;
+    --active-group-file) ACTIVE_GROUP_FILE=${2:-}; shift 2 ;;
+    --lock-timeout-seconds) LOCK_TIMEOUT_SECONDS=${2:-}; shift 2 ;;
+    --command-timeout-seconds) COMMAND_TIMEOUT_SECONDS=${2:-}; shift 2 ;;
+    --curl7-receipt-helper) CURL7_RECEIPT_HELPER=${2:-}; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+
+[[ "$ROOT" == /* && -d "$ROOT" && ! -L "$ROOT" ]] ||
+  fail "--root must name a plain absolute directory"
+ROOT=$(cd "$ROOT" && pwd -P)
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+  fail "--version must be an X.Y.Z release"
+[[ "$ARCHIVE_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "--archive-sha256 must be a lowercase SHA-256"
+[[ -f "$TOOLCHAIN_LOCK" && ! -L "$TOOLCHAIN_LOCK" ]] ||
+  fail "toolchain lock is absent or symbolic"
+[[ -f "$TREE_RECEIPT_HELPER" && ! -L "$TREE_RECEIPT_HELPER" ]] ||
+  fail "tree receipt helper is absent or symbolic"
+[[ "$SETSID" == /* && -x "$SETSID" && ! -L "$SETSID" ]] ||
+  fail "setsid must be a plain absolute executable"
+[[ "$LOCK_TIMEOUT_SECONDS" =~ ^[1-9][0-9]{0,8}$ &&
+   "$COMMAND_TIMEOUT_SECONDS" =~ ^[1-9][0-9]{0,8}$ ]] ||
+  fail "cache lock/command deadlines must be canonical positive integers"
+[[ "$ACTIVE_GROUP_FILE" == /* && ! -e "$ACTIVE_GROUP_FILE" &&
+   ! -L "$ACTIVE_GROUP_FILE" ]] ||
+  fail "active-group evidence path must be absolute and absent"
+[[ "$(uname -s)" == Linux && -r /proc/self/stat ]] ||
+  fail "authenticated process-group supervision requires Linux /proc start identities"
+OWNER_START_TICKS=$(linux_start_ticks "$$") ||
+  fail "could not authenticate the helper's Linux owner identity"
+
+CURL7_PREFIX="$ROOT/.local/runtime-matrix/prefixes/R-3.6.3"
+CURL7_RECEIPT_DIRECTORY="$ROOT/.local/runtime-matrix/receipts/R-3.6.3"
+CURL7_MANIFEST="$CURL7_RECEIPT_DIRECTORY/prefix.manifest.tsv"
+CURL7_RECEIPT="$CURL7_RECEIPT_DIRECTORY/receipt.tsv"
+CURL7_SEAL="$CURL7_RECEIPT_DIRECTORY/receipt.sha256"
+CURL7_LOCK="$ROOT/environment/runtime-r-3.6.3-linux-64.lock"
+select_configure_compatibility "$VERSION"
+CURL7_MANIFEST_SHA256=not-required
+CURL7_RECEIPT_SHA256=not-required
+CURL7_SEAL_SHA256=not-required
+CURL7_LOCK_SHA256=not-required
+CURL7_RECEIPT_HELPER_SHA256=not-required
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  [[ "$CURL7_RECEIPT_HELPER" == \
+       "$ROOT/.local/checks/"*/metadata/runtime-matrix-prefix-receipt &&
+     -f "$CURL7_RECEIPT_HELPER" && -x "$CURL7_RECEIPT_HELPER" &&
+     ! -L "$CURL7_RECEIPT_HELPER" ]] ||
+    fail "--curl7-receipt-helper must name the plain retained helper"
+  [[ -f "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" &&
+     ! -L "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" &&
+     "$(sha256_value "$CURL7_RECEIPT_HELPER")" == \
+       "$(sha256_value \
+          "$ROOT/scripts/environment/runtime-matrix-prefix-receipt")" ]] ||
+    fail "retained libcurl7 receipt helper differs from current source"
+  for curl7_input in "$CURL7_MANIFEST" "$CURL7_RECEIPT" "$CURL7_SEAL" \
+      "$CURL7_LOCK"; do
+    [[ -f "$curl7_input" && ! -L "$curl7_input" ]] ||
+      fail "authenticated libcurl7 input is absent or symbolic: $curl7_input"
+  done
+  [[ -d "$CURL7_PREFIX" && ! -L "$CURL7_PREFIX" ]] ||
+    fail "authenticated R 3.6 runtime prefix is absent; run scripts/bootstrap-runtime-matrix"
+  curl7_receipt_sha=$(sha256_value "$CURL7_RECEIPT")
+  [[ "$(wc -l < "$CURL7_SEAL")" -eq 1 &&
+     "$(cat "$CURL7_SEAL")" == "$curl7_receipt_sha  receipt.tsv" &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" prefix_relative)" == \
+       .local/runtime-matrix/prefixes/R-3.6.3 &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" lock_relative)" == \
+       environment/runtime-r-3.6.3-linux-64.lock &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" lock_sha256)" == \
+       "$(sha256_value "$CURL7_LOCK")" &&
+     "$(exact_tsv_value "$CURL7_RECEIPT" prefix_manifest_sha256)" == \
+       "$(sha256_value "$CURL7_MANIFEST")" ]] ||
+    fail "libcurl7 prefix receipt is malformed or detached from its lock"
+  CURL7_MANIFEST_SHA256=$(sha256_value "$CURL7_MANIFEST")
+  CURL7_RECEIPT_SHA256=$(sha256_value "$CURL7_RECEIPT")
+  CURL7_SEAL_SHA256=$(sha256_value "$CURL7_SEAL")
+  CURL7_LOCK_SHA256=$(sha256_value "$CURL7_LOCK")
+  CURL7_RECEIPT_HELPER_SHA256=$(sha256_value "$CURL7_RECEIPT_HELPER")
+fi
+
+TOOLCHAIN="$ROOT/.local/toolchain"
+CONFIGURE_PATH="$TOOLCHAIN/bin:/usr/bin"
+PATH=$CONFIGURE_PATH
+export PATH
+RSCRIPT=$(resolve_plain_executable "$TOOLCHAIN/bin/Rscript" "$CONFIGURE_PATH") ||
+  fail "Rscript is absent, symbolic, or non-executable"
+GCC=$(resolve_plain_executable \
+  "$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc" "$CONFIGURE_PATH") ||
+  fail "GCC is absent, symbolic, or non-executable"
+GFORTRAN=$(resolve_plain_executable \
+  "$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gfortran" "$CONFIGURE_PATH") ||
+  fail "GFortran is absent, symbolic, or non-executable"
+MAKE=$(resolve_plain_executable "$TOOLCHAIN/bin/make" "$CONFIGURE_PATH") ||
+  fail "make is absent, symbolic, or non-executable"
+BASH_EXECUTABLE=$(resolve_plain_executable bash "$CONFIGURE_PATH") ||
+  fail "bash does not resolve to a plain executable on the configure path"
+CPP_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-cpp "$CONFIGURE_PATH") ||
+  fail "CPP does not resolve to a plain executable on the configure path"
+CXX_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-c++ "$CONFIGURE_PATH") ||
+  fail "CXX does not resolve to a plain executable on the configure path"
+AR_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-ar "$CONFIGURE_PATH") ||
+  fail "AR does not resolve to a plain executable on the configure path"
+AS_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-as "$CONFIGURE_PATH") ||
+  fail "AS does not resolve to a plain executable on the configure path"
+LD_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-ld "$CONFIGURE_PATH") ||
+  fail "LD does not resolve to a plain executable on the configure path"
+NM_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-nm "$CONFIGURE_PATH") ||
+  fail "NM does not resolve to a plain executable on the configure path"
+RANLIB_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-ranlib "$CONFIGURE_PATH") ||
+  fail "RANLIB does not resolve to a plain executable on the configure path"
+STRIP_EXECUTABLE=$(resolve_plain_executable \
+  x86_64-conda-linux-gnu-strip "$CONFIGURE_PATH") ||
+  fail "STRIP does not resolve to a plain executable on the configure path"
+PKG_CONFIG_EXECUTABLE=$(resolve_plain_executable pkg-config "$CONFIGURE_PATH") ||
+  fail "pkg-config does not resolve to a plain executable on the configure path"
+CURL_CONFIG_EXECUTABLE=$(resolve_plain_executable curl-config "$CONFIGURE_PATH") ||
+  fail "curl-config does not resolve to a plain executable on the configure path"
+ENV_EXECUTABLE=$(resolve_plain_executable env "$CONFIGURE_PATH") ||
+  fail "env does not resolve to a plain executable on the configure path"
+SETSID=$(resolve_plain_executable "$SETSID" "$CONFIGURE_PATH") ||
+  fail "setsid is absent, symbolic, or non-executable"
+FLOCK=$(resolve_plain_executable flock "$CONFIGURE_PATH") ||
+  fail "flock does not resolve to a plain executable on the configure path"
+ARCHIVE="$ROOT/.cache/downloads/R-${VERSION}.tar.gz"
+CACHE_SCHEMA=4
+CACHE_ROOT="$ROOT/.cache/r-api-headers/schema-${CACHE_SCHEMA}"
+ENTRIES_ROOT="$CACHE_ROOT/entries"
+LOCKS_ROOT="$CACHE_ROOT/locks"
+STAGING_ROOT="$CACHE_ROOT/staging"
+QUARANTINE_ROOT="$CACHE_ROOT/quarantine"
+LOCAL_TMP="$ROOT/.local/tmp"
+
+for executable in "$RSCRIPT" "$GCC" "$GFORTRAN" "$MAKE" \
+    "$BASH_EXECUTABLE" "$CPP_EXECUTABLE" "$CXX_EXECUTABLE" \
+    "$AR_EXECUTABLE" "$AS_EXECUTABLE" "$LD_EXECUTABLE" \
+    "$NM_EXECUTABLE" "$RANLIB_EXECUTABLE" "$STRIP_EXECUTABLE" \
+    "$PKG_CONFIG_EXECUTABLE" "$CURL_CONFIG_EXECUTABLE" \
+    "$ENV_EXECUTABLE" "$SETSID" "$FLOCK"; do
+  [[ -x "$executable" && ! -L "$executable" ]] ||
+    fail "toolchain executable is absent or symbolic: $executable"
+done
+
+HELPER_SOURCE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")
+[[ -f "$HELPER_SOURCE" && ! -L "$HELPER_SOURCE" ]] ||
+  fail "executing header-cache helper is absent or symbolic"
+BUILDER_HELPER_SHA256=$(sha256_value "$HELPER_SOURCE")
+TREE_RECEIPT_HELPER_SHA256=$(sha256_value "$TREE_RECEIPT_HELPER")
+
+verify_sha256() {
+  local expected=$1 path=$2 observed
+  observed=$(sha256_value "$path")
+  [[ "$observed" == "$expected" ]] ||
+    fail "SHA-256 mismatch for $path: expected $expected, observed $observed"
+}
+
+require_managed_path() {
+  local path=$1 current remainder component
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed path escaped the repository: $path" ;;
+  esac
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    [[ "$component" != . && "$component" != .. ]] ||
+      fail "managed path contains a dot component: $path"
+    current="$current/$component"
+    [[ ! -L "$current" ]] || fail "managed path is symbolic: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed directory path is not a directory: $current"
+  done
+}
+
+for managed in "$ROOT/.cache" "$ROOT/.cache/downloads" "$CACHE_ROOT" \
+    "$ENTRIES_ROOT" \
+    "$LOCKS_ROOT" "$STAGING_ROOT" "$QUARANTINE_ROOT" "$LOCAL_TMP" \
+    "$TOOLCHAIN" "${TOOLCHAIN_LOCK%/*}" "${TREE_RECEIPT_HELPER%/*}" \
+    "${ACTIVE_GROUP_FILE%/*}" \
+    "$METADATA_DIRECTORY" "$LOG_DIRECTORY" "${OUTPUT%/*}"; do
+  [[ "$managed" == /* ]] || fail "managed output path is not absolute: $managed"
+  require_managed_path "$managed"
+done
+mkdir -p "$ENTRIES_ROOT" "$LOCKS_ROOT" "$STAGING_ROOT" \
+  "$QUARANTINE_ROOT" "$LOCAL_TMP" "$METADATA_DIRECTORY" \
+  "$LOG_DIRECTORY" "${OUTPUT%/*}"
+chmod 0700 "$CACHE_ROOT" "$ENTRIES_ROOT" "$LOCKS_ROOT" \
+  "$STAGING_ROOT" "$QUARANTINE_ROOT"
+
+[[ ! -e "$OUTPUT" && ! -L "$OUTPUT" ]] ||
+  fail "run-local header output already exists: $OUTPUT"
+
+# The values below deliberately reproduce the activated conda compiler
+# environment while removing unrelated user state.  Every byte-affecting
+# value is written to the cache input receipt; only HOME/TMPDIR vary by private
+# staging directory and are explicitly represented by stable isolation tags.
+CONFIGURE_PREFIX="/paradox-r-api-header-cache/R-${VERSION}"
+CC_VALUE="$GCC"
+CFLAGS_VALUE='-O2 -g'
+F77_VALUE="$GFORTRAN"
+FFLAGS_VALUE='-O2 -g'
+FC_VALUE="$GFORTRAN"
+FCFLAGS_VALUE='-O2 -g'
+CPP_VALUE="$CPP_EXECUTABLE"
+CPPFLAGS_VALUE=${CPPFLAGS:-}
+CXX_VALUE="$CXX_EXECUTABLE"
+CXXFLAGS_VALUE=${CXXFLAGS:-}
+AR_VALUE="$AR_EXECUTABLE"
+AS_VALUE="$AS_EXECUTABLE"
+LD_VALUE="$LD_EXECUTABLE"
+LDFLAGS_VALUE=${LDFLAGS:-}
+NM_VALUE="$NM_EXECUTABLE"
+RANLIB_VALUE="$RANLIB_EXECUTABLE"
+STRIP_VALUE="$STRIP_EXECUTABLE"
+BUILD_VALUE=${BUILD:-x86_64-conda-linux-gnu}
+HOST_VALUE=${HOST:-x86_64-conda-linux-gnu}
+SYSROOT_VALUE=${CONDA_BUILD_SYSROOT:-"$TOOLCHAIN/x86_64-conda-linux-gnu/sysroot"}
+PKG_CONFIG_VALUE="$PKG_CONFIG_EXECUTABLE"
+PKG_CONFIG_LIBDIR_VALUE=${PKG_CONFIG_LIBDIR:-"$TOOLCHAIN/lib/pkgconfig:$TOOLCHAIN/share/pkgconfig"}
+PKG_CONFIG_PATH_VALUE=${PKG_CONFIG_PATH:-"$PKG_CONFIG_LIBDIR_VALUE"}
+CONFIG_SHELL_VALUE="$BASH_EXECUTABLE"
+SHELL_VALUE="$BASH_EXECUTABLE"
+select_configure_compatibility "$VERSION"
+if [[ -n "$CONFIGURE_CFLAGS_SUFFIX" ]]; then
+  CFLAGS_VALUE+=" $CONFIGURE_CFLAGS_SUFFIX"
+fi
+CONFIGURE_CURL_ENVIRONMENT=()
+LD_LIBRARY_PATH_VALUE=not-set
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  CURL_CONFIG_EXECUTABLE=$(resolve_plain_executable \
+    "$CURL7_PREFIX/bin/curl-config" "$CONFIGURE_PATH") ||
+    fail "locked libcurl7 curl-config is absent, symbolic, or non-executable"
+  LDFLAGS_VALUE="-L$CURL7_PREFIX/lib -Wl,-rpath,$CURL7_PREFIX/lib $LDFLAGS_VALUE"
+  LD_LIBRARY_PATH_VALUE="$CURL7_PREFIX/lib"
+  CONFIGURE_CURL_ENVIRONMENT+=(
+    "CURL_CONFIG=$CURL_CONFIG_EXECUTABLE"
+    "LD_LIBRARY_PATH=$LD_LIBRARY_PATH_VALUE"
+  )
+else
+  CONFIGURE_CURL_ENVIRONMENT+=("CURL_CONFIG=$CURL_CONFIG_EXECUTABLE")
+fi
+CURL_CONFIG_SELECTED_SHA256=$(sha256_value "$CURL_CONFIG_EXECUTABLE")
+
+# This reviewed inventory covers the helper itself, Autoconf probes used by
+# the four pinned R releases, and commands reachable from generated include
+# make fragments.  Every name is retained even when absent.  Standard system
+# alias links are accepted only as a bounded, fully recorded chain ending in a
+# regular executable below the reviewed toolchain or system roots.
+CONFIGURE_TOOL_NAMES=(
+  R Rscript '[' aclocal ar as autoconf automake awk basename bash bison
+  bunzip2 bzcat bzip2 c++ cat cc chmod clang cmp comm cp cpp curl curl-config
+  cut date
+  diff dirname dvipdfm echo egrep env expr f77 f90 f95 false fc fc-list fgrep
+  file find flang flex flock fort77 ftn g++ g77 gawk gcc getconf gfortran grep
+  groff gzip head hostname iconv id ifort install jar java javac javadoc javah
+  kpsewhich latex ld ldconfig ldd less ln locale ls m4 make makeindex makeinfo
+  mawk mkdir mktemp more mv nm objc objc++ objcopy objdump od openssl pager
+  paste patch pdftex pdflatex perl pkg-config pkgconf printf pwd python python3
+  ranlib readelf readlink
+  realpath rm rmdir sed setsid sh sha256sum sleep sort stat strings strip tail
+  tar tee test tex texi2any texi2dvi touch tr true uname uniq unzip wc wget
+  which xargs xlf xlf90 xz xzcat zcat zip
+  x86_64-conda-linux-gnu-ar x86_64-conda-linux-gnu-as
+  x86_64-conda-linux-gnu-c++ x86_64-conda-linux-gnu-cpp
+  x86_64-conda-linux-gnu-gcc x86_64-conda-linux-gnu-gfortran
+  x86_64-conda-linux-gnu-ld x86_64-conda-linux-gnu-nm
+  x86_64-conda-linux-gnu-ranlib x86_64-conda-linux-gnu-strip
+)
+
+receipt_row() {
+  local name=$1 value=$2
+  [[ "$name" =~ ^[a-z0-9_]+$ && "$value" != *$'\t'* &&
+     "$value" != *$'\r'* && "$value" != *$'\n'* ]] ||
+    fail "cache input contains an unsupported field or value"
+  printf '%s\t%s\n' "$name" "$value"
+}
+
+TOOL_INVENTORY=$(mktemp "$LOCAL_TMP/r-api-header-tools.XXXXXX")
+if ! create_external_tool_inventory "$TOOL_INVENTORY" "$CONFIGURE_PATH" \
+    "${CONFIGURE_TOOL_NAMES[@]}"; then
+  rm -f -- "$TOOL_INVENTORY"
+  fail "could not create the reviewed configure/make tool inventory"
+fi
+TOOL_INVENTORY_SHA256=$(sha256_value "$TOOL_INVENTORY")
+INPUT_RECEIPT=$(mktemp "$LOCAL_TMP/r-api-header-input.XXXXXX")
+STAGING=
+RUN_STAGING=
+RUN_HEADERS_RECEIPT=
+EVIDENCE_STAGING=
+CURL_PREFLIGHT_ROOT=
+ACTIVE_GROUP=
+ACTIVE_GROUP_NEW=
+ACTIVE_GROUP_START=
+ACTIVE_GROUP_FILE_SHA256=
+ACTIVE_GROUP_IDENTITY_FILE=
+ACTIVE_GROUP_IDENTITY_SHA256=
+ACTIVE_GROUP_NONCE=
+ACTIVE_GROUP_RELEASE=
+GROUP_WATCHDOG_PID=
+GROUP_WATCHDOG_SLEEPER_FILE=
+GROUP_TIMEOUT_MARKER=
+TERMINATION_GRACE_TENTHS=20
+cleanup() {
+  local status=$? cleanup_sleeper
+  trap - 0 HUP INT TERM
+  if [[ -n "$GROUP_WATCHDOG_PID" ]]; then
+    if [[ -f "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+        ! -L "$GROUP_WATCHDOG_SLEEPER_FILE" ]] &&
+        IFS= read -r cleanup_sleeper < "$GROUP_WATCHDOG_SLEEPER_FILE" &&
+        [[ "$cleanup_sleeper" =~ ^[1-9][0-9]*$ ]]; then
+      kill "$cleanup_sleeper" 2>/dev/null || true
+    fi
+    kill "$GROUP_WATCHDOG_PID" 2>/dev/null || true
+    wait "$GROUP_WATCHDOG_PID" 2>/dev/null || true
+  fi
+  if [[ -n "$ACTIVE_GROUP" ]]; then
+    terminate_process_group "$ACTIVE_GROUP" "$ACTIVE_GROUP_START" \
+      "$TERMINATION_GRACE_TENTHS" true
+    wait "$ACTIVE_GROUP" 2>/dev/null || true
+  fi
+  for disposable in "$STAGING" "$RUN_STAGING" "$CURL_PREFLIGHT_ROOT"; do
+    [[ -n "$disposable" && -e "$disposable" && ! -L "$disposable" ]] || continue
+    chmod -R u+w "$disposable" 2>/dev/null || true
+    rm -rf -- "$disposable"
+  done
+  remove_owned_active_records
+  rm -f -- "$INPUT_RECEIPT" "$TOOL_INVENTORY" "$RUN_HEADERS_RECEIPT" \
+    "$EVIDENCE_STAGING" "$ACTIVE_GROUP_NEW" "$ACTIVE_GROUP_RELEASE" \
+    "$GROUP_TIMEOUT_MARKER" "$GROUP_WATCHDOG_SLEEPER_FILE"
+  exit "$status"
+}
+trap cleanup 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+emit_tool_receipt() {
+  local label=$1 executable=$2
+  receipt_row "${label}_path" "$executable"
+  receipt_row "${label}_sha256" "$(sha256_value "$executable")"
+  receipt_row "${label}_identity_sha256" \
+    "$(tool_identity_sha256 "$executable")"
+}
+
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  "$CURL7_RECEIPT_HELPER" verify "$CURL7_PREFIX" "$CURL7_MANIFEST" \
+    > "$LOG_DIRECTORY/curl7-prefix-initial-verify-R-${VERSION}.log" 2>&1 ||
+    fail "R $VERSION locked libcurl7 prefix failed complete authentication"
+fi
+
+CURL_PREFLIGHT_ROOT=$(mktemp -d "$LOCAL_TMP/r-api-curl-preflight.XXXXXX")
+CURL_PREFLIGHT_OUTPUT_FILE="$CURL_PREFLIGHT_ROOT/output.txt"
+CURL_PREFLIGHT_SOURCE_SHA256=not-required
+CURL_PREFLIGHT_HEADER_VERSION_HEX=not-required
+CURL_PREFLIGHT_RUNTIME_VERSION_HEX=not-required
+CURL_PREFLIGHT_HTTPS=not-required
+CURL_CONFIG_CFLAGS_VALUE=not-required
+CURL_CONFIG_LIBS_VALUE=not-required
+CURL_PREFLIGHT_COMPILE_POLICY=not-required
+if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+  CURL_PREFLIGHT_SOURCE_FILE="$CURL_PREFLIGHT_ROOT/probe.c"
+  CURL_PREFLIGHT_BINARY="$CURL_PREFLIGHT_ROOT/probe"
+  {
+    printf '%s\n' \
+      '#include <curl/curl.h>' \
+      '#include <stdio.h>' \
+      '#include <string.h>' \
+      '' \
+      'int main(void) {' \
+      '  const curl_version_info_data *info = curl_version_info(CURLVERSION_NOW);' \
+      '  const char *const *protocol;' \
+      '  int have_https = 0;' \
+      '  if (info == NULL) return 10;' \
+      '  if (LIBCURL_VERSION_MAJOR != 7) return 11;' \
+      '  if ((unsigned long) LIBCURL_VERSION_NUM < PARADOX_CURL_MINIMUM) return 12;' \
+      '  if ((unsigned long) info->version_num != (unsigned long) LIBCURL_VERSION_NUM) return 13;' \
+      '  for (protocol = info->protocols; protocol != NULL && *protocol != NULL; ++protocol) {' \
+      '    if (strcmp(*protocol, "https") == 0) {' \
+      '      have_https = 1;' \
+      '      break;' \
+      '    }' \
+      '  }' \
+      '  if (!have_https) return 14;' \
+      '  printf("header_version_hex=%06lx\n", (unsigned long) LIBCURL_VERSION_NUM);' \
+      '  printf("runtime_version_hex=%06lx\n", (unsigned long) info->version_num);' \
+      '  printf("https=true\n");' \
+      '  return 0;' \
+      '}'
+  } > "$CURL_PREFLIGHT_SOURCE_FILE"
+  CURL_PREFLIGHT_SOURCE_SHA256=$(sha256_value "$CURL_PREFLIGHT_SOURCE_FILE")
+  CURL_CONFIG_CFLAGS_VALUE=$(LC_ALL=C \
+    "$CURL_CONFIG_EXECUTABLE" --cflags)
+  CURL_CONFIG_LIBS_VALUE=$(LC_ALL=C "$CURL_CONFIG_EXECUTABLE" --libs)
+  for flag_value in "$CPPFLAGS_VALUE" "$LDFLAGS_VALUE" \
+      "$CURL_CONFIG_CFLAGS_VALUE" "$CURL_CONFIG_LIBS_VALUE"; do
+    [[ "$flag_value" != *$'\t'* && "$flag_value" != *$'\r'* &&
+       "$flag_value" != *$'\n'* ]] ||
+      fail "libcurl preflight received flags with unsupported control bytes"
+  done
+  curl_cppflags=()
+  curl_ldflags=()
+  curl_config_cflags=()
+  curl_config_libs=()
+  read -r -a curl_cppflags <<< "$CPPFLAGS_VALUE"
+  read -r -a curl_ldflags <<< "$LDFLAGS_VALUE"
+  read -r -a curl_config_cflags <<< "$CURL_CONFIG_CFLAGS_VALUE"
+  read -r -a curl_config_libs <<< "$CURL_CONFIG_LIBS_VALUE"
+  CURL_PREFLIGHT_COMPILE_POLICY=gnu-c99-wall-wextra-werror-locked-curl7-v1
+  if ! run_supervised_group "$COMMAND_TIMEOUT_SECONDS" \
+      "libcurl compile proof R $VERSION" \
+      "$ENV_EXECUTABLE" -i PATH="$CONFIGURE_PATH" LC_ALL=C LANG=C TZ=UTC \
+      "$GCC" -std=gnu99 -O2 -g -Wall -Wextra -Werror \
+      "${curl_cppflags[@]}" "${curl_config_cflags[@]}" \
+      "-DPARADOX_CURL_MINIMUM=0x$CURL_PREFLIGHT_MINIMUM_HEX" \
+      "$CURL_PREFLIGHT_SOURCE_FILE" \
+      "${curl_ldflags[@]}" "${curl_config_libs[@]}" \
+      -o "$CURL_PREFLIGHT_BINARY" \
+      > "$LOG_DIRECTORY/curl-preflight-compile-R-${VERSION}.log" 2>&1; then
+    fail "R $VERSION could not compile/link its authenticated libcurl proof"
+  fi
+  if ! run_supervised_group "$COMMAND_TIMEOUT_SECONDS" \
+      "libcurl runtime proof R $VERSION" \
+      "$ENV_EXECUTABLE" -i PATH="$CONFIGURE_PATH" LC_ALL=C LANG=C TZ=UTC \
+      LD_LIBRARY_PATH="$LD_LIBRARY_PATH_VALUE" \
+      "$CURL_PREFLIGHT_BINARY" \
+      > "$CURL_PREFLIGHT_OUTPUT_FILE" \
+      2> "$LOG_DIRECTORY/curl-preflight-run-R-${VERSION}.log"; then
+    fail "R $VERSION libcurl proof failed at runtime"
+  fi
+  validate_curl_preflight_output "$CURL_PREFLIGHT_OUTPUT_FILE" \
+    "$CURL_PREFLIGHT_MINIMUM_HEX" ||
+    fail "R $VERSION libcurl proof returned malformed or insufficient evidence"
+else
+  printf 'status=not-required\n' > "$CURL_PREFLIGHT_OUTPUT_FILE"
+fi
+CURL_PREFLIGHT_OUTPUT_SHA256=$(sha256_value "$CURL_PREFLIGHT_OUTPUT_FILE")
+
+{
+  printf 'field\tvalue\n'
+  receipt_row cache_schema "$CACHE_SCHEMA"
+  receipt_row builder_helper_sha256 "$BUILDER_HELPER_SHA256"
+  receipt_row tree_receipt_helper_sha256 "$TREE_RECEIPT_HELPER_SHA256"
+  receipt_row configure_tool_inventory_sha256 "$TOOL_INVENTORY_SHA256"
+  receipt_row configure_tool_inventory_schema 1
+  receipt_row configure_tool_inventory_commands \
+    "${#CONFIGURE_TOOL_NAMES[@]}"
+  receipt_row process_identity_policy linux-proc-starttime-group-members-v1
+  receipt_row version "$VERSION"
+  receipt_row archive_sha256 "$ARCHIVE_SHA256"
+  receipt_row configure_compatibility_mode "$CONFIGURE_COMPATIBILITY_MODE"
+  receipt_row configure_cache_override_count 0
+  if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+    receipt_row curl7_prefix_relative \
+      .local/runtime-matrix/prefixes/R-3.6.3
+  else
+    receipt_row curl7_prefix_relative not-required
+  fi
+  receipt_row curl7_manifest_sha256 "$CURL7_MANIFEST_SHA256"
+  receipt_row curl7_receipt_sha256 "$CURL7_RECEIPT_SHA256"
+  receipt_row curl7_seal_sha256 "$CURL7_SEAL_SHA256"
+  receipt_row curl7_lock_sha256 "$CURL7_LOCK_SHA256"
+  receipt_row curl7_receipt_helper_sha256 \
+    "$CURL7_RECEIPT_HELPER_SHA256"
+  receipt_row curl_preflight_required "$CURL_PREFLIGHT_REQUIRED"
+  receipt_row curl_preflight_minimum_hex "$CURL_PREFLIGHT_MINIMUM_HEX"
+  receipt_row curl_preflight_source_sha256 \
+    "$CURL_PREFLIGHT_SOURCE_SHA256"
+  receipt_row curl_preflight_output_sha256 \
+    "$CURL_PREFLIGHT_OUTPUT_SHA256"
+  receipt_row curl_preflight_header_version_hex \
+    "$CURL_PREFLIGHT_HEADER_VERSION_HEX"
+  receipt_row curl_preflight_runtime_version_hex \
+    "$CURL_PREFLIGHT_RUNTIME_VERSION_HEX"
+  receipt_row curl_preflight_https "$CURL_PREFLIGHT_HTTPS"
+  receipt_row curl_preflight_compile_policy \
+    "$CURL_PREFLIGHT_COMPILE_POLICY"
+  receipt_row curl_config_cflags "$CURL_CONFIG_CFLAGS_VALUE"
+  receipt_row curl_config_libs "$CURL_CONFIG_LIBS_VALUE"
+  receipt_row configure_arg_01 "--prefix=$CONFIGURE_PREFIX"
+  receipt_row configure_arg_02 --without-x
+  receipt_row configure_arg_03 --without-recommended-packages
+  receipt_row configure_arg_04 --disable-java
+  receipt_row configure_arg_05 --with-readline=no
+  receipt_row configure_arg_06 --with-blas=no
+  receipt_row configure_arg_07 --with-lapack=no
+  receipt_row make_directory src/include
+  receipt_row make_target_01 Rconfig.h
+  receipt_row make_target_02 Rversion.h
+  receipt_row make_argument_shell "SHELL=$SHELL_VALUE"
+  receipt_row env_path "$CONFIGURE_PATH"
+  receipt_row env_home isolated-cache-staging
+  receipt_row env_tmpdir isolated-cache-staging
+  receipt_row env_lc_all C
+  receipt_row env_lang C
+  receipt_row env_tz UTC
+  receipt_row env_config_site /dev/null
+  receipt_row env_config_shell "$CONFIG_SHELL_VALUE"
+  receipt_row env_shell "$SHELL_VALUE"
+  receipt_row env_cc "$CC_VALUE"
+  receipt_row env_cflags "$CFLAGS_VALUE"
+  receipt_row env_f77 "$F77_VALUE"
+  receipt_row env_fflags "$FFLAGS_VALUE"
+  receipt_row env_fc "$FC_VALUE"
+  receipt_row env_fcflags "$FCFLAGS_VALUE"
+  receipt_row env_cpp "$CPP_VALUE"
+  receipt_row env_cppflags "$CPPFLAGS_VALUE"
+  receipt_row env_cxx "$CXX_VALUE"
+  receipt_row env_cxxflags "$CXXFLAGS_VALUE"
+  receipt_row env_ar "$AR_VALUE"
+  receipt_row env_as "$AS_VALUE"
+  receipt_row env_ld "$LD_VALUE"
+  receipt_row env_ldflags "$LDFLAGS_VALUE"
+  receipt_row env_curl_config "$CURL_CONFIG_EXECUTABLE"
+  receipt_row env_ld_library_path "$LD_LIBRARY_PATH_VALUE"
+  receipt_row env_nm "$NM_VALUE"
+  receipt_row env_ranlib "$RANLIB_VALUE"
+  receipt_row env_strip "$STRIP_VALUE"
+  receipt_row env_build "$BUILD_VALUE"
+  receipt_row env_host "$HOST_VALUE"
+  receipt_row env_conda_build_sysroot "$SYSROOT_VALUE"
+  receipt_row env_pkg_config "$PKG_CONFIG_VALUE"
+  receipt_row env_pkg_config_libdir "$PKG_CONFIG_LIBDIR_VALUE"
+  receipt_row env_pkg_config_path "$PKG_CONFIG_PATH_VALUE"
+  receipt_row platform_system "$(uname -s)"
+  receipt_row platform_machine "$(uname -m)"
+  receipt_row platform_long_bit "$(getconf LONG_BIT)"
+  emit_tool_receipt gcc "$GCC"
+  receipt_row gcc_target "$($GCC -dumpmachine)"
+  emit_tool_receipt gfortran "$GFORTRAN"
+  receipt_row gfortran_target "$($GFORTRAN -dumpmachine)"
+  emit_tool_receipt make "$MAKE"
+  emit_tool_receipt rscript "$RSCRIPT"
+  emit_tool_receipt cpp "$CPP_EXECUTABLE"
+  emit_tool_receipt cxx "$CXX_EXECUTABLE"
+  emit_tool_receipt ar "$AR_EXECUTABLE"
+  emit_tool_receipt as "$AS_EXECUTABLE"
+  emit_tool_receipt ld "$LD_EXECUTABLE"
+  emit_tool_receipt nm "$NM_EXECUTABLE"
+  emit_tool_receipt ranlib "$RANLIB_EXECUTABLE"
+  emit_tool_receipt strip "$STRIP_EXECUTABLE"
+  emit_tool_receipt pkg_config "$PKG_CONFIG_EXECUTABLE"
+  emit_tool_receipt curl_config "$CURL_CONFIG_EXECUTABLE"
+  emit_tool_receipt env "$ENV_EXECUTABLE"
+  emit_tool_receipt bash "$BASH_EXECUTABLE"
+  emit_tool_receipt setsid "$SETSID"
+  emit_tool_receipt flock "$FLOCK"
+  receipt_row toolchain_lock_sha256 "$(sha256_value "$TOOLCHAIN_LOCK")"
+} > "$INPUT_RECEIPT"
+
+CACHE_KEY=$(sha256_value "$INPUT_RECEIPT")
+ENTRY="$ENTRIES_ROOT/$CACHE_KEY"
+LOCK_FILE="$LOCKS_ROOT/$CACHE_KEY.lock"
+[[ ! -L "$LOCK_FILE" && ( ! -e "$LOCK_FILE" || -f "$LOCK_FILE" ) ]] ||
+  fail "cache lock is symbolic or not a regular file: $LOCK_FILE"
+exec {LOCK_FD}>"$LOCK_FILE"
+lock_started=$SECONDS
+until "$FLOCK" -x -n "$LOCK_FD"; do
+  if ((SECONDS - lock_started >= LOCK_TIMEOUT_SECONDS)); then
+    fail "timed out after ${LOCK_TIMEOUT_SECONDS}s waiting for cache key $CACHE_KEY"
+  fi
+  sleep 0.1
+done
+LOCK_WAIT_SECONDS=$((SECONDS - lock_started))
+
+verify_recipe_sources_unchanged() {
+  [[ "$(sha256_value "$HELPER_SOURCE")" == "$BUILDER_HELPER_SHA256" &&
+     "$(sha256_value "$TREE_RECEIPT_HELPER")" == \
+       "$TREE_RECEIPT_HELPER_SHA256" ]] ||
+    fail "header-cache builder recipe changed during execution"
+}
+
+verify_curl7_inputs_unchanged() {
+  [[ "$(sha256_value "$CURL_CONFIG_EXECUTABLE")" == \
+       "$CURL_CONFIG_SELECTED_SHA256" ]] ||
+    fail "authenticated libcurl7 inputs changed during header preparation"
+  if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+    [[ "$(sha256_value "$CURL7_MANIFEST")" == \
+         "$CURL7_MANIFEST_SHA256" &&
+       "$(sha256_value "$CURL7_RECEIPT")" == \
+         "$CURL7_RECEIPT_SHA256" &&
+       "$(sha256_value "$CURL7_SEAL")" == "$CURL7_SEAL_SHA256" &&
+       "$(sha256_value "$CURL7_LOCK")" == "$CURL7_LOCK_SHA256" &&
+       "$(sha256_value "$CURL7_RECEIPT_HELPER")" == \
+         "$CURL7_RECEIPT_HELPER_SHA256" ]] ||
+      fail "authenticated libcurl7 receipt inputs changed during preparation"
+  fi
+}
+
+verify_tool_inventory_unchanged() {
+  local observed
+  observed=$(mktemp "$LOCAL_TMP/r-api-header-tools-post.XXXXXX")
+  if ! create_external_tool_inventory "$observed" "$CONFIGURE_PATH" \
+      "${CONFIGURE_TOOL_NAMES[@]}" ||
+      ! cmp -s "$TOOL_INVENTORY" "$observed"; then
+    rm -f -- "$observed"
+    fail "configure/make tool inventory changed during cache construction"
+  fi
+  rm -f -- "$observed"
+}
+
+validate_headers_shape() {
+  local headers=$1 generated_count
+  [[ -d "$headers" && ! -L "$headers" &&
+     -d "$headers/source" && ! -L "$headers/source" &&
+     -d "$headers/generated" && ! -L "$headers/generated" &&
+     -f "$headers/source/R.h" && ! -L "$headers/source/R.h" &&
+     -f "$headers/source/Rinternals.h" && ! -L "$headers/source/Rinternals.h" &&
+     -d "$headers/source/R_ext" && ! -L "$headers/source/R_ext" &&
+     -f "$headers/generated/Rconfig.h" && ! -L "$headers/generated/Rconfig.h" &&
+     -f "$headers/generated/Rversion.h" && ! -L "$headers/generated/Rversion.h" ]] ||
+    return 1
+  if find "$headers" -type l -print -quit | grep -q .; then
+    return 1
+  fi
+  generated_count=$(find "$headers/generated" -mindepth 1 -maxdepth 1 \
+    -type f -printf '.' | wc -c)
+  [[ "$generated_count" -eq 2 ]] || return 1
+  [[ -z "$(find "$headers/generated" -mindepth 1 -maxdepth 1 \
+    ! -name Rconfig.h ! -name Rversion.h -print -quit)" ]] || return 1
+}
+
+validate_entry() {
+  local entry=$1 input_sha receipt_sha tools_sha seal_sha
+  local expected_members actual_members
+  [[ -d "$entry" && ! -L "$entry" &&
+     -f "$entry/inputs.tsv" && ! -L "$entry/inputs.tsv" &&
+     -f "$entry/configure-tools.tsv" &&
+     ! -L "$entry/configure-tools.tsv" &&
+     -f "$entry/headers-tree.tsv" && ! -L "$entry/headers-tree.tsv" &&
+     -f "$entry/seal.tsv" && ! -L "$entry/seal.tsv" &&
+     -f "$entry/seal.sha256" && ! -L "$entry/seal.sha256" ]] || return 1
+  expected_members=$'configure-tools.tsv\nheaders\nheaders-tree.tsv\ninputs.tsv\nseal.sha256\nseal.tsv'
+  actual_members=$(find "$entry" -mindepth 1 -maxdepth 1 -printf '%f\n' |
+    LC_ALL=C sort)
+  [[ "$actual_members" == "$expected_members" ]] || return 1
+  cmp -s "$INPUT_RECEIPT" "$entry/inputs.tsv" || return 1
+  cmp -s "$TOOL_INVENTORY" "$entry/configure-tools.tsv" || return 1
+  [[ "$(wc -l < "$entry/seal.tsv")" -eq 7 ]] || return 1
+  [[ "$(wc -l < "$entry/seal.sha256")" -eq 1 ]] || return 1
+  input_sha=$(sha256_value "$entry/inputs.tsv")
+  receipt_sha=$(sha256_value "$entry/headers-tree.tsv")
+  tools_sha=$(sha256_value "$entry/configure-tools.tsv")
+  seal_sha=$(sha256_value "$entry/seal.tsv")
+  [[ "$input_sha" == "$CACHE_KEY" ]] || return 1
+  grep -Fqx $'schema\t'"$CACHE_SCHEMA" "$entry/seal.tsv" || return 1
+  grep -Fqx $'cache_key\t'"$CACHE_KEY" "$entry/seal.tsv" || return 1
+  grep -Fqx $'inputs_sha256\t'"$input_sha" "$entry/seal.tsv" || return 1
+  grep -Fqx $'headers_tree_sha256\t'"$receipt_sha" "$entry/seal.tsv" || return 1
+  grep -Fqx $'configure_tools_sha256\t'"$tools_sha" "$entry/seal.tsv" ||
+    return 1
+  [[ "$tools_sha" == "$TOOL_INVENTORY_SHA256" ]] || return 1
+  grep -Fqx $'version\t'"$VERSION" "$entry/seal.tsv" || return 1
+  grep -Fqx $'archive_sha256\t'"$ARCHIVE_SHA256" "$entry/seal.tsv" || return 1
+  grep -Fqx "$seal_sha  seal.tsv" "$entry/seal.sha256" || return 1
+  validate_headers_shape "$entry/headers" || return 1
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" verify \
+    "$entry/headers" "$entry/headers-tree.tsv" >/dev/null 2>&1 || return 1
+}
+
+verify_recipe_sources_unchanged
+verify_curl7_inputs_unchanged
+CACHE_RESULT=hit
+if ! validate_entry "$ENTRY"; then
+  CACHE_RESULT=miss
+  if [[ -e "$ENTRY" || -L "$ENTRY" ]]; then
+    CACHE_RESULT=rebuilt
+    quarantine="$QUARANTINE_ROOT/${CACHE_KEY}.$(date -u +%Y%m%dT%H%M%SZ).$$.$RANDOM"
+    [[ -d "$ENTRY" && ! -L "$ENTRY" ]] ||
+      fail "invalid cache target is not a plain directory: $ENTRY"
+    publish_directory_no_clobber "$ENTRY" "$quarantine" ||
+      fail "could not atomically quarantine invalid cache entry"
+  fi
+
+  # The per-key lock makes removal of abandoned same-key staging safe.  Such
+  # directories can only outlive a process killed before its EXIT trap ran.
+  shopt -s nullglob
+  stale_staging=("$STAGING_ROOT/${CACHE_KEY}.staging."*)
+  shopt -u nullglob
+  for stale in "${stale_staging[@]}"; do
+    [[ -d "$stale" && ! -L "$stale" ]] ||
+      fail "abandoned cache staging is symbolic or not a directory: $stale"
+    chmod -R u+w "$stale" 2>/dev/null || true
+    rm -rf -- "$stale"
+  done
+
+  [[ -f "$ARCHIVE" && ! -L "$ARCHIVE" ]] ||
+    fail "cache miss requires $ARCHIVE; run scripts/fetch-reference-sources"
+  verify_sha256 "$ARCHIVE_SHA256" "$ARCHIVE"
+
+  STAGING=$(mktemp -d "$STAGING_ROOT/${CACHE_KEY}.staging.XXXXXX")
+  work_root="$STAGING/work"
+  source_parent="$work_root/source"
+  source_root="$source_parent/R-${VERSION}"
+  build_root="$work_root/build"
+  isolated_home="$work_root/home"
+  isolated_tmp="$work_root/tmp"
+  mkdir -p "$source_parent" "$build_root" "$isolated_home" "$isolated_tmp"
+
+  archive_listing="$work_root/archive-members.txt"
+  tar -tzf "$ARCHIVE" > "$archive_listing"
+  awk -v prefix="R-${VERSION}/" '
+    $0 != substr(prefix, 1, length(prefix) - 1) && index($0, prefix) != 1 { bad = 1 }
+    $0 ~ /(^|\/)\.\.($|\/)/ || $0 ~ /^\// { bad = 1 }
+    END { exit bad }
+  ' "$archive_listing" || fail "R $VERSION archive has an unsafe member inventory"
+  tar -xzf "$ARCHIVE" --no-same-owner -C "$source_parent"
+  [[ -x "$source_root/configure" ]] || fail "R $VERSION source extraction failed"
+
+  run_group_in_directory() {
+    local directory=$1 label=$2
+    shift 2
+    run_supervised_group "$COMMAND_TIMEOUT_SECONDS" "$label" \
+      "$BASH_EXECUTABLE" -c \
+      "directory=\$1; shift; cd \"\$directory\" && exec \"\$@\"" \
+      r-api-header-prepare "$directory" "$@"
+  }
+
+  configure_log="$LOG_DIRECTORY/configure-R-${VERSION}.log"
+  make_log="$LOG_DIRECTORY/make-Rconfig-R-${VERSION}.log"
+  run_group_in_directory "$build_root" "configure R $VERSION" \
+    "$ENV_EXECUTABLE" -i \
+    PATH="$CONFIGURE_PATH" HOME="$isolated_home" TMPDIR="$isolated_tmp" \
+    LC_ALL=C LANG=C TZ=UTC CONFIG_SITE=/dev/null \
+    CONFIG_SHELL="$CONFIG_SHELL_VALUE" SHELL="$SHELL_VALUE" \
+    CC="$CC_VALUE" CFLAGS="$CFLAGS_VALUE" \
+    F77="$F77_VALUE" FFLAGS="$FFLAGS_VALUE" \
+    FC="$FC_VALUE" FCFLAGS="$FCFLAGS_VALUE" \
+    CPP="$CPP_VALUE" CPPFLAGS="$CPPFLAGS_VALUE" \
+    CXX="$CXX_VALUE" CXXFLAGS="$CXXFLAGS_VALUE" \
+    AR="$AR_VALUE" AS="$AS_VALUE" LD="$LD_VALUE" \
+    LDFLAGS="$LDFLAGS_VALUE" NM="$NM_VALUE" \
+    RANLIB="$RANLIB_VALUE" STRIP="$STRIP_VALUE" \
+    BUILD="$BUILD_VALUE" HOST="$HOST_VALUE" \
+    CONDA_BUILD_SYSROOT="$SYSROOT_VALUE" \
+    PKG_CONFIG="$PKG_CONFIG_VALUE" \
+    PKG_CONFIG_LIBDIR="$PKG_CONFIG_LIBDIR_VALUE" \
+    PKG_CONFIG_PATH="$PKG_CONFIG_PATH_VALUE" \
+    "${CONFIGURE_CURL_ENVIRONMENT[@]}" \
+    "$BASH_EXECUTABLE" "$source_root/configure" \
+      "--prefix=$CONFIGURE_PREFIX" \
+      --without-x --without-recommended-packages --disable-java \
+      --with-readline=no --with-blas=no --with-lapack=no \
+      > "$configure_log" 2>&1
+  run_supervised_group "$COMMAND_TIMEOUT_SECONDS" "make headers R $VERSION" \
+    "$ENV_EXECUTABLE" -i \
+    PATH="$CONFIGURE_PATH" HOME="$isolated_home" TMPDIR="$isolated_tmp" \
+    LC_ALL=C LANG=C TZ=UTC CONFIG_SITE=/dev/null \
+    CONFIG_SHELL="$CONFIG_SHELL_VALUE" SHELL="$SHELL_VALUE" \
+    "$MAKE" -C "$build_root/src/include" \
+      "SHELL=$SHELL_VALUE" Rconfig.h Rversion.h \
+      > "$make_log" 2>&1
+
+  if [[ "$CURL_PREFLIGHT_REQUIRED" == true ]]; then
+    "$CURL7_RECEIPT_HELPER" verify "$CURL7_PREFIX" "$CURL7_MANIFEST" \
+      > "$LOG_DIRECTORY/curl7-prefix-final-verify-R-${VERSION}.log" 2>&1 ||
+      fail "R $VERSION locked libcurl7 prefix changed during preparation"
+  fi
+  verify_recipe_sources_unchanged
+  verify_curl7_inputs_unchanged
+  verify_tool_inventory_unchanged
+
+  [[ -f "$build_root/src/include/Rconfig.h" &&
+     -f "$build_root/src/include/Rversion.h" ]] ||
+    fail "R $VERSION did not generate both public configuration headers"
+  mkdir -p "$STAGING/headers/generated"
+  cp -a -- "$source_root/src/include" "$STAGING/headers/source"
+  cp -p -- "$build_root/src/include/Rconfig.h" \
+    "$build_root/src/include/Rversion.h" "$STAGING/headers/generated/"
+  validate_headers_shape "$STAGING/headers" ||
+    fail "prepared R $VERSION header tree has an unexpected shape"
+
+  # This is the critical pruning boundary: no extracted source, configure
+  # output tree, isolated HOME, or temporary file is publishable cache state.
+  rm -rf -- "$work_root"
+  [[ ! -e "$STAGING/work" && ! -L "$STAGING/work" ]] ||
+    fail "R $VERSION cache staging retained private build material"
+  cp -- "$INPUT_RECEIPT" "$STAGING/inputs.tsv"
+  cp -- "$TOOL_INVENTORY" "$STAGING/configure-tools.tsv"
+  find "$STAGING/headers" -type d -exec chmod 0555 {} +
+  find "$STAGING/headers" -type f -exec chmod 0444 {} +
+  "$RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" create \
+    "$STAGING/headers" "$STAGING/headers-tree.tsv" >/dev/null
+  input_sha=$(sha256_value "$STAGING/inputs.tsv")
+  receipt_sha=$(sha256_value "$STAGING/headers-tree.tsv")
+  tools_sha=$(sha256_value "$STAGING/configure-tools.tsv")
+  {
+    printf 'schema\t%s\n' "$CACHE_SCHEMA"
+    printf 'cache_key\t%s\n' "$CACHE_KEY"
+    printf 'inputs_sha256\t%s\n' "$input_sha"
+    printf 'headers_tree_sha256\t%s\n' "$receipt_sha"
+    printf 'configure_tools_sha256\t%s\n' "$tools_sha"
+    printf 'version\t%s\n' "$VERSION"
+    printf 'archive_sha256\t%s\n' "$ARCHIVE_SHA256"
+  } > "$STAGING/seal.tsv"
+  (
+    cd "$STAGING"
+    sha256sum seal.tsv
+  ) > "$STAGING/seal.sha256"
+  chmod 0444 "$STAGING/inputs.tsv" "$STAGING/configure-tools.tsv" \
+    "$STAGING/headers-tree.tsv" \
+    "$STAGING/seal.tsv" "$STAGING/seal.sha256"
+  chmod 0555 "$STAGING"
+  validate_entry "$STAGING" || fail "new R $VERSION cache entry failed validation"
+  publish_directory_no_clobber "$STAGING" "$ENTRY" ||
+    fail "could not atomically publish cache entry without clobbering"
+  STAGING=
+  validate_entry "$ENTRY" || fail "published R $VERSION cache entry failed validation"
+fi
+
+verify_recipe_sources_unchanged
+verify_curl7_inputs_unchanged
+input_sha=$(sha256_value "$ENTRY/inputs.tsv")
+receipt_sha=$(sha256_value "$ENTRY/headers-tree.tsv")
+tools_sha=$(sha256_value "$ENTRY/configure-tools.tsv")
+seal_sha=$(sha256_value "$ENTRY/seal.tsv")
+seal_file_sha=$(sha256_value "$ENTRY/seal.sha256")
+
+RUN_STAGING="${OUTPUT}.new.$$.$RANDOM"
+[[ ! -e "$RUN_STAGING" && ! -L "$RUN_STAGING" ]] ||
+  fail "run-local header staging already exists: $RUN_STAGING"
+mkdir "$RUN_STAGING"
+if ! cp -a --reflink=auto -- "$ENTRY/headers/." "$RUN_STAGING/" 2>/dev/null; then
+  rm -rf -- "$RUN_STAGING"
+  mkdir "$RUN_STAGING"
+  cp -a -- "$ENTRY/headers/." "$RUN_STAGING/"
+fi
+"$RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" verify \
+  "$RUN_STAGING" "$ENTRY/headers-tree.tsv" >/dev/null
+publish_directory_no_clobber "$RUN_STAGING" "$OUTPUT" ||
+  fail "could not atomically publish run-local headers without clobbering"
+RUN_STAGING=
+
+RUN_HEADERS_RECEIPT=$(mktemp "$LOCAL_TMP/r-api-run-headers.XXXXXX")
+"$RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" create \
+  "$OUTPUT" "$RUN_HEADERS_RECEIPT" >/dev/null
+"$RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" verify \
+  "$OUTPUT" "$RUN_HEADERS_RECEIPT" >/dev/null
+cmp -s "$RUN_HEADERS_RECEIPT" "$ENTRY/headers-tree.tsv" ||
+  fail "published run-local header receipt differs from its cache source"
+
+input_copy="$METADATA_DIRECTORY/header-cache-input-R-${VERSION}.tsv"
+receipt_copy="$METADATA_DIRECTORY/header-cache-headers-R-${VERSION}.tsv"
+run_receipt_copy="$METADATA_DIRECTORY/header-cache-run-headers-R-${VERSION}.tsv"
+tools_copy="$METADATA_DIRECTORY/header-cache-configure-tools-R-${VERSION}.tsv"
+curl_preflight_copy="$METADATA_DIRECTORY/header-cache-curl-preflight-R-${VERSION}.txt"
+seal_copy="$METADATA_DIRECTORY/header-cache-seal-R-${VERSION}.tsv"
+seal_hash_copy="$METADATA_DIRECTORY/header-cache-seal-R-${VERSION}.sha256"
+evidence="$METADATA_DIRECTORY/header-cache-evidence-R-${VERSION}.tsv"
+publish_file_no_clobber "$ENTRY/inputs.tsv" "$input_copy" ||
+  fail "could not publish cache input metadata without clobbering"
+publish_file_no_clobber "$ENTRY/headers-tree.tsv" "$receipt_copy" ||
+  fail "could not publish cache header metadata without clobbering"
+publish_file_no_clobber "$RUN_HEADERS_RECEIPT" "$run_receipt_copy" ||
+  fail "could not publish run-header metadata without clobbering"
+publish_file_no_clobber "$ENTRY/configure-tools.tsv" "$tools_copy" ||
+  fail "could not publish configure-tool metadata without clobbering"
+publish_file_no_clobber "$CURL_PREFLIGHT_OUTPUT_FILE" "$curl_preflight_copy" ||
+  fail "could not publish libcurl preflight evidence without clobbering"
+publish_file_no_clobber "$ENTRY/seal.tsv" "$seal_copy" ||
+  fail "could not publish cache seal metadata without clobbering"
+publish_file_no_clobber "$ENTRY/seal.sha256" "$seal_hash_copy" ||
+  fail "could not publish cache seal hash without clobbering"
+rm -f -- "$RUN_HEADERS_RECEIPT"
+RUN_HEADERS_RECEIPT=
+EVIDENCE_STAGING=$(mktemp "$LOCAL_TMP/r-api-header-evidence.XXXXXX")
+{
+  printf 'field\tvalue\n'
+  printf 'schema\t%s\n' "$CACHE_SCHEMA"
+  printf 'version\t%s\n' "$VERSION"
+  printf 'archive_sha256\t%s\n' "$ARCHIVE_SHA256"
+  printf 'cache_key\t%s\n' "$CACHE_KEY"
+  printf 'cache_result\t%s\n' "$CACHE_RESULT"
+  printf 'inputs_sha256\t%s\n' "$input_sha"
+  printf 'headers_tree_sha256\t%s\n' "$receipt_sha"
+  printf 'configure_tools_sha256\t%s\n' "$tools_sha"
+  printf 'builder_helper_sha256\t%s\n' "$BUILDER_HELPER_SHA256"
+  printf 'tree_receipt_helper_sha256\t%s\n' \
+    "$TREE_RECEIPT_HELPER_SHA256"
+  printf 'cache_seal_sha256\t%s\n' "$seal_sha"
+  printf 'cache_seal_file_sha256\t%s\n' "$seal_file_sha"
+  printf 'run_headers_tree_sha256\t%s\n' \
+    "$(sha256_value "$run_receipt_copy")"
+  printf 'run_headers_receipt_semantics\t%s\n' \
+    actual-published-output-receipt-v1
+  printf 'lock_timeout_seconds\t%s\n' "$LOCK_TIMEOUT_SECONDS"
+  printf 'lock_wait_seconds\t%s\n' "$LOCK_WAIT_SECONDS"
+  printf 'command_timeout_seconds\t%s\n' "$COMMAND_TIMEOUT_SECONDS"
+  printf 'termination_grace_tenths\t%s\n' "$TERMINATION_GRACE_TENTHS"
+} > "$EVIDENCE_STAGING"
+publish_file_no_clobber "$EVIDENCE_STAGING" "$evidence" ||
+  fail "could not publish cache evidence without clobbering"
+rm -f -- "$EVIDENCE_STAGING"
+EVIDENCE_STAGING=
+
+printf 'cache_result=%s\n' "$CACHE_RESULT"
+printf 'cache_key=%s\n' "$CACHE_KEY"
+printf 'builder_helper_sha256=%s\n' "$BUILDER_HELPER_SHA256"
+printf 'configure_tools_sha256=%s\n' "$tools_sha"
+printf 'run_headers=%s\n' "$OUTPUT"
+printf 'lock_wait_seconds=%s\n' "$LOCK_WAIT_SECONDS"

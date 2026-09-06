@@ -1,0 +1,38 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+# This is the small compatibility userland around the repository-mounted,
+# lockfile-built .local/toolchain.  The exact resulting OCI digest, rather than
+# this recipe or a mutable tag, is the execution/cache identity.
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      bash \
+      bzip2 \
+      ca-certificates \
+      coreutils \
+      file \
+      findutils \
+      gawk \
+      grep \
+      procps \
+      ripgrep \
+      sed \
+      tar \
+      util-linux \
+      xz-utils \
+    && for command in \
+      bash bunzip2 bzcat bzip2 cat chmod cp date echo egrep false fgrep grep \
+      gzip hostname ln ls mkdir mktemp more mv pwd readlink rm rmdir sed sh \
+      sleep tar true uname zcat; do \
+      if [ ! -e "/usr/bin/$command" ] || [ -L "/usr/bin/$command" ]; then \
+        rm -f "/usr/bin/$command"; \
+        cp -pL "/bin/$command" "/usr/bin/$command"; \
+      fi; \
+      test -f "/usr/bin/$command"; \
+      test -x "/usr/bin/$command"; \
+      test ! -L "/usr/bin/$command"; \
+    done \
+    && rm -rf /var/lib/apt/lists/*
+
+LABEL org.opencontainers.image.title="paradox-verification-worker"
+LABEL org.opencontainers.image.description="Minimal userland for the mounted Paradox local toolchain"

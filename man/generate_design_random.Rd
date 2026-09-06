@@ -17,8 +17,13 @@ Number of points to draw randomly.}
 }
 \description{
 Generates a design with randomly drawn points.
-Internally uses \code{\link{SamplerUnif}}, hence, also works for \link{ParamSet}s with dependencies.
-If dependencies do not hold, values are set to \code{NA} in the resulting data.table.
+Base \link{ParamSet}s, \link{ParamSetCollection}s, and \link{ParamSetShadow}s use the same
+native uniform engine as \code{\link{SamplerUnif}}. Values are drawn in public
+parameter order, so the values and random-number stream agree exactly.
+If dependencies do not hold, values are set to \code{NA} in the resulting
+data.table.
+A zero-level categorical parameter can produce a typed zero-row design;
+requesting one or more rows from it errors before randomness is consumed.
 }
 \examples{
 pset = ps(
@@ -28,9 +33,9 @@ pset = ps(
 generate_design_random(pset, 10)
 }
 \seealso{
-Other generate_design: 
-\code{\link{generate_design_grid}()},
-\code{\link{generate_design_lhs}()},
-\code{\link{generate_design_sobol}()}
+Other generate_design:
+\code{\link[=generate_design_grid]{generate_design_grid()}},
+\code{\link[=generate_design_lhs]{generate_design_lhs()}},
+\code{\link[=generate_design_sobol]{generate_design_sobol()}}
 }
 \concept{generate_design}

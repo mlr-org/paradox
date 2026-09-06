@@ -1,0 +1,1089 @@
+#!/usr/bin/env bash
+
+# Cheap structural preflight for the expensive verification harnesses.  Keep
+# information-free duplication from reaching a long native or memory run.
+# shellcheck disable=SC1003,SC2016 # source-code patterns are deliberately literal
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+MEMORY="$ROOT/scripts/memory-check"
+MEMORY_VALIDATOR="$ROOT/scripts/environment/validate-memory-run"
+RECEIPTS="$ROOT/scripts/environment/valgrind-receipts"
+R_BUILD="$ROOT/scripts/build-valgrind-r"
+PACKAGE_BOOTSTRAP="$ROOT/scripts/bootstrap-valgrind-r-packages"
+NATIVE="$ROOT/scripts/native-check"
+OFFLINE_CHECK_PROFILE="$ROOT/environment/Rprofile-native-check-offline.R"
+OFFLINE_REPOSITORY_HELPER="$ROOT/scripts/environment/create-offline-check-repository.R"
+API_GATE="$ROOT/scripts/check-r-api-compatibility"
+API_HEADER_CACHE="$ROOT/scripts/environment/r-api-header-cache"
+RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
+COMPILER_BATCH_RUNNER="$ROOT/scripts/environment/run-compiler-batch"
+COMPILER_WAVE_RUNNER="$ROOT/scripts/environment/run-compiler-wave"
+COMPILER_IDENTITY_HELPER="$ROOT/scripts/environment/compiler-identity.R"
+TEST_RUNNER="$ROOT/scripts/environment/run-native-tests.R"
+TEST_WORKER_GROUP="$ROOT/scripts/environment/run-native-test-worker-group"
+TEST_VERIFIER="$ROOT/scripts/environment/verify-native-test-ledger.R"
+RUNTIME_MATRIX_TEST_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+RUNTIME_MATRIX_TEST_SUPPORT="$ROOT/scripts/environment/runtime-matrix-test-support.R"
+RUNTIME_MATRIX_STRESS_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-old-r-stress.R"
+LEGACY_REPOSITORY_RUNNER="$ROOT/compat/test-repositories.R"
+HARDENING="$ROOT/scripts/environment/test-validation-hardening"
+TASK_ENTRY="$ROOT/scripts/environment/verify-task-entry"
+
+fail() {
+  printf '%s\n' "test-verification-economy: $*" >&2
+  exit 1
+}
+
+for required in "$MEMORY" "$MEMORY_VALIDATOR" "$RECEIPTS" "$R_BUILD" \
+    "$PACKAGE_BOOTSTRAP" \
+    "$NATIVE" "$OFFLINE_CHECK_PROFILE" "$OFFLINE_REPOSITORY_HELPER" \
+    "$API_GATE" "$API_HEADER_CACHE" "$RESOURCE_JOBS" \
+    "$COMPILER_BATCH_RUNNER" \
+    "$COMPILER_WAVE_RUNNER" "$COMPILER_IDENTITY_HELPER" \
+    "$TEST_RUNNER" "$TEST_WORKER_GROUP" "$TEST_VERIFIER" \
+    "$RUNTIME_MATRIX_TEST_RUNNER" "$RUNTIME_MATRIX_TEST_SUPPORT" \
+    "$RUNTIME_MATRIX_STRESS_RUNNER" \
+    "$LEGACY_REPOSITORY_RUNNER" \
+    "$HARDENING" "$TASK_ENTRY"; do
+  [[ -f "$required" && ! -L "$required" ]] ||
+    fail "required harness is absent or symbolic: $required"
+done
+
+# A dead coordinator can make processx signal both the worker supervisor and
+# its detached token watchdog. The watchdog must clean token descendants for
+# every terminating signal, not exit directly and race the supervisor.
+[[ $(grep -Fxc \
+  '  trap '\''terminate_tokens "$supervisor_pid"'\'' HUP TERM USR1' \
+  "$TEST_WORKER_GROUP") -eq 1 ]] ||
+  fail "native worker watchdog does not clean descendants on every termination path"
+[[ $(grep -Fxc "    trap '' HUP TERM USR1" \
+  "$TEST_WORKER_GROUP") -eq 1 ]] ||
+  fail "native worker watchdog cleanup can be interrupted by a second signal"
+if grep -Eq "trap 'exit 0' (HUP|INT|TERM)" "$TEST_WORKER_GROUP"; then
+  fail "native worker watchdog can exit without scanning token descendants"
+fi
+
+# Worker images have different locale defaults, and R parse/serialization
+# metadata can legitimately differ between C and C.UTF-8. Pin the task locale
+# at the container entry boundary rather than relying on image ENV state.
+for task_environment_line in \
+    'export LANG=C.UTF-8' \
+    'export LC_ALL=C.UTF-8' \
+    'export TZ=UTC' \
+    'unset LANGUAGE'; do
+  [[ $(grep -Fxc "$task_environment_line" "$TASK_ENTRY") -eq 1 ]] ||
+    fail "worker task entry does not pin: $task_environment_line"
+done
+
+first_line() {
+  local pattern=$1 file=$2
+  grep -nF -- "$pattern" "$file" | head -n 1 | cut -d: -f1
+}
+
+last_line() {
+  local pattern=$1 file=$2
+  grep -nF -- "$pattern" "$file" | tail -n 1 | cut -d: -f1
+}
+
+exact_line() {
+  local pattern=$1 file=$2
+  grep -nFx -- "$pattern" "$file" | cut -d: -f1
+}
+
+function_body() {
+  local function_name=$1 file=$2
+  awk -v start="${function_name}() {" '
+    $0 == start { inside = 1 }
+    inside { print }
+    inside && /^}/ { exit }
+  ' "$file"
+}
+
+compiler_plan_fields() {
+  local file=$1
+  sed -n "/^  printf 'field\\\\tvalue\\\\n'/,/^} > .*plan.tsv/p" "$file" |
+    sed -n "s/^  printf '\\([a-z0-9_]*\\)\\\\t.*$/\\1/p"
+}
+
+# A deliberately networkless --as-cran run still retains repository-backed
+# dependency-cycle checks.  All standard repository labels must resolve to
+# authenticated local metadata; warnings and skipped cycle checks are not
+# acceptable substitutes.
+native_full_check=$(function_body check_strict_gcc_full "$NATIVE")
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc '_R_CHECK_CRAN_INCOMING_REMOTE_=false') -eq 2 ]] ||
+  fail "both native package checks do not disable only remote incoming work"
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc '_R_CHECK_SYSTEM_CLOCK_=false') -eq 2 ]] ||
+  fail "networkless native package checks still attempt remote clock access"
+for repository_variable in PARADOX_OFFLINE_CHECK_CRAN \
+    PARADOX_OFFLINE_CHECK_BIOC; do
+  [[ $(printf '%s\n' "$native_full_check" |
+    grep -Fc "\"$repository_variable=file://") -eq 2 ]] ||
+    fail "both native package checks do not select the sealed local repositories"
+done
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc '"R_PROFILE_USER=$offline_profile"') -eq 2 ]] ||
+  fail "both native package checks do not select the offline profile"
+[[ $(printf '%s\n' "$native_full_check" |
+  grep -Fc 'verify_offline_check_repository "$MODE_DIRECTORY/artifacts"') -eq 2 ]] ||
+  fail "native package checks do not authenticate repository metadata before and after use"
+if printf '%s\n' "$native_full_check" |
+    grep -Eq '_R_CHECK_ORPHANED_|options[(]repos[[:space:]]*=[[:space:]]*(NULL|character)'; then
+  fail "networkless native check disables a locally meaningful repository check"
+fi
+for repository_name in CRAN BioCsoft BioCann BioCexp; do
+  grep -Eq "^[[:space:]]*$repository_name =" "$OFFLINE_CHECK_PROFILE" ||
+    fail "offline check profile omits standard repository label $repository_name"
+done
+grep -Fq 'tools::write_PACKAGES(cran_contrib, type = "source")' \
+  "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline package metadata is not built with the public repository writer"
+grep -Fq 'tools::sha256sum(archive)' "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline package metadata does not authenticate its locked archives"
+grep -Fq 'lock = lock[lock$Role != "bootstrap-only", , drop = FALSE]' \
+  "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline repository can accidentally admit the Paradox 1 bootstrap archive"
+grep -Fq 'unlink(staged_archives, force = TRUE)' "$OFFLINE_REPOSITORY_HELPER" ||
+  fail "offline repository does not remove its exact staged archive links"
+if grep -Eq 'suppressWarnings|withCallingHandlers|warning[[:space:]]*=' \
+    "$OFFLINE_CHECK_PROFILE" "$OFFLINE_REPOSITORY_HELPER"; then
+  fail "offline repository setup hides warnings instead of preventing them"
+fi
+for logged_wrapper in run_logged run_in_directory_logged; do
+  function_body "$logged_wrapper" "$NATIVE" | grep -Fq 'reject_warnings' ||
+    fail "native command wrapper no longer rejects warning text"
+done
+
+# The package-only ASan mode depends on preloading the project-local runtime
+# into the mounted R executable.  Prove that exact startup plus an XDR
+# round-trip before any expensive compiler mode, without a retry or weakened
+# sanitizer fallback.
+asan_preflight_call=$(exact_line '  run_asan_runtime_startup_preflight' "$NATIVE")
+first_native_install=$(first_line \
+  '  install_mode strict-gcc "$STRICT_GCC_PROFILE" none' "$NATIVE")
+[[ -n "$asan_preflight_call" && -n "$first_native_install" &&
+   "$asan_preflight_call" -lt "$first_native_install" ]] ||
+  fail "ASan runtime compatibility is not checked before expensive native modes"
+asan_preflight=$(function_body run_asan_runtime_startup_preflight "$NATIVE")
+printf '%s\n' "$asan_preflight" |
+  grep -Fq 'run_mode_r_logged "$asan_startup_log"' ||
+  fail "ASan startup preflight does not use the production sanitizer environment"
+printf '%s\n' "$asan_preflight" | grep -Fq 'saveRDS(value, path, version = 2L)' ||
+  fail "ASan startup preflight does not exercise R XDR serialization"
+printf '%s\n' "$asan_preflight" | grep -Fq 'identical(readRDS(path), value)' ||
+  fail "ASan startup preflight does not exercise R XDR deserialization"
+[[ $(grep -Fc 'ASAN_RUNTIME=$(env -i "PATH=$LOCAL_PATH"' "$NATIVE") -eq 1 ]] ||
+  fail "ASan runtime discovery is duplicated or absent"
+grep -Fq 'handle_segv=2:fast_unwind_on_fatal=0' "$NATIVE" ||
+  fail "ASan does not retain ownership of fatal-signal diagnostics"
+if printf '%s\n' "$asan_preflight" |
+    grep -Eqi 'retry|seccomp|privileged|host[ -]?fallback|verify_asan_link_order'; then
+  fail "ASan startup preflight weakens or retries around an incompatible worker"
+fi
+
+# Memory verification has two content boundaries, with no semantic execution
+# until the corresponding content receipt has authenticated every runtime tree.
+[[ $(grep -Fc '  run_valgrind_receipt_structure_verification \' "$MEMORY") -eq 2 ]] ||
+  fail "memory gate does not have exactly two structure boundaries"
+[[ $(grep -Fc '  run_valgrind_receipt_content_verification \' "$MEMORY") -eq 2 ]] ||
+  fail "memory gate does not have exactly two content boundaries"
+[[ $(grep -Fc '  run_valgrind_receipt_semantic_verification \' "$MEMORY") -eq 2 ]] ||
+  fail "memory gate does not have exactly two semantic boundaries"
+
+mapfile -t receipt_compares < <(grep -nF \
+  '  compare_retained_valgrind_receipts "$VALGRIND_RECEIPT_COPY"' \
+  "$MEMORY" | cut -d: -f1)
+[[ ${#receipt_compares[@]} -eq 4 ]] ||
+  fail "live Valgrind receipts are not checked before and after both uses"
+
+valgrind_admission=$(first_line \
+  '    "$RETAINED_RESOURCE_JOBS_HELPER" valgrind --report' "$MEMORY")
+valgrind_admission_validation=$(first_line \
+  '  validate_serial_resource_report "$MODE_ARTIFACTS/resource-jobs.tsv" \' \
+  "$MEMORY")
+valgrind_lock=$(first_line '  acquire_valgrind_state_lock' "$MEMORY")
+[[ -n "$valgrind_admission" && -n "$valgrind_admission_validation" &&
+   -n "$valgrind_lock" ]] ||
+  fail "Valgrind resource admission boundary is absent"
+((valgrind_admission < valgrind_admission_validation &&
+  valgrind_admission_validation < valgrind_lock)) ||
+  fail "Valgrind takes its state lock or starts work before resource admission"
+grep -Fq '    "$MODES/valgrind/artifacts/resource-jobs.tsv" valgrind' \
+  "$MEMORY_VALIDATOR" ||
+  fail "memory replay does not enforce retained Valgrind resource admission"
+grep -Fq '    --verify-report "$resource_report"' "$MEMORY" ||
+  fail "memory harness does not validate its retained resource decision"
+grep -Fq \
+  'resource_admission=serial valgrind profile with 16384 MiB working-set allowance and at least 16384 MiB host reserve' \
+  "$MEMORY" ||
+  fail "Valgrind scope evidence does not name its exact resource policy"
+
+retain=$(first_line \
+  '  retain_valgrind_receipts "$VALGRIND_RECEIPT_COPY"' "$MEMORY")
+structure_pre=$(last_line \
+  '"$MODE_LOGS/prerequisite-structure-pre.log"' "$MEMORY")
+content_pre=$(last_line \
+  '"$MODE_LOGS/prerequisite-content-pre.log"' "$MEMORY")
+semantic_pre=$(last_line \
+  '"$MODE_LOGS/prerequisite-semantics-pre.log"' "$MEMORY")
+metadata_start=$(first_line \
+  '  initialize_valgrind_prerequisite_metadata' "$MEMORY")
+ordinary_post=$(first_line \
+  '  verify_ordinary_input_metadata post-valgrind' "$MEMORY")
+metadata_before=$(first_line \
+  '  verify_valgrind_prerequisite_metadata post-before' "$MEMORY")
+structure_post=$(last_line \
+  '"$MODE_LOGS/prerequisite-structure-post.log"' "$MEMORY")
+content_post=$(last_line \
+  '"$MODE_LOGS/prerequisite-content-post.log"' "$MEMORY")
+semantic_post=$(last_line \
+  '"$MODE_LOGS/prerequisite-semantics-post.log"' "$MEMORY")
+metadata_after=$(first_line \
+  '  verify_valgrind_prerequisite_metadata post-after' "$MEMORY")
+metadata_ledger=$(first_line \
+  '  verify_valgrind_prerequisite_metadata_ledger' "$MEMORY")
+release=$(first_line '  release_valgrind_state_lock' "$MEMORY")
+
+(( retain < receipt_compares[0] &&
+   receipt_compares[0] < structure_pre &&
+   structure_pre < content_pre && content_pre < semantic_pre &&
+   semantic_pre < receipt_compares[1] &&
+   receipt_compares[1] < metadata_start &&
+   metadata_start < ordinary_post && ordinary_post < metadata_before &&
+   metadata_before < receipt_compares[2] &&
+   receipt_compares[2] < structure_post &&
+   structure_post < content_post && content_post < semantic_post &&
+   semantic_post < metadata_after &&
+   metadata_after < receipt_compares[3] &&
+   receipt_compares[3] < metadata_ledger && metadata_ledger < release )) ||
+  fail "Valgrind authentication/content/semantic boundaries are misordered"
+
+[[ $(grep -Ec '^verify_ordinary_inputs final$' "$MEMORY") -eq 1 ]] ||
+  fail "ordinary multi-gigabyte inputs are not content-verified exactly once at postflight"
+modes_receipt=$(first_line \
+  '"$RUN_DIRECTORY/metadata/memory-modes-tree.tsv"' "$MEMORY")
+ordinary_ledger=$(exact_line 'verify_ordinary_metadata_ledger' "$MEMORY")
+ordinary_final=$(exact_line 'verify_ordinary_inputs final' "$MEMORY")
+completion=$(first_line \
+  'mv "$MEMORY_COMPLETION_NEW" "$RUN_DIRECTORY/metadata/completion.txt"' \
+  "$MEMORY")
+(( modes_receipt < ordinary_ledger && ordinary_ledger < ordinary_final &&
+   ordinary_final < completion )) ||
+  fail "memory completion precedes its final evidence/content boundary"
+
+if grep -Fq 'mkdir -p "$(dirname -- "$VALGRIND_STATE_LOCK")"' "$MEMORY"; then
+  fail "memory state lock parent can be redirected through a symbolic path"
+fi
+grep -Fq 'ensure_plain_state_directory "$(dirname -- "$VALGRIND_STATE_LOCK")"' \
+  "$MEMORY" || fail "memory state lock parent is not authenticated"
+
+# Receipt schema changes do not invalidate unchanged runtime bytes.  Cache-hit
+# verifiers make one pass per tree; source archives are read only when consumed.
+r_writer=$(function_body write_r_inputs "$RECEIPTS")
+library_writer=$(function_body write_library_inputs "$RECEIPTS")
+if printf '%s\n%s\n' "$r_writer" "$library_writer" | \
+    grep -Eq 'receipt_helper_sha256|tree_helper_sha256'; then
+  fail "verifier implementation bytes remain part of the artifact cache key"
+fi
+printf '%s\n' "$library_writer" | grep -Fq declared_archive_set_sha256 ||
+  fail "package cache-hit input generation rereads every package archive"
+
+r_verify=$(function_body verify_r_receipt "$RECEIPTS")
+library_verify=$(function_body verify_library_receipt "$RECEIPTS")
+[[ $(printf '%s\n' "$r_verify" | \
+  grep -Fc '"$RSCRIPT" --vanilla "$TREE_HELPER" verify') -eq 3 ]] ||
+  fail "R cache verification does not traverse each of its three trees once"
+[[ $(printf '%s\n' "$library_verify" | \
+  grep -Fc '"$RSCRIPT" --vanilla "$TREE_HELPER" verify') -eq 1 ]] ||
+  fail "package-library cache verification does not traverse its tree once"
+if printf '%s\n' "$library_verify" | grep -Fq verify_package_archives; then
+  fail "no-op package verification rereads source archives it does not consume"
+fi
+
+structure_body=$(function_body verify_memory_structure "$RECEIPTS")
+if printf '%s\n' "$structure_body" | \
+    grep -Eq 'validate_r_runtime|validate_installed_library|\$RSCRIPT|\$R_BINARY'; then
+  fail "instrumented runtime code can execute before content authentication"
+fi
+
+[[ $(grep -Ec '^if "\$RECEIPT_HELPER" verify-library ' \
+  "$PACKAGE_BOOTSTRAP") -eq 1 ]] ||
+  fail "package bootstrap repeats its combined no-op cache verification"
+refresh_library=$(first_line \
+  'if "$RECEIPT_HELPER" refresh-library "$ROOT" "$MANIFEST" \' \
+  "$PACKAGE_BOOTSTRAP")
+stage_library=$(first_line \
+  'STAGING_LIBRARY="$ROOT/.local/r-valgrind/library.new.$$"' \
+  "$PACKAGE_BOOTSTRAP")
+(( refresh_library < stage_library )) ||
+  fail "package reinstall begins before authenticated receipt migration"
+refresh_r=$(first_line 'if "$RECEIPT_HELPER" refresh-r "$ROOT"' "$R_BUILD")
+clean_r=$(first_line 'rm -rf "$BUILD" "$PREFIX"' "$R_BUILD")
+(( refresh_r < clean_r )) ||
+  fail "instrumented R is deleted before authenticated receipt migration"
+
+# Functional batches finish their selected inventory, seal every failure, and
+# bind the result to the DSO that was loaded throughout the run.
+grep -Fq '"expected-dso-sha256"' "$TEST_VERIFIER" ||
+  fail "functional ledger verifier has no expected DSO identity"
+grep -Fq 'any(ledger$dso_sha256 != expected_dso_sha256)' "$TEST_VERIFIER" ||
+  fail "functional ledger rows are not bound to the expected DSO"
+runner_assert=$(last_line 'assert_dso_unchanged(loaded_dso)' "$TEST_RUNNER")
+runner_write=$(last_line 'write_ledger(' "$TEST_RUNNER")
+runner_fail=$(last_line 'testthat:::test_files_check(' "$TEST_RUNNER")
+(( runner_assert < runner_write && runner_write < runner_fail )) ||
+  fail "functional tests stop before publishing their complete DSO-bound ledger"
+grep -Fq 'stop_on_failure = FALSE' "$TEST_RUNNER" ||
+  fail "functional batch still stops at its first ordinary failure"
+grep -Fq 'requested_jobs = requested_jobs_value' "$TEST_RUNNER" ||
+  fail "functional ledger does not retain requested parallelism"
+grep -Fq 'effective_jobs = effective_jobs' "$TEST_RUNNER" ||
+  fail "functional ledger does not retain effective parallelism"
+grep -Fq 'scheduler_backend = scheduler_backend' "$TEST_RUNNER" ||
+  fail "functional ledger does not retain its scheduler backend"
+for selector in "$TEST_RUNNER" "$TEST_VERIFIER"; do
+  grep -Fq '"upgrade-paradox-object|upgrade-registry)"' "$selector" ||
+    fail "focused native-test selection omits a migration contract: $selector"
+done
+
+# The old-R and legacy consumer fallbacks are costly enough that they must
+# expose the complete ordinary failure set before enforcing their strict clean
+# result.  Keep this invariant even though the default repository path is now
+# resumable: the fallback remains useful when diagnosing runner regressions.
+for complete_runner in "$RUNTIME_MATRIX_TEST_RUNNER" \
+    "$LEGACY_REPOSITORY_RUNNER"; do
+  grep -Fq 'stop_on_failure = FALSE' "$complete_runner" ||
+    fail "expensive fallback still stops at its first failure: $complete_runner"
+  grep -Fq 'stop_on_warning = FALSE' "$complete_runner" ||
+    fail "expensive fallback still stops at its first warning: $complete_runner"
+done
+runtime_test_start=$(first_line 'results <- testthat::test_dir(' \
+  "$RUNTIME_MATRIX_TEST_RUNNER")
+runtime_strict_summary=$(first_line \
+  'if (failed != 0L || warnings != 0L || errors != 0L ||' \
+  "$RUNTIME_MATRIX_TEST_RUNNER")
+((runtime_test_start < runtime_strict_summary)) ||
+  fail "runtime-matrix strict summary precedes its complete test batch"
+for runtime_tree_runner in "$RUNTIME_MATRIX_TEST_RUNNER" \
+    "$RUNTIME_MATRIX_STRESS_RUNNER"; do
+  grep -Fq '"runtime-matrix-test-support.R"' "$runtime_tree_runner" ||
+    fail "runtime tests do not use the shared support-tree projector"
+  grep -Fq 'staged_test_tree_receipt_created=passed' \
+    "$runtime_tree_runner" ||
+    fail "runtime tests do not retain their pre-test tree receipt"
+  grep -Fq 'staged_test_tree_receipt_verified=passed' \
+    "$runtime_tree_runner" ||
+    fail "runtime tests do not reverify their staged tree"
+done
+repository_test_start=$(first_line 'test_results <- testthat::test_local(' \
+  "$LEGACY_REPOSITORY_RUNNER")
+repository_test_strict=$(first_line 'testthat:::test_files_check(' \
+  "$LEGACY_REPOSITORY_RUNNER")
+((repository_test_start < repository_test_strict)) ||
+  fail "legacy repository strict result precedes its complete test batch"
+
+# Operator job limits are lowering-only and parsed before shell arithmetic.
+# Rejecting non-canonical or oversized digit strings prevents octal surprises
+# and arithmetic wraparound in every expensive local build.
+grep -Fq '[[ "$REQUESTED_JOBS" =~ ^[1-9][0-9]{0,8}$ ]]' "$R_BUILD" ||
+  fail "instrumented-R build accepts an unsafe operator job count"
+if grep -Fq 'AUTO_JOBS=$($RESOURCE_JOBS_HELPER compile)' "$R_BUILD"; then
+  fail "instrumented-R make limit is detached from its retained report"
+fi
+grep -Fq 'JOBS=$(resource_report_jobs "$RESOURCE_REPORT_STAGING")' "$R_BUILD" ||
+  fail "instrumented-R make limit is not parsed from retained evidence"
+grep -Fq 'mv "$RESOURCE_REPORT_STAGING" "$BUILD/resource-jobs.tsv"' "$R_BUILD" ||
+  fail "instrumented-R build does not retain the report that selected -j"
+
+# The scheduler is a live CPU/RAM admission decision, not a raw CPU count.
+# Keep the reviewed per-profile budgets and require callers/runners to retain
+# the exact report from which their lowering-only ceiling was parsed.
+compile_profile=$(awk '
+  $0 == "  compile)" { inside = 1 }
+  inside { print }
+  inside && $0 == "    ;;" { exit }
+' "$RESOURCE_JOBS")
+api_profile=$(awk '
+  $0 == "  api-compile)" { inside = 1 }
+  inside { print }
+  inside && $0 == "    ;;" { exit }
+' "$RESOURCE_JOBS")
+consumer_profile=$(awk '
+  $0 == "  consumer)" { inside = 1 }
+  inside { print }
+  inside && $0 == "    ;;" { exit }
+' "$RESOURCE_JOBS")
+light_profile=$(awk '
+  $0 == "  light-test)" { inside = 1 }
+  inside { print }
+  inside && $0 == "    ;;" { exit }
+' "$RESOURCE_JOBS")
+valgrind_profile=$(awk '
+  $0 == "  valgrind)" { inside = 1 }
+  inside { print }
+  inside && $0 == "    ;;" { exit }
+' "$RESOURCE_JOBS")
+rchk_profile=$(awk '
+  $0 == "  rchk)" { inside = 1 }
+  inside { print }
+  inside && $0 == "    ;;" { exit }
+' "$RESOURCE_JOBS")
+verify_resource_profile() {
+  local profile_body=$1
+  shift
+  local budget
+  for budget in "$@"; do
+    printf '%s\n' "$profile_body" | grep -Fqx "    $budget" ||
+      fail "resource profile lost reviewed budget $budget"
+  done
+}
+verify_resource_profile "$compile_profile" CPU_PER_JOB=1 \
+  MEMORY_MIB_PER_JOB=1024 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=16 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=1024 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=16
+verify_resource_profile "$api_profile" CPU_PER_JOB=1 \
+  MEMORY_MIB_PER_JOB=768 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=0 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=768 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=0
+verify_resource_profile "$consumer_profile" CPU_PER_JOB=2 \
+  MEMORY_MIB_PER_JOB=8192 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=4 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=2048 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=8
+verify_resource_profile "$light_profile" CPU_PER_JOB=1 \
+  MEMORY_MIB_PER_JOB=2048 MINIMUM_RESERVE_MIB=12288 PROFILE_MAX_JOBS=16 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=1024 AGGREGATE_MINIMUM_RESERVE_MIB=4096 \
+  AGGREGATE_PROFILE_MAX_JOBS=16
+verify_resource_profile "$valgrind_profile" CPU_PER_JOB=1 \
+  MEMORY_MIB_PER_JOB=16384 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=1 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=16384 AGGREGATE_MINIMUM_RESERVE_MIB=16384 \
+  AGGREGATE_PROFILE_MAX_JOBS=1
+verify_resource_profile "$rchk_profile" CPU_PER_JOB=1 \
+  MEMORY_MIB_PER_JOB=20480 MINIMUM_RESERVE_MIB=16384 PROFILE_MAX_JOBS=1 \
+  AGGREGATE_MEMORY_MIB_PER_JOB=20480 AGGREGATE_MINIMUM_RESERVE_MIB=16384 \
+  AGGREGATE_PROFILE_MAX_JOBS=1
+grep -Fq 'DYNAMIC_RESERVE_MIB=$((MEMORY_AVAILABLE_MIB / 4))' \
+  "$RESOURCE_JOBS" ||
+  fail "resource scheduler no longer reserves one quarter of live memory"
+grep -Fq 'RESERVE_MIB=$EFFECTIVE_MINIMUM_RESERVE_MIB' "$RESOURCE_JOBS" ||
+  fail "resource scheduler no longer enforces its absolute memory reserve"
+for contract in \
+    'CONTAINMENT=direct' \
+    '"${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1' \
+    '"${PARADOX_VERIFY_HARD_WORKER:-}" == 1' \
+    'CONTAINMENT=aggregate-systemd' \
+    'CONTAINMENT=worker-hard' \
+    'WORKER_MINIMUM_RESERVE_MIB=1024' \
+    'EFFECTIVE_MEMORY_MIB_PER_JOB=$AGGREGATE_MEMORY_MIB_PER_JOB' \
+    'EFFECTIVE_MINIMUM_RESERVE_MIB=$AGGREGATE_MINIMUM_RESERVE_MIB' \
+    'EFFECTIVE_PROFILE_MAX_JOBS=$AGGREGATE_PROFILE_MAX_JOBS' \
+    'ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / EFFECTIVE_MEMORY_MIB_PER_JOB))' \
+    'fail "aggregate containment marker without the aggregate service cgroup"' \
+    'fail "hard-worker marker without a finite cgroup memory limit inside the assigned envelope"' \
+    'fail "hard-worker marker without a finite cgroup CPU quota inside the assigned envelope"' \
+    'printf '"'"'containment\t%s\n'"'"' "$CONTAINMENT"'; do
+  grep -Fq "$contract" "$RESOURCE_JOBS" ||
+    fail "resource scheduler lost containment-policy contract: $contract"
+done
+
+# Parallel API admission must keep exit status as data; a declaration typo
+# here previously discarded an otherwise complete result.  GCC and Clang use
+# one balanced live ceiling, and every release gets a new lowering-only report.
+grep -Fq '  local status=$? pid' "$API_GATE" ||
+  fail "API gate cleanup does not safely capture status and child PID state"
+api_compile_body=$(function_body compile_api_release "$API_GATE")
+[[ $(printf '%s\n' "$api_compile_body" | \
+  grep -Fc '"$RETAINED_COMPILER_WAVE_HELPER" "${wave_arguments[@]}"') -eq 1 ]] ||
+  fail "API gate does not use one combined GCC/Clang compiler wave"
+printf '%s\n' "$api_compile_body" |
+  grep -Fq -- '--max-jobs "$PARALLEL_JOBS" --report' ||
+  fail "API gate does not recompute a lowering-only ceiling for every compiler wave"
+printf '%s\n' "$api_compile_body" |
+  grep -Fq 'clang_jobs=$((live_jobs - gcc_jobs))' ||
+  fail "API gate does not split one ceiling across both compiler families"
+printf '%s\n' "$api_compile_body" |
+  grep -Fq -- '--admission-report "$resource_report"' ||
+  fail "API gate does not give the compiler wave its exact live admission report"
+if grep -Eq 'AUTO_(PARALLEL|PREPARE)_JOBS=\$\(' "$API_GATE"; then
+  fail "API gate separates a scheduler job decision from its retained report"
+fi
+grep -Fq 'PARALLEL_JOBS=$(resource_report_jobs "$RUN/metadata/resource-jobs.tsv")' \
+  "$API_GATE" ||
+  fail "API compiler ceiling is not parsed from its retained report"
+grep -Fq 'PREPARE_JOBS=$(resource_report_jobs \' "$API_GATE" ||
+  fail "API preparation ceiling is not parsed from its retained report"
+
+# Header preparation has two deadlines: exact GNU timeout supervises each
+# complete release task, while the cache helper supervises configure and make.
+# Failure cleanup may signal nested work only through the helper's authenticated
+# Linux PID/start/session record; the obsolete unauthenticated watchdog is gone.
+api_prepare_body=$(function_body prepare_api_release "$API_GATE")
+printf '%s\n' "$api_prepare_body" |
+  grep -Fq 'exec "$SETSID" --wait -- "$TIMEOUT_TOOL" --foreground --verbose \' ||
+  fail "API preparation is not enclosed in an authoritative process group and GNU timeout"
+printf '%s\n' "$api_prepare_body" |
+  grep -Fq -- '--signal=TERM --kill-after=10s "${HEADER_CACHE_TASK_TIMEOUT_SECONDS}s" \' ||
+  fail "API preparation has no bounded TERM/KILL outer deadline"
+printf '%s\n' "$api_prepare_body" |
+  grep -Fq '"$BASH_EXECUTABLE" "$PREPARE_TASK_WRAPPER" \' ||
+  fail "API preparation deadline does not use its content-bound logging wrapper"
+printf '%s\n' "$api_prepare_body" |
+  grep -Fq -- '--internal-prepare-wrapper "$prepare_log" \' ||
+  fail "API preparation does not isolate helper output from timeout diagnostics"
+printf '%s\n' "$api_prepare_body" |
+  grep -Fq '"$RETAINED_HEADER_CACHE_HELPER" prepare \' ||
+  fail "API preparation wrapper does not execute the retained helper"
+if grep -Fq 'prepare_timeout_watchdog' "$API_GATE"; then
+  fail "API preparation retains the obsolete custom outer watchdog"
+fi
+api_wait_prepare_body=$(function_body wait_prepare_task "$API_GATE")
+api_classify_prepare_body=$(function_body classify_prepare_supervisor "$API_GATE")
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'timeout_name=${TIMEOUT_TOOL##*/}' ||
+  fail "API preparation does not derive GNU timeout's authenticated display name"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'term_marker="$TIMEOUT_TOOL: sending signal TERM to command '\''$BASH_EXECUTABLE'\''"' ||
+  fail "API preparation cannot authenticate GNU timeout's exact diagnostic"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'term_marker_short="$timeout_name: sending signal TERM to command '\''$BASH_EXECUTABLE'\''"' ||
+  fail "API preparation cannot authenticate GNU timeout's basename diagnostic"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'kill_marker="$TIMEOUT_TOOL: sending signal KILL to command '\''$BASH_EXECUTABLE'\''"' ||
+  fail "API preparation cannot authenticate GNU timeout's exact KILL diagnostic"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq 'kill_marker_short="$timeout_name: sending signal KILL to command '\''$BASH_EXECUTABLE'\''"' ||
+  fail "API preparation cannot authenticate GNU timeout's basename KILL diagnostic"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '*) diagnostics_valid=false ;;' ||
+  fail "API preparation accepts unknown supervisor output"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '"$diagnostics_valid" == true && "$term_count" -eq 1' ||
+  fail "API preparation accepts ambiguous outer timeout diagnostics"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '{ [[ "$status" -eq 124 ]] ||' ||
+  fail "API preparation does not authenticate GNU timeout status 124"
+printf '%s\n' "$api_classify_prepare_body" |
+  grep -Fq '[[ "$status" -eq 137 && "$kill_count" -eq 1 ]]; }; then' ||
+  fail "API preparation does not authenticate GNU timeout KILL escalation"
+printf '%s\n' "$api_wait_prepare_body" |
+  grep -Fq 'classify_prepare_supervisor "$status" "$supervisor_log"' ||
+  fail "API preparation does not classify its supervisor-only log"
+[[ $(printf '%s\n' "$api_wait_prepare_body" | \
+  grep -Fc 'if cleanup_prepare_active_record "$active_file" "$cleanup_log"; then') -eq 2 ]] ||
+  fail "API preparation does not clean failed and unexpectedly live nested groups"
+api_prepare_record_cleanup_body=$(function_body cleanup_prepare_active_record \
+  "$API_GATE")
+printf '%s\n' "$api_prepare_record_cleanup_body" |
+  grep -Fq '"$RETAINED_HEADER_CACHE_HELPER" terminate-active \' ||
+  fail "API preparation cleanup bypasses authenticated nested-group termination"
+printf '%s\n' "$api_prepare_record_cleanup_body" |
+  grep -Fq '! -e "${active_file}.identity" && ! -L "${active_file}.identity"' ||
+  fail "API preparation cleanup accepts retained process-identity evidence"
+printf '%s\n' "$api_prepare_record_cleanup_body" |
+  grep -Fq 'active_group_state=terminated_or_absent' ||
+  fail "API preparation cleanup does not parse the helper's exact result"
+api_prepare_cleanup_body=$(function_body terminate_api_prepare_task "$API_GATE")
+printf '%s\n' "$api_prepare_cleanup_body" |
+  grep -Fq '"$RETAINED_HEADER_CACHE_HELPER" terminate-active \' ||
+  fail "API exit cleanup bypasses authenticated nested-group termination"
+grep -Fq "printf 'version\\texit_status\\touter_timed_out\\tresult\\tcleanup_state\\tprepare_log_sha256\\tsupervisor_log_sha256\\tcleanup_log_sha256\\n'" \
+  "$API_GATE" ||
+  fail "API preparation does not retain a complete result/cleanup ledger"
+grep -Fq "\$'version\\texit_status\\touter_timed_out\\tresult\\tcleanup_state\\tprepare_log_sha256\\tsupervisor_log_sha256\\tcleanup_log_sha256'" \
+  "$API_GATE" ||
+  fail "API preparation does not postflight its exact result-ledger schema"
+grep -Fq 'R API preparation ledger does not cover every release' "$API_GATE" ||
+  fail "API preparation can stop before collecting every sibling result"
+grep -Fq 'header-preparation-cleanup-retries.tsv' "$API_GATE" ||
+  fail "API preparation has no bounded ledgered cleanup retry"
+grep -Fq 'HEADER_PREPARATION_SHA256=$(sha256_value \' "$API_GATE" ||
+  fail "API preparation result ledger is not sealed for later boundaries"
+grep -Fq 'HEADER_PREPARATION_RETRIES_SHA256=$(sha256_value \' "$API_GATE" ||
+  fail "API preparation retry ledger is not sealed for later boundaries"
+sha256_definition=$(exact_line 'sha256_value() {' "$API_GATE")
+sha256_first_call=$(first_line '$(sha256_value "' "$API_GATE")
+[[ -n "$sha256_definition" && -n "$sha256_first_call" &&
+   "$sha256_definition" -lt "$sha256_first_call" ]] ||
+  fail "API gate calls sha256_value before defining it"
+grep -Fq 'source-tree-preparation-failure-verify.log' "$API_GATE" ||
+  fail "API preparation failure evidence omits source reauthentication"
+grep -Fq 'artifacts-tree-preparation-failure-verify.log' "$API_GATE" ||
+  fail "stable API preparation failure artifacts are not sealed and reverified"
+grep -Fq 'expected_fields=(field schema nonce pid start_ticks pgrp session owner_pid' \
+  "$API_HEADER_CACHE" ||
+  fail "header-cache termination has no exact process identity record"
+grep -Fq 'linux_group_identity_matches "$pid" "$start"' \
+  "$API_HEADER_CACHE" ||
+  fail "header-cache termination does not reauthenticate PID start identity"
+grep -Fq 'return 3' "$API_HEADER_CACHE" ||
+  fail "header-cache termination does not fail closed for a stale live PID"
+grep -Fq 'run_supervised_group "$COMMAND_TIMEOUT_SECONDS"' \
+  "$API_HEADER_CACHE" ||
+  fail "API configure/make preparation has no per-group deadline"
+
+# Cache schema 4 additionally binds the narrowly versioned configure
+# compatibility recipe and its direct libcurl compile/link/run evidence.  A
+# hit must authenticate without rereading the large source archive.
+grep -Fqx 'CACHE_SCHEMA=4' "$API_HEADER_CACHE" ||
+  fail "API header cache is not the reviewed schema 4"
+grep -Fq 'CACHE_ROOT="$ROOT/.cache/r-api-headers/schema-${CACHE_SCHEMA}"' \
+  "$API_HEADER_CACHE" ||
+  fail "API headers have no schema-separated repository-local cache"
+for cache_key_binding in \
+    'receipt_row cache_schema "$CACHE_SCHEMA"' \
+    'receipt_row builder_helper_sha256 "$BUILDER_HELPER_SHA256"' \
+    'receipt_row tree_receipt_helper_sha256 "$TREE_RECEIPT_HELPER_SHA256"' \
+    'receipt_row configure_tool_inventory_sha256 "$TOOL_INVENTORY_SHA256"' \
+    'receipt_row configure_tool_inventory_schema 1' \
+    'receipt_row configure_tool_inventory_commands \' \
+    'receipt_row process_identity_policy linux-proc-starttime-group-members-v1' \
+    'receipt_row configure_compatibility_mode "$CONFIGURE_COMPATIBILITY_MODE"' \
+    'receipt_row configure_cache_override_count 0' \
+    'receipt_row curl7_manifest_sha256 "$CURL7_MANIFEST_SHA256"' \
+    'receipt_row curl7_receipt_helper_sha256 \' \
+    'receipt_row curl_preflight_source_sha256 \' \
+    'receipt_row curl_preflight_output_sha256 \' \
+    'emit_tool_receipt curl_config "$CURL_CONFIG_EXECUTABLE"'; do
+  grep -Fq "$cache_key_binding" "$API_HEADER_CACHE" ||
+    fail "API cache key omits recipe identity: $cache_key_binding"
+done
+for compatibility_binding in \
+    'select_configure_compatibility "$VERSION"' \
+    'CONFIGURE_CFLAGS_SUFFIX=-Wno-error=implicit-function-declaration' \
+    'CONFIGURE_CURL_ENVIRONMENT+=(' \
+    '"CURL_CONFIG=$CURL_CONFIG_EXECUTABLE"' \
+    '"LD_LIBRARY_PATH=$LD_LIBRARY_PATH_VALUE"' \
+    '"${CONFIGURE_CURL_ENVIRONMENT[@]}" \' \
+    '"$CURL7_RECEIPT_HELPER" verify "$CURL7_PREFIX" "$CURL7_MANIFEST" \' \
+    'validate_curl_preflight_output "$CURL_PREFLIGHT_OUTPUT_FILE" \' \
+    'gnu-c99-wall-wextra-werror-locked-curl7-v1' \
+    'publish_file_no_clobber "$CURL_PREFLIGHT_OUTPUT_FILE" "$curl_preflight_copy"'; do
+  grep -Fq "$compatibility_binding" "$API_HEADER_CACHE" ||
+    fail "API header cache omits old-R compatibility proof: $compatibility_binding"
+done
+if grep -Fq 'r_cv_have_curl' "$API_HEADER_CACHE"; then
+  fail "API header cache bypasses an upstream libcurl admission probe"
+fi
+mapfile -t configure_tool_names < <(awk '
+  /^CONFIGURE_TOOL_NAMES=\(/ { inside = 1; next }
+  inside && /^\)$/ { exit }
+  inside { for (field = 1; field <= NF; ++field) print $field }
+' "$API_HEADER_CACHE")
+[[ ${#configure_tool_names[@]} -eq 154 ]] ||
+  fail "API configure/make inventory no longer has its 154 reviewed command names"
+[[ $(printf '%s\n' "${configure_tool_names[@]}" | LC_ALL=C sort -u | wc -l) \
+   -eq ${#configure_tool_names[@]} ]] ||
+  fail "API configure/make inventory contains duplicate command names"
+for tool in R Rscript bash curl-config env gcc gfortran make pkg-config setsid flock \
+    awk sed tar x86_64-conda-linux-gnu-gcc; do
+  printf '%s\n' "${configure_tool_names[@]}" | grep -Fxq "$tool" ||
+    fail "API configure/make inventory omits reviewed command: $tool"
+done
+for inventory_binding in \
+    'inventory_row "${prefix}_state" present' \
+    'inventory_row "${prefix}_state" absent' \
+    'inventory_row "${prefix}_selected_path" "$INVENTORY_SELECTED_PATH"' \
+    'inventory_row "${prefix}_link_chain" "$INVENTORY_LINK_CHAIN"' \
+    'inventory_row "${prefix}_final_path" "$INVENTORY_FINAL_PATH"' \
+    'inventory_row "${prefix}_sha256" \' \
+    'inventory_row "${prefix}_identity_sha256" \' ; do
+  grep -Fq "$inventory_binding" "$API_HEADER_CACHE" ||
+    fail "API tool inventory omits state/provenance: $inventory_binding"
+done
+grep -Fq '"$FLOCK" -x -n "$LOCK_FD"' "$API_HEADER_CACHE" ||
+  fail "API header cache publication is not serialized per content key"
+grep -Fq 'SECONDS - lock_started >= LOCK_TIMEOUT_SECONDS' \
+  "$API_HEADER_CACHE" ||
+  fail "API header cache lock wait has no deadline"
+cache_hit_line=$(first_line 'if ! validate_entry "$ENTRY"; then' \
+  "$API_HEADER_CACHE")
+archive_hash_line=$(first_line 'verify_sha256 "$ARCHIVE_SHA256" "$ARCHIVE"' \
+  "$API_HEADER_CACHE")
+prune_line=$(first_line 'rm -rf -- "$work_root"' "$API_HEADER_CACHE")
+header_receipt_line=$(last_line '"$STAGING/headers" "$STAGING/headers-tree.tsv"' \
+  "$API_HEADER_CACHE")
+cache_publish_line=$(first_line 'publish_directory_no_clobber "$STAGING" "$ENTRY"' \
+  "$API_HEADER_CACHE")
+((cache_hit_line < archive_hash_line && archive_hash_line < prune_line &&
+   prune_line < header_receipt_line && header_receipt_line < cache_publish_line)) ||
+  fail "API cache hit/miss, pruning, authentication, and publication are misordered"
+grep -Fq 'rm -rf -- "$work_root"' "$API_HEADER_CACHE" ||
+  fail "API header cache retains its private source/build staging"
+grep -Fq '"$RUN_STAGING" "$ENTRY/headers-tree.tsv"' "$API_HEADER_CACHE" ||
+  fail "API header cache does not verify the run-local copy before publication"
+grep -Fq 'cp -a --reflink=auto -- "$ENTRY/headers/."' "$API_HEADER_CACHE" ||
+  fail "API header cache does not attempt an efficient independent run copy"
+grep -Fq '"$OUTPUT" "$RUN_HEADERS_RECEIPT"' "$API_HEADER_CACHE" ||
+  fail "API header cache does not receipt the actual published run-local output"
+grep -Fq 'cmp -s "$RUN_HEADERS_RECEIPT" "$ENTRY/headers-tree.tsv"' \
+  "$API_HEADER_CACHE" ||
+  fail "API run-local receipt is not required to equal its cache receipt"
+grep -Fq 'actual-published-output-receipt-v1' "$API_HEADER_CACHE" ||
+  fail "API header evidence does not declare fresh-output receipt semantics"
+[[ $(grep -Fc 'publish_directory_no_clobber' "$API_HEADER_CACHE") -ge 5 ]] ||
+  fail "API cache directory publication does not consistently use no-clobber mv -T"
+grep -Fq 'mv -T --no-clobber -- "$source" "$destination"' \
+  "$API_HEADER_CACHE" ||
+  fail "API cache directory publication can nest or replace a raced target"
+
+# The parent verifies every schema-4 field, promotes it to one exact release
+# ledger, and binds that ledger plus helper/schema identities into completion.
+grep -Fq "printf 'version\\tcache_key\\tcache_result\\tinputs_sha256\\theaders_tree_sha256\\tconfigure_tools_sha256\\tbuilder_helper_sha256\\ttree_receipt_helper_sha256\\tcache_seal_sha256\\tcache_seal_file_sha256\\trun_headers_tree_sha256\\trun_headers_receipt_semantics\\tcurl_preflight_output_sha256\\tevidence_sha256\\n'" \
+  "$API_GATE" || fail "API parent does not create the expanded header-cache ledger"
+grep -Fq "printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' \\" \
+  "$API_GATE" ||
+  fail "API parent header-cache row does not populate all fourteen fields"
+grep -Fq '[[ "$header_cache_header" == $'"'"'version\tcache_key\tcache_result\tinputs_sha256\theaders_tree_sha256\tconfigure_tools_sha256\tbuilder_helper_sha256\ttree_receipt_helper_sha256\tcache_seal_sha256\tcache_seal_file_sha256\trun_headers_tree_sha256\trun_headers_receipt_semantics\tcurl_preflight_output_sha256\tevidence_sha256'"'"' ]]' \
+  "$API_GATE" || fail "API parent does not postflight the exact header-cache ledger schema"
+for parent_header_binding in \
+    'expected_evidence_fields=$' \
+    'require_exact_two_column_tsv "$cache_evidence"' \
+    'require_exact_two_column_tsv "$input_receipt"' \
+    'require_exact_two_column_tsv "$cache_seal"' \
+    '"$(tsv_record_value "$cache_evidence" schema)" == 4' \
+    '"$builder_helper_sha" == "$HEADER_CACHE_HELPER_SHA256"' \
+    '"$tree_receipt_helper_sha" == "$TREE_RECEIPT_HELPER_SHA256"' \
+    '"$(tsv_record_value "$input_receipt" configure_tool_inventory_sha256)" == \' \
+    '"$(tsv_record_value "$input_receipt" configure_tool_inventory_schema)" == 1' \
+    '"$(tsv_record_value "$input_receipt" process_identity_policy)" == \' \
+    '"$(tsv_record_value "$input_receipt" rscript_sha256)" == \' \
+    '"$(tsv_record_value "$input_receipt" rscript_identity_sha256)" == \' \
+    'input_env_paths=$(awk -F '\''\t'\'' '\''$1 == "env_path" { print $2 }'\'' \' \
+    '"$input_env_paths" == \' \
+    '"$(tsv_record_value "$input_receipt" rscript_path)" == "$RSCRIPT"' \
+    '"$(tsv_record_value "$input_receipt" env_config_shell)" == \' \
+    '"$(tsv_record_value "$input_receipt" env_shell)" == \' \
+    '"$(tsv_record_value "$input_receipt" make_argument_shell)" == \' \
+    'expected_compatibility_mode=legacy-implicit-declarations-locked-curl7' \
+    'expected_compatibility_mode=locked-curl7' \
+    'verify_sha256 "$curl_output_sha" "$curl_preflight"' \
+    'curl_preflight_source_sha256)" =~ ^[0-9a-f]{64}$' \
+    'curl_preflight_header_version_hex)" == "$curl_header_hex"' \
+    'curl_preflight_runtime_version_hex)" == "$curl_runtime_hex"' \
+    'curl_preflight_compile_policy)" == \' \
+    'configure_compatibility_mode)" == "$expected_compatibility_mode"' \
+    'configure_cache_override_count)" == 0' \
+    '"$(tsv_record_value "$input_receipt" curl7_manifest_sha256)" == \' \
+    'curl7_receipt_helper_sha256)" == \' \
+    'curl_config_identity_sha256)" == \' \
+    '"$(tsv_record_value "$input_receipt" toolchain_lock_sha256)" == \' \
+    'verify_configure_tool_inventory "$configure_tools" "$configure_tool_count" \' \
+    '"$run_headers_receipt_semantics" == actual-published-output-receipt-v1' \
+    'cmp -s "$header_receipt" "$run_header_receipt"' \
+    'header-cache-configure-tools-R-${version}.tsv' \
+    'header-cache-curl-preflight-R-${version}.txt' \
+    'header-cache-run-headers-R-${version}.tsv'; do
+  grep -Fq "$parent_header_binding" "$API_GATE" ||
+    fail "API parent omits schema-4 header evidence binding: $parent_header_binding"
+done
+api_tool_inventory_body=$(function_body verify_configure_tool_inventory \
+  "$API_GATE")
+grep -Fq '"$TOOLCHAIN"/*|/bin/*|/usr/bin/*|/usr/lib/*|/lib/*' \
+  "$API_HEADER_CACHE" ||
+  fail "API tool inventory omits the authenticated unmerged-/usr /bin root"
+for inventory_check in \
+    '"${#lines[@]}" -eq $((4 + expected_count * 11))' \
+    'suffixes=(name state selected_path resolution link_chain final_path mode' \
+    '-z "${seen_names[$name]:-}"' \
+    'if [[ "$state" == absent ]]; then' \
+    'elif [[ "$state" == present ]]; then' \
+    'authenticated_symlink_chain' \
+    '"$identity_state" =~ ^(supported|unsupported)$'; do
+  grep -Fq -- "$inventory_check" <<<"$api_tool_inventory_body" ||
+    fail "API parent incompletely validates configure-tool inventory: $inventory_check"
+done
+[[ $(grep -Fc '"$RETAINED_TREE_RECEIPT_HELPER" verify \' "$API_GATE") -eq 6 ]] ||
+  fail "API gate has an unexpected large-boundary/minimal-header verification inventory"
+grep -Fq 'header-cache-precompile-verify-R-${version}.log' "$API_GATE" ||
+  fail "API gate does not authenticate each run-local header copy immediately before use"
+grep -Fq 'header-cache-final-verify-R-${version}.log' "$API_GATE" ||
+  fail "API gate does not finally reverify each small run-local header copy"
+[[ $(grep -Fc '"$RETAINED_TREE_RECEIPT_HELPER" create \' "$API_GATE") -eq 3 ]] ||
+  fail "API gate has an unexpected tree-receipt creation inventory"
+if grep -Eq '(reference_root|build_root)="\$RUN/artifacts/(reference|build-R-)' \
+    "$API_GATE"; then
+  fail "API gate still retains full extracted R source or configure trees"
+fi
+grep -Fq -- '--output "$RUN/artifacts/headers/R-${version}"' "$API_GATE" ||
+  fail "API compilation has no run-local minimal-header copy"
+grep -Fq 'generated_include="$run_headers/generated"' "$API_GATE" ||
+  fail "API compilation does not consume the run-local generated headers"
+grep -Fq 'source_include="$run_headers/source"' "$API_GATE" ||
+  fail "API compilation does not consume the run-local source headers"
+api_completion_body=$(sed -n \
+  '/^COMPLETION_NEW=/,/^} > "\$COMPLETION_NEW"/p' "$API_GATE")
+for completion_binding in \
+    'header_cache_ledger_sha256=' \
+    'header_preparation_ledger_sha256=' \
+    'header_preparation_retries_sha256=' \
+    'header_cache_helper_sha256=' \
+    'header_cache_schema=4' \
+    'curl7_prefix_manifest_sha256=' \
+    'curl7_prefix_receipt_sha256=' \
+    'curl7_prefix_seal_sha256=' \
+    'curl7_runtime_lock_sha256=' \
+    'runtime_prefix_receipt_helper_sha256=' \
+    'tree_receipt_helper_sha256=' \
+    'resource_jobs_helper_sha256=' \
+    'resource_decision_sha256=' \
+    'resource_prepare_decision_sha256=' \
+    'compiler_batch_helper_sha256=' \
+    'compiler_wave_helper_sha256=' \
+    'compiler_waves_sha256=' \
+    'compiler_identity_helper_sha256=' \
+    'compiler_identity_sha256='; do
+  grep -Fq "$completion_binding" <<< "$api_completion_body" ||
+    fail "API completion lacks evidence binding: $completion_binding"
+done
+grep -Fq '"$RETAINED_COMPILER_IDENTITY_HELPER" verify' "$API_GATE" ||
+  fail "API completion is not preceded by compiler-closure reauthentication"
+for timeout_binding in \
+    'compiler_timeout_policy_sha256=' \
+    'compiler_task_timeout_seconds=' \
+    'timeout_tool_sha256=' \
+    'timeout_tool_identity_sha256=' \
+    'header_cache_lock_timeout_seconds=' \
+    'header_cache_command_timeout_seconds=' \
+    'header_cache_task_timeout_seconds='; do
+  grep -Fq "$timeout_binding" <<< "$api_completion_body" ||
+    fail "API completion lacks timeout binding: $timeout_binding"
+done
+api_timeout_identity=$(function_body timeout_identity_sha256 "$API_GATE")
+printf '%s\n' "$api_timeout_identity" |
+  grep -Fq 'LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 |' ||
+  fail "API timeout identity is locale-sensitive or omits diagnostics"
+grep -Fq 'TIMEOUT_TOOL_IDENTITY_SHA256=$(timeout_identity_sha256)' \
+  "$API_GATE" ||
+  fail "API timeout policy does not use its canonical identity helper"
+grep -Fq 'LC_ALL=C "$TIMEOUT_TOOL" --version 2>&1 | head -n 1 |' \
+  "$API_GATE" ||
+  fail "API GNU timeout admission is locale-sensitive"
+grep -Fq '"$(timeout_identity_sha256)" == "$TIMEOUT_TOOL_IDENTITY_SHA256"' \
+  "$API_GATE" ||
+  fail "API completion does not reauthenticate GNU timeout semantics"
+
+cache_self_test=$($API_HEADER_CACHE self-test 2>&1) || {
+  printf '%s\n' "$cache_self_test" >&2
+  fail "API header cache synthetic self-test failed"
+}
+printf '%s\n' "$cache_self_test" |
+  grep -Fq 'r_api_header_cache_self_test=passed' ||
+  fail "API header cache synthetic self-test retained no success marker"
+printf '%s\n' "$cache_self_test" |
+  grep -Fq 'configure_compatibility_selection=passed' ||
+  fail "API header cache did not self-test its exact old-R selection"
+printf '%s\n' "$cache_self_test" |
+  grep -Fq 'curl_preflight_validation=passed' ||
+  fail "API header cache did not self-test libcurl proof rejection"
+printf '%s\n' "$cache_self_test" |
+  grep -Fq 'fast_watchdog_cancellation=passed' ||
+  fail "API header cache did not self-test fast watchdog cancellation"
+
+# Compiler batches retain exact admission, deadline, process provenance,
+# NUL-framed argument-vector, per-task, and paired-lane evidence.  Plan schema
+# changes are intentionally review-visible in this focused preflight.
+expected_admission_source="expected_fields=\$'field\\nschema\\nprofile\\ncontainment\\nplatform\\nonline_cpus\\naffinity_cpus\\ncgroup_cpu_limit\\ncpu_limit\\ncpu_reserve\\ncpu_per_job\\ncpu_jobs\\nmemory_source\\nmemory_available_mib\\ncgroup_memory_available_mib\\nmemory_reserve_mib\\nmemory_mib_per_job\\nmemory_jobs\\nprofile_max_jobs\\noperator_max_jobs\\njobs\\nselection'"
+for runner in "$COMPILER_BATCH_RUNNER" "$COMPILER_WAVE_RUNNER"; do
+  grep -Fq "$expected_admission_source" "$runner" ||
+    fail "compiler runner does not require the exact admission-report schema: $runner"
+  grep -Fq '"$(report_value profile)" == api-compile' "$runner" ||
+    fail "compiler runner accepts an admission report from the wrong profile: $runner"
+  grep -Fq '"$memory_per" -eq 768' "$runner" ||
+    fail "compiler runner does not recheck the API per-job memory budget: $runner"
+  grep -Fq 'expected_memory_reserve=$((memory_available / 4))' "$runner" ||
+    fail "compiler runner does not recompute the 25 percent memory reserve: $runner"
+  grep -Fq 'direct) reserve_floor=12288 ;;' "$runner" ||
+    fail "compiler runner does not recompute the direct reserve floor: $runner"
+  grep -Fq 'aggregate-systemd) reserve_floor=4096 ;;' "$runner" ||
+    fail "compiler runner does not recompute the aggregate reserve floor: $runner"
+  grep -Fq 'worker-hard) reserve_floor=1024 ;;' "$runner" ||
+    fail "compiler runner does not recompute the hard-worker reserve floor: $runner"
+  grep -Fq '((expected_memory_reserve >= reserve_floor)) ||' "$runner" ||
+    fail "compiler runner does not recompute the containment reserve floor: $runner"
+  grep -Fq 'fail "admission report arithmetic is internally inconsistent"' \
+    "$runner" ||
+    fail "compiler runner trusts rather than rederives report arithmetic: $runner"
+done
+grep -Fq 'validate_admission_report "$ADMISSION_REPORT"' \
+  "$COMPILER_WAVE_RUNNER" ||
+  fail "compiler wave does not validate its retained admission report"
+grep -Fq 'validate_admission_report "$ADMISSION_REPORT" ceiling' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler batch does not validate its retained admission report"
+
+expected_batch_plan_fields=$'field\nschema\njobs\nadmitted_jobs\nadmission_report_path\nadmission_report_sha256\nlabel\ntasks\ncompiler_invoked_path\ncompiler_link_target\ncompiler_canonical_path\ncompiler_canonical_sha256\ncompiler_identity_sha256\nsource_root\nsource_list_sha256\ncompiler_arguments_count\ncompiler_arguments_sha256\nsetsid_path\nsetsid_sha256\nsetsid_identity_sha256\ntask_timeout_seconds\ntimeout_tool_path\ntimeout_tool_sha256\ntimeout_tool_identity_sha256\ntask_wrapper_path\ntask_wrapper_sha256\ntask_wrapper_bash_path\ntask_wrapper_bash_sha256\nsupervisor_log_suffix\ntask_ledger'
+[[ "$(compiler_plan_fields "$COMPILER_BATCH_RUNNER")" == \
+   "$expected_batch_plan_fields" ]] ||
+  fail "compiler batch plan does not have the exact reviewed schema-4 fields"
+grep -Fq "printf 'schema\\t4\\n'" "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler batch plan is not schema 4"
+expected_wave_plan_fields=$'field\nschema\njobs_ceiling\nadmitted_jobs\nadmission_report_path\nadmission_report_sha256\nbatch_runner_path\nbatch_runner_sha256\nexecution\nmax_concurrent_jobs\nleft_label\nleft_jobs\nleft_compiler_invoked_path\nleft_compiler_link_target\nleft_compiler_canonical_path\nleft_compiler_canonical_sha256\nleft_compiler_identity_sha256\nleft_arguments_count\nleft_arguments_sha256\nright_label\nright_jobs\nright_compiler_invoked_path\nright_compiler_link_target\nright_compiler_canonical_path\nright_compiler_canonical_sha256\nright_compiler_identity_sha256\nright_arguments_count\nright_arguments_sha256\nsetsid_path\nsetsid_sha256\nsetsid_identity_sha256\ntask_timeout_seconds\ntimeout_tool_path\ntimeout_tool_sha256\ntimeout_tool_identity_sha256'
+[[ "$(compiler_plan_fields "$COMPILER_WAVE_RUNNER")" == \
+   "$expected_wave_plan_fields" ]] ||
+  fail "compiler wave plan does not have the exact reviewed schema-4 fields"
+grep -Fq "printf 'schema\\t4\\n'" "$COMPILER_WAVE_RUNNER" ||
+  fail "compiler wave plan is not schema 4"
+
+for argv_runner in "$COMPILER_BATCH_RUNNER" "$COMPILER_WAVE_RUNNER" \
+    "$API_GATE"; do
+  argv_hash_body=$(function_body argument_vector_sha256 "$argv_runner")
+  printf '%s\n' "$argv_hash_body" | grep -Fq 'if (($#)); then' ||
+    fail "argument-vector hash does not distinguish zero arguments: $argv_runner"
+  printf '%s\n' "$argv_hash_body" | grep -Fq "printf '%s\\0' \"\$@\"" ||
+    fail "argument-vector hash is not NUL-framed: $argv_runner"
+done
+for argument_binding in \
+    'compiler_arguments_count' 'compiler_arguments_sha256'; do
+  grep -Fq "$argument_binding" "$COMPILER_BATCH_RUNNER" ||
+    fail "compiler batch plan omits exact argument identity: $argument_binding"
+done
+for argument_binding in left_arguments_count left_arguments_sha256 \
+    right_arguments_count right_arguments_sha256; do
+  grep -Fq "$argument_binding" "$COMPILER_WAVE_RUNNER" ||
+    fail "compiler wave plan omits exact argument identity: $argument_binding"
+  grep -Fq "$argument_binding" "$API_GATE" ||
+    fail "API gate does not postflight compiler arguments: $argument_binding"
+done
+
+for runner in "$COMPILER_BATCH_RUNNER" "$COMPILER_WAVE_RUNNER"; do
+  for setsid_binding in setsid_path setsid_sha256 setsid_identity_sha256; do
+    grep -Fq "$setsid_binding" "$runner" ||
+      fail "compiler runner omits setsid provenance: $runner: $setsid_binding"
+  done
+  grep -Fq 'setsid from util-linux' "$runner" ||
+    fail "compiler runner accepts an unidentified setsid: $runner"
+  grep -Fq 'verify_setsid_identity' "$runner" ||
+    fail "compiler runner does not reauthenticate setsid: $runner"
+  for timeout_binding in timeout_tool_path timeout_tool_sha256 \
+      timeout_tool_identity_sha256; do
+    grep -Fq "$timeout_binding" "$runner" ||
+      fail "compiler runner omits timeout provenance: $runner: $timeout_binding"
+  done
+  grep -Fq 'verify_timeout_identity' "$runner" ||
+    fail "compiler runner does not reauthenticate GNU timeout: $runner"
+done
+grep -Fq 'LC_ALL=C "$SETSID" --wait -- "$TIMEOUT_TOOL" --foreground --verbose \' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler tasks are not launched directly under retained setsid and GNU timeout"
+if grep -Fq -- '-- env LC_ALL=C' "$COMPILER_BATCH_RUNNER"; then
+  fail "compiler task provenance can be changed through an unreceipted env hop"
+fi
+grep -Fq -- '--setsid "$SETSID"' "$API_GATE" ||
+  fail "API caller does not pass its retained setsid to compiler waves"
+for completion_binding in 'setsid_sha256=' 'setsid_identity_sha256='; do
+  grep -Fq "$completion_binding" <<< "$api_completion_body" ||
+    fail "API completion omits setsid provenance: $completion_binding"
+done
+
+task_ledger_source="schema\\tordinal\\tsource_relative\\tsource_sha256\\tcompiler_invoked_path\\tcompiler_link_target\\tcompiler_canonical_path\\tcompiler_canonical_sha256\\tcompiler_identity_sha256\\ttask_wrapper_path\\ttask_wrapper_sha256\\ttask_wrapper_bash_path\\ttask_wrapper_bash_sha256\\texit_status\\ttimed_out\\tlog_relative\\tlog_sha256\\tsupervisor_log_relative\\tsupervisor_log_sha256"
+grep -Fq "printf '$task_ledger_source\\n'" "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler batch does not publish the exact 19-column task ledger"
+grep -Fq "LEDGER_HEADER=\$'$task_ledger_source'" "$COMPILER_WAVE_RUNNER" ||
+  fail "compiler wave does not authenticate the exact task-ledger schema"
+grep -Fq "expected_header=\$'$task_ledger_source'" "$API_GATE" ||
+  fail "API gate does not authenticate the exact task-ledger schema"
+grep -Fq 'term_marker="$TIMEOUT_TOOL: sending signal TERM to command '\''$TASK_WRAPPER_BASH'\''"' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler timeout classification lacks its exact supervisor marker"
+grep -Fq 'term_marker_short="$timeout_name: sending signal TERM to command '\''$TASK_WRAPPER_BASH'\''"' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler timeout classification lacks GNU timeout's basename marker"
+grep -Fq '*) supervisor_valid=false ;;' "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler timeout classification accepts unknown supervisor output"
+grep -Fq 'supervisor_evidence_failures=$((supervisor_evidence_failures + 1))' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler runner does not fail closed on impossible supervisor evidence"
+grep -Fq '"$TIMEOUT_TOOL" --foreground --verbose' \
+  "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler batch tasks are not supervised by retained GNU timeout"
+grep -Fq 'supervisor_log_suffix' "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler batch does not separate supervisor diagnostics from compiler output"
+[[ $(grep -Fc 'exec "$BATCH_RUNNER"' "$COMPILER_WAVE_RUNNER") -eq 2 ]] ||
+  fail "compiler wave does not track exactly two authoritative batch PIDs"
+grep -Fq 'kill -KILL -- "-$pid"' "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler batch cannot remove TERM-resistant descendants"
+grep -Fq "printf 'lane\\ttask_ledger\\ttask_ledger_sha256\\ttasks\\tcompiler_invoked_path\\tcompiler_link_target\\tcompiler_canonical_path\\tcompiler_canonical_sha256\\tcompiler_identity_sha256\\n'" \
+  "$COMPILER_WAVE_RUNNER" ||
+  fail "compiler wave does not bind both exact lane ledgers and compiler identities"
+
+# The API caller verifies schema-4 plans immediately and again at postflight,
+# then promotes per-release resource/plan/lane hashes and complete result counts
+# to one exact compiler-wave ledger bound by completion.
+grep -Fq "expected_plan_fields=\$'field\\nschema\\njobs\\nadmitted_jobs" \
+  "$API_GATE" ||
+  fail "API task-ledger verifier does not expect batch plan schema 4"
+grep -Fq "expected_wave_plan_fields=\$'field\\nschema\\njobs_ceiling\\nadmitted_jobs" \
+  "$API_GATE" ||
+  fail "API compiler verifier does not expect wave plan schema 4"
+grep -Fq 'expected_arguments_sha256=$(argument_vector_sha256 "$@")' \
+  "$API_GATE" ||
+  fail "API task verifier does not recompute each exact compiler argument vector"
+for api_argument_binding in \
+    '"$gcc_jobs" "$resource_report" "$live_jobs" "${left_arguments[@]}"' \
+    '"$clang_jobs" "$resource_report" "$live_jobs" "${right_arguments[@]}"' \
+    '"$GCC" gcc "$gcc_jobs" "$resource_report" "$live_jobs" \' \
+    '"$CLANG" clang "$clang_jobs" "$resource_report" "$live_jobs" \' \
+    '"${final_left_arguments[@]}"' \
+    '"${final_right_arguments[@]}"'; do
+  grep -Fq "$api_argument_binding" "$API_GATE" ||
+    fail "API initial/final compiler verification omits an argument vector: $api_argument_binding"
+done
+compiler_wave_ledger_header="version\\tresource_report_sha256\\twave_plan_sha256\\tjobs\\tgcc_jobs\\tclang_jobs\\texecution\\ttask_timeout_seconds\\ttimeout_tool_sha256\\twave_task_ledgers_sha256\\ttasks_per_compiler\\ttask_failures\\texact_timeouts"
+grep -Fq "printf '$compiler_wave_ledger_header\\n'" "$API_GATE" ||
+  fail "API gate does not create the expanded compiler-wave ledger"
+grep -Fq "\$'${compiler_wave_ledger_header}'" "$API_GATE" ||
+  fail "API gate does not postflight the exact compiler-wave ledger schema"
+for final_compiler_binding in \
+    'verify_sha256 "$resource_sha256"' \
+    'verify_sha256 "$wave_plan_sha256" "$wave_plan"' \
+    'verify_sha256 "$wave_task_ledgers_sha256" "$wave_task_ledgers"' \
+    'final compiler task ledgers disagree with the release result counts' \
+    'compiler matrix postflight and collected failure totals disagree'; do
+  grep -Fq "$final_compiler_binding" "$API_GATE" ||
+    fail "API compiler postflight omits evidence: $final_compiler_binding"
+done
+compiler_identity_self_test=$(
+  "$ROOT/.local/toolchain/bin/Rscript" --vanilla \
+    "$COMPILER_IDENTITY_HELPER" self-test 2>&1
+) || {
+  printf '%s\n' "$compiler_identity_self_test" >&2
+  fail "compiler identity synthetic self-test failed"
+}
+printf '%s\n' "$compiler_identity_self_test" |
+  grep -Fq 'compiler_identity_self_test=passed' ||
+  fail "compiler identity self-test retained no success marker"
+for compiler_closure_binding in \
+    'gcc_effective_preprocessing_plan' \
+    'clang_effective_preprocessing_plan' \
+    'clang_target_config' \
+    'gcc_fixed_tree' \
+    'compiler_sysroot_include_tree' \
+    'explicit_toolchain_include_tree'; do
+  grep -Fq "$compiler_closure_binding" "$COMPILER_IDENTITY_HELPER" ||
+    fail "compiler identity omits a syntax-admission input: $compiler_closure_binding"
+done
+
+# The adversarial validator invokes the same large synthetic native fixture
+# many times. Construct it once per focused/full scope and ASan selection, then
+# restore independent copies; rebuilding it before every one-line mutation adds
+# no information.
+hardening_fixture=$(function_body build_valid_native_fixture "$HARDENING")
+grep -Fq \
+  'cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS-asan-$FIXTURE_ASAN"' \
+  <<<"$hardening_fixture" ||
+  fail "hardening suite has no scope/ASan-specific valid-fixture cache"
+grep -Fq 'cp -a -- "$cached_fixture" "$RUN_DIRECTORY"' \
+  <<<"$hardening_fixture" ||
+  fail "hardening suite regenerates valid fixtures instead of restoring copies"
+grep -Fq 'cp -a -- "$RUN_DIRECTORY" "$cached_fixture"' \
+  <<<"$hardening_fixture" ||
+  fail "hardening suite never publishes its reusable valid fixture"
+
+printf '%s\n' \
+  "verification_economy_preflight=passed" \
+  "memory_content_boundaries=2" \
+  "valgrind_receipt_compare_boundaries=4" \
+  "r_cache_tree_passes=3" \
+  "library_cache_tree_passes=1"

@@ -1,0 +1,1574 @@
+{
+  "schema": 1,
+  "defaults": {
+    "cpu": 1,
+    "memory_mib": 2048,
+    "pids": 256,
+    "scratch_mib": 1024,
+    "timeout_seconds": 3600,
+    "failure_class": "semantic",
+    "cache": "success",
+    "estimated_seconds": 300,
+    "information": 1,
+    "host_memory_reserve_mib": 12288,
+    "host_memory_reserve_fraction": 0.25,
+    "host_disk_reserve_mib": 8192,
+    "host_pid_budget": 8192,
+    "engine_overhead_mib": 3072,
+    "admission_timeout_seconds": 3600,
+    "platforms": [
+      "linux"
+    ],
+    "machines": [
+      "x86_64"
+    ]
+  },
+  "parameters": {
+    "source_ref": "",
+    "baseline_ref": "main",
+    "candidate_run_id": "",
+    "candidate_context_sha256": "",
+    "candidate_ref": "",
+    "candidate_commit": "",
+    "candidate_tree": "",
+    "candidate_source": "",
+    "candidate_library": "",
+    "dependency_library": "",
+    "candidate_content": "",
+    "evidence_profile": "",
+    "paradox_axis": "paradox2",
+    "bridge_library": "",
+    "candidate_run_root": "",
+    "consumer_extra_libs": "",
+    "documentation_extra_libs": ""
+  },
+  "input_groups": {
+    "orchestrator": [
+      "scripts/verify",
+      "scripts/verify-systemd",
+      "scripts/environment/verify-task-entry",
+      "scripts/environment/test-verify-harness",
+      "verification/**"
+    ],
+    "harness": [
+      "scripts/activate",
+      "scripts/environment/**",
+      "scripts/bootstrap-configspace",
+      "scripts/bootstrap-c23-gcc",
+      "scripts/native-check",
+      "scripts/check-c23-compatibility",
+      "scripts/check-r-api-compatibility",
+      "scripts/test-runtime-matrix",
+      "scripts/memory-check",
+      "environment/**"
+    ],
+    "package": [
+      "DESCRIPTION",
+      "NAMESPACE",
+      "LICENSE",
+      ".Rbuildignore",
+      "README.md",
+      "README.Rmd",
+      "R/**",
+      "src/**",
+      "tests/**",
+      "man/**",
+      "man-roxygen/**",
+      "vignettes/**",
+      "NEWS.md",
+      "?.Rinstignore",
+      "?configure",
+      "?configure.ac",
+      "?configure.win",
+      "?cleanup",
+      "?cleanup.win",
+      "?inst/**",
+      "?data/**",
+      "?demo/**",
+      "?exec/**",
+      "?po/**",
+      "?tools/**"
+    ],
+    "compatibility": [
+      "compat/**"
+    ],
+    "benchmarks": [
+      "benchmarks/**"
+    ]
+  },
+  "profiles": {
+    "smoke": {
+      "description": "Changed-file-oriented harness and native-probe feedback.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "harness-native",
+        "harness-runtime",
+        "harness-repositories",
+        "harness-reverse",
+        "harness-downstream",
+        "harness-documentation",
+        "harness-portability",
+        "native-probes",
+        "native-focused"
+      ],
+      "always": [
+        "harness-controller"
+      ],
+      "changed_only": true,
+      "policy": "adaptive",
+      "reuse_results": true,
+      "publish_results": true,
+      "require_clean": false,
+      "require_hard_isolation": true
+    },
+    "harness": {
+      "description": "All deterministic synthetic regressions for the verification machinery.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "harness-native",
+        "harness-runtime",
+        "harness-repositories",
+        "harness-reverse",
+        "harness-downstream",
+        "harness-documentation",
+        "harness-portability"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "harness-native",
+        "harness-runtime",
+        "harness-repositories",
+        "harness-reverse",
+        "harness-downstream",
+        "harness-documentation",
+        "harness-portability"
+      ],
+      "changed_only": false,
+      "policy": "adaptive",
+      "reuse_results": true,
+      "publish_results": true,
+      "require_clean": false,
+      "require_hard_isolation": true
+    },
+    "focused": {
+      "description": "Default development gate: harness preflight followed by the focused package corpus.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "native-focused"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "native-focused"
+      ],
+      "changed_only": false,
+      "policy": "adaptive",
+      "reuse_results": true,
+      "publish_results": true,
+      "require_clean": false,
+      "require_hard_isolation": true
+    },
+    "compat": {
+      "description": "Focused package tests followed by the offline Paradox-1 differential.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "native-focused",
+        "differential"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "native-focused",
+        "differential"
+      ],
+      "changed_only": false,
+      "policy": "adaptive",
+      "reuse_results": true,
+      "publish_results": true,
+      "require_clean": false,
+      "require_hard_isolation": true
+    },
+    "release-core": {
+      "description": "Fresh source-bound native, C23, API, runtime, and differential release foundation; memory evidence remains a separate direct gate.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "native-release",
+        "c23-compatibility",
+        "api-headers",
+        "runtime-supported",
+        "differential"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "native-release",
+        "c23-compatibility",
+        "api-headers",
+        "runtime-supported",
+        "differential"
+      ],
+      "changed_only": false,
+      "policy": "adaptive",
+      "reuse_results": false,
+      "publish_results": false,
+      "require_clean": true,
+      "require_hard_isolation": true
+    },
+    "prepared-downstream": {
+      "description": "Exact maintained downstream checks for an already authenticated candidate/overlay run.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "downstream-overlay",
+        "downstream-focused",
+        "downstream-corpus"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "downstream-overlay",
+        "downstream-focused",
+        "downstream-corpus"
+      ],
+      "changed_only": false,
+      "policy": "keep-going",
+      "reuse_results": false,
+      "publish_results": false,
+      "require_clean": true,
+      "require_hard_isolation": true
+    },
+    "prepared-reverse": {
+      "description": "Actual priority-zero/one reverse-dependency gate for an authenticated prepared candidate.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "harness-reverse",
+        "reverse-preflight",
+        "reverse-dependencies"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "harness-reverse",
+        "reverse-preflight",
+        "reverse-dependencies"
+      ],
+      "changed_only": false,
+      "policy": "keep-going",
+      "reuse_results": false,
+      "publish_results": false,
+      "require_clean": true,
+      "require_hard_isolation": true
+    },
+    "prepared-documentation": {
+      "description": "Actual all-scope documentation compatibility gate for an authenticated prepared candidate.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "harness-downstream",
+        "harness-documentation",
+        "downstream-overlay",
+        "documentation-compatibility"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "harness-downstream",
+        "harness-documentation",
+        "downstream-overlay",
+        "documentation-compatibility"
+      ],
+      "changed_only": false,
+      "policy": "keep-going",
+      "reuse_results": false,
+      "publish_results": false,
+      "require_clean": true,
+      "require_hard_isolation": true
+    },
+    "prepared-release-compat": {
+      "description": "Complete real downstream, reverse-dependency, and documentation compatibility DAG for one authenticated prepared candidate.",
+      "tasks": [
+        "harness-controller",
+        "harness-validation",
+        "harness-repositories",
+        "harness-reverse",
+        "harness-downstream",
+        "harness-documentation",
+        "downstream-overlay",
+        "downstream-focused",
+        "downstream-corpus",
+        "reverse-preflight",
+        "reverse-dependencies",
+        "documentation-compatibility"
+      ],
+      "always": [
+        "harness-controller",
+        "harness-validation",
+        "harness-repositories",
+        "harness-reverse",
+        "harness-downstream",
+        "harness-documentation",
+        "downstream-overlay",
+        "downstream-focused",
+        "downstream-corpus",
+        "reverse-preflight",
+        "reverse-dependencies",
+        "documentation-compatibility"
+      ],
+      "changed_only": false,
+      "policy": "keep-going",
+      "reuse_results": false,
+      "publish_results": false,
+      "require_clean": true,
+      "require_hard_isolation": true
+    }
+  },
+  "tasks": [
+    {
+      "id": "harness-controller",
+      "description": "Synthetic regression suite for DAG, cache, containment, and failure semantics.",
+      "command": [
+        "scripts/environment/test-verify-harness"
+      ],
+      "dependencies": [],
+      "phase": 0,
+      "priority": 1000,
+      "information": 10,
+      "estimated_seconds": 10,
+      "cpu": 1,
+      "memory_mib": 1024,
+      "pids": 128,
+      "scratch_mib": 256,
+      "timeout_seconds": 120,
+      "failure_class": "fatal",
+      "cache": "success",
+      "input_groups": [
+        "orchestrator"
+      ],
+      "inputs": [],
+      "impacts": [
+        "verification/**",
+        "scripts/verify",
+        "scripts/environment/verify-*",
+        "verification/test_harness.py",
+        "Makefile"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-validation",
+      "description": "Adversarial structural tests for snapshots, caches, resource admission, and evidence validators.",
+      "command": [
+        "scripts/environment/test-validation-hardening"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 900,
+      "information": 10,
+      "estimated_seconds": 90,
+      "cpu": 2,
+      "memory_mib": 4096,
+      "pids": 512,
+      "scratch_mib": 1024,
+      "timeout_seconds": 600,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "harness",
+        "compatibility"
+      ],
+      "inputs": [],
+      "impacts": [
+        "scripts/**",
+        "environment/**",
+        "compat/**"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "writable_paths": [
+        ".local/checks"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-native",
+      "description": "Deterministic native worker batching, complete-failure, and ledger fixtures.",
+      "command": [
+        "scripts/environment/test-native-test-batch"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 850,
+      "information": 8,
+      "estimated_seconds": 40,
+      "cpu": 2,
+      "memory_mib": 4096,
+      "pids": 512,
+      "scratch_mib": 1024,
+      "timeout_seconds": 300,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "scripts/native-check",
+        "scripts/environment/run-native*",
+        "scripts/environment/verify-native*",
+        "scripts/environment/test-native-test-batch"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-runtime",
+      "description": "Synthetic runtime-matrix selection, wave, and evidence fixtures.",
+      "command": [
+        "scripts/environment/test-runtime-matrix"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 800,
+      "information": 7,
+      "estimated_seconds": 30,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "pids": 256,
+      "scratch_mib": 512,
+      "timeout_seconds": 300,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "harness",
+        "package"
+      ],
+      "inputs": [],
+      "impacts": [
+        "scripts/*runtime-matrix*",
+        "scripts/environment/*runtime-matrix*",
+        "environment/runtime-*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-repositories",
+      "description": "Synthetic resumable repository scheduler and evidence fixtures.",
+      "command": [
+        "Rscript",
+        "--vanilla",
+        "compat/test-repository-runner.R"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 780,
+      "information": 8,
+      "estimated_seconds": 45,
+      "cpu": 2,
+      "memory_mib": 4096,
+      "pids": 512,
+      "scratch_mib": 1024,
+      "timeout_seconds": 420,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "compatibility",
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "compat/*repository*",
+        "compat/test-repositories*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-reverse",
+      "description": "Synthetic reverse scheduler, cache, evidence, and reserved-output fixtures.",
+      "command": [
+        "scripts/environment/test-reverse-reserved-output-contract"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 770,
+      "information": 8,
+      "estimated_seconds": 45,
+      "cpu": 2,
+      "memory_mib": 4096,
+      "pids": 512,
+      "scratch_mib": 1024,
+      "timeout_seconds": 420,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "compatibility",
+        "harness"
+      ],
+      "inputs": [
+        "scripts/environment/test-reverse-reserved-output-contract",
+        "scripts/environment/run-reverse-verification"
+      ],
+      "impacts": [
+        "compat/*reverse*",
+        "compat/reverse-*",
+        "scripts/environment/*reverse*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-downstream",
+      "description": "Synthetic candidate-specific downstream overlay construction and verification fixtures.",
+      "command": [
+        "scripts/environment/test-downstream-bridge-installer"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 760,
+      "information": 7,
+      "estimated_seconds": 30,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "pids": 256,
+      "scratch_mib": 512,
+      "timeout_seconds": 300,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "compatibility",
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "compat/install-downstream-bridges",
+        "compat/*bridge*",
+        "compat/downstream-*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-documentation",
+      "description": "Synthetic documentation ordering, bounded-log, and evidence-economy fixtures.",
+      "command": [
+        "Rscript",
+        "--vanilla",
+        "scripts/environment/test-documentation-economy.R"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 750,
+      "information": 6,
+      "estimated_seconds": 20,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "pids": 256,
+      "scratch_mib": 512,
+      "timeout_seconds": 240,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "compatibility",
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "compat/test-documentation",
+        "scripts/environment/test-documentation-economy.R"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "harness-portability",
+      "description": "Synthetic Windows/macOS workflow status propagation and artifact contract fixtures.",
+      "command": [
+        "Rscript",
+        "--vanilla",
+        "scripts/environment/test-portability-workflow.R",
+        "{root}"
+      ],
+      "dependencies": [
+        "harness-controller"
+      ],
+      "phase": 10,
+      "priority": 740,
+      "information": 6,
+      "estimated_seconds": 20,
+      "cpu": 1,
+      "memory_mib": 2048,
+      "pids": 256,
+      "scratch_mib": 512,
+      "timeout_seconds": 240,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "harness"
+      ],
+      "inputs": [
+        ".github/workflows/r-cmd-check.yml"
+      ],
+      "impacts": [
+        ".github/workflows/**",
+        "scripts/environment/test-portability*",
+        "scripts/environment/verify-portability*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "native-probes",
+      "description": "Strict GCC/Clang builds with complete registered-routine and hazard probes.",
+      "command": [
+        "scripts/native-check",
+        "--mode",
+        "strict-gcc",
+        "--mode",
+        "strict-clang",
+        "--tests",
+        "probes",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-native"
+      ],
+      "phase": 20,
+      "priority": 700,
+      "information": 9,
+      "estimated_seconds": 900,
+      "cpu": 8,
+      "cpu_min": 2,
+      "memory_mib": 6144,
+      "memory_mib_min": 3072,
+      "pids": 1024,
+      "scratch_mib": 4096,
+      "timeout_seconds": 3600,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "package",
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "DESCRIPTION",
+        "NAMESPACE",
+        "scripts/native-check",
+        "scripts/environment/run-native*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "writable_paths": [
+        ".local/checks"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "native-focused",
+      "description": "Strict GCC/Clang package builds, probes, and the focused internal test corpus once.",
+      "command": [
+        "scripts/native-check",
+        "--mode",
+        "strict-gcc",
+        "--mode",
+        "strict-clang",
+        "--tests",
+        "focused",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-native"
+      ],
+      "phase": 20,
+      "priority": 700,
+      "information": 10,
+      "estimated_seconds": 2400,
+      "cpu": 16,
+      "cpu_min": 6,
+      "memory_mib": 16384,
+      "memory_mib_min": 6144,
+      "pids": 2048,
+      "scratch_mib": 4096,
+      "timeout_seconds": 7200,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "package",
+        "harness"
+      ],
+      "inputs": [
+        "compat/github-snapshot.tsv",
+        "compat/mlr-org-review.tsv"
+      ],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "tests/**",
+        "DESCRIPTION",
+        "NAMESPACE",
+        "compat/github-snapshot.tsv",
+        "compat/mlr-org-review.tsv",
+        "scripts/native-check",
+        "scripts/environment/run-native*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "writable_paths": [
+        ".local/checks"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "native-release",
+      "description": "Fresh complete native/compiler/sanitizer/package-check evidence for a release candidate.",
+      "command": [
+        "scripts/native-check",
+        "--mode",
+        "all",
+        "--tests",
+        "full",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-native"
+      ],
+      "phase": 20,
+      "priority": 700,
+      "information": 10,
+      "estimated_seconds": 10800,
+      "cpu": 16,
+      "cpu_min": 6,
+      "memory_mib": 16384,
+      "memory_mib_min": 8192,
+      "pids": 2048,
+      "scratch_mib": 4096,
+      "timeout_seconds": 21600,
+      "failure_class": "blocker",
+      "cache": "none",
+      "input_groups": [
+        "package",
+        "harness"
+      ],
+      "inputs": [
+        "compat/github-snapshot.tsv",
+        "compat/mlr-org-review.tsv"
+      ],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "tests/**",
+        "DESCRIPTION",
+        "NAMESPACE",
+        "scripts/bootstrap-configspace",
+        "scripts/native-check",
+        "scripts/environment/run-native*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "writable_paths": [
+        ".local/checks"
+      ],
+      "readonly_paths": [
+        ".local/configspace"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "c23-compatibility",
+      "description": "Explicit GCC 15.2 and Clang 22 C23 builds plus complete registered native probes.",
+      "command": [
+        "scripts/check-c23-compatibility",
+        "--source-ref",
+        "{source_ref}",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-native"
+      ],
+      "phase": 20,
+      "priority": 675,
+      "information": 9,
+      "estimated_seconds": 900,
+      "cpu": 4,
+      "cpu_min": 2,
+      "memory_mib": 4096,
+      "memory_mib_min": 4096,
+      "pids": 512,
+      "scratch_mib": 3072,
+      "timeout_seconds": 3600,
+      "failure_class": "blocker",
+      "cache": "none",
+      "input_groups": [
+        "package",
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "DESCRIPTION",
+        "NAMESPACE",
+        "environment/c23-gcc-linux-64.lock",
+        "scripts/bootstrap-c23-gcc",
+        "scripts/check-c23-compatibility",
+        "scripts/environment/run-native-probes.R",
+        "scripts/environment/verify-native-probes.R"
+      ],
+      "environment": {},
+      "required_parameters": [
+        "source_ref"
+      ],
+      "writable_paths": [
+        ".local/checks"
+      ],
+      "readonly_paths": [
+        ".local/c23-gcc",
+        ".local/receipts/c23-gcc"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "api-headers",
+      "description": "Strict compilation against every pinned supported R public-header tree.",
+      "command": [
+        "scripts/check-r-api-compatibility",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-native"
+      ],
+      "phase": 20,
+      "priority": 650,
+      "information": 9,
+      "estimated_seconds": 1800,
+      "cpu": 16,
+      "cpu_min": 4,
+      "memory_mib": 12288,
+      "memory_mib_min": 4096,
+      "pids": 1024,
+      "scratch_mib": 4096,
+      "timeout_seconds": 5400,
+      "failure_class": "blocker",
+      "cache": "none",
+      "input_groups": [
+        "package",
+        "harness"
+      ],
+      "inputs": [],
+      "impacts": [
+        "src/**",
+        "environment/r-api-*",
+        "scripts/check-r-api-compatibility",
+        "scripts/environment/r-api-*"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "writable_paths": [
+        ".local/checks",
+        ".cache/r-api-headers"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "runtime-supported",
+      "description": "Complete supported corpus under actual local R 3.6.3 and every R 4 minor from 4.0.5 through 4.5.2; current R 4.6.1 is owned by native-release.",
+      "command": [
+        "scripts/test-runtime-matrix",
+        "--runtime",
+        "all",
+        "--source-ref",
+        "{source_ref}",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "native-release",
+        "c23-compatibility",
+        "api-headers",
+        "harness-runtime"
+      ],
+      "phase": 40,
+      "priority": 600,
+      "information": 9,
+      "estimated_seconds": 10800,
+      "cpu": 8,
+      "cpu_min": 4,
+      "memory_mib": 12288,
+      "memory_mib_min": 6144,
+      "pids": 1024,
+      "scratch_mib": 6144,
+      "timeout_seconds": 36000,
+      "failure_class": "blocker",
+      "cache": "none",
+      "input_groups": [
+        "package",
+        "harness"
+      ],
+      "inputs": [
+        "compat/github-snapshot.tsv",
+        "compat/mlr-org-review.tsv"
+      ],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "tests/**",
+        "compat/github-snapshot.tsv",
+        "compat/mlr-org-review.tsv",
+        "scripts/*runtime-matrix*",
+        "scripts/environment/*runtime-matrix*",
+        "environment/runtime-*"
+      ],
+      "environment": {},
+      "required_parameters": [
+        "source_ref"
+      ],
+      "writable_paths": [
+        ".local/checks"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "differential",
+      "description": "Offline current-candidate comparison with the pinned upstream Paradox-1 baseline.",
+      "command": [
+        "compat/differential/run",
+        "--offline",
+        "--baseline-ref",
+        "{baseline_ref}",
+        "--run-id",
+        "{attempt_id}"
+      ],
+      "dependencies": [
+        "harness-validation"
+      ],
+      "phase": 20,
+      "priority": 800,
+      "information": 9,
+      "estimated_seconds": 2400,
+      "cpu": 4,
+      "cpu_min": 2,
+      "memory_mib": 6144,
+      "memory_mib_min": 3072,
+      "pids": 1024,
+      "scratch_mib": 4096,
+      "timeout_seconds": 7200,
+      "failure_class": "blocker",
+      "cache": "success",
+      "input_groups": [
+        "package",
+        "compatibility"
+      ],
+      "inputs": [],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "tests/**",
+        "compat/differential/**"
+      ],
+      "environment": {},
+      "required_parameters": [],
+      "writable_paths": [
+        ".local/compat/differential/runs"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "reverse-preflight",
+      "description": "Real pinned miesmuschel reverse-harness provenance and command-resolution preflight.",
+      "command": [
+        "scripts/environment/run-reverse-verification",
+        "{root}",
+        "{attempt_id}",
+        "{candidate_library}",
+        "{dependency_library}",
+        "{candidate_source}",
+        "1",
+        "{paradox_axis}",
+        "miesmuschel-plan"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-reverse"
+      ],
+      "phase": 20,
+      "priority": 675,
+      "information": 10,
+      "estimated_seconds": 600,
+      "cpu": 2,
+      "cpu_min": 2,
+      "memory_mib": 8192,
+      "memory_mib_min": 4096,
+      "pids": 512,
+      "scratch_mib": 1024,
+      "timeout_seconds": 3600,
+      "failure_class": "blocker",
+      "cache": "none",
+      "input_groups": [
+        "compatibility",
+        "harness"
+      ],
+      "inputs": [
+        "scripts/activate-compat-system",
+        "scripts/bootstrap-compat-system"
+      ],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "compat/**",
+        "scripts/activate-compat-system",
+        "scripts/bootstrap-compat-system",
+        "scripts/environment/run-reverse-verification"
+      ],
+      "environment": {
+        "PARADOX_CANDIDATE_RUN_ID": "{candidate_run_id}",
+        "PARADOX_CANDIDATE_REF": "{candidate_ref}",
+        "PARADOX_CANDIDATE_COMMIT": "{candidate_commit}",
+        "PARADOX_CANDIDATE_TREE": "{candidate_tree}",
+        "PARADOX_CANDIDATE_SOURCE": "{candidate_source}",
+        "PARADOX_CANDIDATE_CONTENT_SHA256": "{candidate_content}",
+        "PARADOX_VERIFY_COMPAT_SYSTEM": "1"
+      },
+      "required_parameters": [
+        "candidate_context_sha256",
+        "candidate_run_id",
+        "candidate_ref",
+        "candidate_commit",
+        "candidate_tree",
+        "candidate_source",
+        "candidate_library",
+        "dependency_library",
+        "candidate_content",
+        "paradox_axis"
+      ],
+      "required_values": {
+        "paradox_axis": [
+          "paradox2"
+        ]
+      },
+      "writable_paths": [
+        ".local/compat/reverse-runs/{attempt_id}",
+        ".local/compat/reverse-runs/.locks"
+      ],
+      "readonly_paths": [
+        "{candidate_source}",
+        "{candidate_library}",
+        "{dependency_library}"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "machines": [
+        "x86_64"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "reverse-dependencies",
+      "description": "Actual pinned priority-zero/one CRAN and Bioconductor reverse-dependency gate.",
+      "command": [
+        "scripts/environment/run-reverse-verification",
+        "{root}",
+        "{run_id}",
+        "{candidate_library}",
+        "{dependency_library}",
+        "{candidate_source}",
+        "1",
+        "{paradox_axis}",
+        "full"
+      ],
+      "dependencies": [
+        "reverse-preflight"
+      ],
+      "phase": 30,
+      "priority": 625,
+      "information": 10,
+      "estimated_seconds": 10800,
+      "cpu": 16,
+      "cpu_min": 4,
+      "memory_mib": 16384,
+      "memory_mib_min": 8192,
+      "pids": 2048,
+      "scratch_mib": 2048,
+      "timeout_seconds": 172800,
+      "failure_class": "semantic",
+      "cache": "none",
+      "input_groups": [
+        "compatibility",
+        "harness"
+      ],
+      "inputs": [
+        "scripts/activate-compat-system",
+        "scripts/bootstrap-compat-system"
+      ],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "compat/**",
+        "scripts/environment/run-reverse-verification"
+      ],
+      "environment": {
+        "PARADOX_CANDIDATE_RUN_ID": "{candidate_run_id}",
+        "PARADOX_CANDIDATE_REF": "{candidate_ref}",
+        "PARADOX_CANDIDATE_COMMIT": "{candidate_commit}",
+        "PARADOX_CANDIDATE_TREE": "{candidate_tree}",
+        "PARADOX_CANDIDATE_SOURCE": "{candidate_source}",
+        "PARADOX_CANDIDATE_CONTENT_SHA256": "{candidate_content}",
+        "PARADOX_VERIFY_COMPAT_SYSTEM": "1"
+      },
+      "required_parameters": [
+        "candidate_context_sha256",
+        "candidate_run_id",
+        "candidate_ref",
+        "candidate_commit",
+        "candidate_tree",
+        "candidate_source",
+        "candidate_library",
+        "dependency_library",
+        "candidate_content",
+        "paradox_axis"
+      ],
+      "required_values": {
+        "paradox_axis": [
+          "paradox2"
+        ]
+      },
+      "writable_paths": [
+        ".local/compat/reverse-runs/{run_id}",
+        ".local/compat/reverse-runs/.locks",
+        ".local/compat/reverse-cache"
+      ],
+      "readonly_paths": [
+        "{candidate_source}",
+        "{candidate_library}",
+        "{dependency_library}"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "machines": [
+        "x86_64"
+      ],
+      "revalidate_on_resume": true,
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "documentation-compatibility",
+      "description": "Actual all-scope documentation and maintained configuration-workload gate.",
+      "command": [
+        "scripts/environment/run-documentation-verification",
+        "{root}",
+        "{attempt_id}",
+        "{candidate_library}",
+        "{candidate_source}",
+        "{dependency_library}",
+        "{evidence_profile}",
+        "{paradox_axis}",
+        "7200"
+      ],
+      "dependencies": [
+        "downstream-overlay",
+        "harness-documentation"
+      ],
+      "phase": 30,
+      "priority": 625,
+      "information": 10,
+      "estimated_seconds": 1200,
+      "cpu": 1,
+      "cpu_min": 1,
+      "memory_mib": 8192,
+      "memory_mib_min": 4096,
+      "pids": 1024,
+      "scratch_mib": 2048,
+      "timeout_seconds": 172800,
+      "failure_class": "semantic",
+      "cache": "none",
+      "input_groups": [
+        "compatibility",
+        "harness"
+      ],
+      "inputs": [
+        "scripts/activate-compat-system",
+        "scripts/bootstrap-compat-system",
+        "scripts/bootstrap-quarto"
+      ],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "compat/**",
+        "scripts/environment/run-documentation-verification"
+      ],
+      "environment": {
+        "PARADOX_CANDIDATE_RUN_ID": "{candidate_run_id}",
+        "PARADOX_CANDIDATE_REF": "{candidate_ref}",
+        "PARADOX_CANDIDATE_COMMIT": "{candidate_commit}",
+        "PARADOX_CANDIDATE_TREE": "{candidate_tree}",
+        "PARADOX_CANDIDATE_SOURCE": "{candidate_source}",
+        "PARADOX_CANDIDATE_CONTENT_SHA256": "{candidate_content}",
+        "PARADOX_DOCUMENTATION_EXTRA_LIBS": "{documentation_extra_libs}",
+        "PARADOX_VERIFY_COMPAT_SYSTEM": "1"
+      },
+      "required_parameters": [
+        "candidate_context_sha256",
+        "candidate_run_id",
+        "candidate_ref",
+        "candidate_commit",
+        "candidate_tree",
+        "candidate_source",
+        "candidate_run_root",
+        "candidate_library",
+        "dependency_library",
+        "candidate_content",
+        "evidence_profile",
+        "paradox_axis",
+        "bridge_library",
+        "documentation_extra_libs"
+      ],
+      "required_values": {
+        "paradox_axis": [
+          "paradox2"
+        ]
+      },
+      "writable_paths": [
+        ".local/compat/runs/{attempt_id}"
+      ],
+      "readonly_paths": [
+        "{candidate_source}",
+        "{candidate_run_root}",
+        "{dependency_library}"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "machines": [
+        "x86_64"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "downstream-overlay",
+      "description": "Read-only authentication of the exact prepared downstream bridge overlay.",
+      "command": [
+        "compat/install-downstream-bridges",
+        "--verify",
+        "--candidate-source",
+        "{candidate_source}",
+        "--evidence-profile",
+        "{evidence_profile}",
+        "--paradox-axis",
+        "{paradox_axis}"
+      ],
+      "dependencies": [
+        "harness-validation",
+        "harness-downstream"
+      ],
+      "phase": 20,
+      "priority": 700,
+      "information": 10,
+      "estimated_seconds": 600,
+      "cpu": 2,
+      "cpu_min": 1,
+      "memory_mib": 8192,
+      "memory_mib_min": 4096,
+      "pids": 512,
+      "scratch_mib": 1024,
+      "timeout_seconds": 1800,
+      "failure_class": "blocker",
+      "cache": "none",
+      "input_groups": [
+        "compatibility"
+      ],
+      "inputs": [],
+      "impacts": [
+        "compat/**"
+      ],
+      "environment": {
+        "PARADOX_CANDIDATE_RUN_ID": "{candidate_run_id}",
+        "PARADOX_CANDIDATE_REF": "{candidate_ref}",
+        "PARADOX_CANDIDATE_COMMIT": "{candidate_commit}",
+        "PARADOX_CANDIDATE_TREE": "{candidate_tree}",
+        "PARADOX_CANDIDATE_SOURCE": "{candidate_source}",
+        "PARADOX_CANDIDATE_CONTENT_SHA256": "{candidate_content}",
+        "PARADOX_VERIFY_COMPAT_SYSTEM": "1"
+      },
+      "required_parameters": [
+        "candidate_context_sha256",
+        "candidate_run_id",
+        "candidate_ref",
+        "candidate_commit",
+        "candidate_tree",
+        "candidate_source",
+        "candidate_library",
+        "dependency_library",
+        "candidate_content",
+        "evidence_profile",
+        "paradox_axis",
+        "bridge_library"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "machines": [
+        "x86_64"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "downstream-focused",
+      "description": "Exact source-package checks for all eight maintained adaptation/serialization heads.",
+      "command": [
+        "compat/check-downstream-profile",
+        "--candidate-source",
+        "{candidate_source}",
+        "--evidence-profile",
+        "{evidence_profile}",
+        "--paradox-axis",
+        "{paradox_axis}",
+        "--resume",
+        "--repositories",
+        "bbotk,mlr3tuning,miesmuschel,mlr3pipelines,mlr3mbo,celecx,mlr3fda,mlr3forecast"
+      ],
+      "dependencies": [
+        "downstream-overlay",
+        "harness-downstream"
+      ],
+      "phase": 30,
+      "priority": 650,
+      "information": 10,
+      "estimated_seconds": 10800,
+      "cpu": 1,
+      "memory_mib": 8192,
+      "memory_mib_min": 4096,
+      "pids": 1024,
+      "scratch_mib": 2048,
+      "timeout_seconds": 21600,
+      "failure_class": "semantic",
+      "cache": "none",
+      "input_groups": [
+        "compatibility"
+      ],
+      "inputs": [],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "compat/**"
+      ],
+      "environment": {
+        "PARADOX_CANDIDATE_RUN_ID": "{candidate_run_id}",
+        "PARADOX_CANDIDATE_REF": "{candidate_ref}",
+        "PARADOX_CANDIDATE_COMMIT": "{candidate_commit}",
+        "PARADOX_CANDIDATE_TREE": "{candidate_tree}",
+        "PARADOX_CANDIDATE_SOURCE": "{candidate_source}",
+        "PARADOX_CANDIDATE_CONTENT_SHA256": "{candidate_content}",
+        "PARADOX_CONSUMER_EXTRA_LIBS": "{consumer_extra_libs}",
+        "PARADOX_VERIFY_ATTEMPT_ID": "{attempt_id}",
+        "PARADOX_VERIFY_COMPAT_SYSTEM": "1"
+      },
+      "required_parameters": [
+        "candidate_context_sha256",
+        "candidate_run_id",
+        "candidate_ref",
+        "candidate_commit",
+        "candidate_tree",
+        "candidate_source",
+        "candidate_library",
+        "dependency_library",
+        "candidate_content",
+        "evidence_profile",
+        "paradox_axis",
+        "bridge_library",
+        "consumer_extra_libs"
+      ],
+      "writable_paths": [
+        ".local/compat/runs/{candidate_run_id}"
+      ],
+      "readonly_paths": [
+        "{candidate_source}",
+        "{candidate_library}",
+        "{dependency_library}",
+        "{bridge_library}"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "machines": [
+        "x86_64"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    },
+    {
+      "id": "downstream-corpus",
+      "description": "Resumable priority-zero/one maintained repository corpus.",
+      "command": [
+        "Rscript",
+        "--vanilla",
+        "compat/test-repositories.R",
+        "{root}",
+        "1",
+        "{candidate_library}",
+        "{dependency_library}",
+        "--run-id",
+        "{candidate_run_id}",
+        "--candidate-source",
+        "{candidate_source}",
+        "--evidence-profile",
+        "{evidence_profile}",
+        "--paradox-axis",
+        "{paradox_axis}"
+      ],
+      "dependencies": [
+        "downstream-overlay",
+        "harness-repositories"
+      ],
+      "phase": 30,
+      "priority": 600,
+      "information": 9,
+      "estimated_seconds": 21600,
+      "cpu": 16,
+      "cpu_min": 4,
+      "memory_mib": 16384,
+      "memory_mib_min": 8192,
+      "pids": 2048,
+      "scratch_mib": 2048,
+      "timeout_seconds": 43200,
+      "failure_class": "semantic",
+      "cache": "none",
+      "input_groups": [
+        "compatibility"
+      ],
+      "inputs": [],
+      "impacts": [
+        "src/**",
+        "R/**",
+        "compat/**"
+      ],
+      "environment": {
+        "PARADOX_CANDIDATE_RUN_ID": "{candidate_run_id}",
+        "PARADOX_CANDIDATE_REF": "{candidate_ref}",
+        "PARADOX_CANDIDATE_COMMIT": "{candidate_commit}",
+        "PARADOX_CANDIDATE_TREE": "{candidate_tree}",
+        "PARADOX_CANDIDATE_SOURCE": "{candidate_source}",
+        "PARADOX_CANDIDATE_CONTENT_SHA256": "{candidate_content}",
+        "PARADOX_CONSUMER_EXTRA_LIBS": "{consumer_extra_libs}",
+        "PARADOX_VERIFY_COMPAT_SYSTEM": "1"
+      },
+      "required_parameters": [
+        "candidate_context_sha256",
+        "candidate_run_id",
+        "candidate_ref",
+        "candidate_commit",
+        "candidate_tree",
+        "candidate_source",
+        "candidate_library",
+        "dependency_library",
+        "candidate_content",
+        "evidence_profile",
+        "paradox_axis",
+        "bridge_library",
+        "consumer_extra_libs"
+      ],
+      "writable_paths": [
+        ".local/compat/runs/{candidate_run_id}"
+      ],
+      "readonly_paths": [
+        "{candidate_source}",
+        "{candidate_library}",
+        "{dependency_library}",
+        "{bridge_library}"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "machines": [
+        "x86_64"
+      ],
+      "isolation": "worker",
+      "network": false,
+      "image": null
+    }
+  ]
+}

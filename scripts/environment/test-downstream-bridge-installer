@@ -1,0 +1,266 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+INSTALLER=$ROOT/compat/install-downstream-bridges
+PROVENANCE=$ROOT/compat/github-bridge-provenance.tsv
+SNAPSHOT=$ROOT/compat/github-snapshot.tsv
+PROFILE_TEST=$ROOT/scripts/environment/test-downstream-evidence-profiles
+
+fail() {
+  printf '%s\n' "test-downstream-bridge-installer: $*" >&2
+  exit 1
+}
+
+[[ -x $INSTALLER && ! -L $INSTALLER &&
+   -x $PROFILE_TEST && ! -L $PROFILE_TEST ]] ||
+  fail "installer or profile test is absent, symbolic, or not executable"
+"$PROFILE_TEST"
+bash -n "$INSTALLER"
+"$INSTALLER" --help | grep -Fqx \
+  'Usage: compat/install-downstream-bridges [--candidate-source PATH] [--verify]' ||
+  fail "installer help does not describe its complete interface"
+
+expected='bbotk mlr3 miesmuschel mlr3pipelines mlr3fselect mlr3mbo celecx'
+observed=$(
+  "$ROOT/.local/toolchain/bin/Rscript" --vanilla \
+    "$ROOT/compat/resolve-downstream-evidence-profile.R" "$ROOT" default paradox2 |
+    awk -F '\t' '$1 == "install_order" { gsub(",", " ", $2); print $2 }'
+)
+[[ $observed == "$expected" ]] || fail "installer order differs from the reviewed order"
+
+awk -F '\t' '
+  NR == FNR {
+    if (NR == 1) next
+    bridge[$1] = $7
+    count += 1
+    next
+  }
+  FNR == 1 { next }
+  $1 in bridge {
+    if ($4 != bridge[$1]) exit 1
+    seen[$1] += 1
+  }
+  END {
+    if (count != 7) exit 1
+    for (repository in bridge) if (seen[repository] != 1) exit 1
+  }
+' "$PROVENANCE" "$SNAPSHOT" || fail "snapshot and bridge provenance disagree"
+
+authentication_branch=$(awk '
+  /^if \[\[ \$CANDIDATE_SOURCE == "\$ROOT" \]\]; then$/ { inside = 1 }
+  inside { print }
+  inside && /^fi$/ { exit }
+' "$INSTALLER")
+grep -Fq '"$CANDIDATE_TREE" >/dev/null' <<<"$authentication_branch" ||
+  fail "primary candidate source is not authenticated in four-argument mode"
+grep -Fq '"$CANDIDATE_TREE" "$CANDIDATE_SOURCE" >/dev/null' \
+  <<<"$authentication_branch" ||
+  fail "detached candidate source is not authenticated in five-argument mode"
+
+candidate_binding=$(awk '
+  /^[[:space:]]*for relative in compat\/install-downstream-bridges / { inside = 1 }
+  inside { print }
+  inside && /^[[:space:]]*done$/ { exit }
+' "$INSTALLER")
+for retained in \
+    compat/verify-repository-evidence.R \
+    scripts/environment/resource-jobs; do
+  grep -Fq "$retained" <<<"$candidate_binding" ||
+    fail "bridge release helper is not bound to the candidate: $retained"
+done
+for field in evidence_verifier_sha256 resource_jobs_sha256; do
+  [[ $(grep -Fc "$field" "$INSTALLER") -ge 2 ]] ||
+    fail "bridge completion does not write and verify helper hash: $field"
+done
+for dependency_binding in \
+    '$(dependency_completion_value schema) == "$DEPENDENCY_SCHEMA"' \
+    '$(dependency_completion_value stage_kind) == repository_dependencies' \
+    '$(dependency_completion_value run_id) == "$RUN_ID"' \
+    '$(dependency_completion_value max_priority) == 1' \
+    '$(dependency_completion_value status) == passed' \
+    '$(dependency_completion_value failed_rows) == 0' \
+    '$(dependency_completion_value dependency_library_content_after) =='; do
+  grep -Fq "$dependency_binding" "$INSTALLER" ||
+    fail "priority-one dependency evidence omits binding: $dependency_binding"
+done
+
+grep -Fq 'publish_directory_no_clobber "$BUILD/library" "$BRIDGE_LIBRARY"' \
+  "$INSTALLER" || fail "bridge library publication is not no-clobber"
+grep -Fq 'publish_directory_no_clobber "$EVIDENCE_BUILD" "$EVIDENCE"' \
+  "$INSTALLER" || fail "bridge evidence publication is not no-clobber"
+grep -Fq 'if [[ $INSTALL_COMPLETE != true ]] && ownership_matches; then' \
+  "$INSTALLER" || fail "failed construction cleanup is not owner-gated"
+if ! grep -Fq 'if [[ -n $PUBLISHED_EVIDENCE_ID ]]; then' "$INSTALLER" ||
+    ! grep -Fq 'if [[ -n $PUBLISHED_LIBRARY_ID ]]; then' "$INSTALLER"; then
+  fail "failed construction cleanup does not cover the post-rename signal window"
+fi
+grep -Fq '$(directory_identity "$path") == "$identity"' "$INSTALLER" ||
+  fail "failed construction cleanup is not directory-identity-bound"
+grep -Fq 'validate_package_evidence_shape "$EVIDENCE/metadata/packages.tsv"' \
+  "$INSTALLER" || fail "bridge verification omits exact package-ledger admission"
+
+fixture_root=$(mktemp -d "$ROOT/.local/tmp/downstream-bridge-installer.XXXXXX")
+cleanup_fixture() {
+  chmod -R u+w "$fixture_root" 2>/dev/null || true
+  rm -rf -- "$fixture_root"
+}
+trap cleanup_fixture EXIT
+
+# Execute the production admission and publication functions themselves in
+# disposable fixtures; the installer cannot silently drift from a duplicated
+# test implementation.
+sed -n '/^publish_directory_no_clobber() {$/,/^}$/p' "$INSTALLER" \
+  >"$fixture_root/publication-function"
+sed -n '/^validate_package_evidence_shape() {$/,/^}$/p' "$INSTALLER" \
+  >"$fixture_root/package-function"
+sed -n '/^directory_identity() {$/,/^}$/p' "$INSTALLER" \
+  >"$fixture_root/identity-function"
+sed -n '/^remove_owned_publication() {$/,/^}$/p' "$INSTALLER" \
+  >"$fixture_root/cleanup-function"
+# shellcheck source=/dev/null
+source "$fixture_root/publication-function"
+# shellcheck source=/dev/null
+source "$fixture_root/package-function"
+# shellcheck source=/dev/null
+source "$fixture_root/identity-function"
+# shellcheck source=/dev/null
+source "$fixture_root/cleanup-function"
+INSTALL_ORDER=(bbotk mlr3 miesmuschel mlr3pipelines mlr3fselect mlr3mbo celecx)
+
+valid_packages=$fixture_root/packages-valid.tsv
+printf 'position\trepository\tcommit\ttree\tarchive_sha256\tversion\tcontent_sha256\n' \
+  >"$valid_packages"
+position=0
+for repository in "${INSTALL_ORDER[@]}"; do
+  position=$((position + 1))
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$position" "$repository" \
+    "$(printf '%040d' "$position")" "$(printf '%040d' "$((position + 10))")" \
+    "$(printf '%064d' "$position")" "1.0.$position" \
+    "$(printf '%064d' "$((position + 20))")" >>"$valid_packages"
+done
+validate_package_evidence_shape "$valid_packages" ||
+  fail "production package-ledger admission rejected the exact fixture"
+awk 'NR != 8' "$valid_packages" >"$fixture_root/packages-missing.tsv"
+if validate_package_evidence_shape "$fixture_root/packages-missing.tsv"; then
+  fail "production package-ledger admission accepted an incomplete fixture"
+fi
+awk 'NR == 3 {$1 = 1; $2 = "bbotk"} {print}' OFS='\t' "$valid_packages" \
+  >"$fixture_root/packages-duplicate.tsv"
+if validate_package_evidence_shape "$fixture_root/packages-duplicate.tsv"; then
+  fail "production package-ledger admission accepted a duplicate fixture"
+fi
+
+mkdir "$fixture_root/publisher-a" "$fixture_root/publisher-b"
+printf 'a\n' >"$fixture_root/publisher-a/member"
+printf 'b\n' >"$fixture_root/publisher-b/member"
+set +e
+publish_directory_no_clobber "$fixture_root/publisher-a" \
+  "$fixture_root/published" &
+publisher_a=$!
+publish_directory_no_clobber "$fixture_root/publisher-b" \
+  "$fixture_root/published" &
+publisher_b=$!
+wait "$publisher_a"
+status_a=$?
+wait "$publisher_b"
+status_b=$?
+set -e
+successes=0
+[[ $status_a -eq 0 ]] && successes=$((successes + 1))
+[[ $status_b -eq 0 ]] && successes=$((successes + 1))
+[[ $successes -eq 1 && -d $fixture_root/published &&
+   $(find "$fixture_root" -maxdepth 1 -type d \
+     \( -name publisher-a -o -name publisher-b \) | wc -l) -eq 1 &&
+   -z $(find "$fixture_root/published" -mindepth 1 -maxdepth 1 \
+     -type d -print -quit) ]] ||
+  fail "production no-clobber publication did not retain exactly one winner"
+
+BRIDGE_LIBRARY=$fixture_root/cleanup-target
+export EVIDENCE=$fixture_root/evidence-target
+mkdir "$BRIDGE_LIBRARY"
+owned_identity=$(directory_identity "$BRIDGE_LIBRARY")
+mv "$BRIDGE_LIBRARY" "$fixture_root/displaced-owner"
+mkdir "$BRIDGE_LIBRARY"
+printf 'replacement\n' >"$BRIDGE_LIBRARY/sentinel"
+if remove_owned_publication "$BRIDGE_LIBRARY" "$owned_identity"; then
+  fail "production cleanup removed a replacement directory it did not publish"
+fi
+grep -Fqx replacement "$BRIDGE_LIBRARY/sentinel" ||
+  fail "production cleanup changed a replacement directory"
+
+for entrypoint in \
+    compat/test-repositories-resumable.R \
+    compat/test-documentation; do
+  grep -Fq 'install-downstream-bridges' "$ROOT/$entrypoint" ||
+    fail "release entrypoint does not authenticate the bridge overlay: $entrypoint"
+  grep -Fq 'downstream_bridge_evidence=passed' "$ROOT/$entrypoint" ||
+    fail "release entrypoint does not require the verifier receipt: $entrypoint"
+done
+for option in '--candidate-source' '--evidence-profile' '--paradox-axis'; do
+  grep -Fq -- "$option" "$ROOT/compat/test-documentation" ||
+    fail "documentation gate omits profile-aware bridge option: $option"
+done
+grep -Fq 'downstream_profile$suffix' "$ROOT/compat/test-documentation" ||
+  fail "documentation gate does not derive the profile/axis bridge path"
+grep -Fq 'paste0("downstream_bridge_library=", bridge_library)' \
+  "$ROOT/compat/test-documentation" ||
+  fail "documentation gate does not require the exact bridge-library receipt"
+
+BENCHMARK_RELEASE=$ROOT/benchmarks/release.R
+FOCUSED_CONSUMER=$ROOT/benchmarks/paramsetcollection-consumers.R
+grep -Fq '"downstream_bridge_evidence=passed",' \
+  "$BENCHMARK_RELEASE" ||
+  fail "release benchmark does not require the exact verifier receipt"
+grep -Fq 'paste0("downstream_bridge_library=", release_bridge_library)' \
+  "$BENCHMARK_RELEASE" ||
+  fail "release benchmark does not require the exact bridge-library receipt"
+for option in \
+    '--candidate-source' '--evidence-profile' '--paradox-axis'; do
+  grep -Fq -- "$option" "$BENCHMARK_RELEASE" ||
+    fail "release benchmark omits profile-aware bridge option: $option"
+done
+if grep -Fq -- '--mies-library' "$BENCHMARK_RELEASE"; then
+  fail "release benchmark retains a caller-selected unsuffixed bridge option"
+fi
+grep -Fq '"mlr3pipelines", release_bridge_library,' "$BENCHMARK_RELEASE" ||
+  fail "release benchmark does not select reviewed mlr3pipelines from the bridge overlay"
+if grep -Fq '"mlr3pipelines", release_dependency_libraries[[1L]]' \
+    "$BENCHMARK_RELEASE"; then
+  fail "release benchmark still selects mlr3pipelines from the dependency library"
+fi
+[[ $(grep -Fc 'lib.loc = bridge_library' "$FOCUSED_CONSUMER") -eq 2 ]] ||
+  fail "focused benchmark does not load both reviewed packages from the bridge overlay"
+if grep -Fq 'lib.loc = dependency_library' "$FOCUSED_CONSUMER"; then
+  fail "focused benchmark explicitly bypasses the reviewed bridge overlay"
+fi
+
+for retained in \
+    downstream-bridges-completion.tsv \
+    downstream-bridges-packages.tsv \
+    downstream-bridges-evidence-manifest.tsv \
+    downstream-bridges-completion.seal; do
+  grep -Fq "\"$retained\"" "$BENCHMARK_RELEASE" ||
+    fail "release benchmark does not retain bridge provenance input: $retained"
+done
+for field in \
+    downstream_bridge_completion_sha256 \
+    downstream_bridge_packages_sha256 \
+    downstream_bridge_evidence_manifest_sha256 \
+    downstream_bridge_completion_seal_sha256; do
+  grep -Fq "\"$field=\"" "$BENCHMARK_RELEASE" ||
+    fail "release completion does not bind bridge provenance field: $field"
+done
+awk '
+  /release_provenance_sources <- c\(/ { inside = 1 }
+  inside && /release_bridge_evidence_inputs/ { retained = 1 }
+  inside && /^\)/ { exit }
+  END { if (!retained) exit 1 }
+' "$BENCHMARK_RELEASE" ||
+  fail "bridge provenance inputs are not part of the sealed benchmark sources"
+
+grep -Fq "compat/install-downstream-bridges --candidate-source \"\$candidate_source\"" \
+  "$ROOT/compat/README.md" || fail "compatibility release recipe omits the installer"
+
+printf '%s\n' 'downstream bridge installer fixtures: PASS'

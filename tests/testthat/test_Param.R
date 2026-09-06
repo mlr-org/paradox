@@ -19,7 +19,10 @@ test_that("check and assert work", {
   p$assert(list(x = 1))
   expect_error(p$assert(list(x = 3)), "Assertion .* failed")
   expect_true(p$check(list(x = 1)))
-  expect_string(p$check(list(x = 3)), fixed = "<= 2")
+  expect_string(
+    p$check(list(x = 3)),
+    fixed = "x: Element 1 is not <= 2"
+  )
   expect_true(p$test(list(x = 1)))
   expect_false(p$test(list(x = 3)))
 })
@@ -27,11 +30,17 @@ test_that("check and assert work", {
 
 test_that("special_vals work for all Param subclasses", {
   class = list(ParamFct, ParamLgl, ParamInt, ParamDbl)
+  materialized_one_to_ten = c(
+    1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L
+  )
   special_vals_list = list(
     list(1),
     list("a"),
-    list(1:10),
-    list("a", 1, 1:10, as.environment(list(a = 10, b = 100, c = mean))),
+    list(materialized_one_to_ten),
+    list(
+      "a", 1, materialized_one_to_ten,
+      as.environment(list(a = 10, b = 100, c = mean))
+    ),
     list(mean, sum, function(x) x^10)
   )
   for (cl in class) {
@@ -52,5 +61,5 @@ test_that("special_vals work for all Param subclasses", {
 })
 
 test_that("we cannot create Params with non-strict R names", {
-  expect_error(ParamInt$new(id = "$foo"), "does not comply")
+  expect_error(ParamInt$new(id = "$foo"), "strict ASCII IDs")
 })

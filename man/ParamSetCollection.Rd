@@ -12,10 +12,21 @@ A collection of multiple \code{\link{ParamSet}} objects.
 Parameters from \code{\link{ParamSet}} with empty (i.e. \code{""}) \code{set_id} are referenced
 directly. Multiple \code{\link{ParamSet}}s with \code{set_id} \code{""} can be combined, but their parameter names
 may not overlap to avoid name clashes.
-\item When you either ask for 'values' or set them, the operation is delegated to the individual,
-contained \code{\link{ParamSet}} references. The collection itself does not maintain a \code{values} state.
-This also implies that if you directly change \code{values} in one of the referenced sets,
-this change is reflected in the collection.
+\item Value reads reflect the current contained \code{\link{ParamSet}} references; the
+collection does not maintain a second value state. Assignments are planned
+over the complete collection/shadow graph and committed atomically to the
+ultimate base sets. Direct child mutations remain visible through the
+collection. \verb{$values} is the translated raw store and may include dormant
+values. The default \verb{$get_values()} view filters activity across the
+complete collection graph. A collection-level cross-set dependency is
+therefore applied when reading the collection, not when reading either
+child directly.
+\item Checked assignment validates every supplied value but may store it while
+dependency-inactive. If constraints are present, activity is computed
+over the complete translated resulting configuration. Each child
+constraint receives only its active child-scope entries, with collection
+prefixes or postfixes removed. The graph transaction remains atomic if a
+callback fails or mutates a planned target.
 \item Dependencies: It is possible to currently handle dependencies
 \itemize{
 \item regarding parameters inside of the same set - in this case simply
@@ -28,236 +39,295 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 }
 }
 \section{Super class}{
-\code{\link[paradox:ParamSet]{paradox::ParamSet}} -> \code{ParamSetCollection}
+\code{\link[paradox:ParamSet]{ParamSet}} -> \code{ParamSetCollection}
 }
 \section{Active bindings}{
-\if{html}{\out{<div class="r6-active-bindings">}}
-\describe{
-\item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+  \if{html}{\out{<div class="r6-active-bindings">}}
+  \describe{
+    \item{\code{params}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+\code{data.table} representing the combined \code{\link{Domain}} objects used to construct the \code{\link{ParamSet}}.
+This is a supported, detached public accessor. Mutating the returned table
+does not mutate the \code{ParamSet}; assign through documented active bindings and
+methods instead. The facade has an ordinary non-ALTREP/non-S4 structural
+shell and metadata; canonical semantic columns are detached ordinary
+snapshots.}
+
+    \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
-Settable, if you want to remove dependencies or perform other changes.}
+The returned table and its \code{\link{Condition}} elements are detached. Mutating
+them does not mutate package state. Settable on a base \code{\link{ParamSet}} if you
+want to remove dependencies, copy a graph after narrowing Domains, or perform
+other bulk changes. Assignment validates the table and Conditions but does
+not require their right-hand sides to be feasible; an impossible predicate
+simply leaves its child inactive. Use \verb{$add_dep()} for feasibility-checked
+interactive authoring. This field is read-only and derived from children on
+a \code{\link{ParamSetCollection}}. The facade and Condition shells have ordinary
+non-ALTREP/non-S4 structural metadata.}
 
-\item{\code{extra_trafo}}{(\verb{function(x, param_set)})\cr
-Transformation function. Settable.
+    \item{\code{extra_trafo}}{(\verb{function(x, param_set)})\cr
+Transformation function. Settable on a base \code{\link{ParamSet}}; read-only and
+derived from children on a \code{\link{ParamSetCollection}}.
 User has to pass a \verb{function(x)}, of the form\cr
-(named \code{list()}, \link{ParamSet}) -> named \code{list()}.\cr
+(named \code{list()}, \link{ParamSet}) -> \code{list()}.\cr
+Result and non-table input list shells, names, and list metadata must be
+ordinary non-ALTREP/non-S4. A documented data-frame input may use the exact
+top-level ALTREP table boundary; admitted semantic atomic leaves or columns
+may be stable ALTREP.
 The function is responsible to transform a feasible configuration into another encoding,
 before potentially evaluating the configuration with the target algorithm.
 For the output, not many things have to hold.
-It needs to have unique names, and the target algorithm has to accept the configuration.
+A base \code{\link{ParamSet}} retains an unnamed result for backward compatibility;
+otherwise supplied names must be unique. A child transformation in a
+\code{\link{ParamSetCollection}} must return unique names so they can be translated
+into the collection namespace. The target algorithm must accept the result.
 For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-Is NULL by default, and you can set it to NULL to switch the transformation off.}
+Is NULL by default, and you can set it to NULL to switch the transformation off.
+Source-reference attributes are removed from the stored callback when it is
+assigned. See \code{options(paradox.strip_srcrefs = FALSE)} under
+\link{paradox-package} for the debugging opt-out.}
 
-\item{\code{constraint}}{(\verb{function(x)})\cr
-Constraint function. Settable.
+    \item{\code{constraint}}{(\verb{function(x)})\cr
+Constraint function. Settable on a base \code{\link{ParamSet}}; read-only and derived
+from children on a \code{\link{ParamSetCollection}}.
 This function must evaluate a named \code{list()} of values and determine whether it satisfies
-constraints, returning a scalar \code{logical(1)} value.}
+constraints, returning a scalar \code{logical(1)} value.
+At package-owned check, test, and assignment sites, it receives only the
+default-aware active subset of the configuration being validated. A
+collection computes activity over its complete translated configuration,
+including cross-set dependencies, before each child receives an unprefixed
+active child-scope slice.
+The input list shell and structural names/list metadata are ordinary
+non-ALTREP/non-S4; admitted semantic atomic leaves may be stable ALTREP.
+Source-reference attributes are removed from the stored callback when it is
+assigned. See \code{options(paradox.strip_srcrefs = FALSE)} under
+\link{paradox-package} for the debugging opt-out.}
 
-\item{\code{sets}}{(named \code{list()})\cr
+    \item{\code{sets}}{(named \code{list()})\cr
 Read-only \code{list} of of \code{\link{ParamSet}}s contained in this \code{ParamSetCollection}.
-This field provides direct references to the \code{\link{ParamSet}} objects.}
-}
-\if{html}{\out{</div>}}
+The list shell and names are detached; its elements are the exact
+contained \code{\link{ParamSet}} objects.}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-ParamSetCollection-new}{\code{ParamSetCollection$new()}}
-\item \href{#method-ParamSetCollection-add}{\code{ParamSetCollection$add()}}
-\item \href{#method-ParamSetCollection-subset}{\code{ParamSetCollection$subset()}}
-\item \href{#method-ParamSetCollection-disable_internal_tuning}{\code{ParamSetCollection$disable_internal_tuning()}}
-\item \href{#method-ParamSetCollection-convert_internal_search_space}{\code{ParamSetCollection$convert_internal_search_space()}}
-\item \href{#method-ParamSetCollection-flatten}{\code{ParamSetCollection$flatten()}}
-\item \href{#method-ParamSetCollection-clone}{\code{ParamSetCollection$clone()}}
+  \itemize{
+    \item \href{#method-ParamSetCollection-initialize}{\code{ParamSetCollection$new()}}
+    \item \href{#method-ParamSetCollection-add}{\code{ParamSetCollection$add()}}
+    \item \href{#method-ParamSetCollection-subset}{\code{ParamSetCollection$subset()}}
+    \item \href{#method-ParamSetCollection-disable_internal_tuning}{\code{ParamSetCollection$disable_internal_tuning()}}
+    \item \href{#method-ParamSetCollection-convert_internal_search_space}{\code{ParamSetCollection$convert_internal_search_space()}}
+    \item \href{#method-ParamSetCollection-flatten}{\code{ParamSetCollection$flatten()}}
+    \item \href{#method-ParamSetCollection-clone}{\code{ParamSetCollection$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details><summary>Inherited methods</summary>
+\if{html}{\out{<details><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep"><a href='../../paradox/html/ParamSet.html#method-ParamSet-add_dep'><code>paradox::ParamSet$add_dep()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="aggr_internal_tuned_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-aggr_internal_tuned_values'><code>paradox::ParamSet$aggr_internal_tuned_values()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert'><code>paradox::ParamSet$assert()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert_dt'><code>paradox::ParamSet$assert_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check'><code>paradox::ParamSet$check()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dependencies"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dependencies'><code>paradox::ParamSet$check_dependencies()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dt'><code>paradox::ParamSet$check_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href='../../paradox/html/ParamSet.html#method-ParamSet-format'><code>paradox::ParamSet$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_domain"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_domain'><code>paradox::ParamSet$get_domain()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_values'><code>paradox::ParamSet$get_values()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids"><a href='../../paradox/html/ParamSet.html#method-ParamSet-ids'><code>paradox::ParamSet$ids()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print"><a href='../../paradox/html/ParamSet.html#method-ParamSet-print'><code>paradox::ParamSet$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="qunif"><a href='../../paradox/html/ParamSet.html#method-ParamSet-qunif'><code>paradox::ParamSet$qunif()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space"><a href='../../paradox/html/ParamSet.html#method-ParamSet-search_space'><code>paradox::ParamSet$search_space()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="set_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-set_values'><code>paradox::ParamSet$set_values()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces"><a href='../../paradox/html/ParamSet.html#method-ParamSet-subspaces'><code>paradox::ParamSet$subspaces()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test'><code>paradox::ParamSet$test()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_constraint'><code>paradox::ParamSet$test_constraint()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_constraint_dt'><code>paradox::ParamSet$test_constraint_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_dt'><code>paradox::ParamSet$test_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="trafo"><a href='../../paradox/html/ParamSet.html#method-ParamSet-trafo'><code>paradox::ParamSet$trafo()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep"><a href='../../paradox/html/ParamSet.html#method-ParamSet-add_dep'><code>ParamSet$add_dep()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="aggr_internal_tuned_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-aggr_internal_tuned_values'><code>ParamSet$aggr_internal_tuned_values()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert'><code>ParamSet$assert()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert_dt'><code>ParamSet$assert_dt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check'><code>ParamSet$check()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dependencies"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dependencies'><code>ParamSet$check_dependencies()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dt'><code>ParamSet$check_dt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href='../../paradox/html/ParamSet.html#method-ParamSet-format'><code>ParamSet$format()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_domain"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_domain'><code>ParamSet$get_domain()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_values'><code>ParamSet$get_values()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids"><a href='../../paradox/html/ParamSet.html#method-ParamSet-ids'><code>ParamSet$ids()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print"><a href='../../paradox/html/ParamSet.html#method-ParamSet-print'><code>ParamSet$print()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="qunif"><a href='../../paradox/html/ParamSet.html#method-ParamSet-qunif'><code>ParamSet$qunif()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space"><a href='../../paradox/html/ParamSet.html#method-ParamSet-search_space'><code>ParamSet$search_space()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="set_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-set_values'><code>ParamSet$set_values()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces"><a href='../../paradox/html/ParamSet.html#method-ParamSet-subspaces'><code>ParamSet$subspaces()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test'><code>ParamSet$test()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_constraint'><code>ParamSet$test_constraint()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_constraint_dt'><code>ParamSet$test_constraint_dt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_dt'><code>ParamSet$test_dt()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="trafo"><a href='../../paradox/html/ParamSet.html#method-ParamSet-trafo'><code>ParamSet$trafo()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-ParamSetCollection-new"></a>}}
-\if{latex}{\out{\hypertarget{method-ParamSetCollection-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(
+\if{html}{\out{<a id="method-ParamSetCollection-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetCollection-initialize}{}}}
+\subsection{\code{ParamSetCollection$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetCollection$new(
   sets,
   tag_sets = FALSE,
   tag_params = FALSE,
   postfix_names = FALSE
-)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{sets}}{(named \code{list()} of \link{ParamSet})\cr
+)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{sets}}{(named \code{list()} of \link{ParamSet})\cr
+The outer set list, names, and list metadata must be ordinary
+non-S4; a top-level ALTREP plain list is materialized exactly once.
 ParamSet objects are not cloned.
-Names are used as "set_id" for the naming scheme of delegated parameters.}
-
-\item{\code{tag_sets}}{(\code{logical(1)})\cr
+Names are used as "set_id" for the naming scheme of delegated parameters.
+A name is therefore part of every parameter ID it contributes and must
+keep that ID inside the ID grammar: a prefix must itself match
+\verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$}, while a postfix (see \code{postfix_names})
+only has to use ASCII letters, digits, \code{.}, and \verb{_}.
+The empty name is also allowed and delegates the set's parameters
+without affixing them.}
+      \item{\code{tag_sets}}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"set_<set_id>"} to each parameter originating from a given \code{ParamSet} given with name \verb{<set_id>}.}
-
-\item{\code{tag_params}}{(\code{logical(1)})\cr
+      \item{\code{tag_params}}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
-
-\item{\code{postfix_names}}{(\code{logical(1)})\cr
+      \item{\code{postfix_names}}{(\code{logical(1)})\cr
 Whether to use the names inside \code{sets} as postfixes, rather than prefixes.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-add"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-add}{}}}
-\subsection{Method \code{add()}}{
-Adds a \code{\link{ParamSet}} to this collection.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$add(p, n = "", tag_sets = FALSE, tag_params = FALSE)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{p}}{(\link{ParamSet}).}
-
-\item{\code{n}}{(\code{character(1)})\cr
-Name to use. Default \code{""}.}
-
-\item{\code{tag_sets}}{(\code{logical(1)})\cr
+\subsection{\code{ParamSetCollection$add()}}{
+  Adds a \code{\link{ParamSet}} to this collection.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetCollection$add(p, n = "", tag_sets = FALSE, tag_params = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{p}}{(\link{ParamSet}).}
+      \item{\code{n}}{(\code{character(1)})\cr
+Name to use. Must keep the IDs it creates inside the ID grammar --
+\verb{^[.]*[a-zA-Z]+[a-zA-Z0-9._]*$} when this collection prefixes, ASCII
+letters, digits, \code{.}, and \verb{_} when it postfixes -- or be \code{""} to
+delegate \code{p}'s parameters without affixing them. Default \code{""}.}
+      \item{\code{tag_sets}}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"set_<n>"} to the newly added parameters.}
-
-\item{\code{tag_params}}{(\code{logical(1)})\cr
+      \item{\code{tag_params}}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-subset"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-subset}{}}}
-\subsection{Method \code{subset()}}{
-Create a new \code{ParamSet} restricted to the passed IDs.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$subset(
+\subsection{\code{ParamSetCollection$subset()}}{
+  Create a new \code{ParamSet} restricted to the passed IDs.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetCollection$subset(
   ids,
   allow_dangling_dependencies = FALSE,
-  keep_constraint = TRUE
-)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{ids}}{(\code{character()}).}
-
-\item{\code{allow_dangling_dependencies}}{(\code{logical(1)})\cr
+  keep_constraint = TRUE,
+  keep_trafo = TRUE
+)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{ids}}{(\code{character()}).}
+      \item{\code{allow_dangling_dependencies}}{(\code{logical(1)})\cr
 Whether to allow subsets that cut across parameter dependencies.
 Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their \code{"on"} will not be present).}
-
-\item{\code{keep_constraint}}{(\code{logical(1)})\cr
+      \item{\code{keep_constraint}}{(\code{logical(1)})\cr
 Whether to keep the \verb{$constraint} function.}
+      \item{\code{keep_trafo}}{(\code{logical(1)})\cr
+Whether to keep per-parameter transformations and the \verb{$extra_trafo}
+function. All three subset control flags must be unclassed,
+attribute-free, non-missing logical scalars.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    \code{ParamSet}.
+  }
 }
-\if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-\code{ParamSet}.
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-disable_internal_tuning"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-disable_internal_tuning}{}}}
-\subsection{Method \code{disable_internal_tuning()}}{
-Set the parameter values so that internal tuning for the selected parameters is disabled.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$disable_internal_tuning(ids)}\if{html}{\out{</div>}}
+\subsection{\code{ParamSetCollection$disable_internal_tuning()}}{
+  Set the parameter values so that internal tuning for the selected parameters is disabled.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetCollection$disable_internal_tuning(ids)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{ids}}{(\code{character()})\cr
+The ids of the parameters for which to disable internal tuning.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    \code{Self}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{ids}}{(\code{character()})\cr
-The ids of the parameters for which to disable internal tuning.}
-}
-\if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-\code{Self}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-convert_internal_search_space"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-convert_internal_search_space}{}}}
-\subsection{Method \code{convert_internal_search_space()}}{
-Convert all parameters from the search space to parameter values using the transformation given by
+\subsection{\code{ParamSetCollection$convert_internal_search_space()}}{
+  Convert all parameters from the search space to parameter values using the transformation given by
 \code{in_tune_fn}.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$convert_internal_search_space(search_space)}\if{html}{\out{</div>}}
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetCollection$convert_internal_search_space(search_space)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{search_space}}{(\code{\link{ParamSet}})\cr
+The internal search space.}
+    }
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Returns}{
+    (named \code{list()})
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{search_space}}{(\code{\link{ParamSet}})\cr
-The internal search space.}
-}
-\if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-(named \code{list()})
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-flatten"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-flatten}{}}}
-\subsection{Method \code{flatten()}}{
-Create a \code{ParamSet} from this \code{ParamSetCollection}.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$flatten()}\if{html}{\out{</div>}}
+\subsection{\code{ParamSetCollection$flatten()}}{
+  Create a \code{ParamSet} from this \code{ParamSetCollection}.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetCollection$flatten()}
+    \if{html}{\out{</div>}}
+  }
 }
 
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{ParamSetCollection$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{ParamSetCollection$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

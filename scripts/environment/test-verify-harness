@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+
+# Fast, daemon-free regression suite for the top-level verification controller.
+
+set -eu
+
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd -P)
+PYTHON="$ROOT/.local/toolchain/bin/python3"
+if [ ! -x "$PYTHON" ]; then
+  PYTHON=$(command -v python3) || {
+    printf '%s\n' "test-verify-harness: Python 3 is required" >&2
+    exit 2
+  }
+fi
+
+cd "$ROOT"
+PYTHONDONTWRITEBYTECODE=1 exec "$PYTHON" -m unittest \
+  --verbose verification.test_harness

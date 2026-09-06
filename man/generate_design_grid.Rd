@@ -4,7 +4,12 @@
 \alias{generate_design_grid}
 \title{Generate a Grid Design}
 \usage{
-generate_design_grid(param_set, resolution = NULL, param_resolutions = NULL)
+generate_design_grid(
+  param_set,
+  resolution = NULL,
+  param_resolutions = NULL,
+  upper_limit = NULL
+)
 }
 \arguments{
 \item{param_set}{(\code{\link{ParamSet}}).}
@@ -14,6 +19,11 @@ Global resolution for all parameters.}
 
 \item{param_resolutions}{(named \code{integer()})\cr
 Resolution per \code{\link{Domain}}, named by parameter ID.}
+
+\item{upper_limit}{(\code{integer(1)} | \code{NULL})\cr
+Optional upper bound on the number of rows in the realized design, after
+fixed values, dependencies, and duplicated realized values have been
+accounted for. An error is raised instead of returning a larger design.}
 }
 \value{
 \code{\link{Design}}.
@@ -23,6 +33,20 @@ Generate a grid with a specified resolution in the parameter space.
 The resolution for categorical parameters is ignored, these parameters
 always produce a grid over all their valid levels.
 For number params the endpoints of the params are always included in the grid.
+
+Grid generation works on realized parameter values. Values made identical by
+integer rounding or another built-in mapping are collapsed before the
+Cartesian product is expanded. Stored parameter values form fixed axes, and
+dependency-inactive branches are not expanded. The row order is the stable
+order obtained by generating the nominal Cartesian product, applying fixed
+values and dependencies, and retaining the first occurrence of each row.
+A parameter with a nominal resolution of zero makes the complete design
+empty, including when that parameter currently has a stored fixed value.
+A valid fixed special value whose storage differs from its parameter,
+including \code{NULL} or an S4 special, is preserved as an identity-preserving
+list-column value.
+A stored \code{\link{TuneToken}} cannot represent a concrete grid value and raises an
+error.
 }
 \examples{
 pset = ps(
@@ -32,9 +56,9 @@ pset = ps(
 generate_design_grid(pset, 10)
 }
 \seealso{
-Other generate_design: 
-\code{\link{generate_design_lhs}()},
-\code{\link{generate_design_random}()},
-\code{\link{generate_design_sobol}()}
+Other generate_design:
+\code{\link[=generate_design_lhs]{generate_design_lhs()}},
+\code{\link[=generate_design_random]{generate_design_random()}},
+\code{\link[=generate_design_sobol]{generate_design_sobol()}}
 }
 \concept{generate_design}

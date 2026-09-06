@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "run_id": "replace-with-candidate-run-id",
+  "ref": "refs/paradox-release/replace-with-frozen-ref",
+  "commit": "0000000000000000000000000000000000000000",
+  "tree": "0000000000000000000000000000000000000000",
+  "source": "/absolute/repository/.local/compat/candidate-snapshots/0000000000000000000000000000000000000000",
+  "library": "/absolute/repository/.local/compat/runs/replace/library-candidate",
+  "dependency_library": "/absolute/repository/.local/compat/R/library-dependencies",
+  "content_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+  "evidence_profile": "replace-with-reviewed-profile",
+  "axis": "paradox2",
+  "bridge_library": "/absolute/repository/.local/compat/runs/replace/library-downstream-bridges-profile-paradox2",
+  "extra_libraries": [
+    "/absolute/repository/.local/compat/R/library-mlr3verse-core"
+  ],
+  "documentation_libraries": [
+    "/absolute/repository/.local/compat/R/library-documentation-extra-final3"
+  ]
+}

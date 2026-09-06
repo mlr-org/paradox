@@ -1,0 +1,247 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+RUN_ID="${PARADOX_CANDIDATE_RUN_ID:-}"
+CANDIDATE_LIBRARY="${1:-$ROOT/.local/compat/runs/$RUN_ID/library-candidate}"
+DEPENDENCY_LIBRARY="${2:-$ROOT/.local/compat/R/library-dependencies}"
+CANDIDATE_SOURCE="${3:-$ROOT}"
+
+fail() {
+  printf '%s\n' "install-candidate: $*" >&2
+  exit 2
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
+}
+
+[[ "$RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] &&
+  [[ "$RUN_ID" != . && "$RUN_ID" != .. ]] ||
+  fail "PARADOX_CANDIDATE_RUN_ID must be a safe name of at most 128 characters"
+[[ -n ${PARADOX_CANDIDATE_REF:-} ]] ||
+  fail "PARADOX_CANDIDATE_REF must declare the immutable candidate ref"
+[[ ${PARADOX_CANDIDATE_COMMIT:-} =~ ^[0-9a-f]{40}$ ]] ||
+  fail "PARADOX_CANDIDATE_COMMIT must be a full lowercase commit ID"
+[[ ${PARADOX_CANDIDATE_TREE:-} =~ ^[0-9a-f]{40}$ ]] ||
+  fail "PARADOX_CANDIDATE_TREE must be a full lowercase tree ID"
+
+if [[ "${PARADOX_ACTIVE_ROOT:-}" != "$ROOT" ]]; then
+  fail "activate the repository-local toolchain first: . scripts/activate"
+fi
+
+EXPECTED_R="$ROOT/.local/toolchain/bin/R"
+EXPECTED_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+EXPECTED_GIT="$ROOT/.local/toolchain/bin/git"
+GIT_AUTHENTICATOR="$ROOT/compat/authenticate-candidate-git"
+[[ $(command -v R) == "$EXPECTED_R" && $(command -v Rscript) == "$EXPECTED_RSCRIPT" ]] ||
+  fail "the repository-local R and Rscript must be first on PATH"
+[[ $("$EXPECTED_R" RHOME) == "$ROOT/.local/toolchain/lib/R" ]] ||
+  fail "the repository-local RHOME is not the pinned toolchain runtime"
+[[ -f "$GIT_AUTHENTICATOR" && ! -L "$GIT_AUTHENTICATOR" && -x "$GIT_AUTHENTICATOR" ]] ||
+  fail "candidate Git authenticator is absent, symbolic, or not executable"
+
+require_plain_directory() {
+  local path=$1
+  local label=$2
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, not a directory, or symbolic: $path"
+}
+
+for path in \
+  "$ROOT/.local" \
+  "$ROOT/.local/compat" \
+  "$ROOT/.local/compat/runs" \
+  "$ROOT/.local/compat/runs/$RUN_ID" \
+  "$ROOT/.local/tmp"; do
+  require_plain_directory "$path" "managed candidate path"
+done
+
+RUN_DIRECTORY=$(cd "$ROOT/.local/compat/runs/$RUN_ID" && pwd -P)
+[[ "$RUN_DIRECTORY" == "$ROOT/.local/compat/runs/$RUN_ID" ]] ||
+  fail "candidate run directory escaped the repository"
+EXPECTED_CANDIDATE_LIBRARY="$RUN_DIRECTORY/library-candidate"
+[[ "$CANDIDATE_LIBRARY" == "$EXPECTED_CANDIDATE_LIBRARY" ]] ||
+  fail "candidate library must be the run-specific path $EXPECTED_CANDIDATE_LIBRARY"
+[[ ! -e "$CANDIDATE_LIBRARY" && ! -L "$CANDIDATE_LIBRARY" ]] ||
+  fail "candidate library already exists; choose a new run ID"
+
+CANDIDATE_LIBRARY_OWNED=false
+INSTALL_COMPLETE=false
+STAGE=''
+ARCHIVE=''
+cleanup() {
+  case "$STAGE" in
+    "$ROOT/.local/tmp/candidate-source."*) rm -rf -- "$STAGE" ;;
+  esac
+  case "$ARCHIVE" in
+    "$ROOT/.local/tmp/candidate-source.tar."*) rm -f -- "$ARCHIVE" ;;
+  esac
+  if [[ "$CANDIDATE_LIBRARY_OWNED" == true &&
+        "$INSTALL_COMPLETE" != true &&
+        "$CANDIDATE_LIBRARY" == "$EXPECTED_CANDIDATE_LIBRARY" &&
+        "${CANDIDATE_LIBRARY%/*}" == "$RUN_DIRECTORY" ]]; then
+    if [[ -d "$CANDIDATE_LIBRARY" && ! -L "$CANDIDATE_LIBRARY" ]]; then
+      rm -rf -- "$CANDIDATE_LIBRARY"
+    elif [[ -e "$CANDIDATE_LIBRARY" || -L "$CANDIDATE_LIBRARY" ]]; then
+      rm -f -- "$CANDIDATE_LIBRARY"
+    fi
+  fi
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+require_plain_directory "$DEPENDENCY_LIBRARY" "dependency library"
+DEPENDENCY_LIBRARY=$(cd "$DEPENDENCY_LIBRARY" && pwd -P)
+case "$DEPENDENCY_LIBRARY/" in
+  "$ROOT/.local/"*) ;;
+  *) fail "dependency library must remain below $ROOT/.local" ;;
+esac
+
+CANDIDATE_SOURCE=$(cd "$CANDIDATE_SOURCE" && pwd -P)
+CANDIDATE_REF=$PARADOX_CANDIDATE_REF
+RESOLVED_COMMIT=$PARADOX_CANDIDATE_COMMIT
+RESOLVED_TREE=$PARADOX_CANDIDATE_TREE
+"$GIT_AUTHENTICATOR" \
+  "$ROOT" "$CANDIDATE_REF" "$RESOLVED_COMMIT" "$RESOLVED_TREE" \
+  "$CANDIDATE_SOURCE" >/dev/null
+
+fingerprint_dependency_library() {
+  R_LIBS="$DEPENDENCY_LIBRARY" R_LIBS_USER="$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+    "$EXPECTED_RSCRIPT" --vanilla -e '
+      arguments <- commandArgs(TRUE)
+      sys.source(file.path(arguments[[2L]], "compat", "fingerprint.R"),
+        envir = environment())
+      cat(compat_tree_content_sha256(arguments[[1L]]))
+    ' "$DEPENDENCY_LIBRARY" "$ROOT"
+}
+
+DEPENDENCY_CONTENT_BEFORE=$(fingerprint_dependency_library)
+[[ "$DEPENDENCY_CONTENT_BEFORE" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "dependency library content fingerprint is malformed"
+
+mkdir "$CANDIDATE_LIBRARY"
+CANDIDATE_LIBRARY_OWNED=true
+CANDIDATE_LIBRARY_CANONICAL=$(cd "$CANDIDATE_LIBRARY" && pwd -P)
+[[ "$CANDIDATE_LIBRARY_CANONICAL" == "$EXPECTED_CANDIDATE_LIBRARY" ]] ||
+  fail "candidate library escaped its reserved run directory"
+
+# Install exactly the committed tree. This deliberately ignores even benign
+# ignored or modified worktree files, making the provenance receipt a factual
+# description of the bytes offered to R CMD INSTALL.
+STAGE=$(mktemp -d "$ROOT/.local/tmp/candidate-source.XXXXXX")
+ARCHIVE=$(mktemp "$ROOT/.local/tmp/candidate-source.tar.XXXXXX")
+GIT_ATTR_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+  "$EXPECTED_GIT" --no-replace-objects -c core.attributesFile=/dev/null \
+  -c tar.umask=0002 \
+  -C "$ROOT" archive --format=tar -o "$ARCHIVE" "$RESOLVED_COMMIT"
+mkdir "$STAGE/source"
+tar -xf "$ARCHIVE" -C "$STAGE/source"
+ARCHIVE_SHA256=$(sha256_file "$ARCHIVE")
+
+R_LIBS="$DEPENDENCY_LIBRARY" R_LIBS_USER="$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+  "$EXPECTED_R" CMD INSTALL \
+    --preclean \
+    --clean \
+    --no-multiarch \
+    --with-keep.source \
+    --library="$CANDIDATE_LIBRARY" \
+    "$STAGE/source"
+
+DEPENDENCY_CONTENT_AFTER=$(fingerprint_dependency_library)
+[[ "$DEPENDENCY_CONTENT_AFTER" == "$DEPENDENCY_CONTENT_BEFORE" ]] ||
+  fail "dependency library changed while installing the candidate"
+"$GIT_AUTHENTICATOR" \
+  "$ROOT" "$CANDIDATE_REF" "$RESOLVED_COMMIT" "$RESOLVED_TREE" \
+  "$CANDIDATE_SOURCE" >/dev/null
+
+R_LIBS="$DEPENDENCY_LIBRARY" R_LIBS_USER="$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+  "$EXPECTED_RSCRIPT" --vanilla -e '
+  args <- commandArgs(TRUE)
+  library <- normalizePath(args[[1L]], mustWork = TRUE)
+  root <- normalizePath(args[[2L]], mustWork = TRUE)
+  sys.source(file.path(root, "compat", "fingerprint.R"), envir = environment())
+  package <- normalizePath(find.package("paradox", lib.loc = library), mustWork = TRUE)
+  stopifnot(identical(normalizePath(dirname(package), mustWork = TRUE), library))
+  fingerprint <- compat_tree_content_sha256(package)
+  writeLines(fingerprint, file.path(library, ".paradox-candidate-content-sha256"))
+  cat("Installed paradox", as.character(packageVersion("paradox", lib.loc = library)), "in", library, "\n")
+  cat("candidate_library=", library, "\n", sep = "")
+  cat("candidate_content_sha256=", fingerprint, "\n", sep = "")
+' "$CANDIDATE_LIBRARY" "$ROOT"
+
+CANDIDATE_CONTENT_SHA256=$(
+  tr -d '\r\n' < "$CANDIDATE_LIBRARY/.paradox-candidate-content-sha256"
+)
+[[ "$CANDIDATE_CONTENT_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "installed candidate content fingerprint is malformed"
+CANDIDATE_VERSION=$(R_LIBS="$CANDIDATE_LIBRARY:$DEPENDENCY_LIBRARY" \
+  R_LIBS_USER="$CANDIDATE_LIBRARY:$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+  "$EXPECTED_RSCRIPT" --vanilla -e \
+  'cat(as.character(packageVersion("paradox", lib.loc = commandArgs(TRUE)[[1L]])))' \
+  "$CANDIDATE_LIBRARY")
+PROVENANCE="$CANDIDATE_LIBRARY/.paradox-candidate-provenance.tsv"
+{
+  printf 'key\tvalue\n'
+  printf 'schema\t2\n'
+  printf 'candidate_run_id\t%s\n' "$RUN_ID"
+  printf 'candidate_ref\t%s\n' "$CANDIDATE_REF"
+  printf 'candidate_commit\t%s\n' "$RESOLVED_COMMIT"
+  printf 'candidate_tree\t%s\n' "$RESOLVED_TREE"
+  printf 'candidate_version\t%s\n' "$CANDIDATE_VERSION"
+  printf 'candidate_library\t%s\n' "$CANDIDATE_LIBRARY"
+  printf 'dependency_library\t%s\n' "$DEPENDENCY_LIBRARY"
+  printf 'dependency_library_content_sha256\t%s\n' "$DEPENDENCY_CONTENT_AFTER"
+  printf 'source_archive_sha256\t%s\n' "$ARCHIVE_SHA256"
+  printf 'candidate_content_sha256\t%s\n' "$CANDIDATE_CONTENT_SHA256"
+  printf 'installer_sha256\t%s\n' \
+    "$(sha256_file "${BASH_SOURCE[0]}")"
+  printf 'git_authenticator_sha256\t%s\n' \
+    "$(sha256_file "$GIT_AUTHENTICATOR")"
+} > "$PROVENANCE.new"
+mv "$PROVENANCE.new" "$PROVENANCE"
+(
+  cd "$CANDIDATE_LIBRARY"
+  printf '%s  %s\n' \
+    "$(sha256_file .paradox-candidate-provenance.tsv)" \
+    .paradox-candidate-provenance.tsv \
+    > .paradox-candidate-provenance.sha256
+)
+
+R_LIBS="$CANDIDATE_LIBRARY:$DEPENDENCY_LIBRARY" \
+  R_LIBS_USER="$CANDIDATE_LIBRARY:$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+  "$EXPECTED_RSCRIPT" --vanilla -e '
+    library <- commandArgs(TRUE)[[1L]]
+    expected <- sort(c(
+      ".paradox-candidate-content-sha256",
+      ".paradox-candidate-provenance.sha256",
+      ".paradox-candidate-provenance.tsv",
+      "paradox"
+    ))
+    observed <- sort(list.files(library, all.files = TRUE, no.. = TRUE))
+    if (!identical(observed, expected)) {
+      stop("candidate library has an unexpected top-level inventory: ",
+        paste(observed, collapse = ", "), call. = FALSE)
+    }
+  ' "$CANDIDATE_LIBRARY"
+"$GIT_AUTHENTICATOR" \
+  "$ROOT" "$CANDIDATE_REF" "$RESOLVED_COMMIT" "$RESOLVED_TREE" \
+  "$CANDIDATE_SOURCE" >/dev/null
+DEPENDENCY_CONTENT_FINAL=$(fingerprint_dependency_library)
+[[ "$DEPENDENCY_CONTENT_FINAL" == "$DEPENDENCY_CONTENT_AFTER" ]] ||
+  fail "dependency library changed before candidate installation completed"
+INSTALL_COMPLETE=true
+CANDIDATE_LIBRARY_OWNED=false
+
+printf '%s\n' \
+  "candidate_ref=$CANDIDATE_REF" \
+  "candidate_commit=$RESOLVED_COMMIT" \
+  "candidate_tree=$RESOLVED_TREE" \
+  "candidate_provenance=$PROVENANCE"

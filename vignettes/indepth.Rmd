@@ -58,6 +58,67 @@ print(ps2) # contains the same reference as ps1, so also changed
 print(ps3) # is a "clone" of the old ps1 with 'a' == 1
 ```
 
+### Migrating serialized Paradox 1 objects
+
+Paradox 2 can migrate a legacy parameter set even when it is hidden inside a
+larger R6 object, closure, attribute, or ordinary container. The recursive
+upgrader preserves the identities of both the containing object and every
+legacy ParamSet-family R6 shell:
+
+This ParamSet-family migration must be run under R >= 4.0. Paradox 1 R6 shells
+contain active bindings, and R 3.6 provides no safe way to retrieve their
+functions for inert authentication. On R 3.6, current Paradox 2 objects and
+standalone legacy Domain/Condition conversion remain supported; load a legacy
+model under R >= 4.0 once, migrate it, and then save the upgraded object for
+continued use on R 3.6.
+
+One narrower boundary applies on R 4.5: that release has no policy-compliant
+way to inspect a reached promise, so recursive migration fails closed if the
+containing graph encounters one. Use R 4.0--4.4 or R >= 4.6 for such a graph;
+R 4.5 remains sufficient when the traversed graph is promise-free. Ordinary
+factory-created callbacks may retain formal promises in their lexical frames
+even when the argument was forced or the callback never uses it, so this
+boundary can arise without an explicit `delayedAssign()`.
+
+```{r, eval=FALSE}
+model = readRDS("legacy-model.rds")
+upgrade_paradox_object_graph(model)
+# `model` and its nested ParamSets are now current objects.
+```
+
+The crawler remembers visited objects, so shared references and cycles in the
+containing graph are safe. It searches ordinary containers, attributes,
+environments, and closure state without invoking active bindings, serialized
+methods, or forcing promises. It deliberately stops at the global environment
+and package/namespace/search-path infrastructure.
+
+`upgrade_paradox_object()` remains useful when the file contains one Paradox
+object directly. It is a pure converter: it does not mutate the input, and it
+also handles standalone built-in Domain and Condition objects.
+
+```{r, eval=FALSE}
+legacy = readRDS("legacy-param-set.rds")
+current = upgrade_paradox_object(legacy)
+```
+
+Calling an unmigrated legacy ParamSet method reports an error with the recursive
+upgrade command by default. Applications that deliberately want transparent
+first-use migration can opt in:
+
+```{r, eval=FALSE}
+options(paradox.legacy_object_action = "upgrade")
+model = readRDS("legacy-model.rds")
+model$train()  # A reached legacy ParamSet is silently upgraded before use.
+```
+
+Private ParamSet state is now opaque, ParamSet-family inheritance is additive
+only, and Domain/Condition kinds are closed. Package code needing a live view
+should use the Paradox-owned `ParamSetShadow`. The maintained bbotk Codomain
+and miesmuschel legacy Shadow bridges are registered by their owner packages;
+load the package that owns such an object before upgrading it so its `.onLoad()`
+hook can register the exact bridge. An unknown legacy subclass still fails
+closed rather than executing serialized extension code.
+
 ### Defining a Parameter Space
 
 #### `Domain` Representing Single Parameters
@@ -105,7 +166,9 @@ The `p_uty` parameter can also have a **`custom_check`** function that must retu
 The example above defines `parE` as a parameter that only accepts functions.
 
 All values which are given to the constructor are then accessible from the `ParamSet` for inspection using `$`.
-The `ParamSet` should be considered immutable, except for some fields such as `$values`, `$deps`, `$tags`.
+The parameter schema should be considered immutable. The documented mutable
+state is `$values`, `$deps`, `$tags`, `$constraint`, `$extra_trafo`, and the
+`$assert_values` assignment-policy flag.
 Bounds and levels should not be changed after construction.
 Instead, a new `ParamSet` should be constructed.
 
@@ -120,6 +183,10 @@ param_set$class
 ```
 
 It is also possible to get all information of a `ParamSet` as `data.table` by calling `as.data.table()`.
+The returned table is detached: mutating it, including its list-column
+elements, does not mutate the `ParamSet`. The same rule applies to `$params`,
+`$deps`, and `$domains`; use documented setters such as `$values`, `$tags`,
+`$deps`, or `$add_dep()` to change package state.
 
 ```{r}
 as.data.table(param_set)
@@ -170,7 +237,11 @@ as.data.table(ps_all)
 
 Although a `ParamSet` fundamentally represents a value space, it also has a field `$values` that can contain a point within that space.
 This is useful because many things that define a parameter space need similar operations (like parameter checking) that can be simplified.
-The `$values` field contains a named list that is always checked against parameter constraints.
+The `$values` field contains a named list that is checked against parameter
+Domains and the ParamSet constraint by default. A value whose dependencies are
+currently unsatisfied is nevertheless stored; it is *dormant* rather than
+invalid, as described below. Setting `$assert_values = FALSE` selects unchecked
+value assignment; structural validation still applies.
 When trying to set parameter values, e.g. for `mlr3` `Learner`s, it is the `$values` field of its `$param_set` that needs to be used.
 
 ```{r}
@@ -179,7 +250,8 @@ ps1$values$y = 2.5
 print(ps1$values)
 ```
 
-The parameter constraints are automatically checked:
+Type, range, special-value, and custom constraints are automatically checked,
+including for dormant values:
 
 ```{r, error = TRUE}
 ps1$values$x = 1.5
@@ -196,9 +268,65 @@ The `Condition` object represents the check to be performed on the "dependee".
 Currently it can be created using `CondEqual()` and `CondAnyOf()`.
 Multiple dependencies can be added, and parameters that depend on others can again be depended on, as long as no cyclic dependencies are introduced.
 
-The consequence of dependencies are twofold:
-For one, the `$check()`, `$test()` and `$assert()` tests will not accept the presence of a parameter if its dependency is not met, when the `check_strict` argument is given as `TRUE`.
-Furthermore, when sampling or creating grid designs from a `ParamSet`, the dependencies will be respected.
+Dependencies affect explicit point checking, filtered value reads, constraints,
+and designs. With `check_strict = TRUE` (the default), `$check()`, `$test()`,
+and `$assert()` do not accept a supplied parameter whose dependency is not met.
+These functions validate the supplied point only: they do not fill it from the
+ParamSet's stored `$values`.
+
+Assignment is intentionally different. A valid value may be stored while its
+dependencies are unsatisfied. Raw `$values` retains this dormant value;
+`$get_values()` filters it by default, and a later parent change makes it
+visible again:
+
+```{r}
+branch = ps(
+  enabled = p_lgl(init = FALSE),
+  detail = p_int(0, 10, depends = enabled == TRUE)
+)
+branch$values$detail = 4
+branch$values                         # contains dormant 'detail'
+branch$get_values()                   # contains only 'enabled'
+branch$values$enabled = TRUE
+branch$get_values()                   # 'detail' is active again
+```
+
+Consequently, `$check(branch$values)` is not guaranteed to succeed while a raw
+store contains dormant entries. Use `$check(branch$get_values())` to validate
+the currently active configuration. `get_values(remove_dependencies = FALSE)`
+is the explicit raw-store view.
+
+When a dependency parent is absent from the point or store being evaluated, its
+recorded `default` participates in the condition. An explicit value takes
+precedence; a parent without a default does not satisfy the dependency. This
+rule is recursive: a default belonging to an inactive parent cannot activate a
+descendant.
+
+```{r}
+with_default = ps(
+  enabled = p_lgl(default = TRUE),
+  detail = p_int(0, 10, depends = enabled == TRUE)
+)
+with_default$check(list(detail = 4))  # parent default makes 'detail' active
+```
+
+The same default-aware activity rule controls `presence = "all"` and
+`"required"` and `get_values(check_required = TRUE)`. It also determines the
+input to `$constraint`: a constraint receives only entries that are active in
+the configuration being validated; defaults select activity but are not added
+to the callback list. Collection constraints evaluate activity in the complete
+translated collection namespace and then give child callbacks their active
+unprefixed slice. A collection-level dependency filters collection-level
+reads; directly reading a child applies only dependencies owned by that child.
+
+Bulk dependency-table replacement can represent a cycle even though normal
+authoring should avoid one. Any check, filtered read, or constraint evaluation
+that encounters such a cycle reports it as an error instead of attempting to
+derive a partial configuration.
+
+Finally, sampling and grid designs respect dependencies as before. Those
+operations work on complete generated rows, so the new absent-parent default
+rule does not change their results.
 
 The easiest way to set dependencies is to give the `depends` argument to the `Domain` constructor.
 
@@ -226,10 +354,11 @@ p$check(list(A = TRUE, D = "x", B = 1), check_strict = TRUE)   # D's dependency 
 p$check(list(A = TRUE, B = 1), check_strict = TRUE)            # B's dependency is not met
 ```
 
-Internally, the dependencies are represented as a `data.table`, which can be accessed listed in the **`$deps`** field.
-This `data.table` can even be mutated, to e.g. remove dependencies.
-There are no sanity checks done when the `$deps` field is changed this way.
-Therefore it is advised to be cautious.
+The **`$deps`** field returns a detached `data.table` view of the current
+dependencies.  Mutating that returned table does not modify the `ParamSet`.
+Use `$add_dep()` to add a dependency, or assign a complete valid dependency
+table back to `$deps`; assignment is validated before the ParamSet state is
+replaced.
 
 ```{r}
 p$deps
@@ -250,7 +379,7 @@ It is also possible to use a `ParamUty` to accept vectorial parameters, which al
 A `ParamSet` containing a `ParamUty` can be used for parameter checking, but not for sampling.
 To sample values for a method that needs a vectorial parameter, it is advised to use an `$extra_trafo` transformation function that creates a vector from atomic values.
 
-Assembling a vector from repeated parameters is aided by the parameter's `$tags`: Parameters that were generated by the `pr_replicate()` command can be tagged as belonging to a group of repeated parameters.
+Assembling a vector from repeated parameters is aided by the parameter's `$tags`: Parameters that were generated by the `ps_replicate()` command can be tagged as belonging to a group of repeated parameters.
 
 ```{r}
 ps2d = ps_replicate(ps(x = p_dbl(0, 1), y = p_int(0, 10)), 2, tag_params = TRUE)
@@ -372,7 +501,9 @@ sampJ$sample(5)
 
 ##### SamplerUnif
 
-The `Sampler` used in `generate_design_random()` is the `SamplerUnif` sampler, which corresponds to a `HierarchicalSampler` of `Sampler1DUnif` for all parameters.
+`SamplerUnif` and `generate_design_random()` use the same native uniform engine
+over the complete `ParamSet` graph. `SamplerUnif$samplers` is descriptive
+metadata; use `SamplerHierarchical` when custom child samplers should execute.
 
 ### Parameter Transformation
 
@@ -408,7 +539,7 @@ Compare this to `$transpose()` without transformation:
 design$transpose(trafo = FALSE)
 ```
 
-Another way to get tihs effect, using `$extra_trafo`, would be:
+Another way to get this effect, using `$extra_trafo`, would be:
 ```{r}
 psexp = ps(par = p_dbl(0, 1))
 psexp$extra_trafo = function(x, param_set) {
@@ -522,7 +653,7 @@ Note, that `ParamSet` objects exist in two contexts.
 First, `ParamSet`-objects are used to define the space of valid parameter settings for a learner (and other objects).
 Second, they are used to define a search space for tuning.
 We are mainly interested in the latter.
-For example we can consider the `minsplit` parameter of the `mlr_learners_classif.rpart", "classif.rpart Learner`.
+For example, consider the `minsplit` parameter of the `classif.rpart` learner.
 The `ParamSet` associated with the learner has a lower but *no* upper bound.
 However, for tuning the value, a lower *and* upper bound must be given because tuning search spaces need to be bounded.
 For `Learner` or `PipeOp` objects, typically "unbounded" `ParamSet`s are used.
@@ -530,7 +661,7 @@ Here, however, we will mainly focus on creating "bounded" `ParamSet`s that can b
 
 #### Creating `ParamSet`s
 
-An empty `"ParamSet` -- not yet very useful -- can be constructed using just the `"ps"` call:
+An empty `ParamSet`--not yet very useful--can be constructed with `ps()`:
 
 ```{r}
 search_space = ps()
@@ -683,7 +814,7 @@ search_space = ps(
   cost = p_fct(c(0.1, 3, 10)),
   kernel = p_fct(c("polynomial", "radial"))
 )
-typeof(search_space$params$cost$levels)
+typeof(search_space$levels$cost)
 ```
 
 Be aware that this results in an "unordered" hyperparameter, however.
@@ -757,14 +888,15 @@ rbindlist(generate_design_grid(
 )
 ```
 
-`"to_tune"` can also be constructed with a `Domain` object, i.e. something constructed with a `p_***` call.
+`"to_tune"` can also be constructed with a bounded, value-producing `Domain` object, i.e. something constructed with a suitable `p_***` call.
+An unbounded `p_uty()` Domain or a zero-level `p_fct()` Domain is not a tuning range; use a bounded typed Domain or the BASE-`ParamSet` form when the resulting value is opaque.
 This way it is possible to tune continuous parameters with discrete values, or to give trafos or dependencies.
 One could, for example, tune the `cost` as above on three given special values, and introduce a dependency of `shrinking` on it.
 Notice that a short form for `to_tune(<levels>)` is a short form of `to_tune(p_fct(<levels>))`.
 When introducing the dependency, we need to use the `degree` value from *before* the implicit trafo, which is the name or `as.character()` of the respective value, here `"val2"`!
 
 ```{r, eval = FALSE}
-learner$param_set$values$type = "C-classification" # needs to be set because of a bug in paradox
+learner$param_set$values$type = "C-classification" # select classification mode explicitly
 learner$param_set$values$cost = to_tune(c(val1 = 0.3, val2 = 0.7))
 learner$param_set$values$shrinking = to_tune(p_lgl(depends = cost == "val2"))
 
@@ -790,6 +922,11 @@ rbindlist(generate_design_grid(learner$param_set$search_space(), 3)$transpose(),
 It is even possible to define whole `ParamSet`s that get tuned over for a single parameter.
 This may be especially useful for vector hyperparameters that should be searched along multiple dimensions.
 This `ParamSet` must, however, have an `.extra_trafo` that returns a list with a single element, because it corresponds to a single hyperparameter that is being tuned.
+In Paradox 2 this Object TuneToken form accepts an ordinary BASE `ParamSet`, as
+constructed by `ps(...)`; a `ParamSetCollection`, `ParamSetShadow`, or
+third-party `ParamSet` subclass is not accepted as its content. The candidate is
+snapshotted before its transformation runs, so callback mutation cannot race
+the surrounding assignment or search-space conversion.
 Suppose the `class.weights` hyperparameter should be tuned along two dimensions:
 
 ```{r, eval = FALSE}
@@ -799,4 +936,3 @@ learner$param_set$values$class.weights = to_tune(
 ))
 head(generate_design_grid(learner$param_set$search_space(), 3)$transpose(), 3)
 ```
-

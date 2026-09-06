@@ -1,0 +1,39 @@
+#!/usr/bin/env sh
+set -eu
+
+BENCHMARK_DIRECTORY=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+PARADOX_ROOT=$(CDPATH='' cd -- "$BENCHMARK_DIRECTORY/.." && pwd -P)
+export PARADOX_ROOT
+
+fail() {
+  printf '%s\n' "benchmarks/release: $*" >&2
+  exit 2
+}
+
+test "${PARADOX_ACTIVE_ROOT:-}" = "$PARADOX_ROOT" ||
+  fail "activate the repository-local toolchain first: . scripts/activate"
+
+EXPECTED_R="$PARADOX_ROOT/.local/toolchain/bin/R"
+EXPECTED_RSCRIPT="$PARADOX_ROOT/.local/toolchain/bin/Rscript"
+test "$(command -v R)" = "$EXPECTED_R" ||
+  fail "R is not the exact activated repository-local runtime"
+test "$(command -v Rscript)" = "$EXPECTED_RSCRIPT" ||
+  fail "Rscript is not the exact activated repository-local runtime"
+test "$("$EXPECTED_R" RHOME)" = "$PARADOX_ROOT/.local/toolchain/lib/R" ||
+  fail "RHOME is not the exact repository-local runtime"
+test "${R_LIBS_USER:-}" = "$PARADOX_ROOT/.local/R/library" ||
+  fail "R_LIBS_USER is not the activated repository-local project library"
+test "${R_LIBS_SITE:-}" = "" ||
+  fail "R_LIBS_SITE must be empty after repository activation"
+test "${R_ENVIRON_USER:-}" = "$PARADOX_ROOT/environment/Renviron" ||
+  fail "R_ENVIRON_USER is not the repository startup file"
+test "${R_PROFILE_USER:-}" = "$PARADOX_ROOT/environment/Rprofile.R" ||
+  fail "R_PROFILE_USER is not the repository startup file"
+test "${R_MAKEVARS_USER:-}" = "$PARADOX_ROOT/environment/Makevars" ||
+  fail "R_MAKEVARS_USER is not the repository compiler configuration"
+test "${TMPDIR:-}" = "$PARADOX_ROOT/.local/tmp" ||
+  fail "TMPDIR is not the repository-local temporary directory"
+
+cd "$PARADOX_ROOT"
+exec "$EXPECTED_RSCRIPT" --no-save --no-restore --no-site-file --no-init-file \
+  "$BENCHMARK_DIRECTORY/release.R" "$@"

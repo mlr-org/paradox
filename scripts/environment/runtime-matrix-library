@@ -1,0 +1,1101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+R_HELPER="$ROOT/scripts/environment/runtime-matrix-library.R"
+TREE_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+MATRIX_ROOT="$ROOT/.local/runtime-matrix"
+CACHE_ROOT="$ROOT/.cache/downloads/runtime-matrix"
+TEMP_ROOT="$ROOT/.local/tmp"
+# Bump this only when the package-install algorithm or its isolated build
+# environment changes in a way that can alter installed bytes.  Verification,
+# registry, and receipt-tool changes deliberately do not invalidate a built
+# package closure.
+SOURCE_LIBRARY_BUILD_SCHEMA=1
+# `--vanilla` does not suppress an inherited default-package list.  Receipt
+# verification and package installation must not preload caller-selected
+# namespaces.
+unset R_DEFAULT_PACKAGES
+
+fail() {
+  printf 'runtime-matrix-library: %s\n' "$*" >&2
+  exit 1
+}
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  [[ "$path" != *//* && ("$path" == "$ROOT" || "$path" != */) ]] ||
+    fail "managed source-library path is not component-canonical: $path"
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed source-library path escaped the repository: $path" ;;
+  esac
+  [[ -d "$ROOT" && ! -L "$ROOT" &&
+    "$(cd "$ROOT" && pwd -P)" == "$ROOT" ]] ||
+    fail "repository root is absent, symbolic, or non-canonical: $ROOT"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "managed source-library path has an invalid component: $path"
+    current="$current/$component"
+    [[ ! -L "$current" ]] ||
+      fail "refusing symbolic managed source-library directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed source-library path is not a directory: $current"
+    if [[ -d "$current" ]]; then
+      [[ "$(cd "$current" && pwd -P)" == "$current" ]] ||
+        fail "managed source-library directory is not canonical: $current"
+    fi
+  done
+}
+
+require_plain_directory() {
+  local path=$1
+  assert_plain_directory_chain "$path"
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "required source-library directory is absent or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "required source-library directory is not canonical: $path"
+}
+
+ensure_plain_directory() {
+  local path=$1 current remainder component
+  assert_plain_directory_chain "$path"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    current="$current/$component"
+    if [[ ! -e "$current" && ! -L "$current" ]] &&
+        ! mkdir -- "$current" 2>/dev/null; then
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "could not create managed source-library directory: $current"
+    fi
+    require_plain_directory "$current"
+  done
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  assert_plain_directory_chain "${path%/*}"
+  [[ ! -L "$path" ]] ||
+    fail "refusing symbolic managed source-library file: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "managed source-library path is not a regular file: $path"
+}
+
+require_plain_file() {
+  local path=$1
+  assert_plain_file_or_absent "$path"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "required source-library file is absent or symbolic: $path"
+}
+
+path_identity() {
+  /usr/bin/stat -c '%d:%i' -- "$1"
+}
+
+require_owned_directory() {
+  local path=$1 expected=$2 label=$3 actual
+  require_plain_directory "$path"
+  actual=$(path_identity "$path")
+  [[ "$actual" == "$expected" ]] ||
+    fail "$label identity changed after creation: $path"
+}
+
+require_owned_file() {
+  local path=$1 expected=$2 label=$3 actual
+  require_plain_file "$path"
+  actual=$(path_identity "$path")
+  [[ "$actual" == "$expected" ]] ||
+    fail "$label identity changed after creation: $path"
+}
+
+clear_open_owned_directory_after_use() {
+  local descriptor=$1 path=$2 expected=$3 label=$4 fd_identity
+  verify_open_directory "$descriptor" "$path" "$expected" "$label"
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  [[ "$fd_identity" == "$expected" ]] ||
+    fail "$label changed before its contents were cleared: $path"
+  /usr/bin/find -H "/proc/$$/fd/$descriptor" -xdev -depth -mindepth 1 \
+    -delete
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  [[ "$fd_identity" == "$expected" ]] ||
+    fail "$label changed while its contents were cleared: $path"
+  verify_open_directory "$descriptor" "$path" "$expected" "$label"
+}
+
+verify_open_directory() {
+  local descriptor=$1 path=$2 expected=$3 label=$4
+  local fd_identity path_identity_now
+  require_plain_directory "$path"
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  path_identity_now=$(path_identity "$path")
+  [[ "$fd_identity" == "$expected" && "$path_identity_now" == "$expected" ]] ||
+    fail "$label was substituted while opening: $path"
+}
+
+require_open_regular_file() {
+  local path=$1 label=$2
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, non-regular, or symbolic: $path"
+}
+
+verify_open_file() {
+  local descriptor=$1 expected=$2 label=$3
+  local fd_path="/proc/$$/fd/$descriptor"
+  [[ -f "$fd_path" ]] ||
+    fail "$label is not an opened regular file"
+  [[ "$(/usr/bin/stat -Lc '%d:%i' "$fd_path")" == "$expected" ]] ||
+    fail "$label changed while it was opened"
+}
+
+usage() {
+  cat <<'EOF'
+Usage: runtime-matrix-library --runtime VERSION [--verify|--verify-lock]
+                              [--profile runtime|declared-floor]
+                              [--verified-receipt-handoff DIRECTORY]
+                              [--offline]
+                              [--print-path]
+
+Provision or verify the exact sealed source-package library registered for an
+old runtime.  The declared-floor profile is the separate exact direct-
+dependency floor closure for R 3.6.3.  Caches and installed libraries remain
+inside this checkout.
+EOF
+}
+
+version=
+library_profile=runtime
+mode=provision
+offline=false
+print_path=false
+handoff_receipt=
+while (($#)); do
+  case "$1" in
+    --runtime)
+      (($# >= 2)) || fail "--runtime requires a value"
+      version=$2
+      shift 2
+      ;;
+    --profile)
+      (($# >= 2)) || fail "--profile requires a value"
+      [[ "$2" == runtime || "$2" == declared-floor ]] ||
+        fail "--profile must be runtime or declared-floor"
+      library_profile=$2
+      shift 2
+      ;;
+    --verify)
+      [[ "$mode" == provision ]] || fail "verification modes are mutually exclusive"
+      mode=verify
+      shift
+      ;;
+    --verify-lock)
+      [[ "$mode" == provision ]] || fail "verification modes are mutually exclusive"
+      mode=verify_lock
+      shift
+      ;;
+    --verified-receipt-handoff)
+      (($# >= 2)) || fail "--verified-receipt-handoff requires a directory"
+      [[ "$mode" == provision ]] || fail "verification modes are mutually exclusive"
+      mode=verify_handoff
+      handoff_receipt=$2
+      shift 2
+      ;;
+    --offline) offline=true; shift ;;
+    --print-path) print_path=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+[[ -n "$version" ]] || fail "--runtime is required"
+[[ "$version" =~ ^[0-9]+[.][0-9]+[.][0-9]+$ ]] ||
+  fail "runtime version has an invalid shape: $version"
+[[ "$mode" == provision || "$offline" == false ]] ||
+  fail "--offline is meaningful only while provisioning"
+for input in "$MANAGER" "$REGISTRY" "$R_HELPER" "$TREE_RECEIPT"; do
+  require_plain_file "$input"
+done
+"$REGISTRY" contains "$version" ||
+  fail "runtime is not registered: $version"
+if [[ "$library_profile" == runtime ]]; then
+  [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]] ||
+    fail "runtime does not use a source-package library: $version"
+  lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+  library_dependency_mode=source-library
+  library_version_component="R-$version"
+  handoff_name=dependency-library-receipt
+else
+  [[ "$version" == 3.6.3 ]] ||
+    fail "the declared-floor profile is defined only for R 3.6.3"
+  lock_relative=environment/runtime-r-3.6.3-declared-floor-packages.lock
+  library_dependency_mode=declared-floor
+  library_version_component=R-3.6.3-declared-floor
+  handoff_name=declared-floor-library-receipt
+fi
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *) fail "the local runtime library is pinned for Linux x86_64" ;;
+esac
+
+lock="$ROOT/$lock_relative"
+runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+runtime_lock="$ROOT/$runtime_lock_relative"
+registry_manifest="$ROOT/environment/runtime-matrix.tsv"
+prefix="$MATRIX_ROOT/prefixes/R-$version"
+prefix_receipt_directory="$MATRIX_ROOT/receipts/R-$version"
+prefix_manifest="$prefix_receipt_directory/prefix.manifest.tsv"
+prefix_receipt="$prefix_receipt_directory/receipt.tsv"
+prefix_seal="$prefix_receipt_directory/receipt.sha256"
+cache="$CACHE_ROOT/$library_version_component"
+for input in "$lock" "$runtime_lock" "$registry_manifest"; do
+  require_plain_file "$input"
+done
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+verify_package_cache() {
+  local package package_version expected_hash archive
+  require_plain_directory "$cache"
+  while IFS=$'\t' read -r package package_version _ expected_hash _ _; do
+    [[ "$package" != Package ]] || continue
+    archive="$cache/${package}_${package_version}.tar.gz"
+    require_plain_file "$archive"
+    [[ "$(sha256_file "$archive")" == "$expected_hash" ]] ||
+      fail "cached source archive failed SHA-256: $archive"
+  done < "$lock"
+}
+
+metadata_value() {
+  local path=$1 field=$2
+  awk -F '\t' -v field="$field" '
+    $1 == field {
+      if (NF != 2 || found++) exit 2
+      value = $2
+    }
+    END {
+      if (found != 1) exit 1
+      print value
+    }
+  ' "$path"
+}
+
+verify_prefix_receipt_identity() {
+  local expected_seal
+  require_plain_directory "$prefix_receipt_directory"
+  require_plain_file "$prefix_manifest"
+  require_plain_file "$prefix_receipt"
+  require_plain_file "$prefix_seal"
+  expected_seal="$(sha256_file "$prefix_receipt")  receipt.tsv"
+  [[ $(wc -l < "$prefix_seal") -eq 1 &&
+    "$(<"$prefix_seal")" == "$expected_seal" ]] ||
+    fail "runtime prefix receipt seal is malformed or stale"
+  [[ "$(metadata_value "$prefix_receipt" format)" == 1 &&
+    "$(metadata_value "$prefix_receipt" runtime)" == "$version" &&
+    "$(metadata_value "$prefix_receipt" platform)" == linux-64 &&
+    "$(metadata_value "$prefix_receipt" prefix_relative)" == \
+      ".local/runtime-matrix/prefixes/R-$version" &&
+    "$(metadata_value "$prefix_receipt" lock_relative)" == \
+      "$runtime_lock_relative" &&
+    "$(metadata_value "$prefix_receipt" lock_sha256)" == \
+      "$(sha256_file "$runtime_lock")" &&
+    "$(metadata_value "$prefix_receipt" prefix_manifest_sha256)" == \
+      "$(sha256_file "$prefix_manifest")" ]] ||
+    fail "runtime prefix receipt differs from the selected build inputs"
+}
+
+expected_header=$'Package\tVersion\tRole\tSHA256\tURL\tFallbackURL'
+[[ $(head -n 1 "$lock") == "$expected_header" ]] ||
+  fail "dependency lock header is malformed"
+awk -F '\t' '
+  NR == 1 {next}
+  NF != 6 {exit 1}
+  $1 !~ /^[A-Za-z][A-Za-z0-9.]*$/ || package[$1]++ {exit 1}
+  $2 !~ /^[A-Za-z0-9][A-Za-z0-9.-]*$/ {exit 1}
+  $3 !~ /^(runtime-import|runtime-dependency|test-framework|test-support)$/ {exit 1}
+  $4 !~ /^[0-9a-f]+$/ || length($4) != 64 {exit 1}
+  $5 !~ /^https:\/\/(cloud[.]r-project[.]org|packagemanager[.]posit[.]co)\// {exit 1}
+  $6 != "-" &&
+    $6 !~ /^https:\/\/cloud[.]r-project[.]org\/src\/contrib\/Archive\// {exit 1}
+  END {if (NR < 2) exit 1}
+' "$lock" || fail "dependency lock rows are malformed"
+if [[ "$mode" == verify_lock ]]; then
+  printf 'runtime_matrix_dependency_lock=passed\nruntime=%s\npackages=%s\nlock_sha256=%s\n' \
+    "$version" "$(( $(wc -l < "$lock") - 1 ))" "$(sha256_file "$lock")"
+  exit 0
+fi
+
+require_plain_directory "$MATRIX_ROOT"
+matrix_root_identity=$(path_identity "$MATRIX_ROOT")
+exec 9< "$MATRIX_ROOT"
+verify_open_directory 9 "$MATRIX_ROOT" "$matrix_root_identity" \
+  "source-library publication lock"
+if [[ "$mode" == verify || "$mode" == verify_handoff ]]; then
+  /usr/bin/flock -s 9
+else
+  /usr/bin/flock -x 9
+fi
+verify_open_directory 9 "$MATRIX_ROOT" "$matrix_root_identity" \
+  "source-library publication lock"
+
+for input in "$prefix_receipt" "$prefix_seal"; do
+  require_plain_file "$input"
+done
+require_plain_directory "$prefix"
+verify_prefix_receipt_identity
+runtime_lock_sha256=$(sha256_file "$runtime_lock")
+prefix_manifest_sha256=$(sha256_file "$prefix_manifest")
+dependency_lock_sha256=$(sha256_file "$lock")
+runtime_receipt_sha256=$(sha256_file "$prefix_receipt")
+runtime_seal_sha256=$(sha256_file "$prefix_seal")
+registry_sha256=$(sha256_file "$registry_manifest")
+registry_helper_sha256=$(sha256_file "$REGISTRY")
+library_manager_sha256=$(sha256_file "$MANAGER")
+library_helper_sha256=$(sha256_file "$R_HELPER")
+tree_receipt_helper_sha256=$(sha256_file "$TREE_RECEIPT")
+runtime_r_version=$(
+  "$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))'
+)
+[[ "$runtime_r_version" == "$version" ]] ||
+  fail "source-library runtime does not report R $version"
+
+key=$(
+  {
+    printf 'schema\t%s\n' "$SOURCE_LIBRARY_BUILD_SCHEMA"
+    printf 'runtime\t%s\n' "$version"
+    printf 'platform\t%s\n' \
+      "$("$REGISTRY" field "$version" platform)"
+    printf 'dependency_mode\t%s\n' "$library_dependency_mode"
+    printf 'runtime_lock_relative\t%s\n' "$runtime_lock_relative"
+    printf 'runtime_lock\t%s\n' "$runtime_lock_sha256"
+    printf 'prefix_manifest\t%s\n' "$prefix_manifest_sha256"
+    printf 'dependency_lock_relative\t%s\n' "$lock_relative"
+    printf 'dependency_lock\t%s\n' "$dependency_lock_sha256"
+  } | sha256sum | cut -d ' ' -f 1
+)
+library="$MATRIX_ROOT/dependencies/$library_version_component/$key/library"
+receipt_directory="$MATRIX_ROOT/dependency-receipts/$library_version_component/$key"
+manifest="$receipt_directory/library.manifest.tsv"
+identity_manifest="$receipt_directory/library.identity.tsv"
+inventory="$receipt_directory/packages.tsv"
+receipt="$receipt_directory/receipt.tsv"
+seal="$receipt_directory/receipt.sha256"
+dependency_version_root="$MATRIX_ROOT/dependencies/$library_version_component"
+dependency_key_root="${library%/*}"
+receipt_version_root="${receipt_directory%/*}"
+
+managed_paths=(
+  "$ROOT/.local"
+  "$MATRIX_ROOT"
+  "$MATRIX_ROOT/dependencies"
+  "$dependency_version_root"
+  "$dependency_key_root"
+  "$library"
+  "$MATRIX_ROOT/dependency-receipts"
+  "$receipt_version_root"
+  "$receipt_directory"
+)
+for managed_path in "${managed_paths[@]}"; do
+  assert_plain_directory_chain "$managed_path"
+done
+
+write_expected_receipt() {
+  cat <<EOF
+format	2
+runtime	$version
+platform	linux-64
+build_schema	$SOURCE_LIBRARY_BUILD_SCHEMA
+build_identity	$key
+cache_key	$key
+library_relative	.local/runtime-matrix/dependencies/$library_version_component/$key/library
+runtime_lock_relative	$runtime_lock_relative
+runtime_lock_sha256	$runtime_lock_sha256
+prefix_manifest_sha256	$prefix_manifest_sha256
+lock_relative	$lock_relative
+lock_sha256	$dependency_lock_sha256
+runtime_receipt_sha256	$runtime_receipt_sha256
+runtime_seal_sha256	$runtime_seal_sha256
+registry_sha256	$registry_sha256
+registry_helper_sha256	$registry_helper_sha256
+library_manager_sha256	$library_manager_sha256
+library_helper_sha256	$library_helper_sha256
+tree_receipt_helper_sha256	$tree_receipt_helper_sha256
+library_manifest_sha256	$(sha256_file "$manifest")
+library_identity_sha256	$(sha256_file "$identity_manifest")
+package_inventory_sha256	$(sha256_file "$inventory")
+r_version	$runtime_r_version
+EOF
+}
+
+write_library_identity() {
+  local root=$1
+  printf 'path\tkind\tdevice\tinode\tmode\tsize\tctime\n'
+  LC_ALL=C find -H "$root" -mindepth 1 \
+    -printf '%P\t%y\t%D\t%i\t%m\t%s\t%C@\0' |
+    LC_ALL=C sort -z |
+    tr '\0' '\n'
+}
+
+run_inventory() {
+  local selected_library=${1:-$library}
+  PARADOX_ROOT="$ROOT" R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER="$selected_library" R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$R_HELPER" \
+    inventory "$version" "$lock" "$cache" "$selected_library"
+}
+
+verify_reusable_receipt() {
+  local expected_seal field receipt_field receipt_value extra
+  local -a build_fields=(
+    format runtime platform build_schema build_identity cache_key
+    library_relative runtime_lock_relative runtime_lock_sha256
+    prefix_manifest_sha256 lock_relative lock_sha256
+    library_manifest_sha256 library_identity_sha256 package_inventory_sha256
+    r_version
+  )
+  local -a expected_fields=()
+  local -A expected=()
+  while IFS=$'\t' read -r receipt_field receipt_value extra; do
+    [[ -n "$receipt_field" && -z "${extra:-}" &&
+      ! -v "expected[$receipt_field]" ]] ||
+      fail "generated dependency-library receipt schema is malformed"
+    expected["$receipt_field"]=$receipt_value
+    expected_fields+=("$receipt_field")
+  done < <(write_expected_receipt)
+  cut -f 1 "$receipt" |
+    cmp -s -- <(printf '%s\n' "${expected_fields[@]}") - ||
+    fail "dependency-library receipt schema is malformed"
+  expected_seal="$(sha256_file "$receipt")  receipt.tsv"
+  [[ $(wc -l < "$seal") -eq 1 && "$(<"$seal")" == "$expected_seal" ]] ||
+    fail "dependency-library receipt seal is malformed or stale"
+  for field in "${build_fields[@]}"; do
+    [[ "$(metadata_value "$receipt" "$field")" == \
+      "${expected[$field]}" ]] ||
+      fail "dependency-library receipt has stale build identity: $field"
+  done
+}
+
+verify_library_artifacts() {
+  local library_identity_value library_descriptor open_library
+  require_plain_directory "$library"
+  library_identity_value=$(path_identity "$library")
+  exec {library_descriptor}< "$library"
+  verify_open_directory "$library_descriptor" "$library" \
+    "$library_identity_value" "sealed dependency library"
+  open_library="/proc/$$/fd/$library_descriptor"
+  require_plain_directory "$receipt_directory"
+  for input in "$manifest" "$identity_manifest" "$inventory" "$receipt" "$seal"; do
+    require_plain_file "$input"
+  done
+  verify_reusable_receipt
+  "$TREE_RECEIPT" verify "$library" "$manifest" >/dev/null
+  run_inventory | cmp -s -- "$inventory" - ||
+    fail "installed dependency inventory differs from its receipt"
+  write_library_identity "$open_library" |
+    cmp -s -- "$identity_manifest" - ||
+    fail "dependency-library identity receipt differs from the live tree"
+  require_plain_directory "$library"
+  require_plain_directory "$receipt_directory"
+  verify_open_directory "$library_descriptor" "$library" \
+    "$library_identity_value" "sealed dependency library"
+  exec {library_descriptor}<&-
+}
+
+verify_library_receipt_current() {
+  local expected_seal
+  cmp -s -- "$receipt" <(write_expected_receipt) ||
+    fail "dependency-library receipt differs from current inputs"
+  expected_seal="$(sha256_file "$receipt")  receipt.tsv"
+  [[ $(wc -l < "$seal") -eq 1 && "$(<"$seal")" == "$expected_seal" ]] ||
+    fail "dependency-library receipt seal is malformed or stale"
+}
+
+verify_library() {
+  verify_library_artifacts
+  verify_library_receipt_current
+}
+
+refresh_library_receipt() {
+  local receipt_directory_identity replacement_receipt replacement_seal
+  local replacement_receipt_identity replacement_seal_identity
+  local replacement_receipt_descriptor replacement_seal_descriptor
+  local replacement_receipt_handle replacement_seal_handle
+  require_plain_directory "$receipt_directory"
+  receipt_directory_identity=$(path_identity "$receipt_directory")
+  exec {receipt_directory_descriptor}< "$receipt_directory"
+  verify_open_directory "$receipt_directory_descriptor" "$receipt_directory" \
+    "$receipt_directory_identity" "dependency-library receipt refresh"
+  replacement_receipt=$(mktemp \
+    "/proc/$$/fd/$receipt_directory_descriptor/.receipt.tsv.XXXXXX")
+  replacement_seal=$(mktemp \
+    "/proc/$$/fd/$receipt_directory_descriptor/.receipt.sha256.XXXXXX")
+  replacement_receipt_identity=$(/usr/bin/stat -Lc '%d:%i' \
+    "$replacement_receipt")
+  replacement_seal_identity=$(/usr/bin/stat -Lc '%d:%i' \
+    "$replacement_seal")
+  exec {replacement_receipt_descriptor}<> "$replacement_receipt"
+  exec {replacement_seal_descriptor}<> "$replacement_seal"
+  verify_open_file "$replacement_receipt_descriptor" \
+    "$replacement_receipt_identity" "replacement dependency-library receipt"
+  verify_open_file "$replacement_seal_descriptor" \
+    "$replacement_seal_identity" "replacement dependency-library seal"
+  replacement_receipt_handle="/proc/$$/fd/$replacement_receipt_descriptor"
+  replacement_seal_handle="/proc/$$/fd/$replacement_seal_descriptor"
+  write_expected_receipt > "$replacement_receipt_handle"
+  printf '%s  receipt.tsv\n' "$(sha256_file "$replacement_receipt_handle")" \
+    > "$replacement_seal_handle"
+  verify_open_file "$replacement_receipt_descriptor" \
+    "$replacement_receipt_identity" "replacement dependency-library receipt"
+  verify_open_file "$replacement_seal_descriptor" \
+    "$replacement_seal_identity" "replacement dependency-library seal"
+  chmod 0444 "$replacement_receipt_handle" "$replacement_seal_handle"
+  verify_open_directory "$receipt_directory_descriptor" "$receipt_directory" \
+    "$receipt_directory_identity" "dependency-library receipt refresh"
+  trap '' HUP INT TERM
+  mv -T -- "$replacement_receipt" \
+    "/proc/$$/fd/$receipt_directory_descriptor/receipt.tsv"
+  mv -T -- "$replacement_seal" \
+    "/proc/$$/fd/$receipt_directory_descriptor/receipt.sha256"
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  exec {replacement_receipt_descriptor}<&-
+  exec {replacement_seal_descriptor}<&-
+  verify_open_directory "$receipt_directory_descriptor" "$receipt_directory" \
+    "$receipt_directory_identity" "dependency-library receipt refresh"
+  exec {receipt_directory_descriptor}<&-
+}
+
+verify_receipt_handoff() {
+  local handoff=$1 relative run_id expected_handoff handoff_file
+  local expected_handoff_seal expected_live_seal
+  local handoff_identity live_identity handoff_descriptor live_descriptor
+  local handoff_root live_root public_handoff_file public_live_file
+  local public_identity open_identity index
+  local library_identity_value library_descriptor open_library
+  local -a receipt_files=(
+    library.manifest.tsv
+    library.identity.tsv
+    packages.tsv
+    receipt.tsv
+    receipt.sha256
+  )
+  local -a sorted_receipt_files observed_entries
+  mapfile -t sorted_receipt_files < <(
+    printf '%s\n' "${receipt_files[@]}" | LC_ALL=C sort
+  )
+  case "$handoff" in
+    "$ROOT/.local/checks/"*) ;;
+    *) fail "verified receipt handoff is outside the retained stage tree: $handoff" ;;
+  esac
+  relative=${handoff#"$ROOT/.local/checks/"}
+  run_id=${relative%%/*}
+  [[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
+    fail "verified receipt handoff has an invalid run ID"
+  expected_handoff="$ROOT/.local/checks/$run_id/runtime-matrix/R-$version/artifacts/inputs/$handoff_name"
+  [[ "$handoff" == "$expected_handoff" ]] ||
+    fail "verified receipt handoff is not the exact runtime stage input"
+  require_plain_directory "$handoff"
+  handoff_identity=$(path_identity "$handoff")
+  exec {handoff_descriptor}< "$handoff"
+  verify_open_directory "$handoff_descriptor" "$handoff" "$handoff_identity" \
+    "verified receipt handoff"
+  handoff_root="/proc/$$/fd/$handoff_descriptor"
+  mapfile -d '' -t observed_entries < <(
+    find -H "$handoff_root" -mindepth 1 -maxdepth 1 -printf '%f\0' |
+      LC_ALL=C sort -z
+  )
+  [[ ${#observed_entries[@]} -eq ${#sorted_receipt_files[@]} ]] ||
+    fail "verified receipt handoff has unexpected entries"
+  for index in "${!sorted_receipt_files[@]}"; do
+    [[ "${observed_entries[$index]}" == "${sorted_receipt_files[$index]}" ]] ||
+      fail "verified receipt handoff has unexpected entries"
+  done
+  require_plain_directory "$library"
+  library_identity_value=$(path_identity "$library")
+  exec {library_descriptor}< "$library"
+  verify_open_directory "$library_descriptor" "$library" \
+    "$library_identity_value" "sealed dependency library"
+  open_library="/proc/$$/fd/$library_descriptor"
+  require_plain_directory "$receipt_directory"
+  live_identity=$(path_identity "$receipt_directory")
+  exec {live_descriptor}< "$receipt_directory"
+  verify_open_directory "$live_descriptor" "$receipt_directory" "$live_identity" \
+    "live dependency-library receipt"
+  live_root="/proc/$$/fd/$live_descriptor"
+  observed_entries=()
+  mapfile -d '' -t observed_entries < <(
+    find -H "$live_root" -mindepth 1 -maxdepth 1 -printf '%f\0' |
+      LC_ALL=C sort -z
+  )
+  [[ ${#observed_entries[@]} -eq ${#sorted_receipt_files[@]} ]] ||
+    fail "live dependency-library receipt has unexpected entries"
+  for index in "${!sorted_receipt_files[@]}"; do
+    [[ "${observed_entries[$index]}" == "${sorted_receipt_files[$index]}" ]] ||
+      fail "live dependency-library receipt has unexpected entries"
+  done
+  for handoff_file in "${receipt_files[@]}"; do
+    public_handoff_file="$handoff/$handoff_file"
+    public_live_file="$receipt_directory/$handoff_file"
+    require_plain_file "$public_handoff_file"
+    require_plain_file "$public_live_file"
+    require_open_regular_file "$handoff_root/$handoff_file" \
+      "verified receipt handoff file"
+    require_open_regular_file "$live_root/$handoff_file" \
+      "live dependency-library receipt file"
+    public_identity=$(path_identity "$public_handoff_file")
+    open_identity=$(/usr/bin/stat -Lc '%d:%i' \
+      "$handoff_root/$handoff_file")
+    [[ "$public_identity" == "$open_identity" ]] ||
+      fail "verified receipt handoff file was substituted: $public_handoff_file"
+    public_identity=$(path_identity "$public_live_file")
+    open_identity=$(/usr/bin/stat -Lc '%d:%i' "$live_root/$handoff_file")
+    [[ "$public_identity" == "$open_identity" ]] ||
+      fail "live dependency-library receipt file was substituted: $public_live_file"
+    cmp -s -- "$handoff_root/$handoff_file" \
+      "$live_root/$handoff_file" ||
+      fail "verified receipt handoff differs from the live sealed receipt"
+  done
+  local manifest="$live_root/library.manifest.tsv"
+  local identity_manifest="$live_root/library.identity.tsv"
+  local receipt="$live_root/receipt.tsv"
+  local seal="$live_root/receipt.sha256"
+  write_library_identity "$open_library" |
+    cmp -s -- "$identity_manifest" - ||
+    fail "dependency-library identity receipt differs from the live tree"
+  cmp -s -- "$handoff_root/receipt.tsv" <(write_expected_receipt) ||
+    fail "verified receipt handoff is stale for current authenticated inputs"
+  expected_handoff_seal="$(sha256_file "$handoff_root/receipt.tsv")  receipt.tsv"
+  [[ $(wc -l < "$handoff_root/receipt.sha256") -eq 1 &&
+    "$(<"$handoff_root/receipt.sha256")" == "$expected_handoff_seal" ]] ||
+    fail "verified receipt handoff seal is malformed or stale"
+  expected_live_seal="$(sha256_file "$receipt")  receipt.tsv"
+  [[ $(wc -l < "$seal") -eq 1 && "$(<"$seal")" == "$expected_live_seal" ]] ||
+    fail "live dependency-library receipt seal is malformed or stale"
+  verify_open_directory "$handoff_descriptor" "$handoff" "$handoff_identity" \
+    "verified receipt handoff"
+  verify_open_directory "$live_descriptor" "$receipt_directory" "$live_identity" \
+    "live dependency-library receipt"
+  verify_open_directory "$library_descriptor" "$library" \
+    "$library_identity_value" "sealed dependency library"
+  exec {handoff_descriptor}<&-
+  exec {live_descriptor}<&-
+  exec {library_descriptor}<&-
+}
+
+if [[ "$mode" == verify_handoff ]]; then
+  verify_receipt_handoff "$handoff_receipt"
+  if [[ "$print_path" == true ]]; then
+    printf '%s\n' "$library"
+  else
+    printf 'runtime_matrix_library_handoff=passed\nruntime=%s\ncache_key=%s\nlibrary=%s\n' \
+      "$version" "$key" "$library"
+  fi
+  exit 0
+fi
+
+if [[ "$mode" == verify ]]; then
+  verify_library
+  if [[ "$print_path" == true ]]; then
+    printf '%s\n' "$library"
+  else
+    printf 'runtime_matrix_library=passed\nruntime=%s\ncache_key=%s\nlibrary=%s\n' \
+      "$version" "$key" "$library"
+  fi
+  exit 0
+fi
+
+if [[ -e "$library" || -L "$library" || -e "$receipt_directory" ||
+    -L "$receipt_directory" ]]; then
+  verify_library_artifacts
+  if ! cmp -s -- "$receipt" <(write_expected_receipt); then
+    refresh_library_receipt
+  fi
+  verify_library_receipt_current
+  [[ "$print_path" == false ]] || printf '%s\n' "$library"
+  exit 0
+fi
+
+provision_paths=(
+  "$ROOT/.cache"
+  "$ROOT/.cache/downloads"
+  "$CACHE_ROOT"
+  "$cache"
+  "$TEMP_ROOT"
+)
+for managed_path in "${provision_paths[@]}"; do
+  assert_plain_directory_chain "$managed_path"
+done
+while IFS=$'\t' read -r package package_version _ _ _ _; do
+  [[ "$package" != Package ]] || continue
+  assert_plain_file_or_absent \
+    "$cache/${package}_${package_version}.tar.gz"
+done < "$lock"
+for managed_path in "$cache" "$TEMP_ROOT" "$dependency_version_root" \
+    "$receipt_version_root"; do
+  ensure_plain_directory "$managed_path"
+done
+
+partial_path=
+partial_identity=
+owned_library_identity=
+owned_receipt_identity=
+owned_home_identity=
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+while IFS=$'\t' read -r package package_version _ expected_hash url fallback; do
+  [[ "$package" != Package ]] || continue
+  archive="$cache/${package}_${package_version}.tar.gz"
+  require_plain_directory "$cache"
+  assert_plain_file_or_absent "$archive"
+  if [[ ! -f "$archive" ]]; then
+    [[ "$offline" == false ]] ||
+      fail "offline package archive is absent: $archive"
+    partial_path=$(mktemp "$cache/.${package}_${package_version}.XXXXXX")
+    partial_identity=$(path_identity "$partial_path")
+    require_owned_file "$partial_path" "$partial_identity" \
+      "source-package download staging file"
+    exec {partial_descriptor}<> "$partial_path"
+    verify_open_file "$partial_descriptor" "$partial_identity" \
+      "source-package download staging file"
+    partial_handle="/proc/$$/fd/$partial_descriptor"
+    downloaded=false
+    for candidate in "$url" "$fallback"; do
+      [[ "$candidate" != - ]] || continue
+      if curl --disable -fL --retry 3 --silent --show-error \
+          -o "$partial_handle" -- "$candidate"; then
+        downloaded=true
+        break
+      fi
+    done
+    [[ "$downloaded" == true ]] ||
+      fail "could not download locked source archive: $package $package_version"
+    verify_open_file "$partial_descriptor" "$partial_identity" \
+      "source-package download staging file"
+    require_owned_file "$partial_path" "$partial_identity" \
+      "source-package download staging file"
+    [[ "$(sha256_file "$partial_handle")" == "$expected_hash" ]] ||
+      fail "downloaded source archive failed SHA-256: $package $package_version"
+    chmod 0444 "$partial_handle"
+    verify_open_file "$partial_descriptor" "$partial_identity" \
+      "source-package download staging file"
+    require_owned_file "$partial_path" "$partial_identity" \
+      "source-package download staging file"
+    require_plain_directory "$cache"
+    assert_plain_file_or_absent "$archive"
+    mv -nT -- "$partial_path" "$archive"
+    [[ ! -e "$partial_path" && ! -L "$partial_path" ]] ||
+      fail "source-package cache target appeared concurrently; retained $partial_path"
+    exec {partial_descriptor}<&-
+    partial_path=
+    partial_identity=
+  fi
+  require_plain_file "$archive"
+  [[ "$(sha256_file "$archive")" == "$expected_hash" ]] ||
+    fail "cached source archive failed SHA-256: $archive"
+done < "$lock"
+verify_package_cache
+
+require_plain_directory "$TEMP_ROOT"
+staging_library=$(mktemp -d "$TEMP_ROOT/runtime-library.R-$version.XXXXXX")
+owned_library_identity=$(path_identity "$staging_library")
+require_owned_directory "$staging_library" "$owned_library_identity" \
+  "dependency-library staging directory"
+require_plain_directory "$TEMP_ROOT"
+staging_receipt=$(mktemp -d \
+  "$TEMP_ROOT/runtime-library-receipt.R-$version.XXXXXX")
+owned_receipt_identity=$(path_identity "$staging_receipt")
+require_owned_directory "$staging_receipt" "$owned_receipt_identity" \
+  "dependency-library receipt staging directory"
+exec {staging_receipt_descriptor}< "$staging_receipt"
+verify_open_directory "$staging_receipt_descriptor" "$staging_receipt" \
+  "$owned_receipt_identity" "dependency-library receipt staging directory"
+open_staging_receipt="/proc/$$/fd/$staging_receipt_descriptor"
+require_plain_directory "$TEMP_ROOT"
+staging_home=$(mktemp -d \
+  "$TEMP_ROOT/runtime-library-home.R-$version.XXXXXX")
+owned_home_identity=$(path_identity "$staging_home")
+require_owned_directory "$staging_home" "$owned_home_identity" \
+  "dependency-library build-home staging directory"
+exec {staging_home_descriptor}< "$staging_home"
+verify_open_directory "$staging_home_descriptor" "$staging_home" \
+  "$owned_home_identity" "dependency-library build-home staging directory"
+for home_directory in home tmp config cache data state runtime r-cache ccache \
+    ccache-tmp pip-cache uv-cache cargo rustup go go-mod npm yarn bundle \
+    python julia cuda; do
+  mkdir -- "$staging_home/$home_directory"
+  require_plain_directory "$staging_home/$home_directory"
+done
+chmod 0700 "$staging_home/home" "$staging_home/tmp" "$staging_home/runtime"
+(
+  unset R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE R_DEFAULT_PACKAGES \
+    R_ENVIRON R_ENVIRON_USER \
+    R_PROFILE R_PROFILE_USER \
+    R_BUILD_ENVIRON R_CHECK_ENVIRON R_INSTALL_ENVIRON \
+    R_MAKEVARS_SITE R_MAKEVARS_USER \
+    CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
+    CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS LDFLAGS \
+    CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH LD_LIBRARY_PATH \
+    PKG_CONFIG PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
+    MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES \
+    HOME TMP TEMP XDG_CONFIG_HOME XDG_CACHE_HOME XDG_DATA_HOME XDG_STATE_HOME \
+    XDG_RUNTIME_DIR \
+    R_USER R_USER_CACHE_DIR CCACHE_DIR CCACHE_TEMPDIR \
+    PIP_CACHE_DIR UV_CACHE_DIR CARGO_HOME RUSTUP_HOME GOPATH GOMODCACHE \
+    npm_config_cache YARN_CACHE_FOLDER BUNDLE_USER_HOME PYTHONPYCACHEPREFIX \
+    JULIA_DEPOT_PATH CUDA_CACHE_PATH GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM
+  export PATH="$prefix/bin:/usr/bin:/bin"
+  export CONDA_PREFIX="$prefix"
+  export R_ENVIRON_USER=/dev/null
+  export R_PROFILE_USER=/dev/null
+  export R_MAKEVARS_USER=/dev/null
+  export R_BUILD_ENVIRON=/dev/null
+  export R_CHECK_ENVIRON=/dev/null
+  export R_INSTALL_ENVIRON=/dev/null
+  export PARADOX_ROOT="$ROOT"
+  export HOME="$staging_home/home"
+  export R_USER="$staging_home/home"
+  export XDG_CONFIG_HOME="$staging_home/config"
+  export XDG_CACHE_HOME="$staging_home/cache"
+  export XDG_DATA_HOME="$staging_home/data"
+  export XDG_STATE_HOME="$staging_home/state"
+  export XDG_RUNTIME_DIR="$staging_home/runtime"
+  export R_USER_CACHE_DIR="$staging_home/r-cache"
+  export CCACHE_DIR="$staging_home/ccache"
+  export CCACHE_TEMPDIR="$staging_home/ccache-tmp"
+  export PIP_CACHE_DIR="$staging_home/pip-cache"
+  export UV_CACHE_DIR="$staging_home/uv-cache"
+  export CARGO_HOME="$staging_home/cargo"
+  export RUSTUP_HOME="$staging_home/rustup"
+  export GOPATH="$staging_home/go"
+  export GOMODCACHE="$staging_home/go-mod"
+  export npm_config_cache="$staging_home/npm"
+  export YARN_CACHE_FOLDER="$staging_home/yarn"
+  export BUNDLE_USER_HOME="$staging_home/bundle"
+  export PYTHONPYCACHEPREFIX="$staging_home/python"
+  export JULIA_DEPOT_PATH="$staging_home/julia"
+  export CUDA_CACHE_PATH="$staging_home/cuda"
+  export GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_CONFIG_SYSTEM=/dev/null
+  export R_LIBS_USER="$staging_library"
+  export R_LIBS_SITE=''
+  export TMPDIR="$staging_home/tmp"
+  export TMP="$staging_home/tmp"
+  export TEMP="$staging_home/tmp"
+  export MAKEFLAGS=-j1
+  export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+  set +u
+  for hook in "$prefix"/etc/conda/activate.d/*.sh; do
+    # shellcheck disable=SC1090
+    [[ ! -f "$hook" || "${hook##*/}" == activate-r-base.sh ]] || . "$hook"
+  done
+  set -u
+  "$prefix/bin/Rscript" --vanilla "$R_HELPER" \
+    install "$version" "$lock" "$cache" "$staging_library"
+)
+
+require_owned_directory "$staging_home" "$owned_home_identity" \
+  "dependency-library build-home staging directory"
+clear_open_owned_directory_after_use "$staging_home_descriptor" \
+  "$staging_home" "$owned_home_identity" \
+  "dependency-library build-home staging directory"
+rmdir -- "$staging_home"
+[[ ! -e "$staging_home" && ! -L "$staging_home" ]] ||
+  fail "dependency-library build-home staging directory was not removed"
+exec {staging_home_descriptor}<&-
+staging_home=
+owned_home_identity=
+require_owned_directory "$staging_library" "$owned_library_identity" \
+  "dependency-library staging directory"
+find "$staging_library" -type f -exec chmod a-w {} +
+# Keep only the unreceipted staging root writable until its cross-directory
+# rename completes. The manifest excludes that root but seals every child
+# directory mode; the installed root becomes read-only immediately after move.
+find "$staging_library" -mindepth 1 -type d -exec chmod 0555 {} +
+require_owned_directory "$staging_receipt" "$owned_receipt_identity" \
+  "dependency-library receipt staging directory"
+assert_plain_file_or_absent "$staging_receipt/library.manifest.tsv"
+"$TREE_RECEIPT" create "$staging_library" \
+  "$staging_receipt/library.manifest.tsv" >/dev/null
+require_plain_file "$staging_receipt/library.manifest.tsv"
+manifest_stage_identity=$(path_identity \
+  "$staging_receipt/library.manifest.tsv")
+exec {manifest_stage_descriptor}< \
+  "$staging_receipt/library.manifest.tsv"
+verify_open_file "$manifest_stage_descriptor" "$manifest_stage_identity" \
+  "dependency-library manifest staging file"
+require_owned_directory "$staging_receipt" "$owned_receipt_identity" \
+  "dependency-library receipt staging directory"
+packages_stage=$(mktemp "$open_staging_receipt/.packages.tsv.XXXXXX")
+packages_stage_identity=$(/usr/bin/stat -Lc '%d:%i' "$packages_stage")
+exec {packages_stage_descriptor}<> "$packages_stage"
+verify_open_file "$packages_stage_descriptor" "$packages_stage_identity" \
+  "dependency-library inventory staging file"
+packages_stage_handle="/proc/$$/fd/$packages_stage_descriptor"
+run_inventory "$staging_library" > "$packages_stage_handle"
+verify_open_file "$packages_stage_descriptor" "$packages_stage_identity" \
+  "dependency-library inventory staging file"
+manifest="/proc/$$/fd/$manifest_stage_descriptor"
+inventory="$packages_stage_handle"
+identity_stage=$(mktemp "$open_staging_receipt/.library.identity.tsv.XXXXXX")
+identity_stage_identity=$(/usr/bin/stat -Lc '%d:%i' "$identity_stage")
+exec {identity_stage_descriptor}<> "$identity_stage"
+verify_open_file "$identity_stage_descriptor" "$identity_stage_identity" \
+  "dependency-library identity staging file"
+identity_manifest="/proc/$$/fd/$identity_stage_descriptor"
+require_owned_directory "$staging_receipt" "$owned_receipt_identity" \
+  "dependency-library receipt staging directory"
+write_library_identity "$staging_library" > "$identity_manifest"
+verify_open_file "$identity_stage_descriptor" "$identity_stage_identity" \
+  "dependency-library identity staging file"
+require_owned_directory "$staging_receipt" "$owned_receipt_identity" \
+  "dependency-library receipt staging directory"
+receipt_stage=$(mktemp "$open_staging_receipt/.receipt.tsv.XXXXXX")
+seal_stage=$(mktemp "$open_staging_receipt/.receipt.sha256.XXXXXX")
+receipt_stage_identity=$(/usr/bin/stat -Lc '%d:%i' "$receipt_stage")
+seal_stage_identity=$(/usr/bin/stat -Lc '%d:%i' "$seal_stage")
+exec {receipt_stage_descriptor}<> "$receipt_stage"
+exec {seal_stage_descriptor}<> "$seal_stage"
+verify_open_file "$receipt_stage_descriptor" "$receipt_stage_identity" \
+  "dependency-library receipt staging file"
+verify_open_file "$seal_stage_descriptor" "$seal_stage_identity" \
+  "dependency-library seal staging file"
+receipt_stage_handle="/proc/$$/fd/$receipt_stage_descriptor"
+seal_stage_handle="/proc/$$/fd/$seal_stage_descriptor"
+write_expected_receipt > "$receipt_stage_handle"
+verify_open_file "$receipt_stage_descriptor" "$receipt_stage_identity" \
+  "dependency-library receipt staging file"
+printf '%s  receipt.tsv\n' "$(sha256_file "$receipt_stage_handle")" \
+  > "$seal_stage_handle"
+verify_open_file "$seal_stage_descriptor" "$seal_stage_identity" \
+  "dependency-library seal staging file"
+chmod 0444 "$manifest" "$identity_manifest" "$packages_stage_handle" \
+  "$receipt_stage_handle" "$seal_stage_handle"
+verify_open_directory "$staging_receipt_descriptor" "$staging_receipt" \
+  "$owned_receipt_identity" "dependency-library receipt staging directory"
+[[ "$(/usr/bin/stat -Lc '%d:%i' "$packages_stage")" == \
+    "$packages_stage_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "$identity_stage")" == \
+    "$identity_stage_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "$receipt_stage")" == \
+    "$receipt_stage_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "$seal_stage")" == \
+    "$seal_stage_identity" ]] ||
+  fail "dependency-library receipt staging pathname changed identity"
+mv -T -- "$packages_stage" "$open_staging_receipt/packages.tsv"
+mv -T -- "$identity_stage" "$open_staging_receipt/library.identity.tsv"
+mv -T -- "$receipt_stage" "$open_staging_receipt/receipt.tsv"
+mv -T -- "$seal_stage" "$open_staging_receipt/receipt.sha256"
+[[ "$(/usr/bin/stat -Lc '%d:%i' "$open_staging_receipt/packages.tsv")" == \
+    "$packages_stage_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' \
+    "$open_staging_receipt/library.identity.tsv")" == \
+    "$identity_stage_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "$open_staging_receipt/receipt.tsv")" == \
+    "$receipt_stage_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "$open_staging_receipt/receipt.sha256")" == \
+    "$seal_stage_identity" ]] ||
+  fail "dependency-library receipt staging publication changed identity"
+exec {manifest_stage_descriptor}<&-
+exec {packages_stage_descriptor}<&-
+exec {identity_stage_descriptor}<&-
+exec {receipt_stage_descriptor}<&-
+exec {seal_stage_descriptor}<&-
+verify_open_directory "$staging_receipt_descriptor" "$staging_receipt" \
+  "$owned_receipt_identity" "dependency-library receipt staging directory"
+exec {staging_receipt_descriptor}<&-
+
+ensure_plain_directory "$dependency_key_root"
+dependency_key_root_identity=$(path_identity "$dependency_key_root")
+exec {dependency_key_root_descriptor}< "$dependency_key_root"
+verify_open_directory "$dependency_key_root_descriptor" "$dependency_key_root" \
+  "$dependency_key_root_identity" "dependency-library publication parent"
+open_library="/proc/$$/fd/$dependency_key_root_descriptor/library"
+require_owned_directory "$staging_library" "$owned_library_identity" \
+  "dependency-library staging directory"
+assert_plain_directory_chain "$library"
+[[ ! -e "$library" && ! -L "$library" &&
+  ! -e "$open_library" && ! -L "$open_library" ]] ||
+  fail "dependency-library publication target appeared concurrently: $library"
+trap '' HUP INT TERM
+mv -nT -- "$staging_library" "$open_library"
+[[ ! -e "$staging_library" && ! -L "$staging_library" &&
+  -d "$library" && ! -L "$library" &&
+  -d "$open_library" && ! -L "$open_library" &&
+  "$(path_identity "$library")" == "$owned_library_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "$open_library")" == \
+    "$owned_library_identity" ]] ||
+  fail "dependency-library publication did not retain its owned identity"
+chmod 0555 "$open_library"
+verify_open_directory "$dependency_key_root_descriptor" "$dependency_key_root" \
+  "$dependency_key_root_identity" "dependency-library publication parent"
+
+ensure_plain_directory "$receipt_version_root"
+receipt_version_root_identity=$(path_identity "$receipt_version_root")
+exec {receipt_version_root_descriptor}< "$receipt_version_root"
+verify_open_directory "$receipt_version_root_descriptor" "$receipt_version_root" \
+  "$receipt_version_root_identity" "dependency-library receipt publication parent"
+open_receipt_directory="/proc/$$/fd/$receipt_version_root_descriptor/$key"
+require_owned_directory "$staging_receipt" "$owned_receipt_identity" \
+  "dependency-library receipt staging directory"
+assert_plain_directory_chain "$receipt_directory"
+[[ ! -e "$receipt_directory" && ! -L "$receipt_directory" &&
+  ! -e "$open_receipt_directory" && ! -L "$open_receipt_directory" ]] ||
+  fail "dependency-library receipt target appeared concurrently: $receipt_directory"
+mv -nT -- "$staging_receipt" "$open_receipt_directory"
+[[ ! -e "$staging_receipt" && ! -L "$staging_receipt" &&
+  -d "$receipt_directory" && ! -L "$receipt_directory" &&
+  -d "$open_receipt_directory" && ! -L "$open_receipt_directory" &&
+  "$(path_identity "$receipt_directory")" == "$owned_receipt_identity" &&
+  "$(/usr/bin/stat -Lc '%d:%i' "$open_receipt_directory")" == \
+    "$owned_receipt_identity" ]] ||
+  fail "dependency-library receipt publication did not retain its owned identity"
+verify_open_directory "$receipt_version_root_descriptor" "$receipt_version_root" \
+  "$receipt_version_root_identity" "dependency-library receipt publication parent"
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+manifest="$receipt_directory/library.manifest.tsv"
+identity_manifest="$receipt_directory/library.identity.tsv"
+inventory="$receipt_directory/packages.tsv"
+receipt="$receipt_directory/receipt.tsv"
+seal="$receipt_directory/receipt.sha256"
+verify_library
+verify_open_directory "$dependency_key_root_descriptor" "$dependency_key_root" \
+  "$dependency_key_root_identity" "dependency-library publication parent"
+verify_open_directory "$receipt_version_root_descriptor" "$receipt_version_root" \
+  "$receipt_version_root_identity" "dependency-library receipt publication parent"
+exec {dependency_key_root_descriptor}<&-
+exec {receipt_version_root_descriptor}<&-
+owned_library_identity=
+owned_receipt_identity=
+owned_home_identity=
+trap - HUP INT TERM
+if [[ "$print_path" == true ]]; then
+  printf '%s\n' "$library"
+else
+  printf 'runtime_matrix_library=passed\nruntime=%s\ncache_key=%s\nlibrary=%s\n' \
+    "$version" "$key" "$library"
+fi

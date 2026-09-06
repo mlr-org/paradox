@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+
+# Install the exact Quarto CLI used by the documentation compatibility gate.
+# The archive, the extracted tree, and the selected installation are all
+# authenticated.  Nothing is installed outside this repository.
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/bootstrap-quarto [--verify]
+
+Install the pinned repository-local Quarto CLI.  --verify is offline and
+changes no state.
+EOF
+}
+
+fail() {
+  printf '%s\n' "bootstrap-quarto: $*" >&2
+  exit 1
+}
+
+VERIFY_ONLY=false
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --verify) VERIFY_ONLY=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+MANIFEST="$ROOT/environment/quarto-linux-x86_64.tsv"
+TREE_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+CURL="$ROOT/.local/toolchain/bin/curl"
+CACHE="$ROOT/.cache/downloads/quarto"
+INSTALL_ROOT="$ROOT/.local/quarto"
+RECEIPT_ROOT="$ROOT/.local/receipts/quarto"
+LOCK_ROOT="$ROOT/.local/locks"
+EXPECTED_HEADER=$'version\tplatform\tarchive\tarchive_size\tarchive_sha256\ttree_manifest_sha256\turl'
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed path escaped the repository: $path" ;;
+  esac
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] || fail "refusing symbolic managed directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed path is not a directory: $current"
+  done
+}
+
+require_plain_directory() {
+  local path=$1
+  assert_plain_directory_chain "$path"
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "required directory is missing, non-directory, or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "required directory is not canonical: $path"
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  assert_plain_directory_chain "${path%/*}"
+  [[ ! -L "$path" ]] || fail "refusing symbolic managed file: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "managed path is not a regular file: $path"
+}
+
+require_plain_file() {
+  local path=$1
+  require_plain_directory "${path%/*}"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "required input is missing, non-regular, or symbolic: $path"
+}
+
+require_plain_executable() {
+  local path=$1
+  require_plain_file "$path"
+  [[ -x "$path" ]] || fail "required input is not executable: $path"
+}
+
+verify_open_lock() {
+  local descriptor=$1 path=$2 label=$3 fd_identity path_identity
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label changed while it was opened: $path"
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  path_identity=$(/usr/bin/stat -Lc '%d:%i' "$path")
+  [[ "$fd_identity" == "$path_identity" ]] ||
+    fail "$label path was substituted while opening: $path"
+}
+
+[[ $(uname -s) == Linux && $(uname -m) == x86_64 ]] ||
+  fail "the pinned documentation toolchain supports Linux x86_64"
+require_plain_file "$MANIFEST"
+require_plain_file "$TREE_HELPER"
+require_plain_executable "$RSCRIPT"
+require_plain_executable "$CURL"
+
+mapfile -t rows < "$MANIFEST"
+[[ ${#rows[@]} -eq 2 && "${rows[0]}" == "$EXPECTED_HEADER" ]] ||
+  fail "Quarto manifest must contain one exact row"
+IFS=$'\t' read -r version platform archive archive_size archive_sha tree_sha url \
+  <<< "${rows[1]}"
+[[ "$version" == 1.9.38 && "$platform" == linux-amd64 && \
+   "$archive" == "quarto-$version-linux-amd64.tar.gz" ]] ||
+  fail "Quarto manifest identity is unexpected"
+[[ "$archive_size" =~ ^[0-9]+$ ]] || fail "archive size is malformed"
+for digest in "$archive_sha" "$tree_sha"; do
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail "manifest digest is malformed"
+done
+[[ "$url" == "https://github.com/quarto-dev/quarto-cli/releases/download/v$version/$archive" ]] ||
+  fail "Quarto manifest URL is unexpected"
+
+PREFIX="$INSTALL_ROOT/$version"
+ARCHIVE="$CACHE/$archive"
+RECEIPT="$RECEIPT_ROOT/$version"
+TREE_RECEIPT="$RECEIPT/installed-tree.tsv"
+INPUT_RECEIPT="$RECEIPT/inputs.tsv"
+SEAL="$RECEIPT/seal.sha256"
+
+for managed_directory in \
+  "$ROOT/.local" "$ROOT/.local/tmp" "$INSTALL_ROOT" "$PREFIX" \
+  "$ROOT/.local/receipts" "$RECEIPT_ROOT" "$RECEIPT" "$LOCK_ROOT" \
+  "$ROOT/.cache" "$ROOT/.cache/downloads" "$CACHE"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+assert_plain_file_or_absent "$ARCHIVE"
+assert_plain_file_or_absent "$LOCK_ROOT/quarto-toolchain.lock"
+
+sha256() { sha256sum "$1" | cut -d ' ' -f 1; }
+
+verify_archive() {
+  [[ -f "$ARCHIVE" && ! -L "$ARCHIVE" ]] || fail "Quarto archive is absent or symbolic"
+  [[ $(stat -c '%s' "$ARCHIVE") == "$archive_size" ]] || fail "Quarto archive size differs from manifest"
+  [[ $(sha256 "$ARCHIVE") == "$archive_sha" ]] || fail "Quarto archive SHA-256 differs from manifest"
+}
+
+expected_inputs() {
+  printf '%s\n' \
+    "schema=1" \
+    "manifest_sha256=$(sha256 "$MANIFEST")" \
+    "archive=$archive" \
+    "archive_size=$archive_size" \
+    "archive_sha256=$archive_sha" \
+    "tree_manifest_sha256=$tree_sha" \
+    "tree_receipt_helper_sha256=$(sha256 "$TREE_HELPER")" \
+    "bootstrap_sha256=$(sha256 "${BASH_SOURCE[0]}")"
+}
+
+verify_install() {
+  verify_archive
+  [[ -d "$PREFIX" && ! -L "$PREFIX" ]] || fail "Quarto prefix is absent or symbolic"
+  [[ -d "$RECEIPT" && ! -L "$RECEIPT" ]] || fail "Quarto receipt is absent or symbolic"
+  for path in "$TREE_RECEIPT" "$INPUT_RECEIPT" "$SEAL"; do
+    [[ -f "$path" && ! -L "$path" ]] || fail "Quarto receipt file is absent or symbolic: $path"
+  done
+  [[ $(sha256 "$TREE_RECEIPT") == "$tree_sha" ]] || fail "Quarto tree receipt digest differs from manifest"
+  [[ "$(<"$INPUT_RECEIPT")" == "$(expected_inputs)" ]] || fail "Quarto input receipt is stale"
+  [[ $(wc -l < "$SEAL") -eq 2 ]] || fail "Quarto receipt seal has unexpected shape"
+  (cd "$RECEIPT" && sha256sum -c seal.sha256) >/dev/null || fail "Quarto receipt seal is invalid"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify "$PREFIX" "$TREE_RECEIPT" >/dev/null
+  [[ $("$PREFIX/bin/quarto" --version) == "$version" ]] || fail "Quarto reports an unexpected version"
+}
+
+if [[ "$VERIFY_ONLY" == true ]]; then
+  verify_install
+  printf '%s\n' "Repository-local Quarto receipt verified: $PREFIX"
+  exit 0
+fi
+
+mkdir -p "$CACHE" "$INSTALL_ROOT" "$RECEIPT_ROOT" "$LOCK_ROOT" "$ROOT/.local/tmp"
+for managed_directory in "$CACHE" "$INSTALL_ROOT" "$RECEIPT_ROOT" \
+  "$LOCK_ROOT" "$ROOT/.local/tmp"
+do
+  require_plain_directory "$managed_directory"
+done
+exec 9>"$LOCK_ROOT/quarto-toolchain.lock"
+verify_open_lock 9 "$LOCK_ROOT/quarto-toolchain.lock" "Quarto toolchain lock"
+flock -x 9
+
+if [[ ! -f "$ARCHIVE" ]] ||
+   [[ $(stat -c '%s' "$ARCHIVE" 2>/dev/null || printf 0) != "$archive_size" ]] ||
+   [[ $(sha256 "$ARCHIVE" 2>/dev/null || true) != "$archive_sha" ]]; then
+  partial="$ARCHIVE.part.$$"
+  assert_plain_file_or_absent "$partial"
+  rm -f "$partial"
+  "$CURL" -fL --retry 3 "$url" -o "$partial"
+  require_plain_file "$partial"
+  [[ $(stat -c '%s' "$partial") == "$archive_size" && \
+     $(sha256 "$partial") == "$archive_sha" ]] || {
+    rm -f "$partial"
+    fail "downloaded Quarto archive differs from manifest"
+  }
+  mv "$partial" "$ARCHIVE"
+fi
+verify_archive
+
+listing=$(mktemp "$ROOT/.local/tmp/quarto-listing.XXXXXX")
+stage_prefix=$(mktemp -d "$ROOT/.local/tmp/quarto-prefix.XXXXXX")
+stage_receipt=$(mktemp -d "$ROOT/.local/tmp/quarto-receipt.XXXXXX")
+old_prefix="$INSTALL_ROOT/.${version}.old.$$"
+old_receipt="$RECEIPT_ROOT/.${version}.old.$$"
+selection_active=false
+cleanup() {
+  exit_status=$?
+  trap - EXIT HUP INT TERM
+  if [[ "$selection_active" == true ]]; then
+    rm -rf "$PREFIX" "$RECEIPT"
+    [[ ! -e "$old_prefix" ]] || mv "$old_prefix" "$PREFIX"
+    [[ ! -e "$old_receipt" ]] || mv "$old_receipt" "$RECEIPT"
+  fi
+  rm -f "$listing"
+  rm -rf "$stage_prefix" "$stage_receipt"
+  exit "$exit_status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+require_plain_file "$listing"
+require_plain_directory "$stage_prefix"
+require_plain_directory "$stage_receipt"
+assert_plain_directory_chain "$old_prefix"
+assert_plain_directory_chain "$old_receipt"
+
+tar -tzf "$ARCHIVE" > "$listing"
+awk -v prefix="quarto-$version/" '
+  index($0, prefix) != 1 { bad = 1 }
+  $0 ~ /(^|\/)\.\.($|\/)/ { bad = 1 }
+  END { exit bad }
+' "$listing" || fail "Quarto archive contains an unsafe or unexpected member"
+# A non-root tar normally filters archived modes through the caller's umask.
+# The receipt includes modes, so restore the authenticated archive permissions
+# explicitly and make extraction reproducible even under umask 077.
+tar -xzf "$ARCHIVE" --same-permissions --strip-components=1 -C "$stage_prefix"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$stage_prefix" \
+  "$stage_receipt/installed-tree.tsv" >/dev/null
+[[ $(sha256 "$stage_receipt/installed-tree.tsv") == "$tree_sha" ]] ||
+  fail "extracted Quarto tree differs from manifest"
+expected_inputs > "$stage_receipt/inputs.tsv"
+(cd "$stage_receipt" && sha256sum inputs.tsv installed-tree.tsv > seal.sha256)
+[[ $("$stage_prefix/bin/quarto" --version) == "$version" ]] ||
+  fail "staged Quarto reports an unexpected version"
+
+rm -rf "$old_prefix" "$old_receipt"
+[[ ! -e "$PREFIX" ]] || mv "$PREFIX" "$old_prefix"
+[[ ! -e "$RECEIPT" ]] || mv "$RECEIPT" "$old_receipt"
+selection_active=true
+mv "$stage_prefix" "$PREFIX"
+mv "$stage_receipt" "$RECEIPT"
+stage_prefix=
+stage_receipt=
+verify_install
+selection_active=false
+rm -rf "$old_prefix" "$old_receipt"
+printf '%s\n' "Repository-local Quarto ready: $PREFIX"

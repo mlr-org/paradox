@@ -1,0 +1,377 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export LC_ALL=C
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+MANIFEST="$ROOT/compat/github-repositories.tsv"
+SOURCE="$ROOT/.local/compat/github"
+OUTPUT="$ROOT/compat/github-snapshot.tsv"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+LOCAL_GIT_EXEC="$ROOT/.local/toolchain/libexec/git-core"
+LOCK_DIRECTORY="$ROOT/.local/compat/locks"
+LOCK_FILE="$LOCK_DIRECTORY/github-corpus.lock"
+TEMP=
+
+fail() {
+  printf '%s\n' "snapshot-github-repositories: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: compat/snapshot-github-repositories
+
+Authenticate every reviewed GitHub checkout and atomically record its current
+commit, commit date, and branch in compat/github-snapshot.tsv. Checkouts must
+be complete, clean, and use their exact reviewed origins.
+EOF
+}
+
+is_managed_path() {
+  [[ "$1" == "$ROOT" || "$1" == "$ROOT/"* ]]
+}
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  is_managed_path "$path" || fail "managed path escaped the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "managed path has an unsafe component: $path"
+    current="$current/$component"
+    [[ ! -L "$current" ]] || fail "managed directory is symbolic: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed path is not a directory: $current"
+  done
+}
+
+ensure_plain_directory_chain() {
+  local path=$1 current remainder component
+  assert_plain_directory_chain "$path"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    if [[ ! -e "$current" ]]; then
+      /usr/bin/mkdir -- "$current"
+    fi
+    [[ -d "$current" && ! -L "$current" ]] ||
+      fail "managed directory changed while it was created: $current"
+  done
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "managed directory is not canonical: $path"
+}
+
+require_plain_directory() {
+  local path=$1
+  assert_plain_directory_chain "$path"
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "required directory is missing, non-directory, or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "required directory is not canonical: $path"
+}
+
+require_plain_file() {
+  local path=$1
+  require_plain_directory "${path%/*}"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "required input is missing, non-regular, or symbolic: $path"
+}
+
+require_plain_executable() {
+  local path=$1
+  require_plain_file "$path"
+  [[ -x "$path" ]] || fail "required input is not executable: $path"
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  require_plain_directory "${path%/*}"
+  [[ ! -L "$path" ]] || fail "managed file is symbolic: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "managed path is not a regular file: $path"
+}
+
+verify_open_file() {
+  local descriptor=$1 path=$2 label=$3 fd_identity path_identity
+  [[ -f "$path" && ! -L "$path" ]] || fail "$label changed while it was opened"
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  path_identity=$(/usr/bin/stat -Lc '%d:%i' "$path")
+  [[ "$fd_identity" == "$path_identity" ]] ||
+    fail "$label path was substituted while opening"
+}
+
+corpus_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_QUARANTINE_PATH \
+    -u GIT_SHALLOW_FILE -u GIT_EXEC_PATH -u GIT_TEMPLATE_DIR \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 \
+    "$LOCAL_GIT" -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+      -c core.untrackedCache=false "$@"
+}
+
+validate_repository_manifest() {
+  /usr/bin/awk -F '\t' '
+    NR == 1 {
+      if ($0 != "repository\turl\trelation\tpriority\taction\tnotes") exit 1
+      next
+    }
+    {
+      if (NF != 6 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
+          $2 !~ /^https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.git$/ ||
+          $3 !~ /^(Depends|Imports|Suggests|Dependency|ExactDependency|Documentation|Workload)$/ ||
+          $4 !~ /^[0-3]$/ || $5 !~ /^(clone|skip)$/ ||
+          ($3 == "ExactDependency" && $5 != "clone") ||
+          $6 == "" || seen[$1]++) exit 1
+      rows += 1
+      if ($5 == "clone") clones += 1
+    }
+    END { if (rows == 0 || clones == 0) exit 1 }
+  ' "$MANIFEST" || fail "GitHub repository manifest is malformed or truncated"
+}
+
+validate_snapshot_file() {
+  local snapshot=$1
+  /usr/bin/awk -F '\t' '
+    NR == 1 {
+      if ($0 != "repository\turl\tpriority\tcommit\tcommit_date\tbranch") exit 1
+      next
+    }
+    {
+      if (NF != 6 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
+          $2 !~ /^https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.git$/ ||
+          $3 !~ /^[0-3]$/ || $4 !~ /^[0-9a-f]+$/ || length($4) != 40 ||
+          $5 !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ || seen[$1]++) exit 1
+      rows += 1
+    }
+    END { if (rows == 0) exit 1 }
+  ' "$snapshot" || fail "generated GitHub snapshot is malformed or truncated"
+}
+
+verify_source_membership() {
+  local existing repository
+  local -a existing_paths
+  require_plain_directory "$SOURCE"
+  shopt -s dotglob nullglob
+  existing_paths=("$SOURCE"/*)
+  shopt -u dotglob nullglob
+  for existing in "${existing_paths[@]}"; do
+    repository=${existing##*/}
+    [[ -v "repository_action[$repository]" &&
+       "${repository_action[$repository]}" == clone ]] ||
+      fail "unreviewed path exists in the GitHub checkout root: $repository"
+  done
+  [[ ${#existing_paths[@]} -eq ${#clone_repositories[@]} ]] ||
+    fail "GitHub checkout root does not contain the exact clone repository set"
+}
+
+verify_checkout() {
+  local repository=$1 checkout=$2 expected_url=$3
+  local observed_status observed_top observed_git_dir special_index_entry
+  local -a observed_remotes observed_urls observed_pushurls
+  require_plain_directory "$checkout"
+  require_plain_directory "$checkout/.git"
+  observed_top=$(corpus_git -C "$checkout" rev-parse --show-toplevel)
+  observed_git_dir=$(corpus_git -C "$checkout" rev-parse --absolute-git-dir)
+  [[ "$observed_top" == "$checkout" &&
+     "$observed_git_dir" == "$checkout/.git" ]] ||
+    fail "$repository does not use its managed checkout and Git directory"
+  mapfile -t observed_remotes < <(corpus_git -C "$checkout" remote)
+  mapfile -t observed_urls < <(
+    corpus_git -C "$checkout" config --get-all remote.origin.url
+  )
+  mapfile -t observed_pushurls < <(
+    corpus_git -C "$checkout" config --get-all remote.origin.pushurl
+  )
+  [[ ${#observed_remotes[@]} -eq 1 &&
+     "${observed_remotes[0]}" == origin &&
+     ${#observed_urls[@]} -eq 1 &&
+     "${observed_urls[0]}" == "$expected_url" &&
+     ${#observed_pushurls[@]} -eq 0 ]] ||
+    fail "$repository does not have the one exact reviewed origin"
+  [[ ! -e "$checkout/.git/objects/info/alternates" &&
+     ! -L "$checkout/.git/objects/info/alternates" &&
+     ! -e "$checkout/.git/info/grafts" &&
+     ! -L "$checkout/.git/info/grafts" ]] ||
+    fail "$repository uses unreviewed alternate objects or grafts"
+  [[ -z $(corpus_git -C "$checkout" for-each-ref \
+    --format='%(refname)' refs/replace) ]] ||
+    fail "$repository contains replacement objects"
+  CHECKOUT_COMMIT=$(corpus_git -C "$checkout" rev-parse --verify 'HEAD^{commit}')
+  [[ "$CHECKOUT_COMMIT" =~ ^[0-9a-f]{40}$ ]] ||
+    fail "$repository HEAD is not an exact SHA-1 commit"
+  CHECKOUT_DATE=$(corpus_git -C "$checkout" show -s --format=%cI \
+    "$CHECKOUT_COMMIT")
+  if [[ "$CHECKOUT_DATE" == *Z ]]; then
+    CHECKOUT_DATE="${CHECKOUT_DATE%Z}+00:00"
+  fi
+  [[ "$CHECKOUT_DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$ ]] ||
+    fail "$repository has a malformed commit date"
+  CHECKOUT_BRANCH=$(corpus_git -C "$checkout" branch --show-current)
+  if [[ -n "$CHECKOUT_BRANCH" ]]; then
+    corpus_git check-ref-format --branch "$CHECKOUT_BRANCH" >/dev/null 2>&1 ||
+      fail "$repository has a malformed branch name"
+  fi
+  observed_status=$(corpus_git -C "$checkout" status --porcelain=v1 \
+    --untracked-files=all)
+  [[ -z "$observed_status" ]] ||
+    fail "$repository has local changes; preserve or remove them explicitly"
+  special_index_entry=$(corpus_git -C "$checkout" ls-files -v | \
+    /usr/bin/awk 'substr($0, 1, 1) ~ /[a-zS]/ && !found { print; found = 1 }')
+  [[ -z "$special_index_entry" ]] ||
+    fail "$repository hides worktree state with special index flags"
+}
+
+verify_generated_snapshot() {
+  local index repository url priority commit commit_date branch
+  local -a snapshot_repositories=()
+  exec 7<"$TEMP"
+  IFS= read -r _header <&7
+  while IFS=$'\t' read -r repository url priority commit commit_date branch <&7; do
+    snapshot_repositories+=("$repository")
+    [[ "$url" == "${repository_url[$repository]:-}" &&
+       "$priority" == "${repository_priority[$repository]:-}" &&
+       "$commit" == "${captured_commit[$repository]:-}" &&
+       "$commit_date" == "${captured_date[$repository]:-}" &&
+       "$branch" == "${captured_branch[$repository]:-}" ]] ||
+      fail "generated snapshot identity differs for $repository"
+  done
+  exec 7<&-
+  [[ ${#snapshot_repositories[@]} -eq ${#clone_repositories[@]} ]] ||
+    fail "generated snapshot does not contain the exact clone repository set"
+  for index in "${!clone_repositories[@]}"; do
+    [[ "${snapshot_repositories[$index]}" == "${clone_repositories[$index]}" ]] ||
+      fail "generated snapshot repository order differs from the reviewed clone order"
+  done
+}
+
+cleanup() {
+  local exit_status=$?
+  trap - EXIT HUP INT TERM
+  if [[ -n "$TEMP" ]]; then
+    assert_plain_file_or_absent "$TEMP"
+    /usr/bin/rm -f -- "$TEMP"
+  fi
+  exit "$exit_status"
+}
+
+case "${1:-}" in
+  -h|--help)
+    [[ $# -eq 1 ]] || fail "--help may not be combined with other arguments"
+    usage
+    exit 0
+    ;;
+  '') ;;
+  *) fail "arguments are not supported; use --help" ;;
+esac
+
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+require_plain_executable "$LOCAL_GIT"
+require_plain_directory "$LOCAL_GIT_EXEC"
+[[ $(command -v git) == "$LOCAL_GIT" ]] ||
+  fail "git does not resolve to the exact repository-local executable"
+[[ $(corpus_git --exec-path) == "$LOCAL_GIT_EXEC" ]] ||
+  fail "git helpers do not resolve to the exact repository-local directory"
+require_plain_file "$MANIFEST"
+require_plain_directory "$SOURCE"
+assert_plain_file_or_absent "$OUTPUT"
+validate_repository_manifest
+
+ensure_plain_directory_chain "$LOCK_DIRECTORY"
+assert_plain_file_or_absent "$LOCK_FILE"
+exec 9>>"$LOCK_FILE"
+verify_open_file 9 "$LOCK_FILE" "GitHub corpus lock"
+/usr/bin/flock -x 9
+verify_open_file 9 "$LOCK_FILE" "GitHub corpus lock"
+require_plain_file "$MANIFEST"
+require_plain_directory "$SOURCE"
+assert_plain_file_or_absent "$OUTPUT"
+validate_repository_manifest
+
+declare -A repository_url repository_priority repository_action
+declare -A captured_commit captured_date captured_branch
+declare -a clone_repositories=()
+exec 7<"$MANIFEST"
+IFS= read -r _header <&7
+while IFS=$'\t' read -r repository url _relation priority action _notes <&7; do
+  repository_url[$repository]=$url
+  repository_priority[$repository]=$priority
+  repository_action[$repository]=$action
+  [[ "$url" == "https://github.com/"*"/$repository.git" ]] ||
+    fail "repository URL basename differs from its safe checkout name: $repository"
+  if [[ "$action" == clone ]]; then
+    clone_repositories+=("$repository")
+  fi
+done
+exec 7<&-
+verify_source_membership
+
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+umask 077
+TEMP=$(/usr/bin/mktemp "$ROOT/compat/.github-snapshot.new.XXXXXX")
+assert_plain_file_or_absent "$TEMP"
+exec 8>>"$TEMP"
+verify_open_file 8 "$TEMP" "GitHub snapshot staging file"
+printf 'repository\turl\tpriority\tcommit\tcommit_date\tbranch\n' >&8
+
+for repository in "${clone_repositories[@]}"; do
+  checkout="$SOURCE/$repository"
+  verify_checkout "$repository" "$checkout" "${repository_url[$repository]}"
+  captured_commit[$repository]=$CHECKOUT_COMMIT
+  captured_date[$repository]=$CHECKOUT_DATE
+  captured_branch[$repository]=$CHECKOUT_BRANCH
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$repository" "${repository_url[$repository]}" \
+    "${repository_priority[$repository]}" "$CHECKOUT_COMMIT" \
+    "$CHECKOUT_DATE" "$CHECKOUT_BRANCH" >&8
+done
+verify_open_file 8 "$TEMP" "GitHub snapshot staging file"
+exec 8>&-
+
+require_plain_file "$TEMP"
+validate_snapshot_file "$TEMP"
+verify_generated_snapshot
+for repository in "${clone_repositories[@]}"; do
+  verify_checkout "$repository" "$SOURCE/$repository" \
+    "${repository_url[$repository]}"
+  [[ "$CHECKOUT_COMMIT" == "${captured_commit[$repository]}" &&
+     "$CHECKOUT_DATE" == "${captured_date[$repository]}" &&
+     "$CHECKOUT_BRANCH" == "${captured_branch[$repository]}" ]] ||
+    fail "$repository changed while the snapshot was generated"
+done
+verify_source_membership
+require_plain_file "$TEMP"
+/usr/bin/chmod 0644 "$TEMP"
+assert_plain_file_or_absent "$OUTPUT"
+/usr/bin/mv -T -- "$TEMP" "$OUTPUT"
+TEMP=
+require_plain_file "$OUTPUT"

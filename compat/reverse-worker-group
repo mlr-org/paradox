@@ -1,0 +1,327 @@
+#!/usr/bin/env sh
+
+# A bounded process-tree boundary for one external reverse-dependency worker.
+# The portable ancestry sweep is always used.  Linux additionally sweeps the
+# per-task environment token so that grandchildren which start new sessions
+# cannot survive their coordinator.
+
+set -eu
+umask 077
+
+valid_pid() {
+  case ${1:-} in ''|0*) return 1 ;; *[!0-9]*) return 1 ;; esac
+  return 0
+}
+
+valid_token() {
+  case ${1:-} in ''|*[!A-Za-z0-9._-]*) return 1 ;; esac
+  return 0
+}
+
+pid_running() {
+  valid_pid "$1" || return 1
+  /bin/kill -0 "$1" 2>/dev/null || return 1
+  state=$(/bin/ps -o stat= -p "$1" 2>/dev/null | /usr/bin/awk 'NR == 1 { print substr($1, 1, 1) }')
+  [ -n "$state" ] && [ "$state" != Z ]
+}
+
+descendants() {
+  valid_pid "$1" || return 0
+  /bin/ps -eo pid=,ppid= | /usr/bin/awk -v root="$1" '
+    { pid[NR] = $1; parent[NR] = $2 }
+    END {
+      selected[root] = 1
+      for (round = 1; round <= NR; round++) {
+        changed = 0
+        for (i = 1; i <= NR; i++) {
+          if (!selected[pid[i]] && selected[parent[i]]) {
+            selected[pid[i]] = 1
+            changed = 1
+          }
+        }
+        if (!changed) break
+      }
+      for (i = NR; i >= 1; i--) {
+        if (pid[i] != root && selected[pid[i]]) print pid[i]
+      }
+    }
+  '
+}
+
+token_pids() {
+  excluded_pid=$1
+  [ "${PARADOX_REVERSE_DISABLE_PROC_SWEEP:-}" != 1 ] || return 0
+  if [ ! -d /proc ]; then
+    # Darwin and other Unix systems expose the same inherited marker through
+    # the invoking user's process environment.  Match the fixed assignment,
+    # not the token argument passed to this watchdog.
+    /bin/ps eww -axo pid=,ppid=,command= 2>/dev/null |
+      /usr/bin/awk -v excluded="$excluded_pid" \
+        -v coordinator="$coordinator_pid" \
+        -v needle="PARADOX_REVERSE_WORKER_TOKEN=$worker_token" '
+          $1 ~ /^[1-9][0-9]*$/ && $1 != excluded &&
+              !(excluded != 0 && ($1 == coordinator || $2 == coordinator)) &&
+              index($0, needle) {
+            print $1
+          }
+        ' || true
+    return 0
+  fi
+  # One grep process examines all readable environ files.  Do not spawn one
+  # pipeline per host process: that made ordinary worker cleanup quadratic.
+  /usr/bin/grep -l -z -F -x \
+    "PARADOX_REVERSE_WORKER_TOKEN=$worker_token" \
+    /proc/[0-9]*/environ 2>/dev/null |
+    /usr/bin/awk -F/ -v excluded="$excluded_pid" '
+      $3 ~ /^[0-9]+$/ && $3 != excluded { print $3 }
+    ' |
+    while IFS= read -r candidate; do
+      if [ "$excluded_pid" != 0 ]; then
+        candidate_parent=$(/bin/ps -o ppid= -p "$candidate" 2>/dev/null |
+          /usr/bin/awk 'NR == 1 { print $1 }')
+        # processx may place its task supervisor beside the wrapper as a direct
+        # coordinator child.  It owns cleanup bookkeeping, not consumer work,
+        # and is reaped by processx after the wrapper exits.
+        if [ "$candidate" = "$coordinator_pid" ] ||
+            [ "$candidate_parent" = "$coordinator_pid" ]; then
+          continue
+        fi
+      fi
+      printf '%s\n' "$candidate"
+    done || true
+}
+
+owned_pids() {
+  root_pid=$1
+  excluded_pid=$2
+  {
+    if valid_pid "$root_pid" && [ "$root_pid" != "$excluded_pid" ]; then
+      printf '%s\n' "$root_pid"
+    fi
+    descendants "$root_pid"
+    token_pids "$excluded_pid"
+  } | /usr/bin/awk '/^[1-9][0-9]*$/ && !seen[$1]++ { print $1 }'
+}
+
+group_running() {
+  group_pid=$1
+  valid_pid "$group_pid" || return 1
+  # procps-ng kill parses an unseparated negative operand as another signal
+  # option and then targets process group zero.  The option terminator is a
+  # process-lifetime safety boundary, not cosmetic portability syntax.
+  /bin/kill -0 -- "-$group_pid" 2>/dev/null || return 1
+  # A rootless container can have a non-reaping PID 1.  An already terminated
+  # orphan may therefore remain as the sole member of its former process group
+  # until the container exits.  kill(2) still reports that zombie-only group as
+  # existing, although it contains no executable work and no signal can make
+  # progress.  Keep the conservative kill probe, but classify liveness from a
+  # successful process snapshot and ignore only terminal zombie members.
+  group_snapshot=$(/bin/ps -eo pgid=,stat= 2>/dev/null) || return 0
+  printf '%s\n' "$group_snapshot" |
+    /usr/bin/awk -v group="$group_pid" '
+      $1 == group && substr($2, 1, 1) != "Z" { live = 1 }
+      END { exit live ? 0 : 1 }
+    '
+}
+
+signal_group() {
+  signal=$1
+  group_pid=$2
+  valid_pid "$group_pid" || return 0
+  /bin/kill "-$signal" -- "-$group_pid" 2>/dev/null || true
+}
+
+signal_owned() {
+  signal=$1
+  root_pid=$2
+  excluded_pid=$3
+  owned_pids "$root_pid" "$excluded_pid" |
+    while IFS= read -r candidate; do
+      /bin/kill "-$signal" "$candidate" 2>/dev/null || true
+    done
+}
+
+owned_running() {
+  root_pid=$1
+  excluded_pid=$2
+  group_pid=$3
+  if group_running "$group_pid"; then return 0; fi
+  for candidate in $(owned_pids "$root_pid" "$excluded_pid"); do
+    if pid_running "$candidate"; then return 0; fi
+  done
+  return 1
+}
+
+# TERM and then KILL are each bounded.  Failure to clear the ownership set is
+# reported to the caller; no cleanup path waits indefinitely.
+cleanup_owned() {
+  root_pid=$1
+  excluded_pid=$2
+  group_pid=$3
+  signal_group TERM "$group_pid"
+  signal_owned TERM "$root_pid" "$excluded_pid"
+  attempts=0
+  while owned_running "$root_pid" "$excluded_pid" "$group_pid" &&
+      [ "$attempts" -lt 20 ]; do
+    sleep 0.1
+    attempts=$((attempts + 1))
+  done
+  if owned_running "$root_pid" "$excluded_pid" "$group_pid"; then
+    signal_group KILL "$group_pid"
+    signal_owned KILL "$root_pid" "$excluded_pid"
+    attempts=0
+    while owned_running "$root_pid" "$excluded_pid" "$group_pid" &&
+        [ "$attempts" -lt 20 ]; do
+      sleep 0.1
+      attempts=$((attempts + 1))
+    done
+  fi
+  ! owned_running "$root_pid" "$excluded_pid" "$group_pid"
+}
+
+bounded_reap() {
+  pid=$1
+  valid_pid "$pid" || return 0
+  /bin/kill -TERM "$pid" 2>/dev/null || true
+  attempts=0
+  while pid_running "$pid" && [ "$attempts" -lt 20 ]; do
+    sleep 0.1
+    attempts=$((attempts + 1))
+  done
+  if pid_running "$pid"; then
+    /bin/kill -KILL "$pid" 2>/dev/null || true
+    attempts=0
+    while pid_running "$pid" && [ "$attempts" -lt 20 ]; do
+      sleep 0.1
+      attempts=$((attempts + 1))
+    done
+  fi
+  if ! pid_running "$pid"; then wait "$pid" 2>/dev/null || true; return 0; fi
+  return 1
+}
+
+if [ "${1:-}" = --watchdog ]; then
+  shift
+  [ "$#" -eq 5 ] || exit 64
+  coordinator_pid=$1
+  worker_token=$2
+  supervisor_pid=$3
+  worker_pid=$4
+  worker_group_pid=$5
+  valid_pid "$coordinator_pid" && valid_pid "$supervisor_pid" &&
+    valid_pid "$worker_pid" && valid_token "$worker_token" || exit 65
+  case $worker_group_pid in 0) ;; *) valid_pid "$worker_group_pid" || exit 65 ;; esac
+  trap 'exit 0' HUP INT TERM
+  while pid_running "$coordinator_pid"; do sleep 0.1; done
+  /bin/kill -USR1 "$supervisor_pid" 2>/dev/null || true
+  cleanup_owned "$worker_pid" 0 "$worker_group_pid" || exit 67
+  exit 0
+fi
+
+[ "$#" -gt 0 ] || {
+  printf '%s\n' 'reverse-worker-group: no worker command' >&2
+  exit 64
+}
+coordinator_pid=${PARADOX_REVERSE_COORDINATOR_PID:-}
+worker_token=${PARADOX_REVERSE_WORKER_TOKEN:-}
+worker_launch=${PARADOX_REVERSE_WORKER_LAUNCH:-}
+worker_result=${PARADOX_REVERSE_WORKER_RESULT:-}
+worker_completion=${PARADOX_REVERSE_WORKER_COMPLETION:-}
+task_position=${PARADOX_REVERSE_TASK_POSITION:-}
+task_sha256=${PARADOX_REVERSE_TASK_SHA256:-}
+if ! valid_pid "$coordinator_pid" || ! valid_token "$worker_token"; then
+  printf '%s\n' 'reverse-worker-group: unsafe coordinator identity' >&2
+  exit 65
+fi
+for output_path in "$worker_launch" "$worker_result" "$worker_completion"; do
+  case $output_path in /*) ;; *)
+    printf '%s\n' 'reverse-worker-group: unsafe result identity' >&2
+    exit 65
+  ;; esac
+done
+case $task_position in ''|0*|*[!0-9]*) task_position_invalid=true ;; esac
+case $task_sha256 in ''|*[!0-9a-f]*) task_sha256_invalid=true ;; esac
+if [ "${task_position_invalid:-false}" = true ] ||
+    [ "${task_sha256_invalid:-false}" = true ] ||
+    [ "${#task_sha256}" -ne 64 ]; then
+  printf '%s\n' 'reverse-worker-group: unsafe task identity' >&2
+  exit 65
+fi
+# Cleanup helpers must not inherit the task marker, or a token sweep would
+# discover and terminate its own ps/awk/grep pipeline.  Only the worker command
+# receives the marker explicitly below.
+unset PARADOX_REVERSE_WORKER_TOKEN
+
+launch_temporary=$worker_launch.new-$$
+[ ! -e "$worker_launch" ] && [ ! -L "$worker_launch" ] &&
+  [ ! -e "$launch_temporary" ] && [ ! -L "$launch_temporary" ] || exit 66
+{
+  printf 'schema\tposition\ttask_sha256\twrapper_pid\n'
+  printf '1\t%s\t%s\t%s\n' "$task_position" "$task_sha256" "$$"
+} > "$launch_temporary"
+/bin/chmod 0600 "$launch_temporary"
+/bin/mv "$launch_temporary" "$worker_launch"
+
+watchdog_pid=
+worker_pid=
+worker_group_pid=0
+
+terminate_all() {
+  status=$1
+  trap - HUP INT TERM USR1
+  cleanup_owned "${worker_pid:-0}" "$$" "$worker_group_pid" || status=67
+  if [ -n "$watchdog_pid" ]; then bounded_reap "$watchdog_pid" || status=67; fi
+  if [ -n "$worker_pid" ] && ! pid_running "$worker_pid"; then
+    wait "$worker_pid" 2>/dev/null || true
+  fi
+  exit "$status"
+}
+
+trap 'terminate_all 129' HUP
+trap 'terminate_all 130' INT
+trap 'terminate_all 143' TERM
+trap 'terminate_all 143' USR1
+
+if [ -x /usr/bin/setsid ]; then
+  PARADOX_REVERSE_WORKER_TOKEN=$worker_token /usr/bin/setsid "$@" &
+  worker_pid=$!
+  worker_group_pid=$worker_pid
+elif [ -x /bin/setsid ]; then
+  PARADOX_REVERSE_WORKER_TOKEN=$worker_token /bin/setsid "$@" &
+  worker_pid=$!
+  worker_group_pid=$worker_pid
+else
+  PARADOX_REVERSE_WORKER_TOKEN=$worker_token "$@" &
+  worker_pid=$!
+fi
+/usr/bin/env -i PATH=/usr/bin:/bin "$0" --watchdog \
+  "$coordinator_pid" "$worker_token" "$$" "$worker_pid" \
+  "$worker_group_pid" &
+watchdog_pid=$!
+set +e
+wait "$worker_pid"
+worker_status=$?
+set -e
+trap - HUP INT TERM USR1
+
+# Successful and failed commands receive identical descendant cleanup.  A
+# clean-exit marker is published only after the complete ownership set is gone.
+cleanup_status=0
+cleanup_owned "$worker_pid" "$$" "$worker_group_pid" || cleanup_status=67
+bounded_reap "$watchdog_pid" || cleanup_status=67
+if [ "$cleanup_status" -ne 0 ]; then exit "$cleanup_status"; fi
+
+if [ "$worker_status" -eq 0 ]; then
+  [ -f "$worker_result" ] && [ ! -L "$worker_result" ] || exit 66
+  completion_temporary=$worker_completion.new-$$
+  [ ! -e "$worker_completion" ] && [ ! -L "$worker_completion" ] &&
+    [ ! -e "$completion_temporary" ] && [ ! -L "$completion_temporary" ] ||
+    exit 66
+  {
+    printf 'schema\tposition\ttask_sha256\tworker_exit_status\n'
+    printf '1\t%s\t%s\t0\n' "$task_position" "$task_sha256"
+  } > "$completion_temporary"
+  /bin/chmod 0600 "$completion_temporary"
+  /bin/mv "$completion_temporary" "$worker_completion"
+fi
+exit "$worker_status"

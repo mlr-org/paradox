@@ -1,0 +1,536 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+STATE="$ROOT/.local/compat/differential"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+LOCAL_GIT_EXEC_PATH="$ROOT/.local/toolchain/libexec/git-core"
+[[ -x "$LOCAL_GIT" && -f "$LOCAL_GIT" && ! -L "$LOCAL_GIT" &&
+   -d "$LOCAL_GIT_EXEC_PATH" && ! -L "$LOCAL_GIT_EXEC_PATH" ]] || {
+  printf '%s\n' 'The repository-local Git or exec path is unavailable' >&2
+  exit 2
+}
+differential_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_QUARANTINE_PATH \
+    -u GIT_SHALLOW_FILE -u GIT_EXEC_PATH -u GIT_TEMPLATE_DIR \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    -u GIT_EXTERNAL_DIFF -u GIT_DIFF_OPTS \
+    -u GIT_ASKPASS -u GIT_SSH -u GIT_SSH_COMMAND -u GIT_PROXY_COMMAND \
+    -u GIT_CEILING_DIRECTORIES -u GIT_DISCOVERY_ACROSS_FILESYSTEM \
+    -u GIT_PAGER -u GIT_EDITOR -u GIT_SEQUENCE_EDITOR \
+    -u GIT_LITERAL_PATHSPECS -u GIT_GLOB_PATHSPECS \
+    -u GIT_NOGLOB_PATHSPECS -u GIT_ICASE_PATHSPECS \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 \
+    GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 \
+    GIT_TERMINAL_PROMPT=0 GIT_PAGER=cat GIT_EXEC_PATH="$LOCAL_GIT_EXEC_PATH" \
+    LC_ALL=C TZ=UTC \
+    "$LOCAL_GIT" --no-replace-objects -c core.hooksPath=/dev/null \
+      -c core.attributesFile=/dev/null -c core.fsmonitor=false \
+      -c core.untrackedCache=false -c diff.external= \
+      -c interactive.diffFilter= -c tar.umask=0022 "$@"
+}
+[[ "$(differential_git --exec-path)" == "$LOCAL_GIT_EXEC_PATH" ]] || {
+  printf '%s\n' 'The repository-local Git exec path changed' >&2
+  exit 2
+}
+BASELINE_URL=$(differential_git -C "$ROOT" remote get-url origin 2>/dev/null ||
+  printf '%s\n' "https://github.com/mlr-org/paradox.git")
+BASELINE_REF=main
+CASE_FILE="$ROOT/compat/differential/cases.R"
+EXPECTED_DIFFERENCES="$ROOT/compat/differential/expected-differences.tsv"
+CASE_SOURCE_KIND=default
+EXPECTED_SOURCE_KIND=default
+FETCH=1
+SELECTED_CASES=()
+RUN_ID_OVERRIDE=
+RUN_ID_SET=0
+
+usage() {
+  sed -n 's/^# *//p' <<'USAGE'
+# Usage: compat/differential/run [OPTIONS]
+#
+# Install a clean upstream paradox and the current worktree into separate,
+# run-local libraries, capture cases in separate R processes, and compare them.
+#
+# Options:
+#   --baseline-ref REF   Upstream branch, tag, or commit (default: main)
+#   --baseline-url URL   Git repository used for the upstream mirror
+#   --cases FILE         Alternative case-definition file
+#   --case NAME          Run one named case; repeat to select several
+#   --expected-differences FILE
+#                       Expected-difference manifest (default: checked-in list)
+#   --run-id ID         New retained run ID (default: UTC timestamp/PID)
+#   --strict             Treat every observed difference as a failure
+#   --offline            Do not clone or fetch; require an existing mirror/ref
+#   -h, --help           Show this help
+USAGE
+}
+
+while (($#)); do
+  case "$1" in
+    --baseline-ref)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--baseline-ref requires a value" >&2; exit 2; }
+      BASELINE_REF=$2
+      shift 2
+      ;;
+    --baseline-url)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--baseline-url requires a value" >&2; exit 2; }
+      BASELINE_URL=$2
+      shift 2
+      ;;
+    --cases)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--cases requires a value" >&2; exit 2; }
+      CASE_FILE=$2
+      CASE_SOURCE_KIND=external
+      shift 2
+      ;;
+    --case)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--case requires a value" >&2; exit 2; }
+      SELECTED_CASES+=("$2")
+      shift 2
+      ;;
+    --expected-differences)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--expected-differences requires a value" >&2; exit 2; }
+      EXPECTED_DIFFERENCES=$2
+      EXPECTED_SOURCE_KIND=external
+      shift 2
+      ;;
+    --run-id)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--run-id requires a value" >&2; exit 2; }
+      ((RUN_ID_SET == 0)) || { printf '%s\n' "--run-id may be supplied only once" >&2; exit 2; }
+      RUN_ID_OVERRIDE=$2
+      RUN_ID_SET=1
+      shift 2
+      ;;
+    --run-id=*)
+      ((RUN_ID_SET == 0)) || { printf '%s\n' "--run-id may be supplied only once" >&2; exit 2; }
+      RUN_ID_OVERRIDE=${1#--run-id=}
+      RUN_ID_SET=1
+      shift
+      ;;
+    --strict)
+      EXPECTED_DIFFERENCES=""
+      EXPECTED_SOURCE_KIND=strict
+      shift
+      ;;
+    --offline)
+      FETCH=0
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'Unknown option: %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if ((RUN_ID_SET == 1)) &&
+   [[ ! "$RUN_ID_OVERRIDE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+  printf '%s\n' "--run-id must be a safe name of at most 128 characters" >&2
+  exit 2
+fi
+
+if [[ "${PARADOX_ACTIVE_ROOT:-}" != "$ROOT" ]]; then
+  printf '%s\n' "Activate the repository-local toolchain first: . scripts/activate" >&2
+  exit 2
+fi
+
+EXPECTED_R="$ROOT/.local/toolchain/bin/R"
+EXPECTED_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+if [[ ! -x "$EXPECTED_R" || ! -x "$EXPECTED_RSCRIPT" ]]; then
+  printf '%s\n' "The local R toolchain is missing; run scripts/bootstrap" >&2
+  exit 2
+fi
+if [[ "$(command -v R)" != "$EXPECTED_R" || "$(command -v Rscript)" != "$EXPECTED_RSCRIPT" ]]; then
+  printf '%s\n' "R/Rscript do not resolve to the activated repository-local toolchain" >&2
+  exit 2
+fi
+if [[ ! -f "$CASE_FILE" ]]; then
+  printf 'Case file does not exist: %s\n' "$CASE_FILE" >&2
+  exit 2
+fi
+if [[ -n "$EXPECTED_DIFFERENCES" && ! -f "$EXPECTED_DIFFERENCES" ]]; then
+  printf 'Expected-difference manifest does not exist: %s\n' "$EXPECTED_DIFFERENCES" >&2
+  exit 2
+fi
+
+ensure_plain_managed_directory() {
+  local path=$1 resolved
+  case "$path" in
+    "$ROOT/.local"|"$ROOT/.local"/*) ;;
+    *) printf 'Managed differential path escaped the repository: %s\n' "$path" >&2; exit 2 ;;
+  esac
+  if [[ -L "$path" || ( -e "$path" && ! -d "$path" ) ]]; then
+    printf 'Managed differential path is symbolic or not a directory: %s\n' "$path" >&2
+    exit 2
+  fi
+  if [[ ! -d "$path" ]]; then
+    mkdir "$path"
+  fi
+  resolved=$(cd "$path" && pwd -P)
+  [[ "$resolved" == "$path" ]] || {
+    printf 'Managed differential path resolves elsewhere: %s -> %s\n' "$path" "$resolved" >&2
+    exit 2
+  }
+}
+
+ensure_plain_managed_directory "$ROOT/.local"
+ensure_plain_managed_directory "$ROOT/.local/compat"
+ensure_plain_managed_directory "$STATE"
+ensure_plain_managed_directory "$STATE/runs"
+MIRROR="$STATE/upstream.git"
+if [[ -L "$MIRROR" || ( -e "$MIRROR" && ! -d "$MIRROR" ) ]]; then
+  printf 'Differential mirror is symbolic or not a directory: %s\n' "$MIRROR" >&2
+  exit 2
+fi
+if [[ ! -d "$MIRROR" ]]; then
+  if ((FETCH == 0)); then
+    printf 'Offline mode requested but the upstream mirror is absent: %s\n' "$MIRROR" >&2
+    exit 2
+  fi
+  differential_git clone --mirror "$BASELINE_URL" "$MIRROR"
+else
+  [[ "$(cd "$MIRROR" && pwd -P)" == "$MIRROR" ]] || {
+    printf 'Differential mirror resolves outside its managed path: %s\n' "$MIRROR" >&2
+    exit 2
+  }
+  CONFIGURED_URL=$(differential_git --git-dir="$MIRROR" remote get-url origin)
+  if [[ "$CONFIGURED_URL" != "$BASELINE_URL" ]]; then
+    printf 'Existing mirror URL is %s, not requested URL %s\n' "$CONFIGURED_URL" "$BASELINE_URL" >&2
+    printf 'Use the configured URL or remove %s deliberately.\n' "$MIRROR" >&2
+    exit 2
+  fi
+  if ((FETCH == 1)); then
+    differential_git --git-dir="$MIRROR" remote update --prune
+  fi
+fi
+
+if ! BASELINE_COMMIT=$(differential_git --git-dir="$MIRROR" \
+    rev-parse --verify "${BASELINE_REF}^{commit}"); then
+  printf 'Could not resolve baseline ref %s in %s\n' "$BASELINE_REF" "$MIRROR" >&2
+  exit 2
+fi
+
+if ((RUN_ID_SET == 1)); then
+  RUN_ID=$RUN_ID_OVERRIDE
+else
+  RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+fi
+[[ "$RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || {
+  printf '%s\n' "--run-id must be a safe name of at most 128 characters" >&2
+  exit 2
+}
+RUN_DIR="$STATE/runs/$RUN_ID"
+HARNESS="$RUN_DIR/harness"
+BASELINE_SOURCE="$RUN_DIR/source-baseline"
+CANDIDATE_SOURCE="$RUN_DIR/source-candidate"
+BASELINE_BUILD="$RUN_DIR/build-baseline"
+CANDIDATE_BUILD="$RUN_DIR/build-candidate"
+BASELINE_LIBRARY="$RUN_DIR/library-baseline"
+CANDIDATE_LIBRARY="$RUN_DIR/library-candidate"
+RESULTS="$RUN_DIR/results"
+LOGS="$RUN_DIR/logs"
+METADATA="$RUN_DIR/metadata"
+[[ ! -e "$RUN_DIR" && ! -L "$RUN_DIR" ]] || {
+  printf 'Differential run path already exists: %s\n' "$RUN_DIR" >&2
+  exit 2
+}
+(umask 077 && mkdir "$RUN_DIR")
+mkdir "$HARNESS" "$BASELINE_SOURCE" "$CANDIDATE_SOURCE" \
+  "$BASELINE_BUILD" "$CANDIDATE_BUILD" "$BASELINE_LIBRARY" \
+  "$CANDIDATE_LIBRARY" "$RESULTS" "$LOGS" "$METADATA"
+
+sha256_value() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
+}
+
+# Bind every subsequent source operation and retained provenance field to the
+# same observed Git state. A clean release run is therefore exactly one commit;
+# dirty worktrees remain useful diagnostics but are deliberately not sealable.
+CANDIDATE_COMMIT=$(differential_git -C "$ROOT" rev-parse --verify 'HEAD^{commit}')
+CANDIDATE_TREE=$(differential_git -C "$ROOT" rev-parse --verify \
+  "$CANDIDATE_COMMIT^{tree}")
+CANDIDATE_STATUS=$(differential_git -C "$ROOT" status --porcelain=v1 \
+  --untracked-files=all)
+CANDIDATE_REVISION="$CANDIDATE_COMMIT"
+CANDIDATE_CLEAN=true
+if [[ -n "$CANDIDATE_STATUS" ]]; then
+  CANDIDATE_REVISION="${CANDIDATE_COMMIT}+worktree"
+  CANDIDATE_CLEAN=false
+fi
+
+verify_candidate_state() {
+  local current_commit current_tree current_status
+  current_commit=$(differential_git -C "$ROOT" rev-parse --verify \
+    'HEAD^{commit}')
+  current_tree=$(differential_git -C "$ROOT" rev-parse --verify \
+    "$current_commit^{tree}")
+  current_status=$(differential_git -C "$ROOT" status --porcelain=v1 \
+    --untracked-files=all)
+  [[ "$current_commit" == "$CANDIDATE_COMMIT" &&
+     "$current_tree" == "$CANDIDATE_TREE" &&
+     "$current_status" == "$CANDIDATE_STATUS" ]] || {
+    printf '%s\n' \
+      "Candidate Git state changed while the differential run was active" >&2
+    exit 1
+  }
+}
+
+# R's staging directory is below the repository by contract, so building the
+# repository root directly would recursively copy that staging directory. Make
+# the exact run-local candidate source snapshot first: committed HEAD, tracked
+# changes, then non-ignored untracked files. The default differential harness is
+# copied from this frozen source rather than independently from the live tree.
+differential_git -C "$ROOT" archive "$CANDIDATE_COMMIT" |
+  tar -xf - -C "$CANDIDATE_SOURCE"
+if [[ "$CANDIDATE_CLEAN" != true ]]; then
+  CANDIDATE_PREFIX=${CANDIDATE_SOURCE#"$ROOT"/}
+  differential_git -C "$ROOT" diff --binary --no-ext-diff \
+    "$CANDIDATE_COMMIT" -- |
+    differential_git -C "$ROOT" apply --unsafe-paths \
+      --directory="$CANDIDATE_PREFIX"
+  while IFS= read -r -d '' path; do
+    mkdir -p "$CANDIDATE_SOURCE/$(dirname "$path")"
+    cp -pP "$ROOT/$path" "$CANDIDATE_SOURCE/$path"
+  done < <(differential_git -C "$ROOT" ls-files -z --others \
+    --exclude-standard)
+fi
+verify_candidate_state
+
+differential_git --git-dir="$MIRROR" archive "$BASELINE_COMMIT" |
+  tar -xf - -C "$BASELINE_SOURCE"
+
+cp -p "$CANDIDATE_SOURCE/compat/repository-evidence.R" \
+  "$METADATA/repository-evidence.R"
+cp -p "$CANDIDATE_SOURCE/compat/verify-repository-evidence.R" \
+  "$METADATA/verify-repository-evidence.R"
+cp -p "$CANDIDATE_SOURCE/compat/fingerprint.R" \
+  "$METADATA/fingerprint.R"
+
+SHARED_LIBRARY="$ROOT/.local/R/library"
+[[ "${R_LIBS_USER:-}" == "$SHARED_LIBRARY" && -d "$SHARED_LIBRARY" &&
+   ! -L "$SHARED_LIBRARY" &&
+   "$(cd "$SHARED_LIBRARY" && pwd -P)" == "$SHARED_LIBRARY" ]] || {
+  printf '%s\n' \
+    "R_LIBS_USER must be the canonical repository-local shared library" >&2
+  exit 2
+}
+fingerprint_tree() {
+  "$EXPECTED_RSCRIPT" --vanilla - \
+    "$METADATA/fingerprint.R" "$1" <<'RSCRIPT'
+args <- commandArgs(TRUE)
+sys.source(args[[1L]], envir = environment())
+cat(compat_tree_content_sha256(args[[2L]]), "\n", sep = "")
+RSCRIPT
+}
+SHARED_LIBRARY_FINGERPRINT=$(fingerprint_tree "$SHARED_LIBRARY")
+[[ "$SHARED_LIBRARY_FINGERPRINT" =~ ^[0-9a-f]{64}$ ]] || {
+  printf '%s\n' "Could not fingerprint the shared R library" >&2
+  exit 2
+}
+
+cp -p "$CANDIDATE_SOURCE/compat/differential/run" "$HARNESS/run"
+if [[ "$CASE_SOURCE_KIND" == default ]]; then
+  cp -p "$CANDIDATE_SOURCE/compat/differential/cases.R" "$HARNESS/cases.R"
+  CASE_ORIGIN=candidate-snapshot
+else
+  cp -p "$CASE_FILE" "$HARNESS/cases.R"
+  CASE_ORIGIN=external-override
+fi
+cp -p "$CANDIDATE_SOURCE/compat/differential/normalize.R" "$HARNESS/normalize.R"
+cp -p "$CANDIDATE_SOURCE/compat/differential/test-normalize.R" "$HARNESS/test-normalize.R"
+cp -p "$CANDIDATE_SOURCE/compat/differential/capture.R" "$HARNESS/capture.R"
+cp -p "$CANDIDATE_SOURCE/compat/differential/compare.R" "$HARNESS/compare.R"
+if [[ "$EXPECTED_SOURCE_KIND" == default ]]; then
+  cp -p "$CANDIDATE_SOURCE/compat/differential/expected-differences.tsv" \
+    "$HARNESS/expected-differences.tsv"
+  EXPECTED_ORIGIN=candidate-snapshot
+elif [[ "$EXPECTED_SOURCE_KIND" == external ]]; then
+  cp -p "$EXPECTED_DIFFERENCES" "$HARNESS/expected-differences.tsv"
+  EXPECTED_ORIGIN=external-override
+else
+  printf '%s\n' $'case\tbaseline_fingerprint\tcandidate_fingerprint\treason' \
+    > "$HARNESS/expected-differences.tsv"
+  EXPECTED_ORIGIN=strict-empty
+fi
+
+HARNESS_MANIFEST="$HARNESS/harness-sha256.tsv"
+harness_roles=(
+  runner cases normalizer test-normalizer capture compare expected-differences
+)
+harness_files=(
+  run cases.R normalize.R test-normalize.R capture.R compare.R expected-differences.tsv
+)
+harness_origins=(
+  candidate-snapshot "$CASE_ORIGIN" candidate-snapshot candidate-snapshot
+  candidate-snapshot candidate-snapshot "$EXPECTED_ORIGIN"
+)
+{
+  printf '%s\n' $'role\tfile\tsha256\torigin'
+  for index in "${!harness_roles[@]}"; do
+    file=${harness_files[$index]}
+    printf '%s\t%s\t%s\t%s\n' \
+      "${harness_roles[$index]}" "$file" "$(sha256_value "$HARNESS/$file")" \
+      "${harness_origins[$index]}"
+  done
+} > "$HARNESS_MANIFEST.tmp"
+mv "$HARNESS_MANIFEST.tmp" "$HARNESS_MANIFEST"
+chmod 0444 "$HARNESS"/*
+chmod 0555 "$HARNESS"
+
+CASE_FILE="$HARNESS/cases.R"
+EXPECTED_DIFFERENCES="$HARNESS/expected-differences.tsv"
+CAPTURE_SCRIPT="$HARNESS/capture.R"
+COMPARE_SCRIPT="$HARNESS/compare.R"
+NORMALIZER="$HARNESS/normalize.R"
+NORMALIZER_TEST="$HARNESS/test-normalize.R"
+
+printf 'Differential run: %s\n' "$RUN_DIR"
+printf 'Baseline commit: %s\n' "$BASELINE_COMMIT"
+printf 'Harness manifest SHA-256: %s\n' "$(sha256_value "$HARNESS_MANIFEST")"
+
+run_logged() {
+  local label=$1
+  local logfile=$2
+  shift 2
+  printf '%s\n' "$label"
+  if ! "$@" >"$logfile" 2>&1; then
+    printf 'Failed; log follows: %s\n' "$logfile" >&2
+    tail -n 80 "$logfile" >&2
+    exit 1
+  fi
+}
+
+# shellcheck disable=SC2016 # Positional parameters expand inside the child shell.
+run_logged "Building upstream baseline" "$LOGS/build-baseline.log" \
+  bash -c 'cd "$1" && exec "$2" CMD build "$3" --no-build-vignettes --no-manual' \
+  _ "$BASELINE_BUILD" "$EXPECTED_R" "$BASELINE_SOURCE"
+# shellcheck disable=SC2016 # Positional parameters expand inside the child shell.
+run_logged "Building current worktree" "$LOGS/build-candidate.log" \
+  bash -c 'cd "$1" && exec "$2" CMD build "$3" --no-build-vignettes --no-manual' \
+  _ "$CANDIDATE_BUILD" "$EXPECTED_R" "$CANDIDATE_SOURCE"
+
+BASELINE_TARBALL=$(find "$BASELINE_BUILD" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print -quit)
+CANDIDATE_TARBALL=$(find "$CANDIDATE_BUILD" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print -quit)
+if [[ -z "$BASELINE_TARBALL" || -z "$CANDIDATE_TARBALL" ]]; then
+  printf '%s\n' "R CMD build did not produce both paradox source archives" >&2
+  exit 1
+fi
+
+run_logged "Installing upstream baseline" "$LOGS/install-baseline.log" \
+  "$EXPECTED_R" CMD INSTALL --library="$BASELINE_LIBRARY" --clean --no-multiarch "$BASELINE_TARBALL"
+run_logged "Installing current worktree" "$LOGS/install-candidate.log" \
+  "$EXPECTED_R" CMD INSTALL --library="$CANDIDATE_LIBRARY" --clean --no-multiarch "$CANDIDATE_TARBALL"
+
+SELECTION=""
+if ((${#SELECTED_CASES[@]})); then
+  IFS=,
+  SELECTION="${SELECTED_CASES[*]}"
+  unset IFS
+fi
+
+run_logged "Testing the differential normalizer" "$LOGS/test-normalizer.log" \
+  "$EXPECTED_RSCRIPT" --vanilla "$NORMALIZER_TEST" "$NORMALIZER" "$HARNESS_MANIFEST"
+
+run_logged "Capturing upstream observations" "$LOGS/capture-baseline.log" \
+  "$EXPECTED_RSCRIPT" --vanilla "$CAPTURE_SCRIPT" \
+  --library "$BASELINE_LIBRARY" \
+  --shared-library "$SHARED_LIBRARY" \
+  --cases "$CASE_FILE" \
+  --normalizer "$NORMALIZER" \
+  --harness-manifest "$HARNESS_MANIFEST" \
+  --output "$RESULTS/baseline.rds" \
+  --label "upstream" \
+  --revision "$BASELINE_COMMIT" \
+  --select "$SELECTION"
+
+run_logged "Capturing worktree observations" "$LOGS/capture-candidate.log" \
+  "$EXPECTED_RSCRIPT" --vanilla "$CAPTURE_SCRIPT" \
+  --library "$CANDIDATE_LIBRARY" \
+  --shared-library "$SHARED_LIBRARY" \
+  --cases "$CASE_FILE" \
+  --normalizer "$NORMALIZER" \
+  --harness-manifest "$HARNESS_MANIFEST" \
+  --output "$RESULTS/candidate.rds" \
+  --label "worktree" \
+  --revision "$CANDIDATE_REVISION" \
+  --select "$SELECTION"
+
+printf '%s\n' "Comparing normalized observations"
+set +e
+COMPARE_ARGS=(
+  "$RESULTS/baseline.rds"
+  "$RESULTS/candidate.rds"
+  "$RESULTS/report.rds"
+  "$RESULTS/report.txt"
+  "$HARNESS_MANIFEST"
+  "$EXPECTED_DIFFERENCES"
+)
+"$EXPECTED_RSCRIPT" --vanilla "$COMPARE_SCRIPT" "${COMPARE_ARGS[@]}" \
+  > "$LOGS/compare.log" 2>&1
+STATUS=$?
+set -e
+cat "$LOGS/compare.log"
+
+verify_candidate_state
+SHARED_LIBRARY_FINGERPRINT_AFTER=$(fingerprint_tree "$SHARED_LIBRARY")
+[[ "$SHARED_LIBRARY_FINGERPRINT_AFTER" == "$SHARED_LIBRARY_FINGERPRINT" ]] || {
+  printf '%s\n' "Shared R library changed during the differential run" >&2
+  exit 1
+}
+{
+  printf 'harness=differential\n'
+  printf 'schema=2\n'
+  printf 'run_id=%s\n' "$RUN_ID"
+  printf 'baseline_url=%s\n' "$BASELINE_URL"
+  printf 'baseline_ref=%s\n' "$BASELINE_REF"
+  printf 'baseline_commit=%s\n' "$BASELINE_COMMIT"
+  printf 'candidate_commit=%s\n' "$CANDIDATE_COMMIT"
+  printf 'candidate_tree=%s\n' "$CANDIDATE_TREE"
+  printf 'candidate_revision=%s\n' "$CANDIDATE_REVISION"
+  printf 'candidate_clean=%s\n' "$CANDIDATE_CLEAN"
+  printf 'shared_library=%s\n' "$SHARED_LIBRARY"
+  printf 'shared_library_sha256=%s\n' "$SHARED_LIBRARY_FINGERPRINT"
+  printf 'fingerprint_helper_sha256=%s\n' \
+    "$(sha256_value "$METADATA/fingerprint.R")"
+  printf 'harness_manifest_sha256=%s\n' "$(sha256_value "$HARNESS_MANIFEST")"
+  printf 'compare_status=%s\n' "$STATUS"
+  printf 'completed_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} > "$METADATA/completion.tsv"
+
+if ((STATUS == 0)) && [[ "$CANDIDATE_CLEAN" == true ]]; then
+  "$EXPECTED_RSCRIPT" --vanilla - \
+    "$METADATA/repository-evidence.R" "$RUN_DIR" <<'RSCRIPT'
+args <- commandArgs(TRUE)
+sys.source(args[[1L]], envir = environment())
+repository_seal_evidence(args[[2L]])
+RSCRIPT
+  "$EXPECTED_RSCRIPT" --vanilla - \
+    "$METADATA/repository-evidence.R" "$RUN_DIR" <<'RSCRIPT'
+args <- commandArgs(TRUE)
+sys.source(args[[1L]], envir = environment())
+repository_verify_evidence(args[[2L]])
+RSCRIPT
+fi
+
+if ((STATUS == 0)) && [[ "$CANDIDATE_CLEAN" != true ]]; then
+  printf '%s\n' \
+    "Dirty-worktree differential passed as an unsealed diagnostic run"
+fi
+
+printf 'Artifacts: %s\n' "$RUN_DIR"
+exit "$STATUS"

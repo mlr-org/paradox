@@ -1,0 +1,889 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016 # literal R expression
+
+# Prove that the functional runner retains every ordinary expectation failure
+# reached by one selected test inventory before it returns a failing status.
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+LIBRARY="$ROOT/.local/R/library"
+RUNNER="$ROOT/scripts/environment/run-native-tests.R"
+WORKER_GROUP="$ROOT/scripts/environment/run-native-test-worker-group"
+mkdir -p "$ROOT/.local/tmp"
+TEST_ROOT=$(mktemp -d "$ROOT/.local/tmp/native-test-batch.XXXXXX")
+INTERRUPT_RUNNER_PID=
+INTERRUPT_CHILD_PIDS=()
+cleanup() {
+  if [[ -n "$INTERRUPT_RUNNER_PID" ]]; then
+    kill "$INTERRUPT_RUNNER_PID" 2>/dev/null || true
+    wait "$INTERRUPT_RUNNER_PID" 2>/dev/null || true
+  fi
+  for interrupt_pid in "${INTERRUPT_CHILD_PIDS[@]}"; do
+    kill "$interrupt_pid" 2>/dev/null || true
+  done
+  rm -rf "$TEST_ROOT"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+[[ -x "$RSCRIPT" && -f "$RUNNER" && -x "$WORKER_GROUP" &&
+   -d "$LIBRARY/paradox" ]] || {
+  printf '%s\n' 'test-native-test-batch: local R/package state is absent' >&2
+  exit 1
+}
+DSO_SHA256=$(sha256sum "$LIBRARY/paradox/libs/paradox.so" | cut -d ' ' -f 1)
+
+# Refuse incomplete or nonnumeric direct-call identities before starting a
+# watchdog or a worker.  Production always supplies these through processx,
+# but the supervisor itself must fail closed as a reusable boundary.
+for bad_identity in missing-coordinator nonnumeric-coordinator missing-token; do
+  set +e
+  case "$bad_identity" in
+    missing-coordinator)
+      env PARADOX_NATIVE_WORKER_TOKEN="native-identity-$$" \
+        "$WORKER_GROUP" /bin/true >/dev/null 2>&1
+      ;;
+    nonnumeric-coordinator)
+      env PARADOX_NATIVE_COORDINATOR_PID=not-a-pid \
+        PARADOX_NATIVE_WORKER_TOKEN="native-identity-$$" \
+        "$WORKER_GROUP" /bin/true >/dev/null 2>&1
+      ;;
+    missing-token)
+      env PARADOX_NATIVE_COORDINATOR_PID="$$" \
+        "$WORKER_GROUP" /bin/true >/dev/null 2>&1
+      ;;
+  esac
+  identity_status=$?
+  set -e
+  [[ "$identity_status" -eq 65 ]] || {
+    printf 'test-native-test-batch: unsafe identity was accepted: %s\n' \
+      "$bad_identity" >&2
+    exit 1
+  }
+done
+
+mkdir -p "$TEST_ROOT/source/tests/testthat" "$TEST_ROOT/home" \
+  "$TEST_ROOT/tmp"
+printf '%s\n' \
+  'test_that("first batch failure", expect_equal(1, 2))' \
+  > "$TEST_ROOT/source/tests/testthat/test-native-batch-001.R"
+printf '%s\n' \
+  'test_that("second batch failure", expect_true(FALSE))' \
+  > "$TEST_ROOT/source/tests/testthat/test-native-batch-002.R"
+printf '%s\n' \
+  'test_that("successful sibling", {' \
+  '  cat("completed\n", file = Sys.getenv("PARADOX_NATIVE_SIBLING_MARKER"))' \
+  '  expect_true(startsWith(Sys.getenv("HOME"), "/") && dir.exists(path.expand("~")))' \
+  '})' \
+  > "$TEST_ROOT/source/tests/testthat/test-native-batch-003.R"
+
+set +e
+(
+cd "$TEST_ROOT"
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "PARADOX_NATIVE_TEST_JOBS=3" \
+  "PARADOX_NATIVE_SIBLING_MARKER=$TEST_ROOT/sibling.marker" \
+  "$RSCRIPT" --vanilla "$RUNNER" "$TEST_ROOT/source" "$LIBRARY" focused \
+  ledger.tsv
+) > "$TEST_ROOT/runner.log" 2>&1
+runner_status=$?
+set -e
+[[ "$runner_status" -ne 0 ]] || {
+  cat "$TEST_ROOT/runner.log" >&2
+  printf '%s\n' 'test-native-test-batch: failing corpus returned success' >&2
+  exit 1
+}
+[[ "$(cat "$TEST_ROOT/sibling.marker")" == completed ]] || {
+  printf '%s\n' 'test-native-test-batch: successful sibling did not complete' >&2
+  exit 1
+}
+
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla -e '
+    path <- setdiff(commandArgs(TRUE), "--args")[[1L]]
+    ledger <- read.delim(path, sep = "\t", quote = "", comment.char = "",
+      colClasses = "character", check.names = FALSE)
+    tests <- ledger[ledger$kind == "test", , drop = FALSE]
+    summary <- ledger[ledger$kind == "summary", , drop = FALSE]
+    stopifnot(
+      nrow(tests) == 3L,
+      identical(
+        sort(tests$test),
+        sort(c(
+          "first batch failure", "second batch failure", "successful sibling"
+        ))
+      ),
+      sum(as.integer(tests$failed)) == 2L,
+      sum(as.integer(tests$passed)) == 1L,
+      nrow(summary) == 1L,
+      identical(summary$failed, "2"),
+      identical(tail(ledger$kind, 1L), "summary")
+    )
+  ' --args "$TEST_ROOT/ledger.tsv"
+
+# Two file workers must genuinely overlap, inherit the reviewed nested-thread
+# caps through processx's `env = c("current", ...)` merge, and receive distinct
+# R session temp directories.  Repeating the same run must produce byte-for-byte
+# identical semantic and worker ledgers despite nondeterministic completion.
+CONCURRENCY_SOURCE="$TEST_ROOT/concurrency-source"
+mkdir -p "$CONCURRENCY_SOURCE/tests/testthat"
+for fixture_index in 1 2; do
+  fixture_file=$(printf \
+    '%s/tests/testthat/test-native-concurrent-%03d.R' \
+    "$CONCURRENCY_SOURCE" "$fixture_index")
+  printf '%s\n' \
+    'test_that("parallel overlap", {' \
+    '  marker = Sys.getenv("PARADOX_NATIVE_CONCURRENCY_MARKER")' \
+    '  cat(' \
+    '    paste(Sys.getpid(), tempdir(), Sys.getenv("MAKEFLAGS"),' \
+    '      Sys.getenv("OMP_NUM_THREADS"), Sys.getenv("NUMEXPR_NUM_THREADS"),' \
+    '      Sys.getenv("MC_CORES"), Sys.getenv("R_FUTURE_PLAN"),' \
+    '      Sys.getenv("R_FUTURE_FORK_ENABLE"),' \
+    '      Sys.getenv("R_PARALLELLY_FORK_ENABLE"),' \
+    '      sep = "\t"),' \
+    '    "\n", file = marker, append = TRUE, sep = ""' \
+    '  )' \
+    '  deadline = Sys.time() + 8' \
+    '  repeat {' \
+    '    starts = tryCatch(readLines(marker, warn = FALSE), error = function(...) "")' \
+    '    if (length(starts) >= 2L || Sys.time() >= deadline) break' \
+    '    Sys.sleep(0.05)' \
+    '  }' \
+    '  expect_gte(length(starts), 2L)' \
+    '  expect_identical(Sys.getenv("MAKEFLAGS"), "-j1")' \
+    '  expect_identical(Sys.getenv("OMP_NUM_THREADS"), "1")' \
+    '  expect_identical(Sys.getenv("NUMEXPR_NUM_THREADS"), "1")' \
+    '})' > "$fixture_file"
+done
+
+CONCURRENCY_LIBRARY="$TEST_ROOT/candidate-library"
+mkdir -p "$CONCURRENCY_LIBRARY"
+cp -a "$LIBRARY/paradox" "$CONCURRENCY_LIBRARY/paradox"
+
+run_concurrency_fixture() {
+  local suffix=$1 marker="$TEST_ROOT/concurrency-$1.marker"
+  local candidate_library="$LIBRARY"
+  # Repeat with a candidate-only library and dependencies selected solely by
+  # R_LIBS_USER. Workers replace that variable for their isolated candidate;
+  # the coordinator must propagate its effective dependency search path.
+  [[ "$suffix" != b ]] || candidate_library="$CONCURRENCY_LIBRARY"
+  env -i \
+    "HOME=$TEST_ROOT/home" \
+    "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+    "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+    "R_LIBS_USER=$LIBRARY" "R_LIBS=" "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "PARADOX_NATIVE_TEST_JOBS=2" \
+    "PARADOX_NATIVE_CONCURRENCY_MARKER=$marker" \
+    "$RSCRIPT" --vanilla "$RUNNER" "$CONCURRENCY_SOURCE" "$candidate_library" \
+    focused "$TEST_ROOT/concurrency-$suffix.tsv" \
+    > "$TEST_ROOT/concurrency-$suffix.log" 2>&1
+  [[ "$(wc -l < "$marker")" -eq 2 ]] || {
+    cat "$TEST_ROOT/concurrency-$suffix.log" >&2
+    printf '%s\n' 'test-native-test-batch: workers did not overlap' >&2
+    exit 1
+  }
+  [[ "$(cut -f 2 "$marker" | sort -u | wc -l)" -eq 2 ]] || {
+    printf '%s\n' 'test-native-test-batch: workers shared one R tempdir' >&2
+    exit 1
+  }
+  awk -F '\t' 'NF != 9 || $3 != "-j1" || $4 != "1" || $5 != "1" ||
+      $6 != "1" || $7 != "sequential" || $8 != "false" || $9 != "false" {
+    exit 1
+  }' "$marker" || {
+    printf '%s\n' 'test-native-test-batch: nested worker caps were not inherited' >&2
+    exit 1
+  }
+}
+run_concurrency_fixture a
+run_concurrency_fixture b
+cmp -s "$TEST_ROOT/concurrency-a.tsv" "$TEST_ROOT/concurrency-b.tsv" || {
+  printf '%s\n' 'test-native-test-batch: parallel semantic ledger is nondeterministic' >&2
+  exit 1
+}
+cmp -s "$TEST_ROOT/concurrency-a-workers.tsv" \
+  "$TEST_ROOT/concurrency-b-workers.tsv" || {
+  printf '%s\n' 'test-native-test-batch: parallel worker ledger is nondeterministic' >&2
+  exit 1
+}
+
+# Full-selection ConfigSpace tests are one exclusive task after the ordinary
+# wave.  The two exact filenames must observe one PID/tempdir and cannot start
+# before the ordinary worker has finished.
+LANE_SOURCE="$TEST_ROOT/lane-source"
+mkdir -p "$LANE_SOURCE/tests/testthat"
+printf '%s\n' \
+  'test_that("ordinary lane predecessor", {' \
+  '  marker = Sys.getenv("PARADOX_NATIVE_LANE_MARKER")' \
+  '  cat("ordinary-start\n", file = marker, append = TRUE)' \
+  '  Sys.sleep(0.4)' \
+  '  cat("ordinary-finish\n", file = marker, append = TRUE)' \
+  '  expect_true(TRUE)' \
+  '})' > "$LANE_SOURCE/tests/testthat/test_ordinary.R"
+printf '%s\n' \
+  'test_that("ConfigSpace lane first", {' \
+  '  marker = Sys.getenv("PARADOX_NATIVE_LANE_MARKER")' \
+  '  events = readLines(marker, warn = FALSE)' \
+  '  expect_identical(tail(events, 1L), "ordinary-finish")' \
+  '  cat(paste("config-new", Sys.getpid(), tempdir(), sep = "\t"),' \
+  '    "\n", file = marker, append = TRUE, sep = "")' \
+  '})' > "$LANE_SOURCE/tests/testthat/test_paramset_to_configspace.R"
+printf '%s\n' \
+  'test_that("ConfigSpace lane second", {' \
+  '  marker = Sys.getenv("PARADOX_NATIVE_LANE_MARKER")' \
+  '  events = readLines(marker, warn = FALSE)' \
+  '  expect_true(startsWith(tail(events, 1L), "config-new\t"))' \
+  '  cat(paste("config-old", Sys.getpid(), tempdir(), sep = "\t"),' \
+  '    "\n", file = marker, append = TRUE, sep = "")' \
+  '})' > "$LANE_SOURCE/tests/testthat/test_paramset_to_configspace_old.R"
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "PARADOX_NATIVE_TEST_JOBS=2" \
+  "PARADOX_NATIVE_LANE_MARKER=$TEST_ROOT/lane.marker" \
+  "$RSCRIPT" --vanilla "$RUNNER" "$LANE_SOURCE" "$LIBRARY" full \
+  "$TEST_ROOT/lane.tsv" > "$TEST_ROOT/lane.log" 2>&1
+mapfile -t lane_events < "$TEST_ROOT/lane.marker"
+[[ "${lane_events[0]}" == ordinary-start &&
+   "${lane_events[1]}" == ordinary-finish &&
+   "${lane_events[2]}" == config-new$'\t'* &&
+   "${lane_events[3]}" == config-old$'\t'* ]] || {
+  cat "$TEST_ROOT/lane.log" >&2
+  printf '%s\n' 'test-native-test-batch: exclusive lane order differs' >&2
+  exit 1
+}
+lane_new_pid=$(printf '%s\n' "${lane_events[2]}" | cut -f 2)
+lane_old_pid=$(printf '%s\n' "${lane_events[3]}" | cut -f 2)
+lane_new_tmp=$(printf '%s\n' "${lane_events[2]}" | cut -f 3)
+lane_old_tmp=$(printf '%s\n' "${lane_events[3]}" | cut -f 3)
+[[ "$lane_new_pid" == "$lane_old_pid" && "$lane_new_tmp" == "$lane_old_tmp" ]] || {
+  printf '%s\n' 'test-native-test-batch: ConfigSpace lane used multiple workers' >&2
+  exit 1
+}
+awk -F '\t' '
+  $5 == "exclusive" &&
+    $6 == "test_paramset_to_configspace.R,test_paramset_to_configspace_old.R" {
+      found = 1
+    }
+  END { exit(found ? 0 : 1) }
+' "$TEST_ROOT/lane-workers.tsv" || {
+  printf '%s\n' 'test-native-test-batch: exclusive lane evidence differs' >&2
+  exit 1
+}
+
+# A worker must reject a wrong expected DSO before it sources even one test.
+mkdir -p "$TEST_ROOT/wrong-dso"
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "PARADOX_NATIVE_CONCURRENCY_MARKER=$TEST_ROOT/wrong-dso.marker" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/run-native-test-worker.R" \
+  "$CONCURRENCY_SOURCE" "$LIBRARY" focused \
+  0000000000000000000000000000000000000000000000000000000000000000 \
+  "$TEST_ROOT/wrong-dso/result.rds" test-native-concurrent-001.R \
+  > "$TEST_ROOT/wrong-dso.log" 2>&1
+wrong_dso_status=$?
+set -e
+[[ "$wrong_dso_status" -ne 0 && ! -e "$TEST_ROOT/wrong-dso/result.rds" &&
+   ! -e "$TEST_ROOT/wrong-dso.marker" ]] || {
+  printf '%s\n' 'test-native-test-batch: wrong DSO worker reached test code' >&2
+  exit 1
+}
+grep -Fq 'worker paradox DSO differs from the expected SHA-256' \
+  "$TEST_ROOT/wrong-dso.log" || {
+  cat "$TEST_ROOT/wrong-dso.log" >&2
+  printf '%s\n' 'test-native-test-batch: wrong DSO rejection was ambiguous' >&2
+  exit 1
+}
+
+# SIGTERM of the coordinator must reap two active R workers and their
+# deliberately unsupervised shell/sleep grandchildren.  This exercises the
+# processx supervisor, Linux parent-death signal, and explicit on-exit tree kill
+# together; no interrupted semantic ledger may be published.
+INTERRUPT_SOURCE="$TEST_ROOT/interrupt-source"
+mkdir -p "$INTERRUPT_SOURCE/tests/testthat"
+for fixture_index in 1 2; do
+  fixture_file=$(printf \
+    '%s/tests/testthat/test-native-interrupt-%03d.R' \
+    "$INTERRUPT_SOURCE" "$fixture_index")
+  printf '%s\n' \
+    'test_that("interrupt cleanup", {' \
+    '  worker_marker = Sys.getenv("PARADOX_NATIVE_WORKER_PID_MARKER")' \
+    '  child_marker = Sys.getenv("PARADOX_NATIVE_CHILD_PID_MARKER")' \
+    '  command = sprintf(' \
+    '    "printf '\''%%s\\n'\'' $$ >> %s; sleep 60 & printf '\''%%s\\n'\'' $! >> %s; wait",' \
+    '    shQuote(child_marker), shQuote(child_marker)' \
+    '  )' \
+    '  processx::process$new(' \
+    '    "/bin/sh", c("-c", command), cleanup = FALSE' \
+    '  )' \
+    '  cat(Sys.getpid(), "\n", file = worker_marker, append = TRUE, sep = "")' \
+    '  deadline = Sys.time() + 8' \
+    '  while (length(tryCatch(readLines(child_marker, warn = FALSE),' \
+    '      error = function(...) "")) < 2L && Sys.time() < deadline) {' \
+    '    Sys.sleep(0.05)' \
+    '  }' \
+    '  Sys.sleep(60)' \
+    '  expect_true(TRUE)' \
+    '})' > "$fixture_file"
+done
+
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "PARADOX_NATIVE_TEST_JOBS=2" \
+  "PARADOX_NATIVE_WORKER_PID_MARKER=$TEST_ROOT/interrupt-workers.pid" \
+  "PARADOX_NATIVE_CHILD_PID_MARKER=$TEST_ROOT/interrupt-children.pid" \
+  "$RSCRIPT" --vanilla "$RUNNER" "$INTERRUPT_SOURCE" "$LIBRARY" focused \
+  "$TEST_ROOT/interrupt.tsv" > "$TEST_ROOT/interrupt.log" 2>&1 &
+INTERRUPT_RUNNER_PID=$!
+interrupt_ready=false
+for _ in $(seq 1 120); do
+  worker_lines=0
+  child_lines=0
+  [[ ! -f "$TEST_ROOT/interrupt-workers.pid" ]] ||
+    worker_lines=$(wc -l < "$TEST_ROOT/interrupt-workers.pid")
+  [[ ! -f "$TEST_ROOT/interrupt-children.pid" ]] ||
+    child_lines=$(wc -l < "$TEST_ROOT/interrupt-children.pid")
+  if [[ "$worker_lines" -ge 2 && "$child_lines" -ge 4 ]]; then
+    interrupt_ready=true
+    break
+  fi
+  sleep 0.1
+done
+[[ "$interrupt_ready" == true ]] || {
+  cat "$TEST_ROOT/interrupt.log" >&2
+  printf '%s\n' 'test-native-test-batch: interruption fixture did not start' >&2
+  exit 1
+}
+mapfile -t INTERRUPT_CHILD_PIDS < <(
+  cat "$TEST_ROOT/interrupt-workers.pid" "$TEST_ROOT/interrupt-children.pid"
+)
+kill -TERM "$INTERRUPT_RUNNER_PID"
+set +e
+wait "$INTERRUPT_RUNNER_PID"
+interrupt_status=$?
+set -e
+INTERRUPT_RUNNER_PID=
+[[ "$interrupt_status" -ne 0 && ! -e "$TEST_ROOT/interrupt.tsv" ]] || {
+  printf '%s\n' 'test-native-test-batch: interrupted coordinator published success' >&2
+  exit 1
+}
+
+pid_is_live() {
+  local pid=$1 state
+  kill -0 "$pid" 2>/dev/null || return 1
+  state=$(ps -o stat= -p "$pid" 2>/dev/null | awk 'NR == 1 { print $1 }')
+  [[ -n "$state" && "$state" != Z* ]]
+}
+watchdog_for_supervisor() {
+  local supervisor_pid=$1 candidate
+  while IFS= read -r candidate; do
+    candidate=${candidate//[[:space:]]/}
+    [[ "$candidate" =~ ^[1-9][0-9]*$ &&
+       -r "/proc/$candidate/cmdline" ]] || continue
+    if tr '\0' '\n' < "/proc/$candidate/cmdline" |
+        grep -Fqx -- '--watchdog'; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done < <(ps -o pid= --ppid "$supervisor_pid")
+  return 1
+}
+for _ in $(seq 1 100); do
+  live_count=0
+  for interrupt_pid in "${INTERRUPT_CHILD_PIDS[@]}"; do
+    pid_is_live "$interrupt_pid" && live_count=$((live_count + 1))
+  done
+  [[ "$live_count" -ne 0 ]] || break
+  sleep 0.1
+done
+[[ "$live_count" -eq 0 ]] || {
+  printf '%s\n' \
+    'test-native-test-batch: interrupted worker tree left live descendants' >&2
+  ps -o pid,ppid,stat,command -p \
+    "$(IFS=,; printf '%s' "${INTERRUPT_CHILD_PIDS[*]}")" >&2 || true
+  exit 1
+}
+INTERRUPT_CHILD_PIDS=()
+
+# processx may signal the detached watchdog directly while it tears down a
+# dead coordinator's descendant tree. Exercise every catchable direct signal
+# promised by the supervisor and require the token-marked shell plus its nested
+# session to disappear. SIGINT is intentionally absent: asynchronous POSIX
+# shell children inherit INT/QUIT ignored and cover coordinator INT through
+# the watchdog's parent-death poll instead.
+for watchdog_signal in HUP TERM USR1; do
+  watchdog_marker="$TEST_ROOT/watchdog-$watchdog_signal.pid"
+  env \
+    PARADOX_NATIVE_COORDINATOR_PID="$$" \
+    PARADOX_NATIVE_WORKER_TOKEN="native-watchdog-$watchdog_signal-$$" \
+    "$WORKER_GROUP" /bin/sh -c \
+      'trap "" HUP TERM USR1; printf "%s\n" "$$" > "$1"; sleep 60 & printf "%s\n" "$!" >> "$1"; wait' \
+      native-watchdog "$watchdog_marker" \
+      > "$TEST_ROOT/watchdog-$watchdog_signal.log" 2>&1 &
+  INTERRUPT_RUNNER_PID=$!
+  watchdog_pid=
+  watchdog_ready=false
+  for _ in $(seq 1 100); do
+    watchdog_lines=0
+    [[ ! -f "$watchdog_marker" ]] ||
+      watchdog_lines=$(wc -l < "$watchdog_marker")
+    if [[ "$watchdog_lines" -ge 2 ]]; then
+      watchdog_pid=$(watchdog_for_supervisor "$INTERRUPT_RUNNER_PID" || true)
+      if [[ -n "$watchdog_pid" ]]; then
+        watchdog_ready=true
+        break
+      fi
+    fi
+    sleep 0.05
+  done
+  [[ "$watchdog_ready" == true ]] || {
+    cat "$TEST_ROOT/watchdog-$watchdog_signal.log" >&2
+    printf 'test-native-test-batch: %s watchdog fixture did not start\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  mapfile -t watchdog_descendants < "$watchdog_marker"
+  INTERRUPT_CHILD_PIDS=("${watchdog_descendants[@]}" "$watchdog_pid")
+  # The command line is visible just before the shell installs its traps; give
+  # that bounded startup path one scheduling quantum before direct delivery.
+  sleep 0.1
+  kill "-$watchdog_signal" "$watchdog_pid"
+  for _ in $(seq 1 100); do
+    pid_is_live "$INTERRUPT_RUNNER_PID" || break
+    sleep 0.05
+  done
+  pid_is_live "$INTERRUPT_RUNNER_PID" && {
+    printf 'test-native-test-batch: %s watchdog cleanup was unbounded\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  set +e
+  wait "$INTERRUPT_RUNNER_PID"
+  watchdog_status=$?
+  set -e
+  INTERRUPT_RUNNER_PID=
+  [[ "$watchdog_status" -ne 0 ]] || {
+    printf 'test-native-test-batch: %s watchdog lost worker failure status\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  for _ in $(seq 1 100); do
+    live_count=0
+    for interrupt_pid in "${INTERRUPT_CHILD_PIDS[@]}"; do
+      pid_is_live "$interrupt_pid" && live_count=$((live_count + 1))
+    done
+    [[ "$live_count" -ne 0 ]] || break
+    sleep 0.05
+  done
+  [[ "$live_count" -eq 0 ]] || {
+    printf 'test-native-test-batch: %s watchdog left token descendants\n' \
+      "$watchdog_signal" >&2
+    exit 1
+  }
+  INTERRUPT_CHILD_PIDS=()
+done
+
+# The process-group supervisor must not wait forever for a TERM-ignoring
+# worker leader.  Its bounded fallback kills and reaps the complete group.
+TERM_IGNORING_MARKER="$TEST_ROOT/term-ignoring-worker.pid"
+env \
+  PARADOX_NATIVE_COORDINATOR_PID="$$" \
+  PARADOX_NATIVE_WORKER_TOKEN="native-term-ignore-$$" \
+  "$WORKER_GROUP" /bin/sh -c \
+    'trap "" TERM; printf "%s\n" "$$" > "$1"; while :; do sleep 60; done' \
+    native-term-ignore "$TERM_IGNORING_MARKER" &
+INTERRUPT_RUNNER_PID=$!
+for _ in $(seq 1 100); do
+  [[ -s "$TERM_IGNORING_MARKER" ]] && break
+  sleep 0.05
+done
+[[ -s "$TERM_IGNORING_MARKER" ]] || {
+  printf '%s\n' 'test-native-test-batch: TERM-ignoring worker did not start' >&2
+  exit 1
+}
+term_ignoring_pid=$(<"$TERM_IGNORING_MARKER")
+INTERRUPT_CHILD_PIDS=("$term_ignoring_pid")
+term_started=$SECONDS
+kill -TERM "$INTERRUPT_RUNNER_PID"
+set +e
+wait "$INTERRUPT_RUNNER_PID"
+term_status=$?
+set -e
+INTERRUPT_RUNNER_PID=
+[[ "$term_status" -eq 143 && $((SECONDS - term_started)) -le 5 ]] || {
+  printf '%s\n' 'test-native-test-batch: TERM-ignoring cleanup was unbounded' >&2
+  exit 1
+}
+for _ in $(seq 1 100); do
+  kill -0 "$term_ignoring_pid" 2>/dev/null || break
+  sleep 0.05
+done
+if kill -0 "$term_ignoring_pid" 2>/dev/null; then
+  printf '%s\n' 'test-native-test-batch: TERM-ignoring worker survived cleanup' >&2
+  exit 1
+fi
+INTERRUPT_CHILD_PIDS=()
+
+# Exercise the deadline without waiting for the reviewed 30-minute production
+# limit: an otherwise exact private runner copy lowers only that constant.
+TIMEOUT_TOOLS="$TEST_ROOT/timeout-tools"
+mkdir -p "$TIMEOUT_TOOLS" "$TEST_ROOT/timeout-source/tests/testthat"
+cp "$RUNNER" "$ROOT/scripts/environment/run-native-test-worker.R" \
+  "$WORKER_GROUP" "$TIMEOUT_TOOLS/"
+grep -Fq 'worker_timeout_seconds <- 1800' \
+  "$TIMEOUT_TOOLS/run-native-tests.R"
+sed -i 's/worker_timeout_seconds <- 1800/worker_timeout_seconds <- 2/' \
+  "$TIMEOUT_TOOLS/run-native-tests.R"
+printf '%s\n' \
+  'test_that("bounded worker timeout", {' \
+  '  cat(Sys.getpid(), "\n", file = Sys.getenv("PARADOX_TIMEOUT_PID"))' \
+  '  Sys.sleep(60)' \
+  '  expect_true(TRUE)' \
+  '})' > "$TEST_ROOT/timeout-source/tests/testthat/test-native-timeout.R"
+timeout_started=$SECONDS
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "PARADOX_NATIVE_TEST_JOBS=2" \
+  "PARADOX_TIMEOUT_PID=$TEST_ROOT/timeout-worker.pid" \
+  "$RSCRIPT" --vanilla "$TIMEOUT_TOOLS/run-native-tests.R" \
+  "$TEST_ROOT/timeout-source" "$LIBRARY" focused "$TEST_ROOT/timeout.tsv" \
+  > "$TEST_ROOT/timeout.log" 2>&1
+timeout_status=$?
+set -e
+[[ "$timeout_status" -ne 0 && $((SECONDS - timeout_started)) -le 10 &&
+   -s "$TEST_ROOT/timeout-worker.pid" && ! -e "$TEST_ROOT/timeout.tsv" ]] || {
+  cat "$TEST_ROOT/timeout.log" >&2
+  printf '%s\n' 'test-native-test-batch: worker timeout was not bounded' >&2
+  exit 1
+}
+timeout_pid=$(<"$TEST_ROOT/timeout-worker.pid")
+INTERRUPT_CHILD_PIDS=("$timeout_pid")
+for _ in $(seq 1 100); do
+  pid_is_live "$timeout_pid" || break
+  sleep 0.05
+done
+if pid_is_live "$timeout_pid"; then
+  printf '%s\n' 'test-native-test-batch: timed-out worker remained alive' >&2
+  exit 1
+fi
+INTERRUPT_CHILD_PIDS=()
+grep -Fq 'native worker timed out after 2 seconds' "$TEST_ROOT/timeout.log" || {
+  cat "$TEST_ROOT/timeout.log" >&2
+  printf '%s\n' 'test-native-test-batch: worker timeout was not retained' >&2
+  exit 1
+}
+
+# Exercise the writer and trusted verifier together on a compact generated
+# corpus. Coverage authority comes from exact source discovery; this fixture
+# needs only enough independent files and NOT_CRAN scopes to exercise batching,
+# scheduler evidence, and source-to-ledger joins.
+CLEAN_SOURCE="$TEST_ROOT/clean-source"
+CLEAN_LEDGER="$TEST_ROOT/clean-ledger.tsv"
+clean_file_count=8
+clean_blocks=3
+clean_not_cran_files=5
+mkdir -p "$CLEAN_SOURCE/tests/testthat"
+printf '%s\n' \
+  'skip_if_no_old_r_binding_existence_path = function() {' \
+  '  testthat::skip_if(' \
+  '    getRversion() >= "4.2.0",' \
+  '    "R >= 4.2 has a public non-evaluating binding-existence operation"' \
+  '  )' \
+  '}' > "$CLEAN_SOURCE/tests/testthat/helper.R"
+for file_index in $(seq 1 "$clean_file_count"); do
+  if [[ "$file_index" -eq "$clean_file_count" ]]; then
+    clean_file="$CLEAN_SOURCE/tests/testthat/test_to_tune.R"
+  elif (( file_index == clean_file_count - 1 )); then
+    clean_file="$CLEAN_SOURCE/tests/testthat/test-paramset-equality.R"
+  elif (( file_index == clean_file_count - 2 )); then
+    clean_file="$CLEAN_SOURCE/tests/testthat/test-ParamSetShadow.R"
+  else
+    clean_file=$(printf '%s/tests/testthat/test-native-clean-%03d.R' \
+      "$CLEAN_SOURCE" "$file_index")
+  fi
+  for block_index in $(seq 1 "$clean_blocks"); do
+    if (( file_index == clean_file_count - 2 && block_index == 1 )); then
+      printf '%s\n' \
+        'test_that("old-R Shadow generation receipts never enter the evaluator", {' \
+        >> "$clean_file"
+    else
+      printf 'test_that("clean %03d %03d", {\n' \
+        "$file_index" "$block_index" >> "$clean_file"
+    fi
+    if [[ "$file_index" -le "$clean_not_cran_files" && "$block_index" -eq 1 ]]; then
+      printf '  skip_on_cran()\n' >> "$clean_file"
+    fi
+    if (( file_index == clean_file_count - 2 && block_index == 1 )); then
+      printf '  skip_if_no_old_r_binding_existence_path()\n' >> "$clean_file"
+    fi
+    printf '%s\n' \
+      '  expect_true(TRUE)' \
+      '  expect_identical(1L, 1L)' \
+      '  expect_length(integer(), 0L)' \
+      '})' >> "$clean_file"
+  done
+done
+
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "PARADOX_NATIVE_TEST_JOBS=4" \
+  "$RSCRIPT" --vanilla "$RUNNER" "$CLEAN_SOURCE" "$LIBRARY" focused \
+  "$CLEAN_LEDGER" > "$TEST_ROOT/clean-runner.log" 2>&1
+
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+  "--source=$CLEAN_SOURCE" "--ledger=$CLEAN_LEDGER" \
+  --selection=focused \
+  "--expected-dso-sha256=$DSO_SHA256" \
+  > "$TEST_ROOT/clean-verifier.log"
+
+# The current-R Shadow exclusion is a required capability receipt, not merely
+# an allowed skip. Removing it while preserving internally consistent ledger
+# and worker aggregates must therefore fail the trusted verifier.
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  NR == 1 { print; next }
+  $6 == "test-ParamSetShadow.R" { $11 = $11 + 1; $13 = $13 - 1 }
+  { print }
+' "$TEST_ROOT/clean-ledger-workers.tsv" \
+  > "$TEST_ROOT/shadow-missing-workers.tsv"
+shadow_missing_workers_sha=$(
+  sha256sum "$TEST_ROOT/shadow-missing-workers.tsv" | cut -d ' ' -f 1
+)
+awk -F '\t' -v OFS='\t' -v sha="$shadow_missing_workers_sha" '
+  $1 == "test" && $6 == "test-ParamSetShadow.R" &&
+      $8 == "old-R Shadow generation receipts never enter the evaluator" {
+    $10 = $10 + 1
+    $12 = 0
+    $15 = "-"
+  }
+  $1 == "summary" {
+    $10 = $10 + 1
+    $12 = $12 - 1
+    sub(/worker_evidence_sha256=[^;]+/,
+      "worker_evidence_sha256=" sha, $16)
+  }
+  { print }
+' "$CLEAN_LEDGER" > "$TEST_ROOT/shadow-missing.tsv"
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+  "--source=$CLEAN_SOURCE" "--ledger=$TEST_ROOT/shadow-missing.tsv" \
+  --selection=focused \
+  "--expected-dso-sha256=$DSO_SHA256" \
+  > "$TEST_ROOT/shadow-missing.log" 2>&1
+shadow_missing_status=$?
+set -e
+[[ "$shadow_missing_status" -ne 0 ]] || {
+  printf '%s\n' 'test-native-test-batch: missing required Shadow skip was accepted' >&2
+  exit 1
+}
+grep -Fq 'runtime capability skip differs' \
+  "$TEST_ROOT/shadow-missing.log" || {
+  cat "$TEST_ROOT/shadow-missing.log" >&2
+  printf '%s\n' 'test-native-test-batch: missing Shadow skip failed ambiguously' >&2
+  exit 1
+}
+
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "test" && $6 == "test-ParamSetShadow.R" &&
+      $8 == "old-R Shadow generation receipts never enter the evaluator" {
+    $15 = "Reason: wrong Shadow capability boundary"
+  }
+  { print }
+' "$CLEAN_LEDGER" > "$TEST_ROOT/shadow-wrong-reason.tsv"
+cp -- "$TEST_ROOT/clean-ledger-workers.tsv" \
+  "$TEST_ROOT/shadow-wrong-reason-workers.tsv"
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+  "--source=$CLEAN_SOURCE" \
+  "--ledger=$TEST_ROOT/shadow-wrong-reason.tsv" \
+  --selection=focused \
+  "--expected-dso-sha256=$DSO_SHA256" \
+  > "$TEST_ROOT/shadow-wrong-reason.log" 2>&1
+shadow_wrong_reason_status=$?
+set -e
+[[ "$shadow_wrong_reason_status" -ne 0 ]] || {
+  printf '%s\n' 'test-native-test-batch: wrong Shadow skip reason was accepted' >&2
+  exit 1
+}
+grep -Fq 'ledger contains an unreviewed skip' \
+  "$TEST_ROOT/shadow-wrong-reason.log" || {
+  cat "$TEST_ROOT/shadow-wrong-reason.log" >&2
+  printf '%s\n' 'test-native-test-batch: wrong Shadow reason failed ambiguously' >&2
+  exit 1
+}
+grep -Fq $'\ttest_to_tune.R\t' "$CLEAN_LEDGER" || {
+  printf '%s\n' 'test-native-test-batch: promoted focused suite was not executed' >&2
+  exit 1
+}
+grep -Fq $'\ttest-paramset-equality.R\t' "$CLEAN_LEDGER" || {
+  printf '%s\n' 'test-native-test-batch: promoted equality suite was not executed' >&2
+  exit 1
+}
+
+# A rehashed worker ledger cannot silently lower the effective Linux worker
+# count below the coordinator's exact min(requested, ordinary-files) policy.
+awk -F '\t' 'BEGIN { OFS = "\t" } NR == 1 { print; next } { $3 = 1; print }' \
+  "$TEST_ROOT/clean-ledger-workers.tsv" \
+  > "$TEST_ROOT/effective-workers.tsv"
+effective_workers_sha=$(sha256sum "$TEST_ROOT/effective-workers.tsv" |
+  cut -d ' ' -f 1)
+awk -F '\t' -v OFS='\t' -v sha="$effective_workers_sha" '
+  $1 == "summary" {
+    sub(/effective_jobs=4/, "effective_jobs=1", $16)
+    sub(/worker_evidence_sha256=[^;]+/,
+      "worker_evidence_sha256=" sha, $16)
+  }
+  { print }
+' "$CLEAN_LEDGER" > "$TEST_ROOT/effective.tsv"
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+  "--source=$CLEAN_SOURCE" "--ledger=$TEST_ROOT/effective.tsv" \
+  --selection=focused \
+  "--expected-dso-sha256=$DSO_SHA256" \
+  > "$TEST_ROOT/effective.log" 2>&1
+effective_status=$?
+set -e
+[[ "$effective_status" -ne 0 ]] || {
+  printf '%s\n' 'test-native-test-batch: silently lowered workers were accepted' >&2
+  exit 1
+}
+grep -Fq 'isolated scheduler used an unexpected worker count' \
+  "$TEST_ROOT/effective.log" || {
+  cat "$TEST_ROOT/effective.log" >&2
+  printf '%s\n' 'test-native-test-batch: worker lowering failed ambiguously' >&2
+  exit 1
+}
+
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "test" && $6 == "test-native-clean-001.R" &&
+      $8 == "clean 001 001" {
+    $10 = $10 - 1
+    $12 = 1
+    $15 = "unreviewed synthetic skip"
+  }
+  $1 == "summary" { $10 = $10 - 1; $12 = $12 + 1 }
+  { print }
+' "$CLEAN_LEDGER" > "$TEST_ROOT/unreviewed-skip.tsv"
+set +e
+env -i \
+  "HOME=$TEST_ROOT/home" \
+  "PATH=$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+  "LD_LIBRARY_PATH=$ROOT/.local/toolchain/lib" \
+  "R_LIBS_USER=$LIBRARY" "R_LIBS=$LIBRARY" "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$TEST_ROOT/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RSCRIPT" --vanilla \
+  "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+  "--source=$CLEAN_SOURCE" "--ledger=$TEST_ROOT/unreviewed-skip.tsv" \
+  --selection=focused \
+  "--expected-dso-sha256=$DSO_SHA256" \
+  > "$TEST_ROOT/unreviewed-skip.log" 2>&1
+unreviewed_skip_status=$?
+set -e
+[[ "$unreviewed_skip_status" -ne 0 ]] || {
+  printf '%s\n' 'test-native-test-batch: unreviewed skip was accepted' >&2
+  exit 1
+}
+grep -Fq 'ledger contains an unreviewed skip' \
+  "$TEST_ROOT/unreviewed-skip.log" || {
+  cat "$TEST_ROOT/unreviewed-skip.log" >&2
+  printf '%s\n' 'test-native-test-batch: unreviewed skip failed ambiguously' >&2
+  exit 1
+}
+
+printf '%s\n' \
+  "native functional failure batching passed: failures=2; successful_siblings=1; exit=$runner_status" \
+  'native functional parallel overlap/deterministic/exact workers passed: workers=2' \
+  'native functional ConfigSpace exclusive lane passed: files=2; worker=1' \
+  'native functional wrong-DSO, bounded timeout, and process-tree cleanup passed' \
+  "native functional clean ledger passed: files=$clean_file_count; blocks=$((clean_file_count * clean_blocks)); expectations=$((clean_file_count * clean_blocks * 3))" \
+  'native functional runner/verifier focused inventory remained synchronized' \
+  'native functional required Shadow capability skip accepted and enforced' \
+  'native functional unreviewed skip rejected'

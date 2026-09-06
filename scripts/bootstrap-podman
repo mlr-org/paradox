@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+MANIFEST="$ROOT/environment/podman-toolchain.tsv"
+TREE_HELPER="$ROOT/scripts/environment/podman-tree-manifest"
+CACHE_DIRECTORY="$ROOT/.cache/downloads/podman"
+RECEIPT_DIRECTORY="$ROOT/.local/receipts/podman"
+LOCK_DIRECTORY="$ROOT/.local/locks"
+CURL="$ROOT/.local/toolchain/bin/curl"
+
+fail() {
+  printf '%s\n' "bootstrap-podman: $*" >&2
+  exit 1
+}
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed path escaped the repository: $path" ;;
+  esac
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] || fail "refusing symbolic managed directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed path is not a directory: $current"
+  done
+}
+
+require_plain_directory() {
+  local path=$1
+  assert_plain_directory_chain "$path"
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "required directory is missing, non-directory, or symbolic: $path"
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "required directory is not canonical: $path"
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  assert_plain_directory_chain "${path%/*}"
+  [[ ! -L "$path" ]] || fail "refusing symbolic managed file: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "managed path is not a regular file: $path"
+}
+
+require_plain_file() {
+  local path=$1
+  require_plain_directory "${path%/*}"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "required input is missing, non-regular, or symbolic: $path"
+}
+
+require_plain_executable() {
+  local path=$1
+  require_plain_file "$path"
+  [[ -x "$path" ]] || fail "required input is not executable: $path"
+}
+
+verify_open_lock() {
+  local descriptor=$1 path=$2 label=$3 fd_identity path_identity
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label changed while it was opened: $path"
+  fd_identity=$(/usr/bin/stat -Lc '%d:%i' "/proc/$$/fd/$descriptor")
+  path_identity=$(/usr/bin/stat -Lc '%d:%i' "$path")
+  [[ "$fd_identity" == "$path_identity" ]] ||
+    fail "$label path was substituted while opening: $path"
+}
+
+[[ $(uname -s)-$(uname -m) == Linux-x86_64 ]] ||
+  fail "the pinned static container toolchain supports Linux x86_64"
+require_plain_file "$MANIFEST"
+require_plain_executable "$TREE_HELPER"
+require_plain_executable "$CURL"
+
+row_count=$(awk -F '\t' 'NR > 1 && NF { count += 1 } END { print count + 0 }' "$MANIFEST")
+[[ $row_count -eq 1 ]] || fail "Podman manifest must contain exactly one data row"
+IFS=$'\t' read -r version platform archive_url archive_sha tree_sha < <(sed -n '2p' "$MANIFEST")
+[[ $version == 5.8.2 && $platform == linux-amd64 ]] ||
+  fail "unexpected Podman version or platform in manifest"
+[[ $archive_sha =~ ^[0-9a-f]{64}$ && $tree_sha =~ ^[0-9a-f]{64}$ ]] ||
+  fail "malformed Podman digest in manifest"
+[[ $archive_url == https://github.com/mgoltzsche/podman-static/releases/download/v5.8.2/podman-linux-amd64.tar.gz ]] ||
+  fail "unexpected Podman archive URL"
+
+PREFIX="$ROOT/.local/podman/$version"
+ARCHIVE="$CACHE_DIRECTORY/podman-linux-amd64-$version.tar.gz"
+for managed_directory in \
+  "$ROOT/.local" "$ROOT/.local/tmp" "$ROOT/.local/podman" "$PREFIX" \
+  "$ROOT/.local/receipts" "$RECEIPT_DIRECTORY" "$LOCK_DIRECTORY" \
+  "$ROOT/.cache" "$ROOT/.cache/downloads" "$CACHE_DIRECTORY"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+assert_plain_file_or_absent "$ARCHIVE"
+assert_plain_file_or_absent "$LOCK_DIRECTORY/podman-toolchain.lock"
+mkdir -p "$CACHE_DIRECTORY" "$RECEIPT_DIRECTORY" "$LOCK_DIRECTORY" \
+  "$ROOT/.local/tmp" "$ROOT/.local/podman"
+for managed_directory in "$CACHE_DIRECTORY" "$RECEIPT_DIRECTORY" \
+  "$LOCK_DIRECTORY" "$ROOT/.local/tmp" "$ROOT/.local/podman"
+do
+  require_plain_directory "$managed_directory"
+done
+exec 9>"$LOCK_DIRECTORY/podman-toolchain.lock"
+verify_open_lock 9 "$LOCK_DIRECTORY/podman-toolchain.lock" \
+  "Podman toolchain lock"
+flock -x 9
+
+archive_valid=false
+if [[ -f $ARCHIVE && ! -L $ARCHIVE ]] &&
+    [[ $(sha256sum "$ARCHIVE" | cut -d ' ' -f 1) == "$archive_sha" ]]; then
+  archive_valid=true
+fi
+if [[ $archive_valid != true ]]; then
+  partial="$ARCHIVE.part.$$"
+  assert_plain_file_or_absent "$partial"
+  rm -f "$partial"
+  "$CURL" -fL --retry 3 "$archive_url" -o "$partial"
+  require_plain_file "$partial"
+  [[ $(sha256sum "$partial" | cut -d ' ' -f 1) == "$archive_sha" ]] || {
+    rm -f "$partial"
+    fail "downloaded Podman archive has the wrong SHA-256"
+  }
+  mv "$partial" "$ARCHIVE"
+fi
+
+archive_listing=$(mktemp "$ROOT/.local/tmp/podman-listing.XXXXXX")
+candidate=$(mktemp -d "$ROOT/.local/tmp/podman-prefix.XXXXXX")
+candidate_manifest=$(mktemp "$ROOT/.local/tmp/podman-manifest.XXXXXX")
+installed_temporary_manifest=$(mktemp \
+  "$ROOT/.local/tmp/podman-installed-manifest.XXXXXX")
+cleanup() {
+  rm -f "$archive_listing"
+  rm -f "$candidate_manifest" "$installed_temporary_manifest"
+  rm -rf "$candidate"
+}
+trap cleanup EXIT HUP INT TERM
+require_plain_file "$archive_listing"
+require_plain_directory "$candidate"
+require_plain_file "$candidate_manifest"
+require_plain_file "$installed_temporary_manifest"
+tar -tzf "$ARCHIVE" > "$archive_listing"
+awk '
+  $0 !~ /^podman-linux-amd64\// { bad = 1 }
+  $0 ~ /(^|\/)\.\.($|\/)/ { bad = 1 }
+  END { exit bad }
+' "$archive_listing" || fail "Podman archive contains an unsafe member"
+# Preserve the authenticated archive modes independently of the caller's
+# umask; modes are part of the pinned tree manifest.
+tar -xzf "$ARCHIVE" --same-permissions --strip-components=1 -C "$candidate"
+
+"$TREE_HELPER" "$candidate" > "$candidate_manifest"
+[[ $(sha256sum "$candidate_manifest" | cut -d ' ' -f 1) == "$tree_sha" ]] ||
+  fail "extracted Podman tree does not match its pinned manifest digest"
+
+installed_valid=false
+if [[ -d $PREFIX ]]; then
+  "$TREE_HELPER" "$PREFIX" > "$installed_temporary_manifest"
+  if [[ $(sha256sum "$installed_temporary_manifest" | cut -d ' ' -f 1) == "$tree_sha" ]]; then
+    installed_valid=true
+  fi
+fi
+if [[ $installed_valid != true ]]; then
+  replacement="$ROOT/.local/podman/.${version}.new.$$"
+  assert_plain_directory_chain "$replacement"
+  rm -rf "$replacement"
+  mv "$candidate" "$replacement"
+  require_plain_directory "$replacement"
+  assert_plain_directory_chain "$PREFIX"
+  rm -rf "$PREFIX"
+  mv "$replacement" "$PREFIX"
+  require_plain_directory "$PREFIX"
+  candidate=$(mktemp -d "$ROOT/.local/tmp/podman-empty.XXXXXX")
+fi
+
+installed_manifest="$RECEIPT_DIRECTORY/$version-tree-manifest.tsv"
+receipt="$RECEIPT_DIRECTORY/$version.txt"
+for managed_file in "$installed_manifest" "$installed_manifest.new" \
+  "$receipt" "$receipt.new" "$RECEIPT_DIRECTORY/$version.sha256"
+do
+  assert_plain_file_or_absent "$managed_file"
+done
+"$TREE_HELPER" "$PREFIX" > "$installed_manifest.new"
+[[ $(sha256sum "$installed_manifest.new" | cut -d ' ' -f 1) == "$tree_sha" ]] ||
+  fail "installed Podman tree failed post-install validation"
+mv "$installed_manifest.new" "$installed_manifest"
+{
+  printf 'schema=1\n'
+  printf 'version=%s\n' "$version"
+  printf 'platform=%s\n' "$platform"
+  printf 'archive_url=%s\n' "$archive_url"
+  printf 'archive_sha256=%s\n' "$archive_sha"
+  printf 'tree_manifest_sha256=%s\n' "$tree_sha"
+  printf 'prefix=%s\n' "$PREFIX"
+} > "$receipt.new"
+mv "$receipt.new" "$receipt"
+sha256sum "$receipt" "$installed_manifest" > "$RECEIPT_DIRECTORY/$version.sha256"
+
+[[ $("$PREFIX/usr/local/bin/podman" --version) == "podman version $version" ]] ||
+  fail "installed Podman reports an unexpected version"
+printf '%s\n' "Project-local Podman toolchain ready: $PREFIX"

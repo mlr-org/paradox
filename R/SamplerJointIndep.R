@@ -23,14 +23,14 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
       pss = map(samplers, "param_set")
       # FIXME: maybe we should use a paramset collection here?
       self$param_set = ps_union(pss)
-      # must_bounded and untyped should be check by the sapler, or if the sampler still works, then ok
+      # must_bounded and untyped should be checked by the samplers themselves; if a sampler still works, then ok
       assert_param_set(self$param_set, no_deps = TRUE)
     }
   ),
 
   private = list(
     # FIXME: would be nice if we could call .sample here instead of sample, for less type
-    # conversion and peed, but .sample is private. make it public? also not great...
+    # conversion and speed, but .sample is private. make it public? also not great...
     .sample = function(n) map_dtc(self$samplers, function(s) s$sample(n)$data),
     .print = function() catf("Independent comps: %i", length(self$samplers))
   )

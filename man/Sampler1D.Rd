@@ -8,7 +8,7 @@
 \link{Sampler1DCateg} and \link{Sampler1DNormal}.
 }
 \seealso{
-Other Sampler: 
+Other Sampler:
 \code{\link{Sampler}},
 \code{\link{Sampler1DCateg}},
 \code{\link{Sampler1DNormal}},
@@ -20,69 +20,71 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super class}{
-\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{Sampler1D}
+\code{\link[paradox:Sampler]{Sampler}} -> \code{Sampler1D}
 }
 \section{Active bindings}{
-\if{html}{\out{<div class="r6-active-bindings">}}
-\describe{
-\item{\code{param}}{(\code{\link{ParamSet}})\cr
+  \if{html}{\out{<div class="r6-active-bindings">}}
+  \describe{
+    \item{\code{param}}{(\code{\link{ParamSet}})\cr
 Returns the one-dimensional \code{\link{ParamSet}} that is sampled from.}
-}
-\if{html}{\out{</div>}}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-Sampler1D-new}{\code{Sampler1D$new()}}
-\item \href{#method-Sampler1D-clone}{\code{Sampler1D$clone()}}
+  \itemize{
+    \item \href{#method-Sampler1D-initialize}{\code{Sampler1D$new()}}
+    \item \href{#method-Sampler1D-clone}{\code{Sampler1D$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details open><summary>Inherited methods</summary>
+\if{html}{\out{<details open><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>paradox::Sampler$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>paradox::Sampler$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>paradox::Sampler$sample()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>Sampler$format()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>Sampler$print()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>Sampler$sample()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Sampler1D-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Sampler1D-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
+\if{html}{\out{<a id="method-Sampler1D-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler1D-initialize}{}}}
+\subsection{\code{Sampler1D$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
 
 Note that this object is typically constructed via derived classes,
 e.g., \code{\link{Sampler1DUnif}}.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler1D$new(param)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param}}{(\code{\link{ParamSet}})\cr
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler1D$new(param)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param}}{(\code{\link{ParamSet}})\cr
 Domain / support of the distribution we want to sample from.
 Must be one-dimensional.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Sampler1D-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-Sampler1D-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler1D$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{Sampler1D$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler1D$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }
