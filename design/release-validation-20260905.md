@@ -21,11 +21,13 @@ Local execution is complete. The release foundation, combined memory gate,
 all sixteen exact-head checks across Paradox 1 and 2, mandatory documentation,
 and the 82-row benchmark policy pass. The broad corpus and reverse-dependency
 coordinator statuses remain non-green, with the exclusions described below.
-Fresh hosted portability and downstream conflict resolution still block final
-publication; this report does not call the entire release matrix green.
+Fresh hosted portability is now accepted. Downstream conflict resolution and
+integration/release ordering remain before publication; this report does not
+call the entire release matrix green.
 
-No agent pushed a branch, tag, or PR. Final hosted portability, downstream
-integration/release ordering, and publication remain separate manual actions.
+No agent pushed a branch, tag, or PR. The user published and dispatched the
+hosted companion. Downstream integration/release ordering and publication
+remain separate manual actions.
 
 ## Plan and resource policy
 
@@ -116,9 +118,10 @@ and mlr3fda #171 report merge conflicts.** The other five are mergeable, which
 does not imply all of their hosted checks are green. Resolve the three
 conflicts manually and recheck the resulting heads on both axes before
 integration; today's exact-head acceptance does not prove future merge
-commits. See [`../compat/downstream-pr-handoff.md`](../compat/downstream-pr-handoff.md).
+commits. A post-CI read on September 6 reconfirms those same three conflicting
+heads. See [`../compat/downstream-pr-handoff.md`](../compat/downstream-pr-handoff.md).
 
-## Hosted companion: prepared, not published
+## Hosted companion: accepted
 
 Exact direct child `4f6adf59475680c55779954d14f4fc20065137c9`, tree
 `d57f556f11896752285c144fbb782f780fbf2e08`, is frozen at
@@ -129,20 +132,58 @@ Exact direct child `4f6adf59475680c55779954d14f4fc20065137c9`, tree
 The deterministic renderer, release structural check, renderer/helper-lock
 regressions, offline evidence-verifier tests, and actionlint all pass.
 
-Manual commands, from the repository:
+The user published this exact tag and dispatched
+[run 34011614882](https://github.com/mlr-org/paradox/actions/runs/34011614882),
+attempt 1. It completed successfully on 2026-09-06 at 05:01:38 UTC. All four
+required REST jobs and every required step succeeded:
 
-```sh
-git push origin refs/tags/paradox-2.0.0-ci-75f85f5b-harness
-gh workflow run r-cmd-check.yml --repo mlr-org/paradox --ref paradox-2.0.0-ci-75f85f5b-harness
-```
+| Job | REST job ID |
+|---|---:|
+| macOS ARM64 release | `101428327335` |
+| current Windows x86-64 release | `101428327390` |
+| exact Windows R 3.6.3/Rtools35 | `101428327259` |
+| required-job completion gate | `101431759624` |
 
-This is not hosted acceptance until the new run's exact three platform
-artifacts and four REST job conclusions pass independent offline validation.
-The final read-only workflow query still has `33991236878` at `64b7a389` as
-the newest run. Its macOS floating-point assertion is fixed in this candidate;
-restarting that superseded commit cannot test the fix. No run of the new
-candidate or companion is available yet. Retain the new artifacts when the
-user dispatches it; historical Windows/macOS results are not acceptance here.
+The three retained original ZIP files match both the REST sizes and digests:
+
+| Artifact platform | REST artifact ID | Bytes | SHA-256 |
+|---|---:|---:|---|
+| macOS ARM64 | `9982869928` | `5991991` | `06d020007b68c320592538de941fb70b26acf795228679e0f0ec569b9b645e92` |
+| current Windows x86-64 | `9983020934` | `4577186` | `c9390cd177a3a3307633046706cfe09ea39b2f8499ac9059408e3e2f41fa9eaa` |
+| Windows R 3.6.3 | `9982691206` | `3392712` | `5810f76b89d5e7e1e57586164efaac8c2a5866bb22153aca28d0280abeeced1a` |
+
+Current Windows and macOS finish with clean `Status: OK`; each full hosted
+test report has 11,227 passes, zero failures/warnings, and six fixture/runtime
+skips. The complete configured local suite remains the owner of the missing
+legacy-fixture coverage. Old Windows finishes with precisely the allowed
+missing-Suggests NOTE. Its source-closure, compiler, DLL, smoke, isolation, and
+bounded-check evidence passes the existing verifier. Its lock is exactly
+7,776 bytes with SHA-256
+`9007e3a2d7eecb1057bf9610a2f2ffacf617c224b9aeb9b91bd1ef5ae85f59c5`;
+no line-ending normalization was used during retention or acceptance.
+
+Complete evidence is retained at `.local/ci/r-cmd-check-34011614882-r1`:
+REST metadata, executed workflow, four original job logs, three original
+archives and exact extractions, the byte-exact verifier, deterministic receipt,
+and six manifests. The current verifier, an independently relocated execution
+of the retained verifier, and the post-promotion replay all pass with identical
+seven-line output. The receipt covers 1,382 manifest members and has SHA-256
+`ac1c48cb12cd4ca6155f38a2d2d3b7283227489f66f99af7b36bf41e728f7a34`.
+Archive, artifact, evidence, job-log, metadata, and verifier manifest hashes:
+`c3428a19436cb9fd33580fe126c18d5f31741945d69fa542c944cf697630c306`,
+`882911c4b3f10737e7f7cb41d4b6fb296b3e8b0c5e7b928acfa9e4c51ad93bae`,
+`bf8ab81ddb547a7d96750fb177d1c3bc9897a8849ee40ebeb6fd2e5e24775f9d`,
+`e6826197b818c25e3376329e5d344329cfce015c78f4d68d728fe14874e3c97d`,
+`1f219831ec814a575243ac1a7259d279ffbbf991b494fe5af1eed62cdecb62fe`,
+`8023c89fa9f1c845553ec7d8fe9c20210658b0d769d0399082fd9b7c8b1e4f44`.
+
+The ordinary branch [run 34011621801](https://github.com/mlr-org/paradox/actions/runs/34011621801)
+also reports success for all eight jobs at exact `33bcaf8b`, including its
+Linux release/development and no-Suggests rows. That is supplemental hosted
+status; the independently retained companion artifacts above own exact release
+portability acceptance. No package fix or local-matrix rerun was needed.
+Do not retry or redispatch this accepted companion. The superseded `64b7a389`
+macOS assertion failure remains historical, not evidence for this candidate.
 
 ## Reviewed analyzer delta
 

@@ -39,11 +39,24 @@ focused/full/analyzer ledger replays plus the complete hardening self-test.
 The earlier incomplete focused donor is retained as failed diagnostic evidence.
 The repair does not change the candidate or relabel frozen evidence.
 
-Hosted portability is still pending for the prepared direct-child companion
+Hosted portability is accepted for the exact direct-child companion
 `4f6adf59475680c55779954d14f4fc20065137c9`, tag
-`paradox-2.0.0-ci-75f85f5b-harness`. Current PR reads also require manual
-conflict resolution for bbotk #356, mlr3mbo #284, and mlr3fda #171, followed by
-dual-axis checks of the resulting heads. Publication is not yet cleared.
+`paradox-2.0.0-ci-75f85f5b-harness`. Run `34011614882`, attempt 1, passes all
+four required jobs. The three original platform archives, exact extractions,
+logs, metadata, and six manifests are retained at
+`.local/ci/r-cmd-check-34011614882-r1`. Current, independently relocated
+retained, and post-promotion verifiers agree on all 1,382 manifest members.
+The receipt SHA-256 is
+`ac1c48cb12cd4ca6155f38a2d2d3b7283227489f66f99af7b36bf41e728f7a34`.
+Current Windows/macOS checks are clean; old Windows has only its bounded
+missing-Suggests NOTE and the exact LF lock. Ordinary branch run `34011621801`
+at `33bcaf8b` also has all eight jobs green. Do not redispatch the accepted
+companion or rerun the local matrix for this ledger-only update.
+
+Post-CI PR reads still require manual conflict resolution for bbotk #356,
+mlr3mbo #284, and mlr3fda #171, followed by dual-axis checks of the resulting
+heads. Downstream integration/release ordering remains; publication is not
+yet cleared.
 Compatibility axes select the September candidate, not August's historical
 candidate; never transfer its old acceptance. All remote writes remain manual.
 Keep direct memory work separate from the broad aggregate coordinator. The

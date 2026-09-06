@@ -17,12 +17,17 @@ on every completed evidence stage.
 
 These results belong to clean validation tooling `28798768` and package
 candidate `75f85f5b`; the later focused-selector fixture/verifier and ledger
-follow-up is package-excluded and separately tested. New hosted portability
-for prepared companion `4f6adf59` is still pending. bbotk #356, mlr3mbo #284,
-and mlr3fda #171 also require manual conflict resolution and targeted dual-axis
+follow-up is package-excluded and separately tested. Hosted portability for
+exact companion `4f6adf59` is accepted: run `34011614882` passes all four jobs,
+and current, independently retained, and post-promotion verifiers agree on
+the three exact artifacts in `.local/ci/r-cmd-check-34011614882-r1`. Current
+Windows/macOS checks are clean; old Windows has only its bounded NOTE.
+The ordinary branch CI at `33bcaf8b` is also green. bbotk #356, mlr3mbo #284,
+and mlr3fda #171 still require manual conflict resolution and targeted dual-axis
 checks of their resulting heads. Publication is not yet cleared. See the
 September report and [`downstream handoff`](../compat/downstream-pr-handoff.md)
-for exact identities and manual commands.
+for exact identities and remaining manual coordination. No new hosted dispatch
+or full local-matrix repetition is needed for this ledger-only follow-up.
 The August acceptance below is retained history, not acceptance of this new
 candidate.
 

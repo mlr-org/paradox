@@ -3,6 +3,22 @@
 This policy applies to the contract-first candidate. Historical workflow runs
 for the superseded compatibility-first source are not accepted evidence.
 
+## Current September acceptance
+
+Candidate `75f85f5be79a0da2dba268b0a7562839f7f9177c` and exact direct-child
+companion `4f6adf59475680c55779954d14f4fc20065137c9` satisfy the hosted policy
+through run `34011614882`, attempt 1. All four required jobs succeed; the three
+exact artifacts are retained at `.local/ci/r-cmd-check-34011614882-r1`.
+Current, independently relocated retained, and post-promotion verifier runs
+agree on all 1,382 manifest members. Windows/macOS checks are clean, while
+exact R 3.6.3 Windows has only its bounded missing-Suggests NOTE and retains
+the exact 7,776-byte LF runtime lock. The new local runtime/compiler/memory
+matrix and the complete hosted identities and hashes are recorded in
+[`release-validation-20260905.md`](release-validation-20260905.md).
+Portability is complete; downstream integration and publication remain manual.
+The candidate/companion run narratives below are historical August evidence,
+not transfers to September. The general portability rules still apply.
+
 ## Supported baseline
 
 - R >= 3.6;
@@ -535,7 +551,9 @@ tree entry, blob, and raw SHA-256 and materializes those blob bytes before the
 installer runs. This keeps the parent/diff proof minimal without weakening
 helper or lock provenance.
 
-The active immutable candidate is
+### Historical August candidate and hosted evidence
+
+The August immutable candidate was
 `refs/paradox-release/candidate-20260803T131049Z`, commit
 `a0a9ff3e05b535068392e0c20442ad9794f3b824`, tree
 `49079e12a816542fe8d8d6a0a2290a757a558b41`. It includes the converged
@@ -716,7 +734,11 @@ Windows, old Windows, macOS, and the aggregate completion job. Any source change
 affecting C, registration, R wrappers, tests, build configuration, or
 portability harness reopens the corresponding rows.
 
-Active pair `a0a9ff3`/`00a24cb` satisfies this contract through hosted run
+Current pair `75f85f5b`/`4f6adf59` satisfies this contract through hosted run
+`34011614882` and its independently replayed retained evidence, as recorded
+at the beginning of this policy. No superseded result supplies acceptance.
+
+Historical pair `a0a9ff3`/`00a24cb` satisfied this contract through hosted run
 `30941929181` and retained evidence
 `.local/ci/r-cmd-check-30941929181-r1`. Current, independently relocated
 retained, and post-promotion verifier executions agree exactly, so the hosted

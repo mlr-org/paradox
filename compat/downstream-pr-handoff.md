@@ -18,6 +18,8 @@ mlr3mbo #284, and mlr3fda #171**. Their resulting heads must be rechecked on
 both axes after manual resolution. All eight PRs remain open drafts. The
 table records that read's mergeability, not new hosted-CI acceptance; the
 August compatibility and hosted evidence below remain historical.
+Post-CI reads on September 6 reconfirm all three conflicts at the same exact
+heads; the passing companion workflow does not resolve downstream integration.
 
 The user has published all eight reviewed migration heads and opened their
 pull requests. No agent made a remote write. The exact heads remain the sealed
@@ -37,10 +39,11 @@ corresponding evidence.
 
 No mlr3 or mlr3fselect diagnostic-only PR remains open.
 
-The Paradox package itself still needs hosted portability for the new
-candidate. The prepared tag and manual dispatch commands are in the
-[September report](../design/release-validation-20260905.md#hosted-companion-prepared-not-published).
-Do not retry an old candidate, reuse August's hosted acceptance, or infer
+The Paradox package's new hosted portability gate is accepted through run
+`34011614882`, exact companion `4f6adf59`, with independently verified retained
+artifacts. Ordinary branch run `34011621801` is also green. Details are in the
+[September report](../design/release-validation-20260905.md#hosted-companion-accepted).
+No repeat dispatch is needed. Do not reuse August's hosted acceptance or infer
 acceptance of a future rebased downstream head from today's passing checks.
 
 ## Historical August source and candidate
